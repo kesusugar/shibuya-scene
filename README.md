@@ -1,3 +1,15 @@
+# RUN S9 — Traffic System
+
+S9 adds directed OSM traffic lanes, left-side travel, curved legal connections, seven procedural vehicle types, pooled movement and selected curb parking. Following uses nearby spatial buckets and a 25m route lookahead; intersection entry checks reserve exit space. Signals expose a read-only-by-convention S10 interface (`signalAPI.getSignalState`, `getPedestrianPhase`, `getCrossingTrafficState`). No pedestrians, trains, gameplay or night lighting are implemented.
+
+Traffic densities start at HIGH 62 / MEDIUM 30 / LOW 14 moving vehicles, plus parked vehicles. Safety and available route capacity take priority. Cars follow a conservative route graph; unusable continuations and stuck traffic recover through the fixed pool. S8 physical signals receive shared colored lens instances. Existing renderer profiles, cameras and debug controls remain.
+
+`?debug=1` adds lane direction arrows, graph nodes, stop-line references, moving future paths and per-vehicle/signal statistics. `?only=traffic` or `?skip=traffic` isolates the module. Quality changes reuse vehicle geometry/materials. S0–S8 runtime modules remain unchanged.
+
+Run `npm test` for build and regression checks, then `node scripts/report-traffic.mjs` to summarize S9 evidence. See `evidence/s9/S9_REPORT.txt` for traffic graph counts, profile counts, three-minute audit, CPU timing, visual QA limits and recovery statistics. No S10+ or GTA additions.
+
+## Historical S8 record
+
 # RUN S8 — Streetscape
 
 Only S8 implemented over S7 b0a9257. Deterministic sidewalk-edge fixtures, mapped signal structures and trees, pole-to-pole sagging cables, shared furniture atlas and instanced geometry. Region weights and HIGH/MEDIUM/LOW density preserve the renderer profiles. Physical signal heads are static; streetlights have emissive metadata only.
