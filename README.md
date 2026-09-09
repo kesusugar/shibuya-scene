@@ -1,3 +1,22 @@
+# Shibuya Scene Reconstruction — RUN S3
+
+S0 conditional PASS; S1/S2 PASS. This version implements **Generic Buildings only**, on the unchanged S2 Ground. No deployment or later-stage builders.
+
+- `npm ci`, `npm run dev`; `npm test` builds and runs **81 tests** (59 existing + 22 S3).
+- Inspect `?only=ground,buildings,data,geo&camera=overview`; also `camera=scramble` / `camera=street`. Buildings can load independently and its switch disposes/rebuilds all owned geometry and materials.
+- `src/buildings/config.mjs`: budgets, floor height, archetypes, centralized hero/station reservation. It reuses S1 HERO_IDS and reserves Mark City West plus overlapping station footprint.
+- `model.mjs`: polygon/holes/self-intersection/triangulation validation, bounds clip, height priority, archetype/frontage metadata, safe roof placement, reason-coded exclusion. IDs seed variation; no input mutation.
+- `render.mjs`: OSM extrusion walls + triangulated roofs merged into two vertex-colored meshes. Three window styles share one PlaneGeometry. Trim/balconies and rooftop boxes share a BoxGeometry; tanks/masts share a cylinder. Seven materials and eight batches, not one mesh per building/window.
+- `lifecycle.mjs`: abort/generation guards prevent stale async loads from resurrecting disabled geometry.
+
+378 generic buildings / 14 reserved sources / 274 excluded sources (236 outside target). All seven archetypes generated. Windows 38,060; rooftop props 701; 160,925 building triangles. Ground + Buildings: 208,754 triangles / 13 estimated calls. Figures exclude S1 debug outlines.
+
+Reproduce CPU evidence: `node scripts/verify-buildings.mjs`, then optional `python3 scripts/plot-buildings.py` (matplotlib). `evidence/s3/S3_REPORT.txt` contains the complete Japanese report, metrics and limitations; geometry.json contains the exact Ground overlap audit; building-metadata.json contains per-building heights, frontage, roof placements and source exclusions. The CPU map is not a WebGL screenshot.
+
+WebGL2/FPS/camera rendering remain unverified in this environment. CPU bounds, transformed instance vertices and rooftop containment pass. 85 road-edge surface overlaps remain documented (none meet the >25% and >10m² gross-overlap threshold); crossing stripe overlap is zero. No footprint deformation to hide source/road-width discrepancies. Shared walls may carry hidden windows; visual quality, clipping at the perimeter and inferred heights require later visual review. No night behavior, signage or hero geometry was added. S3 generation is synchronous, roughly one second here; this is not a GPU frame measurement.
+
+## Historical S2 / S1 record
+
 # Shibuya Scene Reconstruction — RUN S2
 
 S0 conditional PASS / S1 PASS. S2 adds Ground only. No later scene modules, gameplay or deployment.
