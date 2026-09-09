@@ -1,3 +1,19 @@
+# Shibuya Scene Reconstruction — RUN S5
+
+S0 conditional PASS; S1–S4 PASS. This revision implements Station Core only.
+
+- Inspect `?only=ground,buildings,heroes,station,data,geo&camera=hachiko`. The existing station switch disposes/rebuilds owned resources. Fixed cameras are unchanged.
+- `src/station/alignment.mjs`: source classification, exact endpoint joins, deduplication and clipping. `config.mjs`: IDs, POC elevations and widths. `model.mjs`: procedural core and support/penetration audit. `render.mjs`: 11 shared materials and 15 batches.
+- `npm test`: build and 121 tests. Reproduce CPU evidence with `node scripts/verify-station.mjs` then `python3 scripts/plot-station.py` (matplotlib).
+- 96 rail sources: JR33 / Ginza7 / other56. Generated: 4 JR tracks, 4 Ginza main/approach lines, 3 platforms, Hachiko core, 3 pedestrian decks and 1 mapped stair.
+- Station 75,568 triangles; combined known scene 317,492 triangles / 38 estimated calls excluding debug lines.
+
+Complete Japanese report: `evidence/s5/S5_REPORT.txt`. Metadata, reservation/rail/penetration/endpoint audits, tests/build/console logs and CPU plan/elevation figures are alongside it.
+
+WebGL2, fixed-camera rendering and FPS remain unverified. No major road/crossing blockage in CPU audits; 11 minor sidewalk support overlaps remain recorded. Geometry uses inferred local elevations; support spans, station interfaces, perimeter clipping and the closed deck continuation are documented POC limitations. No later detail modules, moving trains, GTA or deployment.
+
+## Historical S4 record
+
 # Shibuya Scene Reconstruction — RUN S4
 
 S0 conditional PASS; S1/S2/S3 PASS. S4 adds eight Hero landmarks across nine reserved OSM footprints. Five station reservations remain untouched.
