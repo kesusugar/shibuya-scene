@@ -1,3 +1,19 @@
+# Shibuya Scene Reconstruction — RUN S6
+
+S0 conditional PASS; S1–S5 PASS. S6 adds station detail, rotary/plaza furniture and original under-viaduct storefronts only.
+
+- Inspect `?only=ground,buildings,heroes,station,stationDetail,data,geo&camera=hachiko`. Existing cameras remain unchanged. `stationDetail` disposes/rebuilds only S6; profile changes adjust its density. Add `&debug=1` for S6 fixture bounds, wires and signal directions.
+- `src/station-detail`: configuration, station-only Canvas atlas, placement model, independent penetration audit, instanced/merged rendering and debug lines. Existing S0–S5 modules are unchanged.
+- `npm test`: build + 142 tests. Reproduce CPU evidence: `node scripts/verify-station-detail.mjs`, then `python3 scripts/plot-station-detail.py` (numpy/matplotlib).
+- MEDIUM: 44 platform fixtures, 27 station sign faces, 5 vending machines, 10 benches, 49 catenary supports, 504 wire segments, 8 rail signals, 14 rotary/plaza props, 2 shelters, 8 storefronts across 4 archetypes.
+- S6 adds 16,540 triangles, 9 materials, 12 batches, 1 shared 1024px Canvas atlas. Known combined scene: 334,032 triangles, 40 materials, 50 batches, 3 textures excluding S1 debug lines.
+
+Japanese report and all evidence: `evidence/s6/S6_REPORT.txt`. S5 minor11 preserved; S6 new major0 / minor3 (sidewalk planter, bench and map board). Large sidewalk shelter candidates are excluded. Locations/clearances and procedural approximations are recorded.
+
+WebGL2 rendering, real camera screenshots and FPS remain unverified. CPU density maps and CAM-05 proxy projection are not WebGL screenshots. Canvas artwork is original static illustrative information; no live schedules. No S7+, citywide signage, traffic, moving trains, GTA or deployment.
+
+## Historical S5 record
+
 # Shibuya Scene Reconstruction — RUN S5
 
 S0 conditional PASS; S1–S4 PASS. This revision implements Station Core only.
