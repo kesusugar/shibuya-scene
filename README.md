@@ -1,3 +1,21 @@
+# Shibuya Scene Reconstruction — RUN S2
+
+S0 conditional PASS / S1 PASS. S2 adds Ground only. No later scene modules, gameplay or deployment.
+
+Run `npm ci`, `npm run dev`; `npm test` builds and runs 59 tests (42 existing + 17 S2). Inspect `?only=ground,data,geo&camera=overview`, `camera=scramble`, `camera=street`. Ground loads independently of data-outline visibility; Ground OFF restores outlines. Fixed cameras and S0 controls are preserved.
+
+`src/ground/config.mjs`, `model.mjs`, `render.mjs` use existing S1 metric coordinates, triangulation/merge, RNG and spatial index. S1 sources are unchanged. Polygon-clipping (MIT, package-lock pinned) provides boolean operations. Segment rectangles and rounded joins tolerate repeated/short/reversing/self-crossing paths; X/Z clipped to ±250 m. Width priority: metric width > lanes × 3 + 1 m > class default. Elevated/tunnel/nonzero-layer geometry is excluded.
+
+Central junction envelope uses OSM scramble crossing anchors. Four main crossings and one diagonal retain OSM directions; southern parts are joined, endpoints extended to road edge. Duplicate normal crossings are excluded within configured 40 m central radius. Other marked footways/crossing/signal points yield normal crossings; unmarked/informal/no tags excluded.
+
+Sidewalk bands 3 m, curb height 0.15 m, ramps interpolate distance to road boundary over 1.5 m. Spatial index and adaptive subdivision resolve ramps. Sidewalk excludes curb tops; paint and tactile polygons are unioned before merge. Five material batches with deterministic procedural asphalt/sidewalk DataTextures and Ground-owned inspection daylight. Night/time remains a stub.
+
+Evidence in `evidence/s2`: geometry.json, tests.log, build.log, browser.txt, ground-plan.png and S2_REPORT.txt. Other tests-s2 logs are intermediate development records. CPU plan is not a WebGL screenshot. Reproduce with `node scripts/verify-ground.mjs`, optionally `python3 scripts/plot-ground.py` (matplotlib).
+
+Known constraints: WebGL2 unavailable; rendered camera views, Z-fighting, lighting, GPU calls and FPS unverified. CPU generation is synchronous (~8 seconds here), not a frame-time measurement. Generic sidewalk widths, road fallback widths, central envelope and signal-derived crossings are POC approximations, not surveyed curb geometry. No subagents used. No later build hooks added.
+
+## Historical S1 record
+
 # Shibuya Scene Reconstruction — S1
 
 S0: conditionally PASS per user. Its WebGL limit remains an environment constraint. S0 foundation.mjs, camera definitions, styling and tests are preserved; app/page.tsx only integrates S1 and updates RUN labels. No gameplay or later-RUN systems. Not deployed.
