@@ -1,3 +1,13 @@
+# RUN S8 — Streetscape
+
+Only S8 implemented over S7 b0a9257. Deterministic sidewalk-edge fixtures, mapped signal structures and trees, pole-to-pole sagging cables, shared furniture atlas and instanced geometry. Region weights and HIGH/MEDIUM/LOW density preserve the renderer profiles. Physical signal heads are static; streetlights have emissive metadata only.
+
+S6 fixture scope is excluded. S7 HIGH sign volumes remain protected at every streetscape tier. Placements reject roadway/crosswalk/ramp/pedestrian-flow/building/station/sign conflicts and reserve an inland 1.2m walkway. Numerical clipping inputs are normalized to micrometre precision in S8 only. `?debug=1` enables category-colored bounds, orientation vectors, rejected anchors, station exclusion and region-colored density stems. Existing debug UI remains.
+
+Run `npm test` for build and all regression tests; `node scripts/verify-streetscape.mjs` summarizes the generated S8 evidence and unchanged S7 baseline. See `evidence/s8/S8_REPORT.txt`. WebGL2 is unavailable in this validation browser; CPU generation, atlas creation and DOM/console checks are distinct from visual approval. Long synchronous generation may pause startup/profile switches. No S9+ systems or GTA features.
+
+## Historical S7 record
+
 # Shibuya Scene Reconstruction — RUN S7
 
 S7 adds original Canvas city signage, facade anchors, region density, Hero screen treatments and placement audits. Inspect `?tier=high&camera=center-gai`; use the existing `signs` switch to compare. Add `&debug=1` for colored anchors, normals, bounds and rejected candidates. S8+ is not implemented.
