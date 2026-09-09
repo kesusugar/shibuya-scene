@@ -1,3 +1,17 @@
+# Shibuya Scene Reconstruction — RUN S4
+
+S0 conditional PASS; S1/S2/S3 PASS. S4 adds eight Hero landmarks across nine reserved OSM footprints. Five station reservations remain untouched.
+
+- Inspect `?only=ground,buildings,heroes,data,geo&camera=overview`. The `heroes` switch disposes and rebuilds the module using the existing lifecycle.
+- `src/heroes/config.mjs` centralizes IDs, heights and references; `model.mjs` handles source-aligned mass/axes/anchors; `builders.mjs` supplies dedicated landmark masses; `render.mjs` merges material channels and instances repeated details.
+- `npm test`: build + 101 tests. CPU evidence: `node scripts/verify-heroes.mjs`, then `python3 scripts/plot-heroes.py` (matplotlib).
+- Hero 33,170 triangles, 8 materials, 10 batches. Combined Ground/Generic/Hero 241,924 triangles, 23 estimated calls excluding debug lines.
+- `evidence/s4/S4_REPORT.txt` contains IDs, heights/bounds, references, verification and known limitations. Metadata, console logs and CPU figures are alongside it.
+
+WebGL2/FPS and fixed-camera visual quality remain unverified in this environment. CPU figures are not rendered scene screenshots. Two small Hero road-edge overlaps remain; no major road or crossing intrusion. Stream/Mark City West retain the existing perimeter clip. Future sign/emissive anchors are metadata and blank surfaces only. No later-stage systems or deployment.
+
+## Historical S3 record
+
 # Shibuya Scene Reconstruction — RUN S3
 
 S0 conditional PASS; S1/S2 PASS. This version implements **Generic Buildings only**, on the unchanged S2 Ground. No deployment or later-stage builders.
