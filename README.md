@@ -1,4 +1,12 @@
-# Shibuya Scene Reconstruction — RUN S6
+# Shibuya Scene Reconstruction — RUN S7
+
+S7 adds original Canvas city signage, facade anchors, region density, Hero screen treatments and placement audits. Inspect `?tier=high&camera=center-gai`; use the existing `signs` switch to compare. Add `&debug=1` for colored anchors, normals, bounds and rejected candidates. S8+ is not implemented.
+
+HIGH: 763 signs / Center-gai260 / 2 atlases / 4 materials / 4 batches / 10,744 added triangles. MEDIUM520 and LOW248 signs. Automated tests160 PASS and build PASS. Placement audit major0/minor0. Runtime console, WebGL screenshots and FPS are unverified in this run because the provided browser connection timed out; do not treat this as Visual PASS.
+
+See `evidence/s7/S7_REPORT.txt`, `geometry.json`, `placements.json` and `signage-density-cpu.png`. Reproduce with `node --test tests/*.test.mjs`, `node scripts/verify-signage.mjs` and `python3 scripts/plot-signage.py`. The CPU map is not a rendered screenshot. Existing S0–S6 source and dependency versions remain unchanged.
+
+## Previous S6 record
 
 S0 conditional PASS; S1–S5 PASS. S6 adds station detail, rotary/plaza furniture and original under-viaduct storefronts only.
 
