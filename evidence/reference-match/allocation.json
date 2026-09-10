@@ -1,0 +1,58 @@
+{
+  "snapshot": {
+    "spawned": 420,
+    "despawned": 0,
+    "reasons": {},
+    "recoveries": 0,
+    "stuck": 0,
+    "routeCompletions": 0,
+    "signalViolations": 0,
+    "entries": {},
+    "completed": {},
+    "neighborChecks": 26,
+    "avoidanceChecks": 0,
+    "updateMs": 0,
+    "throttled": 0,
+    "spawnDeferred": 0,
+    "target": 420,
+    "choreographed": 357,
+    "waitingCells": 49,
+    "total": 420,
+    "tier": "high",
+    "archetypes": {
+      "office": 42,
+      "student": 42,
+      "casual": 42,
+      "hoodie": 42,
+      "shopper": 42,
+      "tourist": 42,
+      "elderly": 42,
+      "jogger": 42,
+      "pastel": 42,
+      "umbrella": 42
+    },
+    "modes": {
+      "scramble": 357,
+      "idle": 63
+    },
+    "states": {
+      "waiting": 357,
+      "idle": 63
+    },
+    "lod": {
+      "near": 420
+    },
+    "regions": {
+      "commercial": 259,
+      "hachiko": 119,
+      "station": 21,
+      "center-gai": 21
+    },
+    "hachiko": 119,
+    "centerGai": 21,
+    "groupCount": 0,
+    "queueSizes": {}
+  },
+  "cast": 357,
+  "uniqueWaitingPositions": 357
+}

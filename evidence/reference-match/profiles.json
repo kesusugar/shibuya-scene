@@ -1,0 +1,238 @@
+{
+  "low": {
+    "spawned": 434,
+    "despawned": 339,
+    "reasons": {
+      "profile": 339
+    },
+    "recoveries": 0,
+    "stuck": 0,
+    "routeCompletions": 357,
+    "signalViolations": 0,
+    "entries": {
+      "way/754454449:-1": 30,
+      "way/754454449:1": 18,
+      "way/355248083:-1": 50,
+      "way/355248083:1": 45,
+      "way/355248078:1": 41,
+      "way/355248080:1": 30,
+      "way/355248078:-1": 36,
+      "way/355248081:1": 30,
+      "way/355248080:-1": 36,
+      "way/355248081:-1": 41
+    },
+    "completed": {
+      "way/355248080:1": 30,
+      "way/355248078:-1": 36,
+      "way/355248081:-1": 41,
+      "way/355248080:-1": 36,
+      "way/355248078:1": 41,
+      "way/355248081:1": 30,
+      "way/355248083:-1": 50,
+      "way/355248083:1": 45,
+      "way/754454449:1": 18,
+      "way/754454449:-1": 30
+    },
+    "neighborChecks": 21,
+    "avoidanceChecks": 0,
+    "updateMs": 0.06867399999464396,
+    "throttled": 31752,
+    "spawnDeferred": 0,
+    "target": 95,
+    "choreographed": 81,
+    "waitingCells": 49,
+    "total": 95,
+    "tier": "low",
+    "archetypes": {
+      "office": 15,
+      "student": 14,
+      "casual": 11,
+      "hoodie": 9,
+      "shopper": 5,
+      "tourist": 3,
+      "elderly": 5,
+      "jogger": 8,
+      "pastel": 12,
+      "umbrella": 13
+    },
+    "modes": {
+      "idle": 14,
+      "ambient": 81
+    },
+    "states": {
+      "idle": 14,
+      "waiting": 81
+    },
+    "lod": {
+      "near": 53,
+      "mid": 35,
+      "far": 7
+    },
+    "regions": {
+      "hachiko": 37,
+      "station": 5,
+      "center-gai": 4,
+      "commercial": 49
+    },
+    "hachiko": 54,
+    "centerGai": 4,
+    "groupCount": 0,
+    "queueSizes": {}
+  },
+  "medium": {
+    "spawned": 644,
+    "despawned": 434,
+    "reasons": {
+      "profile": 434
+    },
+    "recoveries": 0,
+    "stuck": 0,
+    "routeCompletions": 357,
+    "signalViolations": 0,
+    "entries": {
+      "way/754454449:-1": 30,
+      "way/754454449:1": 18,
+      "way/355248083:-1": 50,
+      "way/355248083:1": 45,
+      "way/355248078:1": 41,
+      "way/355248080:1": 30,
+      "way/355248078:-1": 36,
+      "way/355248081:1": 30,
+      "way/355248080:-1": 36,
+      "way/355248081:-1": 41
+    },
+    "completed": {
+      "way/355248080:1": 30,
+      "way/355248078:-1": 36,
+      "way/355248081:-1": 41,
+      "way/355248080:-1": 36,
+      "way/355248078:1": 41,
+      "way/355248081:1": 30,
+      "way/355248083:-1": 50,
+      "way/355248083:1": 45,
+      "way/754454449:1": 18,
+      "way/754454449:-1": 30
+    },
+    "neighborChecks": 31,
+    "avoidanceChecks": 0,
+    "updateMs": 0.06867399999464396,
+    "throttled": 31752,
+    "spawnDeferred": 0,
+    "target": 210,
+    "choreographed": 179,
+    "waitingCells": 49,
+    "total": 210,
+    "tier": "medium",
+    "archetypes": {
+      "office": 21,
+      "student": 21,
+      "casual": 21,
+      "hoodie": 21,
+      "shopper": 21,
+      "tourist": 21,
+      "elderly": 21,
+      "jogger": 21,
+      "pastel": 21,
+      "umbrella": 21
+    },
+    "modes": {
+      "scramble": 179,
+      "idle": 31
+    },
+    "states": {
+      "waiting": 179,
+      "idle": 31
+    },
+    "lod": {
+      "near": 210
+    },
+    "regions": {
+      "commercial": 131,
+      "hachiko": 59,
+      "station": 10,
+      "center-gai": 10
+    },
+    "hachiko": 59,
+    "centerGai": 10,
+    "groupCount": 0,
+    "queueSizes": {}
+  },
+  "high": {
+    "spawned": 1064,
+    "despawned": 644,
+    "reasons": {
+      "profile": 644
+    },
+    "recoveries": 0,
+    "stuck": 0,
+    "routeCompletions": 357,
+    "signalViolations": 0,
+    "entries": {
+      "way/754454449:-1": 30,
+      "way/754454449:1": 18,
+      "way/355248083:-1": 50,
+      "way/355248083:1": 45,
+      "way/355248078:1": 41,
+      "way/355248080:1": 30,
+      "way/355248078:-1": 36,
+      "way/355248081:1": 30,
+      "way/355248080:-1": 36,
+      "way/355248081:-1": 41
+    },
+    "completed": {
+      "way/355248080:1": 30,
+      "way/355248078:-1": 36,
+      "way/355248081:-1": 41,
+      "way/355248080:-1": 36,
+      "way/355248078:1": 41,
+      "way/355248081:1": 30,
+      "way/355248083:-1": 50,
+      "way/355248083:1": 45,
+      "way/754454449:1": 18,
+      "way/754454449:-1": 30
+    },
+    "neighborChecks": 56,
+    "avoidanceChecks": 0,
+    "updateMs": 0.06867399999464396,
+    "throttled": 31752,
+    "spawnDeferred": 0,
+    "target": 420,
+    "choreographed": 357,
+    "waitingCells": 49,
+    "total": 420,
+    "tier": "high",
+    "archetypes": {
+      "office": 42,
+      "student": 42,
+      "casual": 42,
+      "hoodie": 42,
+      "shopper": 42,
+      "tourist": 42,
+      "elderly": 42,
+      "jogger": 42,
+      "pastel": 42,
+      "umbrella": 42
+    },
+    "modes": {
+      "scramble": 357,
+      "idle": 63
+    },
+    "states": {
+      "waiting": 357,
+      "idle": 63
+    },
+    "lod": {
+      "near": 420
+    },
+    "regions": {
+      "commercial": 259,
+      "hachiko": 119,
+      "station": 21,
+      "center-gai": 21
+    },
+    "hachiko": 119,
+    "centerGai": 21,
+    "groupCount": 0,
+    "queueSizes": {}
+  }
+}
