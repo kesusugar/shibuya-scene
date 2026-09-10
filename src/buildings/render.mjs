@@ -25,7 +25,7 @@ export function buildBuildings(data){
    const floorCount=Math.max(1,Math.floor((top-b.base)/C.floorHeight));
    for(let floor=0;floor<floorCount;floor++){
     const y=b.base+(floor+.53)*C.floorHeight;if(y+1.3>top)continue;
-    const isShop=b.archetype==='shop'&&floor===0&&front;
+    const isShop=front&&floor<4&&b.archetype!=='balcony'&&b.frontage.distance<18&&Math.hypot(...b.centroid)<180;
     const strip=b.archetype==='band',curtain=b.archetype==='curtain';
     const pitch=b.archetype==='zakkyo'?2.1:curtain?2.5:C.windowPitch;
     const cols=strip?1:Math.max(1,Math.floor((l-.8)/pitch));
@@ -33,12 +33,13 @@ export function buildBuildings(data){
      // Plain facades have fewer openings; all decisions are stable per OSM ID.
      if(b.archetype==='plain'&&rng()<.25)continue;
      const along=(col+.5)*l/cols,width=strip?Math.max(.5,l-.9):Math.min(l/cols-.45,isShop?2.4:curtain?2.1:b.archetype==='zakkyo'?1.05:1.45),height=isShop?2.5:curtain?2.8:b.archetype==='zakkyo'?2.2:1.6;
-     if(width<=.2)continue;const bucket=isShop?'shopWindows':curtain?'curtainWindows':'windows';const colors=curtain?[0x607f90,0x7897a4,0x455e70]:isShop?[0x475b60,0x627b7d]:[0x3e5666,0x68818a,0x849295];const color=colors[Math.floor(rng()*colors.length)];const p=point(along,y);
+     if(width<=.2)continue;const bucket=isShop?'shopWindows':curtain?'curtainWindows':'windows';const colors=curtain?[0x607f90,0x7897a4,0x455e70]:isShop?[0x8daba8,0xa5b6a3,0x8aa4b2]:[0x3e5666,0x68818a,0x849295];const color=colors[Math.floor(rng()*colors.length)];const p=point(along,y);
      add(bucket,b,p,[width,height,1],yaw,color,'window');wallWindows.push({building:b.key,edge,along,position:p,width,height,normal:n,offset:C.windowOffset});windowCount++;
     }
     if(['band','grid','curtain','shop'].includes(b.archetype)&&(floor>0||isShop))add('trim',b,point(l/2,b.base+floor*C.floorHeight+.065,.065),[Math.max(.2,l-.2),.13,.13],yaw,0xb8b8b1,'floor-band');
     if(b.archetype==='balcony'&&front&&floor>0&&l>3){const w=Math.min(l-.8,10),py=b.base+floor*C.floorHeight;add('trim',b,point(l/2,py,.3),[w,.16,.65],yaw,0xbcb8ac,'balcony-slab');add('trim',b,point(l/2,py+.85,.62),[w,.08,.07],yaw,0x7d8383,'balcony-rail');for(const along of [l/2-w/2,l/2+w/2])add('trim',b,point(along,py+.45,.62),[.07,.8,.07],yaw,0x7d8383,'balcony-post');balconies++;}
    }
+   if(front&&b.archetype!=='balcony'&&b.frontage.distance<18&&Math.hypot(...b.centroid)<180&&l>3){const w=Math.min(l-.8,8);add('trim',b,point(l/2,b.base+3.05,.2),[w,.12,.4],yaw,[0x46675e,0x756559,0x4e657b][b.key.length%3],'store-awning');for(const along of [l/2-w/2,l/2,l/2+w/2])add('trim',b,point(along,b.base+1.5,.065),[.08,2.7,.08],yaw,0xc5c6b8,'store-divider');}
    if(b.archetype==='grid'||b.archetype==='curtain')for(let along=3;along<l-1;along+=C.windowPitch*2)add('trim',b,point(along,(top+b.base)/2,.06),[.085,top-b.base,.1],yaw,0x8c999d,'mullion');
   }
   for(const p of b.rooftop){const isRound=['tank','mast'].includes(p.type);add(isRound?'rooftopCylinders':'rooftopBoxes',b,[p.center[0],top+p.height/2,p.center[1]],[p.width,p.height,p.depth],0,p.type==='hut'?0x92958e:p.type==='mast'?0x626969:0xa4aaa6,p.type);}

@@ -53,11 +53,27 @@ export function buildPedestrianNetwork(data,options){
    const e=edge(from,to,{crossingId:source.id,sourcePoints:source.points,width:source.width,kind:source.kind,direction,track,points:samples,length:total});crossings.push(e);
   }
  }
+ // S16: multiple safe approach/departure cells form deep, high-density waiting strips.
+ // Reuse mapped road tracks and the existing signal/route machinery; no new steering solver.
+ const waitingZones=[];
+ for(const original of [...crossings].filter(e=>e.kind!=='normal')){
+  const a=nodes[original.from],b=nodes[original.to],road=original.points.filter(p=>ctx.onRoad(...p));if(road.length<2)continue;
+  const len=Math.hypot(b.x-a.x,b.z-a.z),tx=(b.x-a.x)/len,tz=(b.z-a.z)/len,entries=[a.id],exits=[b.id];
+  for(let row=1;row<=3;row++){
+   const lateral=(row%2?.3:-.3),from=nearest(a.x-tx*row*1.65+tz*lateral,a.z-tz*row*1.65-tx*lateral,1.35,n=>n.edges.length>1&&!entries.includes(n.id)),to=nearest(b.x+tx*row*1.65-tz*lateral,b.z+tz*row*1.65+tx*lateral,1.35,n=>n.edges.length>1&&!exits.includes(n.id));
+   if(!from||!to)continue;const path=[[from.x,from.z],...road,[to.x,to.z]];
+   if(path.slice(1).some((p,i)=>!segmentSafe({x:path[i][0],z:path[i][1]},{x:p[0],z:p[1]},true)))continue;
+   const total=length(path),points=[];for(let d=0;d<total;d+=.3)points.push(sample(path,d).point);points.push(path.at(-1));
+   if(points.some(p=>ctx.onRoad(...p)&&!inCrossing(...p,original,.34)))continue;
+   const e=edge(from,to,{crossingId:original.crossingId,sourcePoints:original.sourcePoints,width:original.width,kind:original.kind,direction:original.direction,track:original.track,waitingRow:row,points,length:total});crossings.push(e);entries.push(from.id);exits.push(to.id);landingNodes.add(to.id);
+  }
+  waitingZones.push({crossingId:original.crossingId,direction:original.direction,track:original.track,entries,exits});
+ }
  // Components determine route capacity. Disconnected slivers never receive citizens.
  let component=0;const components=[];
  for(const n of nodes){if(n.component>=0)continue;const ids=[n.id];n.component=component;for(let i=0;i<ids.length;i++)for(const eid of nodes[ids[i]].edges){const next=nodes[edges[eid].to];if(next.component<0){next.component=component;ids.push(next.id);}}components.push(ids);component++;}
  const eligible=nodes.filter(n=>components[n.component].length>=35&&n.edges.some(id=>!edges[id].crossingId));
- return {ctx,nodes,edges,crossings,components,eligible,landingNodes,nearest,segmentSafe,rejected,stats:{nodes:nodes.length,edges:edges.length,crossingPaths:crossings.length,scramblePaths:crossings.filter(c=>c.kind!=='normal').length,components:components.length,eligible:eligible.length,footwaySources:ctx.footwaySources.length,rejectedCrossings:rejected.length,generationMs:Math.round(performance.now()-started)}};
+ return {ctx,nodes,edges,crossings,components,eligible,landingNodes,nearest,segmentSafe,rejected,waitingZones,stats:{waitingCells:new Set(waitingZones.flatMap(z=>z.entries)).size,nodes:nodes.length,edges:edges.length,crossingPaths:crossings.length,scramblePaths:crossings.filter(c=>c.kind!=='normal').length,components:components.length,eligible:eligible.length,footwaySources:ctx.footwaySources.length,rejectedCrossings:rejected.length,generationMs:Math.round(performance.now()-started)}};
 }
 // A* with a binary heap. Paths are built at destination changes, never per frame.
 export function route(network,from,to){
