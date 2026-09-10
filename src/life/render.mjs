@@ -25,16 +25,16 @@ export function buildCrowd(data,options={}){
   const g=new BufferGeometry();g.setAttribute('position',new Float32BufferAttribute(lines,3));debug=new LineSegments(g,new LineBasicMaterial({color:0xf8b5d1,depthTest:false}));debug.name='s10-walkable-path-grid';root.add(debug);stats.debugBatches=1;
  }
  function part(key,p,lx,y,lz,w,h,d,hex,swing=0){const c=Math.cos(p.heading),s=Math.sin(p.heading);obj.position.set(p.renderX+c*lx+s*lz,p.height+y,p.renderZ-s*lx+c*lz);obj.rotation.set(0,p.heading,0);obj.rotateX(swing);obj.scale.set(w,h,d);obj.updateMatrix();const i=counts[key]++;meshes[key].setMatrixAt(i,obj.matrix);color.setHex(hex);meshes[key].setColorAt(i,color);}
- function sync(dt=0){for(const k of Object.keys(meshes))counts[k]=0;for(const p of sim.pool){if(!p.active)continue;const def=ARCHETYPES[p.archetype],h=def.height*(.96+(p.id%5)*.02),w=def.width,walk=p.speed>.05,phase=p.animationTime*(walk?7:1)+p.phase,fidelity=p.lod==='near'?1:p.lod==='mid'?.65:.15,swing=walk?Math.sin(phase)*.38*fidelity:Math.sin(phase)*.025,bob=walk?Math.abs(Math.cos(phase))*.024*fidelity:Math.sin(phase)*.008;
+ function sync(dt=0){for(const k of Object.keys(meshes))counts[k]=0;for(const p of sim.pool){if(!p.active)continue;const def=ARCHETYPES[p.archetype],h=def.height*(.96+(p.id%5)*.02),w=def.width*(1.06+(p.id%7)*.015),walk=p.speed>.05,phase=p.animationTime*(walk?7:1)+p.phase,fidelity=p.lod==='near'?1:p.lod==='mid'?.65:.15,swing=walk?Math.sin(phase)*.38*fidelity:Math.sin(phase)*.025,bob=walk?Math.abs(Math.cos(phase))*.024*fidelity:Math.sin(phase)*.008;
    const blend=dt?Math.min(1,dt*(p.lod==='far'?10:25)):1;p.renderX+=(p.x-p.renderX)*blend;p.renderZ+=(p.z-p.renderZ)*blend;
    const shirt=def.colors[p.color],skin=[0xdfb994,0xba8868,0xeac6a7,0xc99c7e][p.id%4],hair=def.gray?0xaeb0ac:[0x25282a,0x4e3a30,0x706051][p.id%3],legs=p.archetype==='pastel'?0x8b859c:0x354151;
-   part('torso',p,0,h*.59+bob,0,w,h*.31,w*.55,shirt);
-   part('head',p,0,h*.87+bob,0,h*.135,h*.13,h*.125,skin);
-   part('hair',p,0,h*.92+bob,-.015,h*.143,h*.065,h*.132,def.hood?shirt:hair);
-   for(const side of [-1,1]){part('legs',p,side*w*.22,h*.22+bob,Math.sin(swing*side)*h*.16,w*.25,h*.42,w*.29,legs,swing*side);part('arms',p,side*w*.64,h*.59+bob,-Math.sin(swing*side)*h*.12,w*.22,h*.32,w*.26,shirt,-swing*side);}
+   part('torso',p,0,h*.54+bob,0,w,h*.29,w*.55,shirt);
+   part('head',p,0,h*.79+bob,0,h*.155,h*.149,h*.144,skin);
+   part('hair',p,0,h*.845+bob,-.022,h*.165,h*.09,h*.153,def.hood?shirt:hair);
+   for(const side of [-1,1]){part('legs',p,side*w*.22,h*.20+bob,Math.sin(swing*side)*h*.16,w*.25,h*.38,w*.29,legs,swing*side);part('arms',p,side*w*.64,h*.54+bob,-Math.sin(swing*side)*h*.12,w*.22,h*.32,w*.26,shirt,-swing*side);}
    if(def.bag)part('bag',p,w*.65,h*.43,-.02,w*.37,h*.17,w*.42,p.id%2?0x9a7960:0x4e5557);
-   if(def.umbrella)part('umbrella',p,.1,h+ .18,0,.52,1,.52,shirt);
-   if(def.hat)part('hat',p,0,h*.96+bob,.02,w*.68,.065,w*.7,0xc9b596);
+   if(def.umbrella&&p.id%5===0)part('umbrella',p,.1,h*.98,0,.4,.65,.4,shirt);
+   if(def.hat)part('hat',p,0,h*.94+bob,.02,w*.68,.065,w*.7,0xc9b596);
   }
   stats.triangles=0;stats.batches=0;for(const [k,m] of Object.entries(meshes)){m.count=counts[k];if(m.count)stats.batches++;stats.triangles+=m.count*triangleCount(geometry[k]);m.instanceMatrix.needsUpdate=true;if(m.instanceColor)m.instanceColor.needsUpdate=true;}
   reportClock+=dt;if(reportClock>=1||!dt){reportClock=0;Object.assign(stats,network.stats,sim.snapshot(options.debug));}

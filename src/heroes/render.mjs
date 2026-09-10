@@ -17,6 +17,13 @@ export function buildHeroScene(data){const started=performance.now(),audit=audit
    const above=union(...h.masses.filter(n=>n!==m&&n.bottom<=m.top+.001&&n.top>m.top+.001).map(n=>multi(n.polygon)));
    for(const p of polygons(difference(multi(m.polygon),above))){if(area(multi(p))<1e-6)continue;const g=polygonGeometry(p,m.top);statics.roof.push(g);h.triangles+=triangleCount(g);}
   }
+  // Selected central concrete faces: shallow bands reuse the existing trim batch.
+  if(['magnet','seibuA','seibuB'].includes(h.key))for(const m of h.masses){
+   if(!m.material.startsWith('concrete'))continue;
+   const ring=m.polygon.outer;for(let i=0;i<ring.length;i++){const a=ring[i],b=ring[(i+1)%ring.length],dx=b[0]-a[0],dz=b[1]-a[1],length=Math.hypot(dx,dz);if(length<12)continue;const nx=dz/length,nz=-dx/length,heading=Math.atan2(nx,nz);
+    for(let y=m.bottom+4;y<m.top-1;y+=4){detailRecords.push({hero:h.key,position:[(a[0]+b[0])/2+nx*.09,y,(a[1]+b[1])/2+nz*.09],heading,scale:[length-.3,.16,.12],color:0x737e87,role:'calibration-band'});h.triangles+=12;}
+   }
+  }
   for(const p of h.panels){panelRecords[p.material].push({...p,hero:h.key});h.triangles+=2;}
   for(const d of h.details){detailRecords.push({...d,hero:h.key});h.triangles+=12;}
   h.rootWorldPosition=[h.sourceCentroid[0],h.base,h.sourceCentroid[1]];

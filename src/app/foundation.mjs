@@ -1,8 +1,8 @@
 export const PROFILES = Object.freeze({high:{dpr:1.5,scale:1,fps:60,textureSize:2048},medium:{dpr:1.25,scale:.6,fps:30,textureSize:1024},low:{dpr:1,scale:.3,fps:24,textureSize:512}});
 export const CAMERAS = Object.freeze([
-{id:'overview',label:'CAM-01 Overview',position:[260,300,260],target:[0,0,0]},
-{id:'scramble',label:'CAM-02 Scramble High',position:[55,70,65],target:[0,0,0]},
-{id:'street',label:'CAM-03 Scramble Street',position:[18,1.7,28],target:[-12,5.5,-25]},
+{id:'overview',label:'CAM-01 Overview',position:[150,165,155],target:[-12,10,-12]},
+{id:'scramble',label:'CAM-02 Scramble High',position:[58,62,67],target:[-10,8,-15]},
+{id:'street',label:'CAM-03 Scramble Street',position:[18,1.55,25],target:[-15,8,-32]},
 {id:'qfront',label:'CAM-04 QFRONT',position:[20,12,28],target:[-28,25,-36]},
 {id:'hachiko',label:'CAM-05 Hachiko',position:[-25,15,25],target:[30,8,50]},
 {id:'109',label:'CAM-06 109',position:[0,5,0],target:[-150,25,-10]},
