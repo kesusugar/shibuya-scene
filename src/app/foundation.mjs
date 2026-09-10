@@ -1,4 +1,4 @@
-export const PROFILES = Object.freeze({high:{dpr:2,scale:1,textureSize:2048},medium:{dpr:1.5,scale:.6,textureSize:1024},low:{dpr:1,scale:.3,textureSize:512}});
+export const PROFILES = Object.freeze({high:{dpr:1.5,scale:1,fps:60,textureSize:2048},medium:{dpr:1.25,scale:.6,fps:30,textureSize:1024},low:{dpr:1,scale:.3,fps:24,textureSize:512}});
 export const CAMERAS = Object.freeze([
 {id:'overview',label:'CAM-01 Overview',position:[260,300,260],target:[0,0,0]},
 {id:'scramble',label:'CAM-02 Scramble High',position:[55,70,65],target:[0,0,0]},
