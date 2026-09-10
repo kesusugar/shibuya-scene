@@ -132,3 +132,5 @@ HERO_IDS is centralized in src/data/normalize.mjs. 11 anchors include QFRONT, 10
 Reproduce the exact snapshot: decompress data-source/shibuya.osm.gz; run python scripts/data/import-osm.py SOURCE.osm RAW.json; then node scripts/data/normalize.mjs RAW.json. That script metadata describes this fixed snapshot, not the time of a future refresh. Source provenance and ODbL attribution are included.
 
 Workspace maintenance removed the first uncommitted S1 checkout. This source was reconstructed from the visible implementation record and surviving OSM bytes. See evidence/s1 for validation of this restored copy. STOP after S1; no deployment.
+
+RUN S10 adds pooled procedural pedestrians, OSM sidewalk routing, signal-coordinated crossings, local avoidance and quality/LOD profiles. Run `node --test tests/s10-crowd.test.mjs` for the integrated 180-second crowd/traffic audit. Detailed counts and validation limits are recorded in evidence/s10/S10_REPORT.txt. S11 and later stages remain out of scope.

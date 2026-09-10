@@ -6,11 +6,14 @@ export function buildSignals(graph,street){const groups=new Map(),crossings=new 
  return new SignalController(groups,crossings);
 }
 export class SignalController{
- constructor(groups,crossings){this.groups=groups;this.crossings=crossings;this.time=0;this.override=null;}
+ constructor(groups,crossings){this.groups=groups;this.crossings=crossings;this.time=0;this.override=null;this.pedestrians=new Map();this.pedestrianClearUntil=new Map();}
  update(dt){this.time+=dt;}
  phase(){const t=this.time%108;return t<35?['NS','GREEN',35-t]:t<39?['NS','YELLOW',39-t]:t<44?['ALL','RED',44-t]:t<79?['EW','GREEN',79-t]:t<83?['EW','YELLOW',83-t]:t<88?['ALL','RED',88-t]:['PEDESTRIAN','RED',108-t];}
- getSignalState(groupId,axis='NS'){if(!this.groups.has(groupId))return 'RED';if(this.override)return this.override;const [active,color]=this.phase();return active===axis?color:'RED';}
- remainingGreen(groupId,axis){if(this.override==='GREEN')return Infinity;const [a,c,left]=this.phase();return this.groups.has(groupId)&&a===axis&&c==='GREEN'?left:0;}
- getPedestrianPhase(groupId){const g=this.groups.get(groupId);return g&&this.phase()[0]==='PEDESTRIAN'&&g.locks.size===0?'WALK':'DONT_WALK';}
+ getSignalState(groupId,axis='NS'){if(!this.groups.has(groupId))return 'RED';if(this.pedestrianOccupied(groupId))return 'RED';if(this.override)return this.override;const [active,color]=this.phase();return active===axis?color:'RED';}
+ pedestrianOccupied(groupId){return (this.pedestrians.get(groupId)?.size??0)>0||this.time<(this.pedestrianClearUntil.get(groupId)??0);}
+ enterPedestrian(groupId,id){if(!this.groups.has(groupId))return false;if(!this.pedestrians.has(groupId))this.pedestrians.set(groupId,new Set());this.pedestrians.get(groupId).add(id);return true;}
+ leavePedestrian(groupId,id){const occupants=this.pedestrians.get(groupId);if(occupants?.delete(id)&&occupants.size===0)this.pedestrianClearUntil.set(groupId,this.time+2);}
+ remainingGreen(groupId,axis){if(this.pedestrianOccupied(groupId))return 0;if(this.override==='GREEN')return Infinity;const [a,c,left]=this.phase();return this.groups.has(groupId)&&a===axis&&c==='GREEN'?left:0;}
+ getPedestrianPhase(groupId){const g=this.groups.get(groupId);return g&&this.override!=='GREEN'&&this.override!=='YELLOW'&&this.phase()[0]==='PEDESTRIAN'&&g.locks.size===0?'WALK':'DONT_WALK';}
  getCrossingTrafficState(id){const c=this.crossings.get(id);if(!c)return {known:false,vehicleClear:false,pedestrian:'DONT_WALK'};const g=this.groups.get(c.group);return {known:true,groupId:c.group,vehicleClear:g.locks.size===0,pedestrian:this.getPedestrianPhase(c.group),NS:this.getSignalState(c.group,'NS'),EW:this.getSignalState(c.group,'EW')};}
 }

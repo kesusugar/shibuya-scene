@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Shibuya Scene Reconstruction — S9",
-  description: "Shibuya traffic, left-side lanes, signals and scene inspection.",
+  title: "Shibuya Scene Reconstruction — S10",
+  description: "Shibuya pedestrians, scramble crossing flow and synchronized traffic inspection.",
   other: {
     "codex-preview": "development",
   },

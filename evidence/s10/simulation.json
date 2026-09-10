@@ -1,0 +1,927 @@
+{
+  "seconds": 180,
+  "network": {
+    "nodes": 12860,
+    "edges": 54064,
+    "crossingPaths": 100,
+    "scramblePaths": 25,
+    "components": 571,
+    "eligible": 10460,
+    "footwaySources": 222,
+    "rejectedCrossings": 54,
+    "generationMs": 14991
+  },
+  "crowd": {
+    "spawned": 514,
+    "despawned": 94,
+    "reasons": {
+      "stuck": 93,
+      "invalid-route": 1
+    },
+    "recoveries": 93,
+    "stuck": 93,
+    "routeCompletions": 445,
+    "signalViolations": 0,
+    "entries": {
+      "way/355248081:1": 4,
+      "way/355248083:-1": 3,
+      "node/2253567072:1": 1,
+      "way/355248078:1": 4,
+      "way/355248078:-1": 7,
+      "way/700497155:1": 1,
+      "way/1507031455:1": 3,
+      "way/355252211:1": 2,
+      "way/664877555:1": 1,
+      "way/1151968435:-1": 5,
+      "node/1685220983:1": 1,
+      "way/1507031461:-1": 4,
+      "way/754454449:1": 4,
+      "way/355248081:-1": 7,
+      "way/754454449:-1": 4,
+      "node/10157692127:1": 2,
+      "way/1462471075:-1": 4,
+      "way/355248080:1": 5,
+      "way/906194284:-1": 1,
+      "way/1112568720:-1": 1,
+      "way/553526347:-1": 1,
+      "way/664532507:1": 1,
+      "way/1391515614:1": 1,
+      "way/647401094:-1": 2,
+      "way/355248423:-1": 1,
+      "node/2253589606:1": 2,
+      "node/10605619818:-1": 2,
+      "way/355252210:1": 2,
+      "way/372165785:1": 1,
+      "way/355248083:1": 2,
+      "way/665967927:1": 1,
+      "way/355254046:-1": 1,
+      "way/355248080:-1": 3,
+      "way/1507031455:-1": 2,
+      "node/2253567072:-1": 4,
+      "way/1462471075:1": 2,
+      "way/355252211:-1": 4,
+      "way/1151968435:1": 1,
+      "node/10157692127:-1": 1,
+      "way/1112568720:1": 1,
+      "way/754454448:1": 1,
+      "node/2253589606:-1": 1
+    },
+    "completed": {
+      "way/700497155:1": 1,
+      "way/1507031455:1": 2,
+      "node/2253567072:1": 1,
+      "node/10157692127:1": 2,
+      "way/1112568720:-1": 1,
+      "node/1685220983:1": 1,
+      "way/1151968435:-1": 5,
+      "way/355248423:-1": 1,
+      "node/2253589606:1": 2,
+      "way/1391515614:1": 1,
+      "way/647401094:-1": 2,
+      "node/10605619818:-1": 2,
+      "way/1507031461:-1": 4,
+      "way/664877555:1": 1,
+      "way/355254046:-1": 1,
+      "way/1462471075:-1": 4,
+      "way/355252211:1": 2,
+      "way/665967927:1": 1,
+      "way/355252210:1": 2,
+      "way/355248078:-1": 6,
+      "way/664532507:1": 1,
+      "way/355248080:1": 5,
+      "way/355248078:1": 2,
+      "way/553526347:-1": 1,
+      "way/372165785:1": 1,
+      "way/355248081:-1": 1,
+      "node/2253589606:-1": 1,
+      "way/355248081:1": 2,
+      "way/355252211:-1": 1,
+      "way/754454449:-1": 4,
+      "way/355248080:-1": 1,
+      "way/355248083:-1": 3,
+      "way/906194284:-1": 1,
+      "way/754454448:1": 1,
+      "way/754454449:1": 3
+    },
+    "neighborChecks": 10251411,
+    "avoidanceChecks": 654836,
+    "updateMs": 5.376470000017434,
+    "throttled": 1189734,
+    "spawnDeferred": 0,
+    "cancelledCurbAdmissions": 31,
+    "total": 420,
+    "tier": "high",
+    "archetypes": {
+      "office": 40,
+      "student": 39,
+      "casual": 44,
+      "hoodie": 41,
+      "shopper": 40,
+      "tourist": 43,
+      "elderly": 39,
+      "jogger": 40,
+      "pastel": 41,
+      "umbrella": 40,
+      "kid": 13
+    },
+    "modes": {
+      "idle": 64,
+      "milling": 36,
+      "group": 45,
+      "ambient": 275
+    },
+    "states": {
+      "idle": 64,
+      "milling": 36,
+      "walking": 231,
+      "waiting": 89
+    },
+    "lod": {
+      "far": 176,
+      "near": 161,
+      "mid": 83
+    },
+    "regions": {
+      "center-gai": 126,
+      "hachiko": 170,
+      "commercial": 112,
+      "station": 12
+    },
+    "hachiko": 177,
+    "centerGai": 122,
+    "groupCount": 18,
+    "queueSizes": {
+      "way/355248080:-1": 5,
+      "way/355248083:1": 7,
+      "way/355248081:-1": 8,
+      "way/355248078:1": 4,
+      "way/754454449:1": 6,
+      "way/372165785:1": 0,
+      "way/355248081:1": 2,
+      "node/10605619818:-1": 0,
+      "way/1507031455:-1": 2,
+      "way/355248078:-1": 1,
+      "way/754454449:-1": 7,
+      "way/355248083:-1": 1,
+      "node/1685220983:1": 0,
+      "node/10157692127:1": 1,
+      "way/1462471075:1": 3,
+      "way/1151968435:-1": 3,
+      "node/2253567072:-1": 5,
+      "way/665967927:1": 0,
+      "way/355248080:1": 0,
+      "way/355252210:1": 0,
+      "way/1462471075:-1": 1,
+      "way/355252211:-1": 4,
+      "way/906194284:-1": 1,
+      "way/700497155:1": 1,
+      "way/1507031455:1": 2,
+      "node/2253589606:1": 0,
+      "way/1112568720:1": 3,
+      "way/355252211:1": 1,
+      "way/1151968435:1": 2,
+      "way/1507031461:-1": 1,
+      "way/1112568720:-1": 1,
+      "way/1391515614:1": 0,
+      "way/647401094:-1": 0,
+      "way/355248423:-1": 0,
+      "way/664877555:1": 1,
+      "way/553526347:-1": 0,
+      "node/2253567072:1": 0,
+      "way/355254046:-1": 0,
+      "way/664532507:1": 0,
+      "node/10157692127:-1": 2,
+      "way/1391515614:-1": 2,
+      "way/647401094:1": 2,
+      "way/553526347:1": 1,
+      "way/553526351:1": 1,
+      "way/665967927:-1": 1,
+      "node/2253589606:-1": 1,
+      "way/553526349:1": 2,
+      "way/1507031461:1": 2,
+      "node/2071048416:-1": 1,
+      "way/355248423:1": 1
+    }
+  },
+  "traffic": {
+    "spawned": 149,
+    "admissions": {
+      "junction:1:-3:NS": 356,
+      "junction:1:-2:NS": 3,
+      "junction:4:-2:NS": 3,
+      "junction:-3:-3:NS": 1197,
+      "junction:1:5:NS": 3,
+      "scramble:NS": 3,
+      "junction:4:0:NS": 7,
+      "junction:0:2:NS": 5,
+      "junction:0:-4:EW": 4,
+      "junction:-5:4:EW": 2,
+      "junction:-3:-3:EW": 1,
+      "junction:-4:-3:EW": 813,
+      "junction:-4:-1:EW": 2,
+      "scramble:EW": 5,
+      "junction:3:0:EW": 4,
+      "junction:4:-2:EW": 3,
+      "junction:-2:-3:EW": 2,
+      "junction:5:3:EW": 6,
+      "junction:-5:-4:EW": 1,
+      "junction:4:0:EW": 2,
+      "junction:4:-4:EW": 1,
+      "junction:1:-4:EW": 3,
+      "junction:-2:-3:NS": 1,
+      "junction:1:-4:NS": 1
+    },
+    "crossingEntries": {
+      "junction:1:-3:NS": 3,
+      "junction:4:-2:NS": 3,
+      "junction:4:0:NS": 10,
+      "junction:1:-2:NS": 3,
+      "junction:0:2:NS": 5,
+      "scramble:NS": 9,
+      "junction:4:0:EW": 3,
+      "junction:1:5:NS": 1,
+      "junction:0:-4:EW": 4,
+      "junction:5:3:EW": 5,
+      "junction:-4:-1:EW": 2,
+      "junction:3:0:EW": 8,
+      "junction:4:-4:EW": 1,
+      "junction:-2:-3:EW": 1,
+      "junction:-3:-3:EW": 1,
+      "scramble:EW": 9,
+      "junction:-5:-4:EW": 1,
+      "junction:-5:4:EW": 2,
+      "junction:-4:-3:EW": 3,
+      "junction:4:-2:EW": 3,
+      "junction:1:-4:EW": 3,
+      "junction:1:-4:NS": 4,
+      "junction:-2:-3:NS": 1
+    },
+    "junctionEntries": 173,
+    "distanceTravelled": 9020.657698859313,
+    "despawned": 76,
+    "recoveries": 20,
+    "routeFailures": 56,
+    "permitYields": 2363,
+    "stuck": 20,
+    "redViolations": 0,
+    "redEvents": [],
+    "overlaps": 0,
+    "blockedEntries": 92275,
+    "neighborChecks": 12597601,
+    "updateMs": 1.82221500002197,
+    "reasons": {
+      "route-end": 56,
+      "stuck": 20
+    },
+    "tier": "high",
+    "moving": 61,
+    "parked": 12,
+    "types": {
+      "taxi": 11,
+      "sedan": 15,
+      "kei": 19,
+      "van": 13,
+      "bus": 7,
+      "keiTruck": 5,
+      "scooter": 3
+    },
+    "signalGroups": 40
+  },
+  "audit": {
+    "major": 0,
+    "trafficMajor": 0,
+    "minor": {
+      "stuck": 93,
+      "groupSeparation": 12
+    },
+    "samples": []
+  },
+  "phases": [
+    {
+      "time": 0.03333333333333333,
+      "phase": [
+        "NS",
+        "GREEN",
+        34.96666666666667
+      ],
+      "states": {
+        "idle": 64,
+        "milling": 36,
+        "walking": 317,
+        "waiting": 3
+      },
+      "vehicleEntries": {}
+    },
+    {
+      "time": 10.033333333333308,
+      "phase": [
+        "NS",
+        "GREEN",
+        24.96666666666669
+      ],
+      "states": {
+        "idle": 64,
+        "milling": 36,
+        "walking": 262,
+        "waiting": 58
+      },
+      "vehicleEntries": {
+        "junction:1:-3:NS": 1,
+        "junction:4:-2:NS": 1,
+        "junction:4:0:NS": 2,
+        "junction:1:-2:NS": 1,
+        "junction:0:2:NS": 2,
+        "scramble:NS": 2
+      }
+    },
+    {
+      "time": 20.033333333333488,
+      "phase": [
+        "NS",
+        "GREEN",
+        14.966666666666512
+      ],
+      "states": {
+        "idle": 64,
+        "milling": 36,
+        "walking": 251,
+        "waiting": 69
+      },
+      "vehicleEntries": {
+        "junction:1:-3:NS": 1,
+        "junction:4:-2:NS": 2,
+        "junction:4:0:NS": 3,
+        "junction:1:-2:NS": 1,
+        "junction:0:2:NS": 3,
+        "scramble:NS": 4,
+        "junction:4:0:EW": 1,
+        "junction:1:5:NS": 1
+      }
+    },
+    {
+      "time": 30.033333333333985,
+      "phase": [
+        "NS",
+        "GREEN",
+        4.966666666666015
+      ],
+      "states": {
+        "idle": 64,
+        "milling": 36,
+        "walking": 244,
+        "waiting": 76
+      },
+      "vehicleEntries": {
+        "junction:1:-3:NS": 1,
+        "junction:4:-2:NS": 2,
+        "junction:4:0:NS": 5,
+        "junction:1:-2:NS": 1,
+        "junction:0:2:NS": 3,
+        "scramble:NS": 5,
+        "junction:4:0:EW": 1,
+        "junction:1:5:NS": 1
+      }
+    },
+    {
+      "time": 40.03333333333362,
+      "phase": [
+        "ALL",
+        "RED",
+        3.9666666666663772
+      ],
+      "states": {
+        "idle": 64,
+        "milling": 36,
+        "walking": 239,
+        "waiting": 81
+      },
+      "vehicleEntries": {
+        "junction:1:-3:NS": 2,
+        "junction:4:-2:NS": 2,
+        "junction:4:0:NS": 5,
+        "junction:1:-2:NS": 1,
+        "junction:0:2:NS": 3,
+        "scramble:NS": 5,
+        "junction:4:0:EW": 1,
+        "junction:1:5:NS": 1
+      }
+    },
+    {
+      "time": 50.033333333333054,
+      "phase": [
+        "EW",
+        "GREEN",
+        28.966666666666946
+      ],
+      "states": {
+        "idle": 64,
+        "milling": 36,
+        "walking": 233,
+        "waiting": 87
+      },
+      "vehicleEntries": {
+        "junction:1:-3:NS": 2,
+        "junction:4:-2:NS": 2,
+        "junction:4:0:NS": 5,
+        "junction:1:-2:NS": 1,
+        "junction:0:2:NS": 3,
+        "scramble:NS": 5,
+        "junction:4:0:EW": 2,
+        "junction:1:5:NS": 1,
+        "junction:0:-4:EW": 1,
+        "junction:5:3:EW": 2,
+        "junction:-4:-1:EW": 1,
+        "junction:3:0:EW": 2,
+        "junction:4:-4:EW": 1,
+        "junction:-2:-3:EW": 1,
+        "junction:-3:-3:EW": 1,
+        "scramble:EW": 2,
+        "junction:-5:-4:EW": 1,
+        "junction:-5:4:EW": 1,
+        "junction:-4:-3:EW": 1,
+        "junction:4:-2:EW": 1
+      }
+    },
+    {
+      "time": 60.033333333332486,
+      "phase": [
+        "EW",
+        "GREEN",
+        18.966666666667514
+      ],
+      "states": {
+        "idle": 64,
+        "milling": 36,
+        "walking": 231,
+        "waiting": 89
+      },
+      "vehicleEntries": {
+        "junction:1:-3:NS": 2,
+        "junction:4:-2:NS": 2,
+        "junction:4:0:NS": 5,
+        "junction:1:-2:NS": 1,
+        "junction:0:2:NS": 3,
+        "scramble:NS": 5,
+        "junction:4:0:EW": 3,
+        "junction:1:5:NS": 1,
+        "junction:0:-4:EW": 2,
+        "junction:5:3:EW": 2,
+        "junction:-4:-1:EW": 2,
+        "junction:3:0:EW": 4,
+        "junction:4:-4:EW": 1,
+        "junction:-2:-3:EW": 1,
+        "junction:-3:-3:EW": 1,
+        "scramble:EW": 3,
+        "junction:-5:-4:EW": 1,
+        "junction:-5:4:EW": 2,
+        "junction:-4:-3:EW": 2,
+        "junction:4:-2:EW": 1,
+        "junction:1:-4:EW": 1,
+        "junction:1:-4:NS": 1
+      }
+    },
+    {
+      "time": 70.03333333333192,
+      "phase": [
+        "EW",
+        "GREEN",
+        8.966666666668075
+      ],
+      "states": {
+        "idle": 64,
+        "milling": 36,
+        "walking": 228,
+        "waiting": 92
+      },
+      "vehicleEntries": {
+        "junction:1:-3:NS": 2,
+        "junction:4:-2:NS": 2,
+        "junction:4:0:NS": 5,
+        "junction:1:-2:NS": 1,
+        "junction:0:2:NS": 3,
+        "scramble:NS": 6,
+        "junction:4:0:EW": 3,
+        "junction:1:5:NS": 1,
+        "junction:0:-4:EW": 2,
+        "junction:5:3:EW": 3,
+        "junction:-4:-1:EW": 2,
+        "junction:3:0:EW": 4,
+        "junction:4:-4:EW": 1,
+        "junction:-2:-3:EW": 1,
+        "junction:-3:-3:EW": 1,
+        "scramble:EW": 3,
+        "junction:-5:-4:EW": 1,
+        "junction:-5:4:EW": 2,
+        "junction:-4:-3:EW": 2,
+        "junction:4:-2:EW": 1,
+        "junction:1:-4:EW": 2,
+        "junction:1:-4:NS": 2
+      }
+    },
+    {
+      "time": 80.03333333333136,
+      "phase": [
+        "EW",
+        "YELLOW",
+        2.966666666668644
+      ],
+      "states": {
+        "idle": 64,
+        "milling": 36,
+        "walking": 227,
+        "waiting": 93
+      },
+      "vehicleEntries": {
+        "junction:1:-3:NS": 2,
+        "junction:4:-2:NS": 2,
+        "junction:4:0:NS": 5,
+        "junction:1:-2:NS": 1,
+        "junction:0:2:NS": 3,
+        "scramble:NS": 6,
+        "junction:4:0:EW": 3,
+        "junction:1:5:NS": 1,
+        "junction:0:-4:EW": 2,
+        "junction:5:3:EW": 3,
+        "junction:-4:-1:EW": 2,
+        "junction:3:0:EW": 4,
+        "junction:4:-4:EW": 1,
+        "junction:-2:-3:EW": 1,
+        "junction:-3:-3:EW": 1,
+        "scramble:EW": 3,
+        "junction:-5:-4:EW": 1,
+        "junction:-5:4:EW": 2,
+        "junction:-4:-3:EW": 2,
+        "junction:4:-2:EW": 1,
+        "junction:1:-4:EW": 2,
+        "junction:1:-4:NS": 2
+      }
+    },
+    {
+      "time": 90.03333333333079,
+      "phase": [
+        "PEDESTRIAN",
+        "RED",
+        17.966666666669212
+      ],
+      "states": {
+        "idle": 64,
+        "milling": 36,
+        "walking": 222,
+        "crossing": 66,
+        "waiting": 32
+      },
+      "vehicleEntries": {
+        "junction:1:-3:NS": 2,
+        "junction:4:-2:NS": 2,
+        "junction:4:0:NS": 5,
+        "junction:1:-2:NS": 1,
+        "junction:0:2:NS": 3,
+        "scramble:NS": 6,
+        "junction:4:0:EW": 3,
+        "junction:1:5:NS": 1,
+        "junction:0:-4:EW": 2,
+        "junction:5:3:EW": 3,
+        "junction:-4:-1:EW": 2,
+        "junction:3:0:EW": 4,
+        "junction:4:-4:EW": 1,
+        "junction:-2:-3:EW": 1,
+        "junction:-3:-3:EW": 1,
+        "scramble:EW": 3,
+        "junction:-5:-4:EW": 1,
+        "junction:-5:4:EW": 2,
+        "junction:-4:-3:EW": 2,
+        "junction:4:-2:EW": 1,
+        "junction:1:-4:EW": 2,
+        "junction:1:-4:NS": 2
+      }
+    },
+    {
+      "time": 100.03333333333022,
+      "phase": [
+        "PEDESTRIAN",
+        "RED",
+        7.966666666669781
+      ],
+      "states": {
+        "idle": 64,
+        "milling": 36,
+        "walking": 233,
+        "crossing": 83,
+        "waiting": 4
+      },
+      "vehicleEntries": {
+        "junction:1:-3:NS": 2,
+        "junction:4:-2:NS": 2,
+        "junction:4:0:NS": 5,
+        "junction:1:-2:NS": 1,
+        "junction:0:2:NS": 3,
+        "scramble:NS": 6,
+        "junction:4:0:EW": 3,
+        "junction:1:5:NS": 1,
+        "junction:0:-4:EW": 2,
+        "junction:5:3:EW": 3,
+        "junction:-4:-1:EW": 2,
+        "junction:3:0:EW": 4,
+        "junction:4:-4:EW": 1,
+        "junction:-2:-3:EW": 1,
+        "junction:-3:-3:EW": 1,
+        "scramble:EW": 3,
+        "junction:-5:-4:EW": 1,
+        "junction:-5:4:EW": 2,
+        "junction:-4:-3:EW": 2,
+        "junction:4:-2:EW": 1,
+        "junction:1:-4:EW": 2,
+        "junction:1:-4:NS": 2
+      }
+    },
+    {
+      "time": 110.03333333332965,
+      "phase": [
+        "NS",
+        "GREEN",
+        32.96666666667035
+      ],
+      "states": {
+        "idle": 64,
+        "milling": 36,
+        "walking": 252,
+        "waiting": 41,
+        "crossing": 27
+      },
+      "vehicleEntries": {
+        "junction:1:-3:NS": 2,
+        "junction:4:-2:NS": 2,
+        "junction:4:0:NS": 5,
+        "junction:1:-2:NS": 1,
+        "junction:0:2:NS": 3,
+        "scramble:NS": 6,
+        "junction:4:0:EW": 3,
+        "junction:1:5:NS": 1,
+        "junction:0:-4:EW": 2,
+        "junction:5:3:EW": 3,
+        "junction:-4:-1:EW": 2,
+        "junction:3:0:EW": 4,
+        "junction:4:-4:EW": 1,
+        "junction:-2:-3:EW": 1,
+        "junction:-3:-3:EW": 1,
+        "scramble:EW": 3,
+        "junction:-5:-4:EW": 1,
+        "junction:-5:4:EW": 2,
+        "junction:-4:-3:EW": 2,
+        "junction:4:-2:EW": 1,
+        "junction:1:-4:EW": 2,
+        "junction:1:-4:NS": 2
+      }
+    },
+    {
+      "time": 120.03333333332908,
+      "phase": [
+        "NS",
+        "GREEN",
+        22.966666666670918
+      ],
+      "states": {
+        "idle": 64,
+        "milling": 36,
+        "walking": 252,
+        "waiting": 59,
+        "crossing": 9
+      },
+      "vehicleEntries": {
+        "junction:1:-3:NS": 2,
+        "junction:4:-2:NS": 3,
+        "junction:4:0:NS": 7,
+        "junction:1:-2:NS": 1,
+        "junction:0:2:NS": 3,
+        "scramble:NS": 6,
+        "junction:4:0:EW": 3,
+        "junction:1:5:NS": 1,
+        "junction:0:-4:EW": 2,
+        "junction:5:3:EW": 3,
+        "junction:-4:-1:EW": 2,
+        "junction:3:0:EW": 4,
+        "junction:4:-4:EW": 1,
+        "junction:-2:-3:EW": 1,
+        "junction:-3:-3:EW": 1,
+        "scramble:EW": 3,
+        "junction:-5:-4:EW": 1,
+        "junction:-5:4:EW": 2,
+        "junction:-4:-3:EW": 2,
+        "junction:4:-2:EW": 1,
+        "junction:1:-4:EW": 2,
+        "junction:1:-4:NS": 3,
+        "junction:-2:-3:NS": 1
+      }
+    },
+    {
+      "time": 130.03333333332853,
+      "phase": [
+        "NS",
+        "GREEN",
+        12.966666666671472
+      ],
+      "states": {
+        "idle": 64,
+        "milling": 36,
+        "walking": 250,
+        "waiting": 68,
+        "crossing": 2
+      },
+      "vehicleEntries": {
+        "junction:1:-3:NS": 3,
+        "junction:4:-2:NS": 3,
+        "junction:4:0:NS": 9,
+        "junction:1:-2:NS": 3,
+        "junction:0:2:NS": 5,
+        "scramble:NS": 6,
+        "junction:4:0:EW": 3,
+        "junction:1:5:NS": 1,
+        "junction:0:-4:EW": 2,
+        "junction:5:3:EW": 3,
+        "junction:-4:-1:EW": 2,
+        "junction:3:0:EW": 4,
+        "junction:4:-4:EW": 1,
+        "junction:-2:-3:EW": 1,
+        "junction:-3:-3:EW": 1,
+        "scramble:EW": 3,
+        "junction:-5:-4:EW": 1,
+        "junction:-5:4:EW": 2,
+        "junction:-4:-3:EW": 2,
+        "junction:4:-2:EW": 1,
+        "junction:1:-4:EW": 2,
+        "junction:1:-4:NS": 3,
+        "junction:-2:-3:NS": 1
+      }
+    },
+    {
+      "time": 140.03333333332796,
+      "phase": [
+        "NS",
+        "GREEN",
+        2.9666666666720403
+      ],
+      "states": {
+        "idle": 64,
+        "milling": 36,
+        "walking": 244,
+        "waiting": 75,
+        "crossing": 1
+      },
+      "vehicleEntries": {
+        "junction:1:-3:NS": 3,
+        "junction:4:-2:NS": 3,
+        "junction:4:0:NS": 10,
+        "junction:1:-2:NS": 3,
+        "junction:0:2:NS": 5,
+        "scramble:NS": 8,
+        "junction:4:0:EW": 3,
+        "junction:1:5:NS": 1,
+        "junction:0:-4:EW": 2,
+        "junction:5:3:EW": 3,
+        "junction:-4:-1:EW": 2,
+        "junction:3:0:EW": 4,
+        "junction:4:-4:EW": 1,
+        "junction:-2:-3:EW": 1,
+        "junction:-3:-3:EW": 1,
+        "scramble:EW": 3,
+        "junction:-5:-4:EW": 1,
+        "junction:-5:4:EW": 2,
+        "junction:-4:-3:EW": 2,
+        "junction:4:-2:EW": 1,
+        "junction:1:-4:EW": 2,
+        "junction:1:-4:NS": 3,
+        "junction:-2:-3:NS": 1
+      }
+    },
+    {
+      "time": 150.0333333333274,
+      "phase": [
+        "ALL",
+        "RED",
+        1.9666666666726087
+      ],
+      "states": {
+        "idle": 64,
+        "milling": 36,
+        "walking": 241,
+        "waiting": 78,
+        "crossing": 1
+      },
+      "vehicleEntries": {
+        "junction:1:-3:NS": 3,
+        "junction:4:-2:NS": 3,
+        "junction:4:0:NS": 10,
+        "junction:1:-2:NS": 3,
+        "junction:0:2:NS": 5,
+        "scramble:NS": 9,
+        "junction:4:0:EW": 3,
+        "junction:1:5:NS": 1,
+        "junction:0:-4:EW": 2,
+        "junction:5:3:EW": 3,
+        "junction:-4:-1:EW": 2,
+        "junction:3:0:EW": 4,
+        "junction:4:-4:EW": 1,
+        "junction:-2:-3:EW": 1,
+        "junction:-3:-3:EW": 1,
+        "scramble:EW": 3,
+        "junction:-5:-4:EW": 1,
+        "junction:-5:4:EW": 2,
+        "junction:-4:-3:EW": 2,
+        "junction:4:-2:EW": 1,
+        "junction:1:-4:EW": 2,
+        "junction:1:-4:NS": 3,
+        "junction:-2:-3:NS": 1
+      }
+    },
+    {
+      "time": 160.03333333332682,
+      "phase": [
+        "EW",
+        "GREEN",
+        26.966666666673177
+      ],
+      "states": {
+        "idle": 64,
+        "milling": 36,
+        "walking": 235,
+        "waiting": 84,
+        "crossing": 1
+      },
+      "vehicleEntries": {
+        "junction:1:-3:NS": 3,
+        "junction:4:-2:NS": 3,
+        "junction:4:0:NS": 10,
+        "junction:1:-2:NS": 3,
+        "junction:0:2:NS": 5,
+        "scramble:NS": 9,
+        "junction:4:0:EW": 3,
+        "junction:1:5:NS": 1,
+        "junction:0:-4:EW": 4,
+        "junction:5:3:EW": 4,
+        "junction:-4:-1:EW": 2,
+        "junction:3:0:EW": 6,
+        "junction:4:-4:EW": 1,
+        "junction:-2:-3:EW": 1,
+        "junction:-3:-3:EW": 1,
+        "scramble:EW": 5,
+        "junction:-5:-4:EW": 1,
+        "junction:-5:4:EW": 2,
+        "junction:-4:-3:EW": 2,
+        "junction:4:-2:EW": 2,
+        "junction:1:-4:EW": 3,
+        "junction:1:-4:NS": 3,
+        "junction:-2:-3:NS": 1
+      }
+    },
+    {
+      "time": 170.03333333332625,
+      "phase": [
+        "EW",
+        "GREEN",
+        16.966666666673746
+      ],
+      "states": {
+        "idle": 64,
+        "milling": 36,
+        "walking": 233,
+        "waiting": 87
+      },
+      "vehicleEntries": {
+        "junction:1:-3:NS": 3,
+        "junction:4:-2:NS": 3,
+        "junction:4:0:NS": 10,
+        "junction:1:-2:NS": 3,
+        "junction:0:2:NS": 5,
+        "scramble:NS": 9,
+        "junction:4:0:EW": 3,
+        "junction:1:5:NS": 1,
+        "junction:0:-4:EW": 4,
+        "junction:5:3:EW": 5,
+        "junction:-4:-1:EW": 2,
+        "junction:3:0:EW": 8,
+        "junction:4:-4:EW": 1,
+        "junction:-2:-3:EW": 1,
+        "junction:-3:-3:EW": 1,
+        "scramble:EW": 7,
+        "junction:-5:-4:EW": 1,
+        "junction:-5:4:EW": 2,
+        "junction:-4:-3:EW": 2,
+        "junction:4:-2:EW": 2,
+        "junction:1:-4:EW": 3,
+        "junction:1:-4:NS": 4,
+        "junction:-2:-3:NS": 1
+      }
+    }
+  ],
+  "crossers": [],
+  "crowdCPU": {
+    "median": 2.577961000002688,
+    "p95": 7.869654000009177,
+    "max": 183.5189089999767
+  },
+  "trafficCPU": {
+    "median": 1.9102560000028461,
+    "p95": 3.9714380000077654,
+    "max": 25.979032000002917
+  }
+}
