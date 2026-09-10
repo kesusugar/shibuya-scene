@@ -31,8 +31,8 @@ export function buildBuildings(data){
     const cols=strip?1:Math.max(1,Math.floor((l-.8)/pitch));
     for(let col=0;col<cols&&windowCount<C.maxWindowsPerBuilding;col++){
      // Plain facades have fewer openings; all decisions are stable per OSM ID.
-     if(b.archetype==='plain'&&rng()<.25)continue;
-     const along=(col+.5)*l/cols,width=strip?Math.max(.5,l-.9):Math.min(l/cols-.45,isShop?2.4:curtain?2.1:b.archetype==='zakkyo'?1.05:1.45),height=isShop?2.5:curtain?2.8:b.archetype==='zakkyo'?2.2:1.6;
+     if(b.archetype==='plain'&&!(isShop&&floor===0)&&rng()<.25)continue;
+     const along=(col+.5)*l/cols,width=strip?Math.max(.5,l-.9):isShop&&floor===0?Math.max(.3,l/cols-.12):Math.min(l/cols-.45,isShop?2.4:curtain?2.1:b.archetype==='zakkyo'?1.05:1.45),height=isShop?(floor===0?2.8:2.5):curtain?2.8:b.archetype==='zakkyo'?2.2:1.6;
      if(width<=.2)continue;const bucket=isShop?'shopWindows':curtain?'curtainWindows':'windows';const colors=curtain?[0x607f90,0x7897a4,0x455e70]:isShop?[0x8daba8,0xa5b6a3,0x8aa4b2]:[0x3e5666,0x68818a,0x849295];const color=colors[Math.floor(rng()*colors.length)];const p=point(along,y);
      add(bucket,b,p,[width,height,1],yaw,color,'window');wallWindows.push({building:b.key,edge,along,position:p,width,height,normal:n,offset:C.windowOffset});windowCount++;
     }

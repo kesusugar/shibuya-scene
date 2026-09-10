@@ -11,8 +11,15 @@ float seed=mod(abs(dot(instanceMatrix[3].xyz,vec3(12.9898,78.233,37.719))),7.0);
 s12Window=(seed<3.0 ? 0.35+seed*0.1 : 0.0)*(1.0+s13Nightglow*(instanceMatrix[3].x<0.0?0.35:0.12));
 if(instanceMatrix[3].y<14.0)s12Window=max(s12Window,0.28);
 #endif`;
-   if(mode==='storefront')body=body.replace('seed<3.0 ? 0.35+seed*0.1 : 0.0','0.45+seed*0.075');
+   if(mode==='storefront')body=body.replace('seed<3.0 ? 0.35+seed*0.1 : 0.0','0.45+seed*0.075')+'\n#ifdef USE_INSTANCING\nif(instanceMatrix[3].y<3.5)s12Window*=1.25;\n#endif';
    shader.fragmentShader=shader.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(1.0,0.72,0.39)*s12Window*s12Night;');
+  }else if(mode==='groundPool'){
+   vertex='varying vec3 s161Position;\n';fragment+='varying vec3 s161Position;\n';body='s161Position=(modelMatrix*vec4(transformed,1.0)).xyz;';
+   shader.fragmentShader=shader.fragmentShader.replace('#include <emissivemap_fragment>',`#include <emissivemap_fragment>
+vec2 q=s161Position.xz;
+float pool=0.14*pow(max(0.0,1.0-length(q)/34.0),2.0);
+for(int i=0;i<4;i++){vec2 c=vec2(i<2?-20.0:20.0,mod(float(i),2.0)<0.5?-18.0:18.0);pool+=0.09*pow(max(0.0,1.0-length(q-c)/17.0),2.0);}
+totalEmissiveRadiance+=vec3(0.65,0.78,1.0)*pool*s12Night;`);
   }else if(mode==='sign'){vertex='attribute float s13GlowWeight;\nvarying float s13Sign;\n';fragment+='varying float s13Sign;\n';body='s13Sign=s13GlowWeight;';shader.fragmentShader=shader.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\ntotalEmissiveRadiance *= 1.0+s13Nightglow*(max(s13Sign,0.8)-1.0);');
   }else if(mode==='train'){vertex='attribute vec3 s12Emission;\nattribute float s12LampEnd;\nattribute vec2 s12Cab;\nvarying vec3 s12Train;\n';fragment+='varying vec3 s12Train;\n';body=`s12Train=s12Emission;
 float cab=s12LampEnd< -0.5?s12Cab.x:(s12LampEnd>0.5?s12Cab.y:0.0);
@@ -31,6 +38,7 @@ export class DayNightSystem{
  register(root){if(this.roots.has(root))return;const materials=new Map(),lights=[];
   root.traverse(o=>{if(o.isLight)lights.push({light:o,intensity:o.intensity});if(!o.isMesh)return;for(const m of Array.isArray(o.material)?o.material:[o.material]){if(!m?.isMeshStandardMaterial)continue;let mode=null,night=null;
    if(/^buildings-(windows|curtainWindows|shopWindows)$/.test(o.name)||/^hero-panels-glass/.test(o.name))mode='window';
+   if(/^ground-(asphalt|sidewalk|curb|paint|tactile)$/.test(o.name))mode='groundPool';
    if(o.name==='buildings-shopWindows')mode='storefront';
    if(/^train-(JR|Ginza)$/.test(o.name))mode='train';
    if(/^signs-(print|led|heroScreen)$/.test(o.name)){night=1.2;mode='sign';}

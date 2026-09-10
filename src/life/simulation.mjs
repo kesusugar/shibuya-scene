@@ -9,7 +9,7 @@ export class CrowdSimulation{
   this.network=network;this.traffic=traffic;this.signals=traffic?.signals??null;this.rng=seededRandom(seed);this.tier=tier;this.time=0;this.accumulator=0;this.camera={x:55,z:65};this.grid=new Map();this.queue=new Map();this.exits=new Map();this.groups=[];this.temp={};this.next={};this.lodClock=0;this.refillClock=0;
   this.stats={spawned:0,despawned:0,reasons:{},recoveries:0,stuck:0,routeCompletions:0,signalViolations:0,entries:{},completed:{},neighborChecks:0,avoidanceChecks:0,updateMs:0,throttled:0,spawnDeferred:0};
   this.pool=Array.from({length:POOL_SIZE},(_,id)=>({id,active:false,x:0,z:0,heading:0,height:0,archetype:'casual',mode:'ambient',state:'walking',group:-1,leader:-1,route:[],routeIndex:0,edge:-1,progress:0,destination:-1,node:-1,speed:0,baseSpeed:1.3,age:0,stuck:0,pause:0,crossing:null,queueKey:null,lod:'near',elapsed:0,phase:0,color:0,animationTime:0,renderX:0,renderZ:0,previousX:0,previousZ:0,travelled:0,lastHeading:0,region:'commercial'}));
-  this.candidates=network.eligible;this.byRegion=Object.fromEntries(['hachiko','center-gai','station','commercial'].map(k=>[k,this.candidates.filter(n=>n.district===k)]));this.crossCandidates=network.crossings.filter(e=>e.kind!=='normal'&&network.nodes[e.from].component===network.nodes[e.to].component);this.refill(true);
+  this.candidates=network.eligible;this.byRegion=Object.fromEntries(['hachiko','center-gai','station','commercial'].map(k=>[k,this.candidates.filter(n=>n.district===k)]));this.crossCandidates=network.crossings.filter(e=>e.kind!=='normal'&&network.nodes[e.from].component===network.nodes[e.to].component);const lanes=new Map();for(const e of this.crossCandidates){const key=e.crossingId+':'+e.direction;if(!lanes.has(key))lanes.set(key,[]);lanes.get(key).push(e);}const groups=[...lanes.values()];this.crossCandidates=[];for(let row=0;row<Math.max(0,...groups.map(g=>g.length));row++)for(const group of groups)if(group[row])this.crossCandidates.push(group[row]);this.crossCursor=0;this.refill(true);
  }
  cell(x,z){return Math.floor(x/2)+','+Math.floor(z/2);}
  insert(p){const k=this.cell(p.x,p.z);if(!this.grid.has(k))this.grid.set(k,[]);this.grid.get(k).push(p);}
@@ -38,7 +38,7 @@ export class CrowdSimulation{
  }
  refill(initial=false){const q=QUALITY[this.tier];let count=this.pool.filter(p=>p.active).length;if(initial&&count===0){for(let i=0;i<q.idle;i++)if(this.spawn('idle',i%5===0?'station':i%3?'hachiko':'center-gai'))count++;for(let i=0;i<q.milling;i++)if(this.spawn('milling','hachiko'))count++;
    for(let i=0;i<q.groups;i++){const leader=this.spawn('group',i%2?'center-gai':'hachiko');if(!leader)continue;leader.group=this.groups.length;const group={id:leader.group,leader:leader.id,members:[leader.id]};this.groups.push(group);count++;for(let j=0;j<1+i%3;j++){const p=this.spawn('group',null,leader);if(p){group.members.push(p.id);count++;}}}
-   const crossingCount=Math.round(q.total*.18);for(let i=0;i<crossingCount;i++)if(this.spawn('ambient',null,null,i))count++;
+   const crossingCount=Math.round(q.total*.32);for(let i=0;i<crossingCount;i++)if(this.spawn('ambient',null,null,i))count++;
   }
   // Restore family/group membership after pooled actors expire, without growing the group pool.
   for(let gi=0;gi<q.groups&&count<q.total-1;gi++){
@@ -49,7 +49,7 @@ export class CrowdSimulation{
    const leader=this.pool[g.leader];for(const id of g.members)this.pool[id].leader=id===g.leader?-1:g.leader;
    if(g.members.length<2&&count<q.total){const follower=this.spawn('group',null,leader);if(follower){g.members.push(follower.id);count++;}}
   }
-  const budget=initial?q.total:12;for(let i=0;i<budget&&count<q.total;i++){const region=i%6===0?'center-gai':i%6===1?'hachiko':i%6===2?'station':null;const idle=this.pool.filter(p=>p.active&&p.mode==='idle').length,milling=this.pool.filter(p=>p.active&&p.mode==='milling').length;const mode=idle<q.idle?'idle':milling<q.milling?'milling':'ambient';if(this.spawn(mode,mode==='ambient'?region:'hachiko'))count++;}
+  const budget=initial?q.total:12;for(let i=0;i<budget&&count<q.total;i++){const region=i%6===0?'center-gai':i%6===1?'hachiko':i%6===2?'station':null;const idle=this.pool.filter(p=>p.active&&p.mode==='idle').length,milling=this.pool.filter(p=>p.active&&p.mode==='milling').length;const mode=idle<q.idle?'idle':milling<q.milling?'milling':'ambient';const allocated=this.pool.filter(p=>p.active&&p.route.slice(p.routeIndex).some(id=>this.network.edges[id]?.kind!=='normal'&&this.network.edges[id]?.crossingId)).length;const cross=mode==='ambient'&&allocated<Math.round(q.total*.32)?this.crossCursor++:-1;if(this.spawn(mode,mode==='ambient'?region:'hachiko',null,cross))count++;}
  }
  beginCrossing(p,e){if(!this.signals)return false;const s=this.signals.getCrossingTrafficState(e.crossingId);if(!s.known||!s.vehicleClear||s.pedestrian!=='WALK'||this.signals.phase()[2]<5)return false;if((p.id%9)*.14>20-this.signals.phase()[2])return false;
   // Exit capacity is reserved by occupancy checks; no admission into a packed curb.
