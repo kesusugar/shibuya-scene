@@ -1,13 +1,13 @@
 import pc from 'polygon-clipping';
-import {cleanLine,distance,length,sample,inPolygon,signedArea,SpatialIndex,bounds} from '../geo/core.mjs';
+import {cleanLine,distance,length,sample,inPolygon,inPreparedRing,signedArea,SpatialIndex,bounds} from '../geo/core.mjs';
 import {metric} from '../data/normalize.mjs';
 import {GROUND as C} from './config.mjs';
 export const union=(...p)=>p.filter(x=>x.length).length?pc.union(...p.filter(x=>x.length)):[];
 export const intersection=(a,b)=>a.length&&b.length?pc.intersection(a,b):[];
 export const difference=(a,b)=>!a.length?[]:b.length?pc.difference(a,b):a;
 export const polygons=m=>m.map(p=>({outer:p[0].slice(0,-1),holes:p.slice(1).map(h=>h.slice(0,-1))}));
-export const contains=(m,p)=>polygons(m).some(q=>inPolygon(p,q));
-export const area=m=>polygons(m).reduce((s,p)=>s+Math.abs(signedArea(p.outer))-p.holes.reduce((a,h)=>a+Math.abs(signedArea(h)),0),0);
+export function contains(m,p){for(const rings of m){if(!inPreparedRing(p,rings[0]))continue;let hole=false;for(let i=1;i<rings.length;i++)if(inPreparedRing(p,rings[i])){hole=true;break;}if(!hole)return true;}return false;}
+export function area(m){let total=0;for(const rings of m){let holes=0;for(let i=1;i<rings.length;i++)holes+=Math.abs(signedArea(rings[i]));total+=Math.abs(signedArea(rings[0]))-holes;}return total;}
 export function rect(a,b,width){const d=distance(a,b);if(d<1e-6)return [];const n=[-(b[1]-a[1])/d*width/2,(b[0]-a[0])/d*width/2];const r=[[a[0]+n[0],a[1]+n[1]],[b[0]+n[0],b[1]+n[1]],[b[0]-n[0],b[1]-n[1]],[a[0]-n[0],a[1]-n[1]]];return [[ [...r,r[0]] ]];}
 export function buffer(points,width){if(!Number.isFinite(width)||width<=0)throw Error('Invalid road width');const p=cleanLine(points);if(p.length<2)return [];const pieces=[];for(let i=1;i<p.length;i++)pieces.push(rect(p[i-1],p[i],width));for(const v of p){const r=Array.from({length:12},(_,i)=>[v[0]+Math.cos(i*Math.PI/6)*width/2,v[1]+Math.sin(i*Math.PI/6)*width/2]);pieces.push([[ [...r,r[0]] ]]);}return union(...pieces);}
 export function roadWidth(r){const w=metric(r.tags?.width??r.width);if(w>0)return w;const lanes=Number(r.tags?.lanes??r.lanes);if(lanes>0&&Number.isFinite(lanes))return lanes*3+1;return C.defaults[(r.highway??r.tags?.highway)?.replace(/_link$/,'')]??6.5;}
@@ -25,7 +25,7 @@ export function buildGroundModel(data){const start=performance.now();const sourc
  roads=clipped(union(roads,central));
  const wide=clipped(union(...sources.map(r=>buffer(r.points,roadWidth(r)+C.sidewalk*2)),central,buffer(envelope,C.mainWidth+1+C.sidewalk*2)));
  const sidewalks=difference(wide,roads);const curbOuter=clipped(union(...sources.map(r=>buffer(r.points,roadWidth(r)+C.curbWidth*2)),central,buffer(envelope,C.mainWidth+1+C.curbWidth*2)));const curbTop=intersection(difference(curbOuter,roads),sidewalks);
- const crossings=[];for(const r of data.footways){if(r.tags.footway!=='crossing'||!marked(r)||C.southParts.slice(1).includes(r.id))continue;let points=r.points;if(r.id===C.southParts[0])points=C.southParts.flatMap(id=>data.footways.find(f=>f.id===id).points).filter((p,i,a)=>i===0||distance(p,a[i-1])>1e-5);const kind=r.id===C.diagonal?'diagonal':r.tags['crossing:scramble']==='yes'?'main':'normal';if(kind==='normal'&&r.points.some(p=>distance(p,data.landmarks.scramble.point)<C.centralExclusionRadius))continue;
+ const crossings=[];for(const r of data.footways){if(r.tags.footway!=='crossing'||!marked(r)||C.southParts.indexOf(r.id,1)!==-1)continue;let points=r.points;if(r.id===C.southParts[0])points=C.southParts.flatMap(id=>data.footways.find(f=>f.id===id).points).filter((p,i,a)=>i===0||distance(p,a[i-1])>1e-5);const kind=r.id===C.diagonal?'diagonal':r.tags['crossing:scramble']==='yes'?'main':'normal';if(kind==='normal'&&r.points.some(p=>distance(p,data.landmarks.scramble.point)<C.centralExclusionRadius))continue;
  if(kind!=='normal'){const original=points;const ends=[0,length(original)].map((d,index)=>{const a=sample(original,d),sign=index===0?-1:1;let last=a.point;for(let step=.25;step<=C.crossingExtension;step+=.25){const p=a.point.map((v,j)=>v+a.tangent[j]*step*sign);if(!contains(roads,p))break;last=p;}return last;});points=[ends[0],...original,ends[1]].filter((p,i,a)=>i===0||distance(p,a[i-1])>1e-5);}
  const width=kind==='diagonal'?C.diagonalWidth:kind==='main'?C.mainWidth:C.normalWidth;const stripes=zebra(points,width,roads);if(stripes.length)crossings.push({id:r.id,points,kind,width,stripes});}
  // Point crossings/signals supply perpendicular crossings only when no mapped crossing path exists.

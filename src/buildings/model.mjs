@@ -1,3 +1,4 @@
+import {finishSteps} from '../quality/runtime.mjs';
 import {ring,signedArea,bounds,inPolygon,inRing,seededRandom,distance,SpatialIndex,overlaps,extend} from '../geo/core.mjs';
 import {triangulate} from '../geo/geometry.mjs';
 import {metric} from '../data/normalize.mjs';
@@ -17,7 +18,7 @@ export function validateFootprint(input){
   const polygon={outer:signedArea(outer)>0?outer:outer.reverse(),holes:holes.map(h=>signedArea(h)<0?h:h.reverse())},a=area(multi(polygon));
   if(a<C.minArea||a>C.maxArea)return {ok:false,reason:'footprint-area'};
   const b=bounds(outer);if(Object.values(b).some(v=>Math.abs(v)>2000))return {ok:false,reason:'gross-bounds'};
-  const t=triangulate(polygon);let actual=0;for(let i=0;i<t.indices.length;i+=3)actual+=Math.abs(signedArea(t.indices.slice(i,i+3).map(j=>t.vertices[j])));
+  const t=triangulate(polygon);let actual=0;for(let i=0;i<t.indices.length;i+=3)actual+=Math.abs(signedArea([t.vertices[t.indices[i]],t.vertices[t.indices[i+1]],t.vertices[t.indices[i+2]]]));
   if(!t.indices.length||Math.abs(actual-a)>Math.max(.001,a*1e-6))return {ok:false,reason:'triangulation-failure'};
   return {ok:true,polygon,area:a,bounds:b};
  }catch(error){return {ok:false,reason:/Degenerate/.test(String(error))?'zero-area':'malformed-polygon'};}
@@ -49,11 +50,11 @@ export function rooftop(building){const rng=seededRandom(building.key+':rooftop'
  const count=Math.min(8,Math.max(1,Math.floor(building.area/90)));for(let i=0;i<count;i++){const [type,w,h,d]=types[Math.floor(rng()*types.length)];for(let attempt=0;attempt<24;attempt++){const center=[b.minX+rng()*(b.maxX-b.minX),b.minZ+rng()*(b.maxZ-b.minZ)];if(!roofFits(building.polygon,center,w,d)||result.some(r=>Math.abs(r.center[0]-center[0])<(r.width+w)/2+.4&&Math.abs(r.center[1]-center[1])<(r.depth+d)/2+.4))continue;result.push({type,center,width:w,height:h,depth:d,y:building.height+C.base});break;}}
  return result;
 }
-export function buildBuildingModel(data){const started=performance.now(),reserved=[],skipped=[],buildings=[],stats={sourceBuildings:data.buildings.length,triangulationFailures:0,clippedBuildings:0,heightClamped:0};
+export function* buildBuildingModelSteps(data){let chunk=0;const started=performance.now(),reserved=[],skipped=[],buildings=[],stats={sourceBuildings:data.buildings.length,triangulationFailures:0,clippedBuildings:0,heightClamped:0};
  const reservedSources=data.buildings.filter(s=>reservationReason(s,data.landmarks));const reservedIndex=new SpatialIndex(40);reservedSources.forEach((s,i)=>reservedIndex.insert(i,s.bounds,s));const roadLines=data.roads.filter(surface).map(r=>r.points);const streets=[...roadLines,...data.footways.filter(f=>surface(f)&&f.tags?.footway!=='crossing').map(f=>f.points)];
  const roadIndex=new SpatialIndex(25);data.roads.filter(surface).forEach((r,i)=>{const p=buffer(r.points,roadWidth(r));if(p.length)roadIndex.insert(i,bounds(polygons(p).flatMap(p=>p.outer)),p);});
  const crossingIndex=new SpatialIndex(25);data.footways.filter(f=>f.tags.footway==='crossing'&&marked(f)).forEach((f,i)=>{const main=f.tags['crossing:scramble']==='yes',points=main?extend(f.points,GROUND.crossingExtension):f.points,p=buffer(points,main?GROUND.mainWidth+1:GROUND.normalWidth);crossingIndex.insert(i,bounds(polygons(p).flatMap(q=>q.outer)),p);});
- for(const source of data.buildings){const key=source.id+':'+source.part,reason=reservationReason(source,data.landmarks);if(reason){reserved.push({id:source.id,key,reason,polygon:source.polygon});continue;}
+ for(const source of data.buildings){if(++chunk%50===0)yield;const key=source.id+':'+source.part,reason=reservationReason(source,data.landmarks);if(reason){reserved.push({id:source.id,key,reason,polygon:source.polygon});continue;}
  const validation=validateFootprint(source.polygon);if(!validation.ok){skipped.push({key,reason:validation.reason});if(validation.reason==='triangulation-failure')stats.triangulationFailures++;continue;}
  if(['roof','bridge'].includes(source.tags?.building)||source.tags?.location==='underground'){skipped.push({key,reason:'non-generic-structure'});continue;}
  const r=reservedIndex.query(validation.bounds).find(r=>area(intersection(multi(validation.polygon),multi(r.value.polygon)))>.1);if(r){reserved.push({id:source.id,key,reason:'overlaps-reserved',reservedId:r.value.id,polygon:source.polygon});continue;}
@@ -61,7 +62,7 @@ export function buildBuildingModel(data){const started=performance.now(),reserve
  for(const [part,polygon] of pieces.entries()){const valid=validateFootprint(polygon);if(!valid.ok){skipped.push({key,reason:'clipped-'+valid.reason});continue;}
  // Keep OSM geometry intact; reject obvious centerline/crossing conflicts, report small surface overlaps separately.
  const crossingConflict=crossingIndex.query(valid.bounds).some(({value:p})=>area(intersection(multi(polygon),p))>1);
- const roadConflict=roadLines.some(line=>line.some(p=>inPolygon(p,polygon)))||roadLines.some(line=>edges(polygon.outer).some(e=>line.slice(1).some((p,i)=>intersects(...e,line[i],p)))&&area(intersection(multi(polygon),buffer(line,.5)))>1);
+ const roadConflict=roadLines.some(line=>line.some(p=>inPolygon(p,polygon)))||roadLines.some(line=>edges(polygon.outer).some(e=>line.some((p,i)=>i>0&&intersects(...e,line[i-1],p)))&&area(intersection(multi(polygon),buffer(line,.5)))>1);
  if(crossingConflict||roadConflict){skipped.push({key,reason:crossingConflict?'crossing-conflict':'road-centerline-conflict'});continue;}
  const roadArea=area(intersection(multi(polygon),union(...roadIndex.query(valid.bounds).map(r=>r.value))));if(roadArea>C.roadConflictArea&&roadArea/valid.area>C.roadConflictRatio){skipped.push({key,reason:'road-surface-conflict',overlapArea:roadArea,overlapRatio:roadArea/valid.area});continue;}
  const c=centroid(polygon),front=frontage(polygon,streets);if(!front){skipped.push({key,reason:'no-valid-edge'});continue;}const b=valid.bounds,w=b.maxX-b.minX,d=b.maxZ-b.minZ,zone=c[0]<0?(c[1]<-80?'northwest':'west'):'east';const f={area:valid.area,centroid:c,aspect:Math.max(w,d)/Math.max(.1,Math.min(w,d)),roadDistance:front.distance,frontageLength:front.length,zone};const resolved=resolveHeight(source,f);if(resolved.clamped)stats.heightClamped++;const building={id:source.id,sourceKey:key,key:key+':'+part,polygon,bounds:b,...f,...resolved,frontage:front};building.archetype=classify(building,source);building.rooftop=rooftop(building);buildings.push(building);
@@ -76,3 +77,5 @@ export function auditGround(model,ground){
  for(const b of model.buildings){const a=area(intersection(multi(b.polygon),ground.roads));if(a>.05)road.push({id:b.id,area:a,ratio:a/b.area});let ca=0;for(const {value:p} of idx.query(b.bounds))ca+=area(intersection(multi(b.polygon),p));if(ca>.05)crossing.push({id:b.id,area:ca});}
  return {roadSurfaceOverlapCount:road.length,obviousRoadOverlapCount:road.filter(r=>r.ratio>C.roadConflictRatio&&r.area>C.roadConflictArea).length,crossingOverlapCount:crossing.length,roadOverlaps:road,crossingOverlaps:crossing};
 }
+
+export function buildBuildingModel(...args){return finishSteps(buildBuildingModelSteps(...args));}

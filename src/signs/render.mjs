@@ -1,9 +1,10 @@
+import {finishStepsAsync} from '../quality/runtime.mjs';
 import {createHeroHalos} from '../fidelity/halos.mjs';
 import {Group,PlaneGeometry,BoxGeometry,Mesh,MeshStandardMaterial,BufferGeometry,Float32BufferAttribute,LineSegments,LineBasicMaterial} from 'three';
 import {merge,InstancedBuilder,triangleCount} from '../geo/geometry.mjs';
 import {inspectGeometry} from '../ground/render.mjs';
 import {createSignAtlases} from './atlas.mjs';
-import {buildSignModel} from './model.mjs';
+import {buildSignModel,buildSignModelSteps} from './model.mjs';
 import {REGIONS} from './config.mjs';
 
 export function calibrateSign(s){if(s.hero||s.category==='rooftop'||s.category==='blade')return s;const seed=[...s.id].reduce((n,c)=>(n*31+c.charCodeAt(0))>>>0,0),wide=seed%3===0,w=wide?.94:.55+(seed%4)*.09,h=wide?.62:.82+(seed%3)*.07;return {...s,width:s.width*w,height:s.height*h,position:[s.position[0],s.position[1]+(seed%2?1:-1)*s.height*(1-h)*.25,s.position[2]]};}
@@ -18,3 +19,5 @@ export function buildSignage(data,options={}){const start=performance.now(),mode
  const stats={...model.stats,tier:model.tier,atlasCount:2,atlasDimensions:[[atlas.size,atlas.size],[atlas.screenWidth,atlas.screenWidth/2]],graphicVariants:atlas.count+1,atlasMode:atlas.city.mode,materials:4+(halos?1:0),batches:geometries.length+(frames.count?1:0)+(halos?1:0),drawCallContribution:geometries.length+(frames.count?1:0)+(halos?1:0),triangles:geometries.reduce((s,g)=>s+triangleCount(g),0)+frames.count*12+(halos?.count??0)*2,debugBatches:debug?1:0,checks,buildTimeMs:Math.round(performance.now()-start),haloCount:halos?.count??0,haloBatches:halos?1:0,emissiveDayOnly:true,pointLights:0};let disposed=false;
  return {root,model,atlas,stats,dispose(){if(disposed)return;disposed=true;halos?.dispose();root.removeFromParent();frames.dispose();box.dispose();geometries.forEach(g=>g.dispose());Object.values(materials).forEach(m=>m.dispose());atlas.dispose();if(debug){debug.geometry.dispose();debug.material.dispose();}root.clear();}};
 }
+
+export async function buildSignageAsync(data,options={}){const model=options.model??await finishStepsAsync(buildSignModelSteps(data,options));return buildSignage(data,{...options,model});}

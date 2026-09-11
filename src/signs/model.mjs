@@ -1,3 +1,4 @@
+import {finishSteps} from '../quality/runtime.mjs';
 import {bounds,seededRandom,SpatialIndex,inPolygon} from '../geo/core.mjs';
 import {buildBuildingModel,multi} from '../buildings/model.mjs';
 import {buildGroundModel,area,intersection,nearest} from '../ground/model.mjs';
@@ -34,12 +35,12 @@ export function placementIssues(s,ctx,accepted=[]){const issues=[],values=[...s.
  return [...new Set(issues)];
 }
 export function auditPlacements(model){const findings=[],accepted=[],hostKeys=new Set(model.hosts.map(h=>h.key));for(const s of model.signs){const issues=placementIssues(s,model.context,accepted);if(!hostKeys.has(s.hostKey))issues.push('invalid-association');if(issues.length)findings.push({id:s.id,issues,position:s.position});accepted.push(s);}return {major:findings.length,minor:0,minorCategories:{},findings};}
-export function buildSignModel(data,{tier='medium',referenceMatch=false,generic=buildBuildingModel(data),ground=buildGroundModel(data),heroes,core=buildStationModel(data,{ground,generic})}={}){
+export function* buildSignModelSteps(data,{tier='medium',referenceMatch=false,generic=buildBuildingModel(data),ground=buildGroundModel(data),heroes,core=buildStationModel(data,{ground,generic})}={}){let chunk=0;
  const started=performance.now(),q=QUALITY[tier];if(!q)throw Error('Unknown signs tier');heroes??=HERO_DEFINITIONS.map(d=>{const h=prepareHero(data,d);BUILDERS[d.builder](h);return h;});
  const context=createAuditContext(data,generic,heroes,ground,core);context.railLines=core.alignments.map(r=>r.points);
  const signs=[],rejected=[],hosts=[],candidates=[];
  const submit=s=>{s.variant=CATEGORIES.indexOf(s.category)+8*(s.variant%4);candidates.push(s);const issues=placementIssues(s,context,signs);if(issues.length)rejected.push({id:s.id,position:s.position,normal:s.normal,width:s.width,height:s.height,heading:s.heading,region:s.region,hero:s.hero,issues});else signs.push(s);};
- for(const b of generic.buildings){const region=regionAt(b.centroid),density=Math.min(1,REGIONS[region].density*(referenceMatch?(['frontage','scramble','centerGai'].includes(region)?1.2:region==='secondary'?.75:1):1))*q.factor;if(b.archetype==='balcony'&&region==='peripheral')continue;
+ for(const b of generic.buildings){if(++chunk%25===0)yield;const region=regionAt(b.centroid),density=Math.min(1,REGIONS[region].density*(referenceMatch?(['frontage','scramble','centerGai'].includes(region)?1.2:region==='secondary'?.75:1):1))*q.factor;if(b.archetype==='balcony'&&region==='peripheral')continue;
   const host={id:b.id,key:b.key,label:'generic-facade',polygon:b.polygon,bottom:b.base,top:b.base+b.height};hosts.push(host);const rng=seededRandom(b.key+':s7');const e={...b.frontage,tangent:[(b.frontage.b[0]-b.frontage.a[0])/b.frontage.length,(b.frontage.b[1]-b.frontage.a[1])/b.frontage.length],index:0};if(e.length<2||e.distance>25)continue;
   const central=referenceMatch&&['frontage','scramble','centerGai'].includes(region)&&Math.hypot(...b.centroid)<120;const slot=Math.max(1,Math.floor((e.length-.5)/(central?4:5)));const rows=Math.min(central?4:region==='centerGai'?4:3,Math.floor((b.height-1.5)/3.5));
   for(let row=0;row<rows;row++)for(let col=0;col<slot;col++){const roll=rng(),kindRoll=rng(),variant=Math.floor(rng()*32);if(roll>density)continue;const w=Math.min(5,e.length/slot-.45),height=row===0?(central?1.35:1):1.55,y=b.base+2.5+row*3.5;let category=row===0?(col%2?'entrance':'box'):kindRoll<.35?'directory':kindRoll<.65?'flush':kindRoll<.85?'billboard':'screen';submit(makePlacement(host,e,{id:b.key+':'+row+':'+col,category,along:(col+.5)*e.length/slot,y,width:category==='directory'?Math.min(w,1):w,height:category==='directory'?2.6:height,region,variant}));}
@@ -56,3 +57,5 @@ export function buildSignModel(data,{tier='medium',referenceMatch=false,generic=
  }
  const model={signs,rejected,hosts,context,tier,genericCount:generic.buildings.length,heroCount:heroes.length,candidateCount:candidates.length};model.audit=auditPlacements(model);const countBy=k=>Object.fromEntries([...new Set(signs.map(s=>s[k]??'generic'))].map(v=>[v,signs.filter(s=>(s[k]??'generic')===v).length]));model.stats={signCount:signs.length,categories:countBy('category'),regions:countBy('region'),heroes:countBy('hero'),centerGai:signs.filter(s=>s.region==='centerGai').length,rejected:rejected.length,candidates:candidates.length,majorPenetration:model.audit.major,minorOverlap:model.audit.minor,minorCategories:model.audit.minorCategories,generationMs:Math.round(performance.now()-started)};return model;
 }
+
+export function buildSignModel(...args){return finishSteps(buildSignModelSteps(...args));}

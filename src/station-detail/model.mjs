@@ -1,10 +1,11 @@
+import {finishSteps} from '../quality/runtime.mjs';
 import {length,sample,bounds,inPolygon,seededRandom,distance,SpatialIndex} from '../geo/core.mjs';
 import {buffer,union,intersection,area,nearest,surface,buildGroundModel} from '../ground/model.mjs';
 import {multi,buildBuildingModel} from '../buildings/model.mjs';
 import {buildStationModel} from '../station/model.mjs';
 import {DETAIL as C,DENSITY,STATION_POIS,SHOP_TYPES} from './config.mjs';
 export function footprint(point,w,d,heading=0){const c=Math.cos(heading),s=Math.sin(heading);return {outer:[[-w/2,-d/2],[w/2,-d/2],[w/2,d/2],[-w/2,d/2]].map(([u,v])=>[point[0]+c*u+s*v,point[1]-s*u+c*v]),holes:[]};}
-export function buildDetailModel(data,{ground=buildGroundModel(data),generic=buildBuildingModel(data),core=buildStationModel(data,{ground,generic}),tier='medium'}={}){
+export function* buildDetailModelSteps(data,{ground=buildGroundModel(data),generic=buildBuildingModel(data),core=buildStationModel(data,{ground,generic}),tier='medium'}={}){let chunk=0;
  const started=performance.now(),density=DENSITY[tier]??DENSITY.medium,m={tier,instances:[],faces:[],fixtures:[],shops:[],wires:[],catenary:[],signals:[],rotary:[],skipped:[],collisions:[],anchors:[],baseline:{major:core.penetrations.filter(p=>p.classification==='major').length,minor:core.penetrations.filter(p=>p.classification==='minor').length},sources:{platforms:core.platforms.map(p=>p.id),railIds:core.alignments.map(a=>a.id)},atlasScope:'station-only'};
  const occupied=new SpatialIndex(10),coreIndex=new SpatialIndex(20),obstacleIndex=new SpatialIndex(25);core.masses.forEach((x,i)=>coreIndex.insert(i,x.bounds??bounds(x.polygon.outer),x));
  const obstacles=[...generic.buildings.map(b=>({id:b.id,polygon:b.polygon,top:b.height+.15})),...generic.reserved.filter(r=>!core.reservations.some(c=>c.id===r.id)).map(r=>({id:r.id,polygon:r.polygon,top:250}))];obstacles.forEach((o,i)=>obstacleIndex.insert(i,bounds(o.polygon.outer),o));
@@ -37,10 +38,10 @@ export function buildDetailModel(data,{ground=buildGroundModel(data),generic=bui
  // A compact end safety rail stands behind tactile, never across the island.
  const q=sample(p.centers,2),f=claim('platform-safety-rail',q.point,.9,.18,p.top,p.top+1.0,q.heading,{platform:p,source:p.id});if(f){for(const x of [-.4,.4])box(f,'safety-post',x,p.top+.5,0,.04,1,.04);box(f,'safety-rail',0,p.top+.94,0,.9,.05,.05);}
  }
- core.platforms.forEach(platformDetails);
+ for(const platform of core.platforms){platformDetails(platform);yield;}
  // Static sign band attachments have explicit S5 hosts; only face-to-host contact is allowed.
  const h=core.hachiko,hs={id:'hachiko-mounted',point:h.point,heading:h.heading};box(hs,'hachiko-sign-shell',0,4.0,.08,5,.7,.1,'green');face(hs,'station',0,4.0,.141,4.8,.6);face(hs,'clock',3.2,3.9,.13,.6,.6);m.anchors.push({type:'mounted-sign',host:h.id,position:[h.point[0],4,h.point[1]],scope:'Hachiko only'});
- for(const a of core.alignments){
+ for(const a of core.alignments){yield;
  if(a.family==='Ginza'){
  // OSM electrified=rail: third-rail impression, no fictitious JR overhead wires.
  for(let d=10;d<a.length-5;d+=density.polePitch){const s=sample(a.points,d),p=[s.point[0]+s.tangent[1]*1.1,s.point[1]-s.tangent[0]*1.1],f=claim('ginza-third-rail',p,.1,3,a.deckY+.24,a.deckY+.42,s.heading,{source:a.id});if(f)box(f,'third-rail-cover',0,a.deckY+.34,0,.1,.14,3,'cream');}continue;}
@@ -71,3 +72,5 @@ export function buildDetailModel(data,{ground=buildGroundModel(data),generic=bui
  m.shops.push({id:f.id,type,point:f.point,polygon:f.polygon,heading,source:f.source,variation});}
  m.stats={platformFixtures:m.fixtures.filter(f=>f.platform).length,signs:m.faces.filter(f=>['station','departure','wayfinding','metro','bus','taxi','map','clock','kiosk','police'].includes(f.tile)).length,vending:m.fixtures.filter(f=>f.role==='platform-vending').length,benches:m.fixtures.filter(f=>f.role.endsWith('bench')).length,catenarySupports:m.catenary.length,wires:m.wires.length,droppers:m.instances.filter(i=>i.role==='dropper').length,railSignals:m.signals.length,rotaryProps:m.rotary.length,shelters:m.rotary.filter(r=>r.type.endsWith('shelter')).length,koban:m.rotary.filter(r=>r.type==='koban').length,info:m.rotary.filter(r=>r.type==='info').length,storefronts:m.shops.length,archetypes:Object.fromEntries(SHOP_TYPES.map(t=>[t,m.shops.filter(s=>s.type===t).length])),lanterns:m.instances.filter(i=>i.role==='lantern').length,noren:m.instances.filter(i=>i.role==='noren').length,menus:m.faces.filter(f=>f.tile==='menu').length,baselineMajor:m.baseline.major,baselineMinor:m.baseline.minor,newMajor:m.collisions.filter(c=>c.classification==='major').length,newMinor:m.collisions.filter(c=>c.classification==='minor').length,skippedCandidates:m.skipped.length,skippedReasons:Object.fromEntries([...new Set(m.skipped.flatMap(s=>s.issues))].map(r=>[r,m.skipped.filter(s=>s.issues.includes(r)).length])),modelBuildTimeMs:Math.round(performance.now()-started)};return m;
 }
+
+export function buildDetailModel(...args){return finishSteps(buildDetailModelSteps(...args));}

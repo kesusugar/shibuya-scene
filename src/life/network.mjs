@@ -41,7 +41,7 @@ export function buildPedestrianNetwork(data,options){
  // Endpoints extend to verified sidewalk cells; road space is only legal on these edges.
  const landingNodes=new Set();for(const source of options.ground.crossings){const used=[];const l=length(source.points),start=sample(source.points,0),end=sample(source.points,l),tracks=source.kind==='normal'?1:3;
   for(const direction of [1,-1])for(let track=0;track<tracks;track++){
-   const shift=(.45+track*.6)*direction,points=source.points.map((p,i)=>{const s=sample(source.points,Math.min(l,source.points.slice(1,i+1).reduce((v,q,j)=>v+distance(source.points[j],q),0)));return [p[0]+s.tangent[1]*shift,p[1]-s.tangent[0]*shift];});
+   const shift=(.45+track*.6)*direction,points=source.points.map((p,i)=>{const s=sample(source.points,Math.min(l,source.points.reduce((v,q,j)=>j>0&&j<=i?v+distance(source.points[j-1],q):v,0)));return [p[0]+s.tangent[1]*shift,p[1]-s.tangent[0]*shift];});
    const endpoint=(p,t,sign)=>{for(let d=.5;d<=14;d+=.5){const x=p[0]+t[0]*sign*d,z=p[1]+t[1]*sign*d;const n=nearest(x,z,1.8,n=>n.edges.length>1&&!used.some(p=>Math.hypot(p.x-n.x,p.z-n.z)<1.05));if(n&&segmentSafe({x:p[0],z:p[1]},n,true))return n;}return null;};
    const a=endpoint(points[0],start.tangent,-1),b=endpoint(points.at(-1),end.tangent,1);
    if(!a||!b||a===b){rejected.push({id:source.id,direction,track,reason:'curb-connection'});continue;}
@@ -62,7 +62,7 @@ export function buildPedestrianNetwork(data,options){
   for(let row=1;row<=3;row++){
    const lateral=(row%2?.3:-.3),from=nearest(a.x-tx*row*1.65+tz*lateral,a.z-tz*row*1.65-tx*lateral,1.35,n=>n.edges.length>1&&!entries.includes(n.id)),to=nearest(b.x+tx*row*1.65-tz*lateral,b.z+tz*row*1.65+tx*lateral,1.35,n=>n.edges.length>1&&!exits.includes(n.id));
    if(!from||!to)continue;const path=[[from.x,from.z],...road,[to.x,to.z]];
-   if(path.slice(1).some((p,i)=>!segmentSafe({x:path[i][0],z:path[i][1]},{x:p[0],z:p[1]},true)))continue;
+   if(path.some((p,i)=>i>0&&!segmentSafe({x:path[i-1][0],z:path[i-1][1]},{x:p[0],z:p[1]},true)))continue;
    const total=length(path),points=[];for(let d=0;d<total;d+=.3)points.push(sample(path,d).point);points.push(path.at(-1));
    if(points.some(p=>ctx.onRoad(...p)&&!inCrossing(...p,original,.34)))continue;
    const e=edge(from,to,{crossingId:original.crossingId,sourcePoints:original.sourcePoints,width:original.width,kind:original.kind,direction:original.direction,track:original.track,waitingRow:row,points,length:total});crossings.push(e);entries.push(from.id);exits.push(to.id);landingNodes.add(to.id);

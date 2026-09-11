@@ -1,12 +1,13 @@
+import {finishStepsAsync} from '../quality/runtime.mjs';
 import {Group,Mesh,MeshStandardMaterial,PlaneGeometry,BoxGeometry,CylinderGeometry,BufferGeometry,Float32BufferAttribute,Color,HemisphereLight,Box3} from 'three';
 import {extrude,polygonGeometry,colorize,merge,InstancedBuilder,triangleCount} from '../geo/geometry.mjs';
 import {distance,seededRandom} from '../geo/core.mjs';
 import {inspectGeometry} from '../ground/render.mjs';
 import {BUILDINGS as C,ARCHETYPE_COLORS} from './config.mjs';
-import {buildBuildingModel} from './model.mjs';
+import {buildBuildingModel,buildBuildingModelSteps} from './model.mjs';
 function sides(g){const group=g.groups.find(g=>g.materialIndex===1);if(!group)throw Error('Missing extrusion side group');const result=new BufferGeometry();for(const name of ['position','normal']){const a=g.getAttribute(name);result.setAttribute(name,new Float32BufferAttribute(a.array.slice(group.start*3,(group.start+group.count)*3),3));}return result;}
-export function buildBuildings(data){
- const start=performance.now(),model=buildBuildingModel(data),root=new Group();root.name='s3-generic-buildings';
+export function buildBuildings(data,options={}){
+ const start=performance.now(),model=options.model??buildBuildingModel(data),root=new Group();root.name='s3-generic-buildings';
  const materials={wall:new MeshStandardMaterial({vertexColors:true,roughness:.85,metalness:.02,envMapIntensity:.45}),roof:new MeshStandardMaterial({vertexColors:true,roughness:.96}),glass:new MeshStandardMaterial({color:0xffffff,roughness:.24,metalness:.55,envMapIntensity:1.3,emissive:0x000000}),glassTower:new MeshStandardMaterial({color:0xffffff,roughness:.22,metalness:.65,envMapIntensity:1.35,emissive:0x000000}),shop:new MeshStandardMaterial({color:0xffffff,roughness:.20,metalness:.45,envMapIntensity:1.35}),trim:new MeshStandardMaterial({color:0xffffff,roughness:.38,metalness:.7,envMapIntensity:1}),metal:new MeshStandardMaterial({color:0xffffff,roughness:.72,metalness:.2})};
  const plane=new PlaneGeometry(1,1),box=new BoxGeometry(1,1,1),cylinder=new CylinderGeometry(.5,.5,1,8);
  const definitions={windows:[plane,'glass'],curtainWindows:[plane,'glassTower'],shopWindows:[plane,'shop'],trim:[box,'trim'],rooftopBoxes:[box,'metal'],rooftopCylinders:[cylinder,'metal']};
@@ -55,3 +56,5 @@ export function buildBuildings(data){
  root.updateMatrixWorld(true);
  return {root,model,stats,records,windows:wallWindows,dispose(){root.removeFromParent();builders.forEach(b=>b.dispose());for(const child of [...root.children]){if(child.isMesh&&!child.isInstancedMesh)child.geometry.dispose();root.remove(child);}plane.dispose();box.dispose();cylinder.dispose();Object.values(materials).forEach(m=>m.dispose());}};
 }
+
+export async function buildBuildingsAsync(data,options={}){const model=options.model??await finishStepsAsync(buildBuildingModelSteps(data,options));return buildBuildings(data,{...options,model});}

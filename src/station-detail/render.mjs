@@ -1,8 +1,9 @@
+import {finishStepsAsync} from '../quality/runtime.mjs';
 import {Group,Mesh,MeshStandardMaterial,BoxGeometry,CylinderGeometry,SphereGeometry,PlaneGeometry,Vector3,Quaternion,Euler,Matrix4,Box3,HemisphereLight} from 'three';
 import {InstancedBuilder,merge,triangleCount} from '../geo/geometry.mjs';import {inspectGeometry} from '../ground/render.mjs';
 import {buildDetailDebug} from './debug.mjs';
-import {buildDetailModel} from './model.mjs';import {createStationAtlas,atlasUV} from './atlas.mjs';
-export function buildStationDetails(data,options={}){const start=performance.now(),model=buildDetailModel(data,options),root=new Group();root.name='s6-station-detail';const atlas=createStationAtlas(options.canvasFactory);
+import {buildDetailModel,buildDetailModelSteps} from './model.mjs';import {createStationAtlas,atlasUV} from './atlas.mjs';
+export function buildStationDetails(data,options={}){const start=performance.now(),model=options.model??buildDetailModel(data,options),root=new Group();root.name='s6-station-detail';const atlas=createStationAtlas(options.canvasFactory);
  const colors={metal:0x829097,dark:0x26343c,cream:0xd9d9c9,wood:0x81634a,glass:0x637e8a,green:0x3b785a,yellow:0xe5bd43,glow:0xf3cf87};const materials=Object.fromEntries(Object.entries(colors).map(([key,color])=>[key,new MeshStandardMaterial({color,roughness:.8,emissive:key==='glow'?0xf3b55e:0,emissiveIntensity:key==='glow'?.18:0})]));materials.atlas=new MeshStandardMaterial({color:0xffffff,map:atlas.texture,roughness:.85});
  const prototypes={box:new BoxGeometry(1,1,1),cylinder:new CylinderGeometry(.5,.5,1,8,1),sphere:new SphereGeometry(.5,8,6)},builders=[],batches={},checks={};
  for(const r of model.instances){if(r.from){const from=new Vector3(...r.from),to=new Vector3(...r.to),v=to.clone().sub(from),q=new Quaternion().setFromUnitVectors(new Vector3(0,0,1),v.clone().normalize()),e=new Euler().setFromQuaternion(q);r.position=from.add(to).multiplyScalar(.5).toArray();r.scale=[r.width,r.width,v.length()];r.heading=0;r.rotation=[e.x,e.y,e.z];}}
@@ -14,3 +15,5 @@ export function buildStationDetails(data,options={}){const start=performance.now
  const stats={...model.stats,tier:model.tier,triangles:Object.values(batches).reduce((s,b)=>s+b.triangles,0),materials:Object.keys(materials).length,batches:Object.keys(batches).length,instancedBatches:builders.length,mergedBatches:signs?1:0,instances:model.instances.length,atlasTextures:1,atlasTiles:atlas.tiles,atlasMode:atlas.mode,pointLights:0,debugBatches:debug?1:0,bounds:{min:extent.min.toArray(),max:extent.max.toArray()},buildTimeMs:Math.round(performance.now()-start),checks,batchDetails:batches};
  let disposed=false;return {root,model,stats,atlas,dispose(){if(disposed)return;disposed=true;root.removeFromParent();builders.forEach(b=>b.dispose());signs?.dispose();Object.values(prototypes).forEach(g=>g.dispose());Object.values(materials).forEach(m=>m.dispose());atlas.dispose();debug?.dispose();root.clear();}};
 }
+
+export async function buildStationDetailsAsync(data,options={}){const model=options.model??await finishStepsAsync(buildDetailModelSteps(data,options));return buildStationDetails(data,{...options,model});}

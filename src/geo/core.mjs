@@ -5,7 +5,7 @@ export function project(lon,lat,origin=ORIGIN){if(![lon,lat,origin.lon,origin.la
 export function unproject([x,z],origin=ORIGIN){return {lon:origin.lon+x/(DEG*R*Math.cos(origin.lat*DEG)),lat:origin.lat-z/(DEG*R)};}
 export const distance=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1]);
 export function cleanLine(points){if(!Array.isArray(points)||!points.every(p=>Array.isArray(p)&&p.length===2&&p.every(Number.isFinite)))throw Error('Invalid points');return points.filter((p,i)=>!i||distance(p,points[i-1])>EPS).map(p=>[...p]);}
-export function length(points){const p=cleanLine(points);return p.slice(1).reduce((s,v,i)=>s+distance(p[i],v),0);}
+export function length(points){const p=cleanLine(points);let total=0;for(let i=1;i<p.length;i++)total+=distance(p[i-1],p[i]);return total;}
 export function sample(points,d){const p=cleanLine(points);if(p.length<2||!Number.isFinite(d))throw Error('Line needs two distinct points and finite distance');let remain=Math.max(0,Math.min(d,length(p)));for(let i=1;i<p.length;i++){const l=distance(p[i-1],p[i]);if(remain<=l||i===p.length-1){const tangent=[(p[i][0]-p[i-1][0])/l,(p[i][1]-p[i-1][1])/l];return {point:[p[i-1][0]+tangent[0]*remain,p[i-1][1]+tangent[1]*remain],tangent,heading:Math.atan2(tangent[0],tangent[1]),segment:i-1};}remain-=l;}}
 export function resample(points,spacing){if(!Number.isFinite(spacing)||spacing<=0)throw Error('Positive spacing required');const total=length(points),out=[];if(total===0)throw Error('Degenerate line');for(let d=0;d<total;d+=spacing)out.push(sample(points,d).point);out.push(sample(points,total).point);return out;}
 /** Positive distance is world-left (north when travelling east). Bounded miter. */
@@ -18,7 +18,9 @@ export function clipLine(points,b){const p=cleanLine(points),parts=[];let curren
 export function ring(points){const p=cleanLine(points);if(p.length>1&&distance(p[0],p.at(-1))<EPS)p.pop();if(p.length<3||Math.abs(signedArea(p))<EPS)throw Error('Degenerate polygon');return p;}
 export function signedArea(p){return p.reduce((s,a,i)=>{const b=p[(i+1)%p.length];return s+a[0]*b[1]-b[0]*a[1];},0)/2;}
 function onSegment(p,a,b){const cross=(p[0]-a[0])*(b[1]-a[1])-(p[1]-a[1])*(b[0]-a[0]);return Math.abs(cross)<EPS&&p[0]>=Math.min(a[0],b[0])-EPS&&p[0]<=Math.max(a[0],b[0])+EPS&&p[1]>=Math.min(a[1],b[1])-EPS&&p[1]<=Math.max(a[1],b[1])+EPS;}
-export function inRing(p,points,boundary=true){const r=ring(points);let inside=false;for(let i=0,j=r.length-1;i<r.length;j=i++){const a=r[i],b=r[j];if(onSegment(p,a,b))return boundary;if((a[1]>p[1])!==(b[1]>p[1])&&p[0]<(b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0])inside=!inside;}return inside;}
+export function inRing(p,points,boundary=true){return inPreparedRing(p,ring(points),boundary);}
+/** Read-only winding test for already normalized clipping rings (open or closed). */
+export function inPreparedRing(p,r,boundary=true){let inside=false;for(let i=0,j=r.length-1;i<r.length;j=i++){const a=r[i],b=r[j];if(onSegment(p,a,b))return boundary;if((a[1]>p[1])!==(b[1]>p[1])&&p[0]<(b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0])inside=!inside;}return inside;}
 export function inPolygon(p,polygon){return inRing(p,polygon.outer)&&!(polygon.holes??[]).some(h=>inRing(p,h));}
 export function seededRandom(seed){let a=2166136261;for(const c of String(seed)){a^=c.charCodeAt(0);a=Math.imul(a,16777619);}return ()=>{a+=0x6D2B79F5;let t=a;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return ((t^t>>>14)>>>0)/4294967296;};}
 export class SpatialIndex{

@@ -1,11 +1,12 @@
+import {finishSteps} from '../quality/runtime.mjs';
 import {length,sample,offset,bounds,clipLine,distance,SpatialIndex,inPolygon} from '../geo/core.mjs';
 import {buffer,rect,union,intersection,difference,area,polygons,clipped,buildGroundModel,nearest} from '../ground/model.mjs';
 import {multi,buildBuildingModel} from '../buildings/model.mjs';
 import {auditRails,atAxis} from './alignment.mjs';
 import {STATION as C,RESERVATIONS,PEDESTRIAN_IDS,PEDESTRIAN_TERMINALS} from './config.mjs';
 const rectangle=(x,z,w,d)=>({outer:[[x-w/2,z-d/2],[x+w/2,z-d/2],[x+w/2,z+d/2],[x-w/2,z+d/2]],holes:[]});
-export function buildStationModel(data,{ground=buildGroundModel(data),generic=buildBuildingModel(data)}={}){
- const started=performance.now(),audit=auditRails(data),m={audit,masses:[],instances:[],decks:[],platforms:[],supports:[],supportRejected:[],pedestrians:[],connections:[],reservations:RESERVATIONS.map(r=>({...r,present:data.buildings.some(b=>b.id===r.id)})),anchors:[],railPairs:[],penetrations:[],skipped:[]};
+export function* buildStationModelSteps(data,{ground=buildGroundModel(data),generic=buildBuildingModel(data)}={}){
+ let chunk=0;const started=performance.now(),audit=auditRails(data),m={audit,masses:[],instances:[],decks:[],platforms:[],supports:[],supportRejected:[],pedestrians:[],connections:[],reservations:RESERVATIONS.map(r=>({...r,present:data.buildings.some(b=>b.id===r.id)})),anchors:[],railPairs:[],penetrations:[],skipped:[]};
  const obstacles=[...generic.buildings.map(b=>({id:b.id,polygon:b.polygon,height:b.height+.15})),...data.buildings.filter(b=>!RESERVATIONS.some(r=>r.id===b.id)&&generic.reserved.some(r=>r.id===b.id)).map(b=>({id:b.id,polygon:b.polygon,height:250}))];
  const obstacleIndex=new SpatialIndex(30);obstacles.forEach((o,i)=>obstacleIndex.insert(i,bounds(o.polygon.outer),o));
  const crossing=union(...ground.crossings.flatMap(c=>c.stripes.map(s=>s.polygon)));
@@ -27,13 +28,13 @@ export function buildStationModel(data,{ground=buildGroundModel(data),generic=bu
  const jrPoly={outer:[...sections.map(s=>s.left),...sections.map(s=>s.right).reverse()],holes:[]};
  const jrDeck=mass('jr-deck',multi(jrPoly),C.jrDeck-.85,C.jrDeck,'stationConcrete');m.decks.push({family:'JR',sections,masses:jrDeck,top:C.jrDeck});
  for(const side of ['left','right']){const line=sections.map(s=>s[side]);lineMass('jr-parapet',line,.23,C.jrDeck,C.jrDeck+.8,'concreteDark');lineMass('jr-girder',line,.55,C.jrDeck-1.4,C.jrDeck-.7,'darkSteel');}
- for(const a of audit.alignments){
+ for(const a of audit.alignments){yield;
  const y=a.deckY;
  if(a.family==='Ginza'){const deck=lineMass('ginza-deck',a.points,4.5,y-.9,y,'stationConcrete');m.decks.push({family:'Ginza',alignment:a.id,masses:deck,top:y});for(const sign of [-1,1]){lineMass('ginza-girder',offset(a.points,sign*1.6),.4,y-1.5,y-.8,'darkSteel');lineMass('ginza-parapet',offset(a.points,sign*2.1),.16,y,y+.65,'concreteDark');}}
  lineMass('track-slab',a.points,2.6,y,y+.22,'ballast',{owner:a.id});
  const pair={alignment:a.id,gauge:a.gauge,left:offset(a.points,a.gauge/2),right:offset(a.points,-a.gauge/2),railTop:y+C.railTop};m.railPairs.push(pair);
  for(const line of [pair.left,pair.right])lineMass('rail',line,.065,y+.36,y+C.railTop,'railMetal',{owner:a.id});
- for(let d=C.sleeperSpacing/2;d<a.length;d+=C.sleeperSpacing){const s=sample(a.points,d);const p=rectangle(...s.point,2.1,2.1);if(intersections(p).some(b=>b.height>y))continue;box('sleeper',s.point,y+.29,a.gauge+.65,.14,.22,s.heading,'concreteDark',{owner:a.id,distance:d,tangent:s.tangent});}
+ for(let d=C.sleeperSpacing/2;d<a.length;d+=C.sleeperSpacing){if(++chunk%50===0)yield;const s=sample(a.points,d);const p=rectangle(...s.point,2.1,2.1);if(intersections(p).some(b=>b.height>y))continue;box('sleeper',s.point,y+.29,a.gauge+.65,.14,.22,s.heading,'concreteDark',{owner:a.id,distance:d,tangent:s.tangent});}
  const accepted=[];for(let d=8;d<a.length;d+=C.pierSpacing){const s=sample(a.points,d);if(support(s.point,y-1.4,a.id,'pier',s.heading))accepted.push(d);}
  m.connections.push({type:'support-span',alignment:a.id,acceptedDistances:accepted,maxUnsupportedSpan:Math.max(...[0,...accepted,a.length].slice(1).map((v,i)=>v-[0,...accepted][i]))});
  }
@@ -89,7 +90,9 @@ export function buildStationModel(data,{ground=buildGroundModel(data),generic=bu
  for(const p of walkShape)for(const ring of p){for(const [role,w,b,t,material] of [['pedestrian-sidewall',.18,0,.25,'stationConcrete'],['pedestrian-glass-rail',.05,.25,1.05,'glass'],['pedestrian-handrail',.08,1.05,1.12,'steel']])mass(role,difference(buffer(ring,w),openings),C.pedestrianTop+b,C.pedestrianTop+t,material);}
  }
  // Audit actual emitted masses, including grade structures and station/Hero intersections.
- for(const a of m.masses){const road=area(intersection(multi(a.polygon),ground.roads)),cross=area(intersection(multi(a.polygon),crossing));if(a.bottom<4.5&&(road>.001||cross>.001))m.penetrations.push({role:a.role,kind:'grade-surface',classification:'major',roadArea:road,crossingArea:cross});for(const b of intersections(a.polygon))if(a.bottom<b.height)m.penetrations.push({role:a.role,kind:'building',id:b.id,classification:'major'});}
+ for(const a of m.masses){if(++chunk%25===0)yield;const road=area(intersection(multi(a.polygon),ground.roads)),cross=area(intersection(multi(a.polygon),crossing));if(a.bottom<4.5&&(road>.001||cross>.001))m.penetrations.push({role:a.role,kind:'grade-surface',classification:'major',roadArea:road,crossingArea:cross});for(const b of intersections(a.polygon))if(a.bottom<b.height)m.penetrations.push({role:a.role,kind:'building',id:b.id,classification:'major'});}
  m.penetrations.push(...m.supports.filter(s=>s.sidewalkArea>.001).map(s=>({kind:'sidewalk-support',classification:'minor',owner:s.owner,point:s.point,area:s.sidewalkArea})));
  m.buildTimeMs=performance.now()-started;return m;
 }
+
+export function buildStationModel(...args){return finishSteps(buildStationModelSteps(...args));}
