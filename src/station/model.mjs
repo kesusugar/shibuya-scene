@@ -5,8 +5,9 @@ import {multi,buildBuildingModel} from '../buildings/model.mjs';
 import {auditRails,atAxis} from './alignment.mjs';
 import {STATION as C,RESERVATIONS,PEDESTRIAN_IDS,PEDESTRIAN_TERMINALS} from './config.mjs';
 const rectangle=(x,z,w,d)=>({outer:[[x-w/2,z-d/2],[x+w/2,z-d/2],[x+w/2,z+d/2],[x-w/2,z+d/2]],holes:[]});
-export function* buildStationModelSteps(data,{ground=buildGroundModel(data),generic=buildBuildingModel(data)}={}){
+export function* buildStationModelSteps(data,{ground=buildGroundModel(data),generic=buildBuildingModel(data),timingTrace=null}={}){
  let chunk=0;const started=performance.now(),audit=auditRails(data),m={audit,masses:[],instances:[],decks:[],platforms:[],supports:[],supportRejected:[],pedestrians:[],connections:[],reservations:RESERVATIONS.map(r=>({...r,present:data.buildings.some(b=>b.id===r.id)})),anchors:[],railPairs:[],penetrations:[],skipped:[]};
+ timingTrace?.markStationModelStart?.(started);
  const obstacles=[...generic.buildings.map(b=>({id:b.id,polygon:b.polygon,height:b.height+.15})),...data.buildings.filter(b=>!RESERVATIONS.some(r=>r.id===b.id)&&generic.reserved.some(r=>r.id===b.id)).map(b=>({id:b.id,polygon:b.polygon,height:250}))];
  const obstacleIndex=new SpatialIndex(30);obstacles.forEach((o,i)=>obstacleIndex.insert(i,bounds(o.polygon.outer),o));
  const crossing=union(...ground.crossings.flatMap(c=>c.stripes.map(s=>s.polygon)));
