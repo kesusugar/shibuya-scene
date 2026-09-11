@@ -1,6 +1,6 @@
 {
   "snapshot": {
-    "spawned": 420,
+    "spawned": 1978,
     "despawned": 0,
     "reasons": {},
     "recoveries": 0,
@@ -9,50 +9,50 @@
     "signalViolations": 0,
     "entries": {},
     "completed": {},
-    "neighborChecks": 26,
+    "neighborChecks": 942,
     "avoidanceChecks": 0,
     "updateMs": 0,
     "throttled": 0,
     "spawnDeferred": 0,
-    "target": 420,
-    "choreographed": 357,
+    "target": 1978,
+    "choreographed": 1681,
     "waitingCells": 49,
-    "total": 420,
+    "total": 1978,
     "tier": "high",
     "archetypes": {
-      "office": 42,
-      "student": 42,
-      "casual": 42,
-      "hoodie": 42,
-      "shopper": 42,
-      "tourist": 42,
-      "elderly": 42,
-      "jogger": 42,
-      "pastel": 42,
-      "umbrella": 42
+      "office": 198,
+      "student": 198,
+      "casual": 198,
+      "hoodie": 198,
+      "shopper": 198,
+      "tourist": 198,
+      "elderly": 198,
+      "jogger": 198,
+      "pastel": 197,
+      "umbrella": 197
     },
     "modes": {
-      "scramble": 357,
-      "idle": 63
+      "scramble": 1681,
+      "idle": 297
     },
     "states": {
-      "waiting": 357,
-      "idle": 63
+      "waiting": 1681,
+      "idle": 297
     },
     "lod": {
-      "near": 420
+      "near": 1978
     },
     "regions": {
-      "commercial": 259,
-      "hachiko": 119,
-      "station": 21,
-      "center-gai": 21
+      "commercial": 1213,
+      "hachiko": 567,
+      "station": 99,
+      "center-gai": 99
     },
-    "hachiko": 119,
-    "centerGai": 21,
+    "hachiko": 567,
+    "centerGai": 99,
     "groupCount": 0,
     "queueSizes": {}
   },
-  "cast": 357,
-  "uniqueWaitingPositions": 357
+  "cast": 1681,
+  "uniqueWaitingPositions": 1560
 }

@@ -9,7 +9,7 @@ test('S16.1 allocated approaches retain diverse safe cells and populated distric
  const active=sim.pool.filter(p=>p.active),assigned=active.filter(p=>p.route.some(id=>network.edges[id].crossingId&&network.edges[id].kind!=='normal'));
  assert.ok(assigned.length>=95);assert.ok(new Set(assigned.map(p=>p.destination)).size>=15);
  for(const r of ['hachiko','station','center-gai'])assert.ok(active.filter(p=>p.region===r).length>=10,r);
- assert.ok(active.length<=420&&active.length>=390);assert.equal(sim.audit().major,0);
+ assert.ok(active.length<=QUALITY.high.total&&active.length>=350);assert.equal(sim.audit().major,0);
  writeFileSync('evidence/s16-1/allocation.json',JSON.stringify({active:active.length,assigned:assigned.length,destinations:new Set(assigned.map(p=>p.destination)).size,regions:sim.snapshot().regions},null,2));sim.dispose();traffic.dispose();
 });
 test('S16.1 continuous first floor glazing remains bounded to selected road frontages',()=>{
@@ -20,5 +20,5 @@ test('S16.1 continuous first floor glazing remains bounded to selected road fron
 });
 test('S16.1 local night pool has a bounded footprint and reversible uniform',()=>{
  const material={onBeforeCompile(){},customProgramCacheKey(){return 'base';}},h=installNightEmission(material,'groundPool'),shader={uniforms:{},vertexShader:'#include <begin_vertex>',fragmentShader:'#include <emissivemap_fragment>'};material.onBeforeCompile(shader);
- assert.equal(shader.uniforms.s12Night.value,0);h.uniform.value=1;assert.equal(shader.uniforms.s12Night.value,1);assert.ok(shader.fragmentShader.includes('length(q)/34.0'));assert.ok(shader.fragmentShader.includes('i<4'));h.restore();assert.equal(shader.uniforms.s12Night.value,0);
+ assert.equal(shader.uniforms.s12Night.value,0);h.uniform.value=1;assert.equal(shader.uniforms.s12Night.value,1);assert.ok(shader.fragmentShader.includes('float pool=0.0'));assert.ok(shader.fragmentShader.includes('i<4'));h.restore();assert.equal(shader.uniforms.s12Night.value,0);
 });

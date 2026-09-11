@@ -1,42 +1,42 @@
 {
   "low": {
-    "spawned": 434,
-    "despawned": 339,
+    "spawned": 1992,
+    "despawned": 1897,
     "reasons": {
-      "profile": 339
+      "profile": 1897
     },
     "recoveries": 0,
     "stuck": 0,
-    "routeCompletions": 357,
+    "routeCompletions": 3362,
     "signalViolations": 0,
     "entries": {
-      "way/754454449:-1": 30,
-      "way/754454449:1": 18,
-      "way/355248083:-1": 50,
-      "way/355248083:1": 45,
-      "way/355248078:1": 41,
-      "way/355248080:1": 30,
-      "way/355248078:-1": 36,
-      "way/355248081:1": 30,
-      "way/355248080:-1": 36,
-      "way/355248081:-1": 41
+      "way/355248083:1": 465,
+      "way/355248081:1": 330,
+      "way/355248080:-1": 305,
+      "way/355248080:1": 305,
+      "way/355248078:-1": 359,
+      "way/355248081:-1": 330,
+      "way/355248083:-1": 465,
+      "way/754454449:1": 222,
+      "way/355248078:1": 359,
+      "way/754454449:-1": 222
     },
     "completed": {
-      "way/355248080:1": 30,
-      "way/355248078:-1": 36,
-      "way/355248081:-1": 41,
-      "way/355248080:-1": 36,
-      "way/355248078:1": 41,
-      "way/355248081:1": 30,
-      "way/355248083:-1": 50,
-      "way/355248083:1": 45,
-      "way/754454449:1": 18,
-      "way/754454449:-1": 30
+      "way/355248080:1": 305,
+      "way/355248078:1": 359,
+      "way/355248078:-1": 359,
+      "way/355248081:-1": 330,
+      "way/355248080:-1": 305,
+      "way/355248081:1": 330,
+      "way/355248083:-1": 465,
+      "way/355248083:1": 465,
+      "way/754454449:-1": 222,
+      "way/754454449:1": 222
     },
-    "neighborChecks": 21,
+    "neighborChecks": 72320,
     "avoidanceChecks": 0,
-    "updateMs": 0.06867399999464396,
-    "throttled": 31752,
+    "updateMs": 0.1753129999997327,
+    "throttled": 1342320,
     "spawnDeferred": 0,
     "target": 95,
     "choreographed": 81,
@@ -44,16 +44,16 @@
     "total": 95,
     "tier": "low",
     "archetypes": {
-      "office": 15,
-      "student": 14,
-      "casual": 11,
-      "hoodie": 9,
-      "shopper": 5,
-      "tourist": 3,
-      "elderly": 5,
-      "jogger": 8,
-      "pastel": 12,
-      "umbrella": 13
+      "office": 8,
+      "student": 9,
+      "casual": 8,
+      "hoodie": 10,
+      "shopper": 11,
+      "tourist": 10,
+      "elderly": 10,
+      "jogger": 9,
+      "pastel": 9,
+      "umbrella": 11
     },
     "modes": {
       "idle": 14,
@@ -64,59 +64,59 @@
       "waiting": 81
     },
     "lod": {
-      "near": 53,
-      "mid": 35,
+      "near": 34,
+      "mid": 54,
       "far": 7
     },
     "regions": {
-      "hachiko": 37,
+      "hachiko": 34,
       "station": 5,
       "center-gai": 4,
-      "commercial": 49
+      "commercial": 52
     },
-    "hachiko": 54,
+    "hachiko": 34,
     "centerGai": 4,
     "groupCount": 0,
     "queueSizes": {}
   },
   "medium": {
-    "spawned": 644,
-    "despawned": 434,
+    "spawned": 2202,
+    "despawned": 1992,
     "reasons": {
-      "profile": 434
+      "profile": 1992
     },
     "recoveries": 0,
     "stuck": 0,
-    "routeCompletions": 357,
+    "routeCompletions": 3362,
     "signalViolations": 0,
     "entries": {
-      "way/754454449:-1": 30,
-      "way/754454449:1": 18,
-      "way/355248083:-1": 50,
-      "way/355248083:1": 45,
-      "way/355248078:1": 41,
-      "way/355248080:1": 30,
-      "way/355248078:-1": 36,
-      "way/355248081:1": 30,
-      "way/355248080:-1": 36,
-      "way/355248081:-1": 41
+      "way/355248083:1": 465,
+      "way/355248081:1": 330,
+      "way/355248080:-1": 305,
+      "way/355248080:1": 305,
+      "way/355248078:-1": 359,
+      "way/355248081:-1": 330,
+      "way/355248083:-1": 465,
+      "way/754454449:1": 222,
+      "way/355248078:1": 359,
+      "way/754454449:-1": 222
     },
     "completed": {
-      "way/355248080:1": 30,
-      "way/355248078:-1": 36,
-      "way/355248081:-1": 41,
-      "way/355248080:-1": 36,
-      "way/355248078:1": 41,
-      "way/355248081:1": 30,
-      "way/355248083:-1": 50,
-      "way/355248083:1": 45,
-      "way/754454449:1": 18,
-      "way/754454449:-1": 30
+      "way/355248080:1": 305,
+      "way/355248078:1": 359,
+      "way/355248078:-1": 359,
+      "way/355248081:-1": 330,
+      "way/355248080:-1": 305,
+      "way/355248081:1": 330,
+      "way/355248083:-1": 465,
+      "way/355248083:1": 465,
+      "way/754454449:-1": 222,
+      "way/754454449:1": 222
     },
-    "neighborChecks": 31,
+    "neighborChecks": 72328,
     "avoidanceChecks": 0,
-    "updateMs": 0.06867399999464396,
-    "throttled": 31752,
+    "updateMs": 0.1753129999997327,
+    "throttled": 1342320,
     "spawnDeferred": 0,
     "target": 210,
     "choreographed": 179,
@@ -158,80 +158,80 @@
     "queueSizes": {}
   },
   "high": {
-    "spawned": 1064,
-    "despawned": 644,
+    "spawned": 4180,
+    "despawned": 2202,
     "reasons": {
-      "profile": 644
+      "profile": 2202
     },
     "recoveries": 0,
     "stuck": 0,
-    "routeCompletions": 357,
+    "routeCompletions": 3362,
     "signalViolations": 0,
     "entries": {
-      "way/754454449:-1": 30,
-      "way/754454449:1": 18,
-      "way/355248083:-1": 50,
-      "way/355248083:1": 45,
-      "way/355248078:1": 41,
-      "way/355248080:1": 30,
-      "way/355248078:-1": 36,
-      "way/355248081:1": 30,
-      "way/355248080:-1": 36,
-      "way/355248081:-1": 41
+      "way/355248083:1": 465,
+      "way/355248081:1": 330,
+      "way/355248080:-1": 305,
+      "way/355248080:1": 305,
+      "way/355248078:-1": 359,
+      "way/355248081:-1": 330,
+      "way/355248083:-1": 465,
+      "way/754454449:1": 222,
+      "way/355248078:1": 359,
+      "way/754454449:-1": 222
     },
     "completed": {
-      "way/355248080:1": 30,
-      "way/355248078:-1": 36,
-      "way/355248081:-1": 41,
-      "way/355248080:-1": 36,
-      "way/355248078:1": 41,
-      "way/355248081:1": 30,
-      "way/355248083:-1": 50,
-      "way/355248083:1": 45,
-      "way/754454449:1": 18,
-      "way/754454449:-1": 30
+      "way/355248080:1": 305,
+      "way/355248078:1": 359,
+      "way/355248078:-1": 359,
+      "way/355248081:-1": 330,
+      "way/355248080:-1": 305,
+      "way/355248081:1": 330,
+      "way/355248083:-1": 465,
+      "way/355248083:1": 465,
+      "way/754454449:-1": 222,
+      "way/754454449:1": 222
     },
-    "neighborChecks": 56,
+    "neighborChecks": 72869,
     "avoidanceChecks": 0,
-    "updateMs": 0.06867399999464396,
-    "throttled": 31752,
+    "updateMs": 0.1753129999997327,
+    "throttled": 1342320,
     "spawnDeferred": 0,
-    "target": 420,
-    "choreographed": 357,
+    "target": 1978,
+    "choreographed": 1681,
     "waitingCells": 49,
-    "total": 420,
+    "total": 1978,
     "tier": "high",
     "archetypes": {
-      "office": 42,
-      "student": 42,
-      "casual": 42,
-      "hoodie": 42,
-      "shopper": 42,
-      "tourist": 42,
-      "elderly": 42,
-      "jogger": 42,
-      "pastel": 42,
-      "umbrella": 42
+      "office": 198,
+      "student": 198,
+      "casual": 198,
+      "hoodie": 198,
+      "shopper": 198,
+      "tourist": 198,
+      "elderly": 198,
+      "jogger": 198,
+      "pastel": 197,
+      "umbrella": 197
     },
     "modes": {
-      "scramble": 357,
-      "idle": 63
+      "scramble": 1681,
+      "idle": 297
     },
     "states": {
-      "waiting": 357,
-      "idle": 63
+      "waiting": 1681,
+      "idle": 297
     },
     "lod": {
-      "near": 420
+      "near": 1978
     },
     "regions": {
-      "commercial": 259,
-      "hachiko": 119,
-      "station": 21,
-      "center-gai": 21
+      "commercial": 1213,
+      "hachiko": 567,
+      "station": 99,
+      "center-gai": 99
     },
-    "hachiko": 119,
-    "centerGai": 21,
+    "hachiko": 567,
+    "centerGai": 99,
     "groupCount": 0,
     "queueSizes": {}
   }
