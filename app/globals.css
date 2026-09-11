@@ -22,5 +22,7 @@
 
 button[data-slot=switch]{padding:0;border-radius:999px;width:32px;height:19px;min-width:32px}button[data-slot=switch][data-state=checked]{background:#60cee2}button[data-slot=switch][data-state=unchecked]{background:#435569}
 
+.qa-capture{position:fixed;right:16px;bottom:16px;z-index:1000;background:#173e49;border-color:#60cee2;color:#d9f8fc;box-shadow:0 4px 18px #0009}.qa-capture:disabled{cursor:wait;opacity:.72}
+
 /* Compact viewing keeps every existing inspection control available. */
 .quick-views{display:flex;gap:6px;flex-wrap:wrap;padding:10px 20px;background:#10151dee}.quick-views button,.quick-views select{border-radius:18px;padding:6px 12px;font-size:12px;background:#192737;color:#dceaf3;border:1px solid #405267}.presentation header{height:75px;padding:12px 20px}.presentation .workspace{grid-template-columns:1fr;height:calc(100dvh - 145px);min-height:360px}.presentation aside,.presentation footer,.presentation>section,.presentation .view-label span,.presentation .empty-label{display:none}.presentation .stats{width:132px;padding:8px;top:12px;right:12px}.presentation .view-label{top:15px;font-size:13px}.presentation h1{font-size:24px}.presentation .eyebrow{font-size:10px}.presentation [role=alert]{max-width:calc(100% - 50px)}@media(max-width:700px){.quick-views{padding:8px 10px;gap:5px}.quick-views button,.quick-views select{padding:5px 8px;font-size:11px}.presentation .workspace{height:calc(100dvh - 178px)}.presentation .view-label{max-width:52%}.presentation header{padding:10px}.presentation h1 span{font-size:15px}}
