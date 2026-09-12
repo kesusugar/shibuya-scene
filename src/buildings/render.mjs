@@ -60,4 +60,4 @@ export function buildBuildings(data,options={}){
  return {root,model,stats,records,windows:wallWindows,setTier,dispose(){root.removeFromParent();highDetail?.dispose();builders.forEach(b=>b.dispose());for(const child of [...root.children]){if(child.isMesh&&!child.isInstancedMesh)child.geometry.dispose();root.remove(child);}plane.dispose();box.dispose();cylinder.dispose();Object.values(materials).forEach(m=>m.dispose());}};
 }
 
-export async function buildBuildingsAsync(data,options={}){const model=options.model??await finishStepsAsync(buildBuildingModelSteps(data,options));return buildBuildings(data,{...options,model});}
+export async function buildBuildingsAsync(data,options={}){const timing=options.stageTiming,model=options.model??await finishStepsAsync(buildBuildingModelSteps(data,options),undefined,timing);const started=timing&&performance.now(),result=buildBuildings(data,{...options,model});if(timing)timing.computeMs=(timing.computeMs??0)+(performance.now()-started);return result;}

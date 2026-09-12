@@ -20,4 +20,4 @@ export function buildSignage(data,options={}){const start=performance.now(),mode
  return {root,model,atlas,stats,dispose(){if(disposed)return;disposed=true;halos?.dispose();root.removeFromParent();frames.dispose();box.dispose();geometries.forEach(g=>g.dispose());Object.values(materials).forEach(m=>m.dispose());atlas.dispose();if(debug){debug.geometry.dispose();debug.material.dispose();}root.clear();}};
 }
 
-export async function buildSignageAsync(data,options={}){const model=options.model??await finishStepsAsync(buildSignModelSteps(data,options));return buildSignage(data,{...options,model});}
+export async function buildSignageAsync(data,options={}){const timing=options.stageTiming,model=options.model??await finishStepsAsync(buildSignModelSteps(data,options),undefined,timing);const started=timing&&performance.now(),result=buildSignage(data,{...options,model});if(timing)timing.computeMs=(timing.computeMs??0)+(performance.now()-started);return result;}

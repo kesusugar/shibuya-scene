@@ -16,4 +16,4 @@ export function buildStationDetails(data,options={}){const start=performance.now
  let disposed=false;return {root,model,stats,atlas,dispose(){if(disposed)return;disposed=true;root.removeFromParent();builders.forEach(b=>b.dispose());signs?.dispose();Object.values(prototypes).forEach(g=>g.dispose());Object.values(materials).forEach(m=>m.dispose());atlas.dispose();debug?.dispose();root.clear();}};
 }
 
-export async function buildStationDetailsAsync(data,options={}){const model=options.model??await finishStepsAsync(buildDetailModelSteps(data,options));return buildStationDetails(data,{...options,model});}
+export async function buildStationDetailsAsync(data,options={}){const timing=options.stageTiming,model=options.model??await finishStepsAsync(buildDetailModelSteps(data,options),undefined,timing);const started=timing&&performance.now(),result=buildStationDetails(data,{...options,model});if(timing)timing.computeMs=(timing.computeMs??0)+(performance.now()-started);return result;}

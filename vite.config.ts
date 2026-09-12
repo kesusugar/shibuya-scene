@@ -1,5 +1,7 @@
 import vinext from "vinext";
 import { defineConfig } from "vite";
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import hostingConfig from "./.openai/hosting.json";
 import { sites } from "./build/sites-vite-plugin";
 
@@ -7,6 +9,9 @@ const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
   "00000000-0000-4000-8000-000000000000";
 
 const { d1, r2 } = hostingConfig;
+const packageVersion = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version;
+const gitCommit = (() => { try { return execFileSync('git', ['rev-parse', 'HEAD'], {encoding:'utf8'}).trim(); } catch { return 'unavailable'; } })();
+const buildTimestamp = new Date().toISOString();
 
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
@@ -44,6 +49,11 @@ export default defineConfig(async () => {
   const { cloudflare } = await import("@cloudflare/vite-plugin");
 
   return {
+    define: {
+      'import.meta.env.VITE_GIT_COMMIT_SHA': JSON.stringify(gitCommit),
+      'import.meta.env.VITE_BUILD_TIMESTAMP': JSON.stringify(buildTimestamp),
+      'import.meta.env.VITE_APP_VERSION': JSON.stringify(packageVersion),
+    },
     server: {
       host: "0.0.0.0",
       allowedHosts: ["terminal.local"],
