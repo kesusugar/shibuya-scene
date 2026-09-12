@@ -15,6 +15,9 @@ const buildTimestamp = new Date().toISOString();
 
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
+const isGitHubPagesBuild =
+  process.env.GITHUB_ACTIONS === "true" &&
+  process.env.GITHUB_REPOSITORY === "kesusugar/shibuya-scene";
 
 const localBindingConfig = {
   main: "./worker/index.ts",
@@ -49,6 +52,7 @@ export default defineConfig(async () => {
   const { cloudflare } = await import("@cloudflare/vite-plugin");
 
   return {
+    base: isGitHubPagesBuild ? "/shibuya-scene/" : "/",
     define: {
       'import.meta.env.VITE_GIT_COMMIT_SHA': JSON.stringify(gitCommit),
       'import.meta.env.VITE_BUILD_TIMESTAMP': JSON.stringify(buildTimestamp),
