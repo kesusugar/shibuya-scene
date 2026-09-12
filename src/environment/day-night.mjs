@@ -53,6 +53,7 @@ export class DayNightSystem{
    if(/^traffic-.*-rear$/.test(o.name)){night=1.1;mode='coloredLamp';}
    if(o.name==='s9-signal-lenses'){night=.85;mode='coloredLamp';}
    if(/^station-detail-.*-glow$/.test(o.name))night=.45;
+   if(o.name==='hero-cafe-frontage')night=.65;
    const wet=o.name==='ground-asphalt';if(!mode&&night===null&&!wet)continue;if(materials.has(m))continue;
    materials.set(m,{material:m,intensity:m.emissiveIntensity,night,wet,roughness:m.roughness,metalness:m.metalness,vehicle:/^traffic-.*-(front|rear)$/.test(o.name),emission:mode?installNightEmission(m,mode):null});
   }});
