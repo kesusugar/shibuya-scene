@@ -29,7 +29,7 @@ export function buildMagnet(h){
 }
 export function buildScrambleSquare(h){
  const p=h.footprint,t=setback(h,.79,.77),upper=setback(h,.73,.72),c=setback(h,.66,.64);mass(h,'retail-podium',p,0,54,'concreteLight');mass(h,'slender-curtain-tower',t,54,199,'glass');mass(h,'upper-setback',upper,199,222,'glassDark');mass(h,'skyline-crown',c,222,h.height,'metal');
- grid(h,p,3,53,{pitch:4,floor:4.2,width:3.2,height:3.3,material:'glassDark'});grid(h,t,55,198,{pitch:3.4,floor:4,width:2.8,height:3.6,mullions:true});grid(h,upper,200,221,{pitch:3.4,floor:4,width:2.8,height:3.6});bands(h,p,[14,30,53.8],{thickness:.6});bands(h,c,[223,h.height-.3],{thickness:.35});anchor(h,h.primaryFacade,'emissiveFacade',Math.min(25,h.primaryFacade.length*.6),30,110);roofMass(h,c,h.height,{width:5,depth:4,height:2});
+ grid(h,p,3,53,{pitch:4,floor:4.2,width:3.2,height:3.3,material:'glassDark'});grid(h,t,55,198,{pitch:3.4,floor:4,width:2.8,height:3.6});grid(h,upper,200,221,{pitch:3.4,floor:4,width:2.8,height:3.6});bands(h,p,[14,30,53.8],{thickness:.6});bands(h,c,[223,h.height-.3],{thickness:.35});anchor(h,h.primaryFacade,'emissiveFacade',Math.min(25,h.primaryFacade.length*.6),30,110);roofMass(h,c,h.height,{width:5,depth:4,height:2});
 }
 export function buildSeibuA(h){
  const p=h.footprint,u=setback(h,.96,.94),r=setback(h,.82,.75);mass(h,'department-store-plinth',p,0,6.5,'concreteDark');mass(h,'horizontal-department-block',u,6.5,27.5);mass(h,'recessed-roofline',r,27.5,h.height,'metal');bands(h,u,sequence(9,28,3.7),{thickness:.6});grid(h,u,7,27,{pitch:5,width:3.8,height:1.25});grid(h,p,0,6.3,{floor:3,pitch:4,width:3,height:2});placeholder(h,primaryFacade(u,[0,0]),'facadeSign',12,1.6,25);roofMass(h,r,h.height,{width:6,depth:4,height:1.2});
@@ -44,6 +44,6 @@ export function buildMarkCity(h){
 }
 export function buildShibuyaStream(h){
  const p=h.footprint,podium=setback(h,.97,.95),tower=setback(h,.72,.73),top=setback(h,.66,.67);mass(h,'stream-public-podium',p,0,18,'concreteDark');mass(h,'hotel-transition',podium,18,54,'concreteLight');mass(h,'offset-panel-office-tower',tower,54,171,'glass');mass(h,'asymmetric-roof-step',top,171,h.height,'metal');
- grid(h,podium,20,54,{pitch:3.4,floor:3.8,width:2.8,height:2.6});grid(h,tower,55,170,{pitch:3.1,floor:4,width:2.45,height:3.6,mullions:true});bands(h,podium,[18.2,36,53.8],{thickness:.5});bands(h,tower,sequence(62,170,12),{thickness:.2});anchor(h,primaryFacade(tower,[0,0]),'emissiveFacade',Math.min(20,h.primaryFacade.length*.6),35,130);roofMass(h,top,h.height,{width:4,depth:3,height:2});
+ grid(h,podium,20,54,{pitch:3.4,floor:3.8,width:2.8,height:2.6});grid(h,tower,55,170,{pitch:3.1,floor:4,width:2.45,height:3.6});bands(h,podium,[18.2,36,53.8],{thickness:.5});bands(h,tower,sequence(62,170,12),{thickness:.2});anchor(h,primaryFacade(tower,[0,0]),'emissiveFacade',Math.min(20,h.primaryFacade.length*.6),35,130);roofMass(h,top,h.height,{width:4,depth:3,height:2});
 }
 export const BUILDERS={qfront:buildQFront,'109':buildShibuya109,magnet:buildMagnet,scrambleSquare:buildScrambleSquare,seibuA:buildSeibuA,seibuB:buildSeibuB,markCity:buildMarkCity,stream:buildShibuyaStream};
