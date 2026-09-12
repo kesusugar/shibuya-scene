@@ -16,13 +16,13 @@ s12Window*=mix(1.0,0.12,smoothstep(70.0,170.0,length(instanceMatrix[3].xz)));\ns
    if(mode==='storefront')body+='\n#ifdef USE_INSTANCING\nif(instanceMatrix[3].y<14.0)s12Window=max(s12Window,1.48);\n#endif';
    shader.fragmentShader=shader.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\ntotalEmissiveRadiance += s12WindowTint*s12Window*s12Night*(1.0+0.65*s13Nightglow);');
   }else if(mode==='wall'){
-   shader.fragmentShader=shader.fragmentShader.replace('#include <color_fragment>','#include <color_fragment>\ndiffuseColor.rgb *= mix(vec3(1.0),vec3(0.32,0.37,0.46),s12Night);');
+   shader.fragmentShader=shader.fragmentShader.replace('#include <color_fragment>','#include <color_fragment>\ndiffuseColor.rgb *= mix(vec3(0.68,0.70,0.72),vec3(0.32,0.37,0.46),s12Night);');
   }else if(mode==='groundPool'){
    vertex='varying vec3 s161Position;\n';fragment+='varying vec3 s161Position;\n';body='s161Position=(modelMatrix*vec4(transformed,1.0)).xyz;';
    shader.fragmentShader=shader.fragmentShader.replace('#include <emissivemap_fragment>',`#include <emissivemap_fragment>
 vec2 q=s161Position.xz;
 float pool=0.0;
-for(int i=0;i<4;i++){vec2 c=vec2(i<2?-20.0:20.0,mod(float(i),2.0)<0.5?-18.0:18.0);pool+=(0.12+0.025*float(i))*pow(max(0.0,1.0-length(q-c)/11.0),2.0);}
+for(int i=0;i<4;i++){vec2 c=vec2(i<2?-20.0:20.0,mod(float(i),2.0)<0.5?-18.0:18.0);pool+=(0.30+0.025*float(i))*pow(max(0.0,1.0-length(q-c)/24.0),2.0);}
 totalEmissiveRadiance+=vec3(0.65,0.78,1.0)*pool*s12Night;`);
   }else if(mode==='sign'){vertex='attribute float s13GlowWeight;\nvarying float s13Sign;\n';fragment+='varying float s13Sign;\n';body='s13Sign=s13GlowWeight;';shader.fragmentShader=shader.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\ntotalEmissiveRadiance *= 1.0+s13Nightglow*(max(s13Sign,0.8)-1.0);');
   }else if(mode==='train'){vertex='attribute vec3 s12Emission;\nattribute float s12LampEnd;\nattribute vec2 s12Cab;\nvarying vec3 s12Train;\n';fragment+='varying vec3 s12Train;\n';body=`s12Train=s12Emission;
