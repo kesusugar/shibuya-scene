@@ -7,10 +7,20 @@ export class FrameGate{
  step(now){if(this.last===null){this.last=now;return 0;}const elapsed=now-this.last;if(elapsed+0.01<1000/PROFILES[this.tier].fps)return null;this.last=now;return Math.min(.1,Math.max(0,elapsed/1000));}
 }
 // Yield between expensive module builds; never drain all loaded modules in one microtask turn.
-export function afterPaint(run){if(typeof requestAnimationFrame==='function')requestAnimationFrame(()=>setTimeout(run,0));else setTimeout(run,0);}
+export function afterPaint(run){
+ // Background tabs can suspend rAF entirely. Resume once, with a bounded fallback.
+ let completed=false,frame;const resume=()=>{if(completed)return;completed=true;clearTimeout(timer);if(frame!==undefined)globalThis.cancelAnimationFrame?.(frame);run();};
+ const timer=setTimeout(resume,100);
+ if(typeof requestAnimationFrame==='function')frame=requestAnimationFrame(()=>setTimeout(resume,0));else setTimeout(resume,0);
+}
 export const yieldFrame=()=>new Promise(afterPaint);
 export function finishSteps(steps){let item;do{item=steps.next();}while(!item.done);return item.value;}
-export async function finishStepsAsync(steps,pause=yieldFrame,timing=null){let item;try{if(!timing){while(!(item=steps.next()).done)await pause();return item.value;}while(true){const computeStart=performance.now();item=steps.next();timing.computeMs=(timing.computeMs??0)+(performance.now()-computeStart);if(item.done)return item.value;const waitStart=performance.now();await pause();timing.cooperativeWaitMs=(timing.cooperativeWaitMs??0)+(performance.now()-waitStart);timing.yieldCount=(timing.yieldCount??0)+1;}}finally{steps.return?.();}}
+export async function finishStepsAsync(steps,pause=yieldFrame,timing=null){
+ let sliceStart=performance.now();try{while(true){const start=performance.now(),item=steps.next();if(timing)timing.computeMs=(timing.computeMs??0)+performance.now()-start;if(item.done)return item.value;
+ // Coalesce cheap chunks into an 8 ms slice; injected schedulers retain exact-yield semantics.
+ if(pause!==yieldFrame||performance.now()-sliceStart>=8){const waitStart=performance.now();await pause();if(timing){timing.cooperativeWaitMs=(timing.cooperativeWaitMs??0)+performance.now()-waitStart;timing.yieldCount=(timing.yieldCount??0)+1;}sliceStart=performance.now();}
+ }}finally{steps.return?.();}
+}
 export function createBuildQueue(schedule=afterPaint,observe=null){
  const jobs=[];let running=false,closed=false,active=null,sequence=0;
  const snapshot=()=>({queueLength:jobs.length,activeBuildName:active?.meta?.name??null,nextBuildName:jobs[0]?.meta?.name??null});

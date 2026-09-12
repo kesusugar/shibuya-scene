@@ -1,5 +1,5 @@
 import {Group,Color,HemisphereLight,DirectionalLight} from 'three';
-export const DAY_NIGHT=Object.freeze({day:{sky:0x9fb5ce,exposure:.9,ambient:.86,key:1.2},night:{sky:0x03060c,exposure:1,ambient:.65,key:.16}});
+export const DAY_NIGHT=Object.freeze({day:{sky:0x9fb5ce,exposure:.9,ambient:.4,key:1.2},night:{sky:0x03060c,exposure:1,ambient:.22,key:.08}});
 // One uniform per existing shared material. No geometry, extra pass, or per-frame allocation.
 export function installNightEmission(material,mode){
  const original=material.onBeforeCompile,key=material.customProgramCacheKey,uniform={value:0},glow={value:0};
@@ -9,9 +9,9 @@ export function installNightEmission(material,mode){
 #ifdef USE_INSTANCING
 float seed=mod(abs(dot(instanceMatrix[3].xyz,vec3(12.9898,78.233,37.719))),7.0);
 s12Window=seed<3.0?1.10+seed*0.18:0.0;
-s12WindowTint=seed<1.0?vec3(1.0,0.56,0.22):(seed<2.0?vec3(1.0,0.82,0.55):vec3(0.54,0.78,1.0));
+s12Window*=mix(1.0,0.12,smoothstep(70.0,170.0,length(instanceMatrix[3].xz)));\ns12WindowTint=seed<1.0?vec3(1.0,0.56,0.22):(seed<2.0?vec3(1.0,0.82,0.55):vec3(0.54,0.78,1.0));
 #endif`;
-   if(mode==='curtainWindow')body+='\n#ifdef USE_INSTANCING\ns12Window=1.12;s12WindowTint=vec3(0.58,0.78,1.0);\n#endif';
+   if(mode==='curtainWindow')body+='\n#ifdef USE_INSTANCING\ns12Window=0.65*mix(1.0,0.12,smoothstep(70.0,170.0,length(instanceMatrix[3].xz)));s12WindowTint=vec3(0.58,0.78,1.0);\n#endif';
    if(mode==='heroStorefront')body+='\n#ifdef USE_INSTANCING\nif(instanceMatrix[3].y<14.0&&length(instanceMatrix[3].xz)<95.0)s12Window=max(s12Window,1.48);\n#endif';
    if(mode==='storefront')body+='\n#ifdef USE_INSTANCING\nif(instanceMatrix[3].y<14.0)s12Window=max(s12Window,1.48);\n#endif';
    shader.fragmentShader=shader.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\ntotalEmissiveRadiance += s12WindowTint*s12Window*s12Night*(1.0+0.65*s13Nightglow);');

@@ -7,7 +7,7 @@ import {OutputPass} from 'three/addons/postprocessing/OutputPass.js';
 import {ShaderPass} from 'three/addons/postprocessing/ShaderPass.js';
 import {Pass,FullScreenQuad} from 'three/addons/postprocessing/Pass.js';
 const vertex='varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position.xy,0.,1.);}';
-export const FIDELITY={dpr:1.5,shadow:4096,aoScale:.5,radius:2.5,thickness:1.5,samples:12,blend:.85,denoiseRings:2,denoiseSamples:12,exposureDay:.74,exposureNight:.86,environmentDay:.55,environmentNight:.42,bloomStrength:.35,bloomThreshold:4.2};
+export const FIDELITY={dpr:1.5,shadow:4096,aoScale:.5,radius:2.5,thickness:1.5,samples:12,blend:.85,denoiseRings:2,denoiseSamples:12,exposureDay:.74,exposureNight:.86,environmentDay:.3,environmentNight:.12,bloomStrength:.35,bloomThreshold:4.2};
 export const noAO=o=>!!o.userData.noAO||/^(signs-(print|led|heroScreen)|s13-|s163-halo|traffic-.*-(front|rear)|s9-signal-lenses)/.test(o.name)||o.material?.isShaderMaterial;
 export function configureAO(ao){
  // Store an exclusion bit in the existing G-buffer alpha, without another scene render.

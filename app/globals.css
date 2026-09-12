@@ -1,4 +1,26 @@
 @import "tailwindcss";
+
+/* Reference-inspired compact overlay, without changing game controls. */
+.presentation header h1 { font-size:clamp(28px,4vw,52px); font-weight:900; letter-spacing:1px; line-height:1; text-shadow:0 3px 16px #0008; }
+.presentation header h1 span { display:none; }
+.presentation header .eyebrow { font-size:11px; color:#d0d2d6; letter-spacing:3px; }
+.presentation .quick-views { max-width:590px; top:100px !important; gap:7px; }
+.presentation .quick-views button,.presentation .quick-views select { background:#090f19b8; border-color:#ffffff26; backdrop-filter:blur(8px); padding:9px 14px; font-size:13px; border-radius:24px; color:#f2f2f5; }
+.presentation .quick-views button[aria-pressed=true] { background:#54687888; border-color:#d9e5ef; }
+.presentation .stats { bottom:auto !important; top:18px !important; right:16px; width:auto !important; display:flex; gap:14px; border-radius:12px; border-color:#ffffff18; padding:6px 12px; }
+.presentation .stats div { gap:7px; }
+.presentation .stats b { color:#e0e3e9; }
+.presentation header > button { position:fixed; top:64px; right:16px; background:#090f19b8; border-radius:20px; font-size:12px; }
+@media(max-width:700px){.presentation .stats{top:auto !important;bottom:60px !important;gap:8px}.presentation .quick-views{top:88px !important;max-width:calc(100% - 24px)}.presentation header h1{font-size:30px}}
+
+/* Give the crossing the full viewport; inspection retains its existing layout. */
+.presentation { position: relative; }
+.presentation header { position:absolute; inset:0 0 auto; z-index:30; border:0; background:linear-gradient(#08101cd9,transparent); pointer-events:none; }
+.presentation header button { pointer-events:auto; }
+.presentation .quick-views { position:absolute; top:76px; left:12px; right:12px; z-index:30; background:transparent; padding:0; }
+.presentation .workspace { height:100dvh !important; min-height:360px; }
+.presentation .view-label { top:auto !important; bottom:18px; padding:8px 12px; background:#08101ca8; border-radius:8px; }
+.presentation .stats { top:auto !important; bottom:16px; background:#08101cb8; }
 @import "tw-animate-css";
 @import "../vendor/shadcn-tailwind-4.13.0.css";
 
