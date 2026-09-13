@@ -51,7 +51,10 @@ export default defineConfig(async () => {
   process.env.MINIFLARE_REGISTRY_PATH ??= ".wrangler/registry";
 
   // Wrangler snapshots its log path while the Cloudflare plugin is imported.
-  const { cloudflare } = await import("@cloudflare/vite-plugin");
+  // The client-only scene can preview in Node without the Workers runner.
+  // Keep the production Workers configuration unchanged.
+  const localNodePreview = process.env.SHIBUYA_LOCAL_NODE === "1";
+  const cloudflare = localNodePreview ? null : (await import("@cloudflare/vite-plugin")).cloudflare;
 
   return {
     base: isGitHubPagesBuild ? "/shibuya-scene/" : "/",
@@ -71,7 +74,7 @@ export default defineConfig(async () => {
       staticModelVersionPlugin(fileURLToPath(new URL('.', import.meta.url))),
       vinext(),
       sites(),
-      cloudflare({
+      cloudflare && cloudflare({
         viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },
         inspectorPort: false,
         config: localBindingConfig,
