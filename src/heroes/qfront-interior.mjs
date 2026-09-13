@@ -6,7 +6,7 @@ import {merge,triangleCount} from '../geo/geometry.mjs';
 // Shallow real geometry behind glass, not a photograph pasted onto its surface.
 export function createQfrontInterior(hero){
  const root=new Group();root.name='qfront-interior';const records=[];
- const materials={shell:new MeshStandardMaterial({color:0x302b26,roughness:.9}),wood:new MeshStandardMaterial({color:0x79583d,roughness:.7}),people:new MeshStandardMaterial({color:0x273039,roughness:.9}),warm:new MeshStandardMaterial({color:0xffd49a,emissive:0xffbc6b,emissiveIntensity:.12}),dim:new MeshStandardMaterial({color:0xc9bda3,emissive:0xeac793,emissiveIntensity:.04})};
+ const materials={shell:new MeshStandardMaterial({color:0x665346,roughness:.9,emissive:0xa47748,emissiveIntensity:.025}),wood:new MeshStandardMaterial({color:0x99744e,roughness:.7,emissive:0xb88c58,emissiveIntensity:.02}),people:new MeshStandardMaterial({color:0x273039,roughness:.9}),warm:new MeshStandardMaterial({color:0xffd49a,emissive:0xffbc6b,emissiveIntensity:.12}),dim:new MeshStandardMaterial({color:0xc9bda3,emissive:0xeac793,emissiveIntensity:.04})};
  const lists=Object.fromEntries(Object.keys(materials).map(k=>[k,[]]));
  const add=(kind,e,u,y,offset,size)=>{const position=facadePoint(e,u,y,offset),g=new BoxGeometry(...size);g.rotateY(e.heading);g.translate(...position);lists[kind].push(g);records.push({kind,position,size});};
  if(hero)for(const e of edges(hero.footprint)){

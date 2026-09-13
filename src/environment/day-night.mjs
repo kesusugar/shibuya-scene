@@ -64,7 +64,9 @@ export class DayNightSystem{
    if(/^station-detail-.*-glow$/.test(o.name))night=4.5;
    if(/^streetscape-.*-emissive$/.test(o.name))night=5;
    if(o.name==='hero-cafe-frontage')night=.42;
-   if(o.name==='qfront-interior-warm')night=2.1;
+   if(o.name==='qfront-interior-warm')night=1.5;
+   if(o.name==='qfront-interior-shell')night=.28;
+   if(o.name==='qfront-interior-wood')night=.2;
    if(o.name==='qfront-interior-dim')night=.16;
    if(o.name==='hero-polish-storefront')night=2.4;
    if(o.name==='hero-polish-marquee')night=3.8;
