@@ -4,30 +4,47 @@ import {merge} from '../geo/geometry.mjs';
 
 // A shared two-storey shopfront texture; geometry remains on the existing footprint.
 export function paintCafe(ctx,w,h){
- ctx.fillStyle='#30271e';ctx.fillRect(0,0,w,h);
- for(const [top,bottom] of [[.06,.43],[.59,.95]]){
-  ctx.fillStyle='#d9b47c';ctx.fillRect(w*.02,h*top,w*.96,h*(bottom-top));
+ ctx.fillStyle='#172125';ctx.fillRect(0,0,w,h);
+ for(const [floor,top,bottom] of [[1,.06,.43],[0,.59,.95]]){
   for(let bay=0;bay<8;bay++){
-   const x=w*(.025+bay*.12);
-   ctx.fillStyle=bay%2?'#efd5a4':'#cfae78';ctx.fillRect(x,h*(top+.015),w*.112,h*(bottom-top-.03));
-   // Shelves, books and merchandise behind the glazing.
-   for(let shelf=0;shelf<3;shelf++){
-    const y=h*(top+.065+shelf*.055);
-    for(let book=0;book<7;book++){ctx.fillStyle=['#e7c99a','#799184','#a16147','#d5bf83','#526474'][(book+bay+shelf)%5];ctx.fillRect(x+w*(.006+book*.014),y,w*.009,h*.04);}
-    ctx.fillStyle='#715137';ctx.fillRect(x,y+h*.043,w*.11,h*.008);
+   const x=w*(.025+bay*.12),bw=w*.112,yt=h*top,bh=h*(bottom-top);
+   const room=ctx.createLinearGradient(0,yt,0,yt+bh);
+   room.addColorStop(0,'#574638');room.addColorStop(.45,bay%3===0?'#66523b':'#98744a');room.addColorStop(1,'#262e2d');
+   ctx.fillStyle=room;ctx.fillRect(x,yt,bw,bh);
+   ctx.fillStyle='#bd9564';ctx.fillRect(x,yt+bh*.12,bw,h*.006);
+   if(floor===1){
+    // Cafe: hanging fixtures, window counters, varied seated silhouettes.
+    ctx.fillStyle='#242b2e';ctx.fillRect(x+bw*.48,yt,bw*.015,bh*.19);
+    ctx.fillStyle='#ffe2a1';ctx.beginPath();ctx.ellipse(x+bw*.49,yt+bh*.21,bw*.12,bh*.045,0,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#ba8b54';ctx.fillRect(x,yt+bh*.68,bw,h*.013);
+    for(let seat=0;seat<3;seat++){
+     const sx=x+bw*(.18+seat*.31),occupied=(bay+seat)%3!==0;
+     ctx.fillStyle='#35302d';ctx.fillRect(sx-bw*.08,yt+bh*.8,bw*.16,bh*.06);ctx.fillRect(sx-bw*.015,yt+bh*.86,bw*.03,bh*.14);
+     if(occupied){ctx.fillStyle=['#202a30','#463633','#314040'][(bay+seat)%3];ctx.beginPath();ctx.ellipse(sx,yt+bh*.5,bw*.06,bh*.065,0,0,Math.PI*2);ctx.fill();ctx.fillRect(sx-bw*.08,yt+bh*.57,bw*.16,bh*.18);}
+     ctx.fillStyle='#efdfb9';ctx.fillRect(sx+bw*.06,yt+bh*.63,bw*.035,bh*.04);
+    }
+   }else if(bay===3||bay===4){
+    // Double entrance doors remain visually distinct from merchandise bays.
+    ctx.fillStyle='#17272d';ctx.fillRect(x+bw*.08,yt+bh*.1,bw*.84,bh*.9);
+    ctx.fillStyle='#acb7af';ctx.fillRect(x+bw*.49,yt+bh*.1,bw*.018,bh*.9);
+    ctx.fillRect(x+bw*.41,yt+bh*.55,bw*.018,bh*.15);ctx.fillRect(x+bw*.57,yt+bh*.55,bw*.018,bh*.15);
+   }else{
+    for(let shelf=0;shelf<3;shelf++){
+     const sy=yt+bh*(.2+shelf*.22);
+     for(let book=0;book<5;book++){ctx.fillStyle=['#d0be95','#677f7e','#a76952','#c6a36a','#d2d8ce'][(book+bay+shelf)%5];ctx.fillRect(x+bw*(.08+book*.17),sy,bw*.11,bh*(.13+((book+bay)%2)*.03));}
+     ctx.fillStyle='#493b30';ctx.fillRect(x,sy+bh*.17,bw,bh*.025);
+    }
    }
-   // Counter seating silhouettes and pendant lights, not a flat glowing rectangle.
-   ctx.fillStyle='#594332';ctx.fillRect(x,h*(bottom-.095),w*.11,h*.012);
-   for(let seat=0;seat<2;seat++){const sx=x+w*(.023+seat*.056);ctx.fillRect(sx,h*(bottom-.063),w*.029,h*.009);ctx.fillRect(sx+w*.009,h*(bottom-.055),w*.006,h*.047);}
-   ctx.fillStyle='#fff0bd';ctx.fillRect(x+w*.035,h*(top+.017),w*.04,h*.015);
-   ctx.fillStyle='#b6d1ce28';ctx.fillRect(x+w*.07,h*top,w*.019,h*(bottom-top));
+   ctx.fillStyle='#bbd3da16';ctx.fillRect(x+bw*.73,yt,bw*.1,bh);
   }
-  ctx.fillStyle='#b5b6a3';for(let bay=0;bay<=8;bay++)ctx.fillRect(w*(.015+bay*.12),h*top,w*.009,h*(bottom-top));
+  ctx.fillStyle='#485457';for(let bay=0;bay<=8;bay++)ctx.fillRect(w*(.015+bay*.12),h*top,w*.009,h*(bottom-top));
  }
- ctx.fillStyle='#006443';ctx.fillRect(0,h*.455,w,h*.105);
- ctx.fillStyle='#fff4d9';ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`700 ${h*.051}px Arial`;ctx.fillText('STARBUCKS COFFEE',w*.5,h*.51,w*.90);
- ctx.fillStyle='#d5c6a0';ctx.fillRect(0,h*.44,w,h*.013);ctx.fillRect(0,h*.56,w,h*.015);
- ctx.fillStyle='#e0d4b8';ctx.fillRect(0,h*.975,w,h*.025);
+ // Neutral fascia and illuminated tenant lettering, not a broad green strip.
+ ctx.fillStyle='#202a2b';ctx.fillRect(0,h*.445,w,h*.125);
+ ctx.fillStyle='#f8e6b8';ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`600 ${h*.047}px Arial`;ctx.fillText('STARBUCKS',w*.32,h*.51,w*.52);
+ ctx.fillStyle='#f1f2ec';ctx.font=`700 ${h*.038}px Arial`;ctx.fillText('TSUTAYA',w*.79,h*.51,w*.29);
+ ctx.fillStyle='#827b65';ctx.fillRect(0,h*.44,w,h*.006);ctx.fillRect(0,h*.57,w,h*.006);
+ ctx.fillStyle='#464b49';ctx.fillRect(0,h*.975,w,h*.025);
 }
 
 export function createQfrontCafe(hero,{canvasFactory}={}){

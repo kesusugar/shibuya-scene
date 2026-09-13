@@ -11,11 +11,11 @@ test('cafe uses one finite facade batch and releases owned resources',()=>{
  let disposed=0;cafe.mesh.material.map.addEventListener('dispose',()=>disposed++);cafe.dispose();assert.equal(disposed,1);
 });
 test('shop texture contains branding, shelving and seating rather than a solid light panel',()=>{
- const calls=[],ctx=new Proxy({},{get(t,k){return t[k]??=(...args)=>calls.push([k,...args]);}});
- paintCafe(ctx,2048,1024);assert.ok(calls.some(c=>c[0]==='fillText'&&c[1]==='STARBUCKS COFFEE'));assert.ok(calls.filter(c=>c[0]==='fillRect').length>400);
+ const calls=[],ctx=new Proxy({createLinearGradient(){return {addColorStop(){}};}},{get(t,k){return t[k]??=(...args)=>calls.push([k,...args]);}});
+ paintCafe(ctx,2048,1024);assert.ok(calls.some(c=>c[0]==='fillText'&&c[1]==='STARBUCKS'));assert.ok(calls.some(c=>c[0]==='fillText'&&c[1]==='TSUTAYA'));assert.ok(calls.filter(c=>c[0]==='ellipse').length>=20);assert.ok(calls.filter(c=>c[0]==='fillRect').length>250);
 });
 test('cafe illumination follows existing day/night lifecycle',()=>{
  const scene=new Scene(),time=new TimeState(),env=new DayNightSystem(scene,null,time),root=new Group(),cafe=createQfrontCafe(hero);
  root.add(cafe.mesh);scene.add(root);env.enable();env.register(root);assert.equal(cafe.mesh.material.emissiveIntensity,.12);
- time.set('night');assert.equal(cafe.mesh.material.emissiveIntensity,.65);time.set('day');assert.equal(cafe.mesh.material.emissiveIntensity,.12);env.dispose();cafe.dispose();
+ time.set('night');assert.equal(cafe.mesh.material.emissiveIntensity,.42);time.set('day');assert.equal(cafe.mesh.material.emissiveIntensity,.12);env.dispose();cafe.dispose();
 });
