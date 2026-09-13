@@ -10,7 +10,7 @@ export function fixtureParts(f){const parts=[],faces=[],h=f.heading,c=Math.cos(h
  const pole=(height,diameter=.13,material='steel',x=0,z=0)=>add('cylinder',material,x,height/2,z,diameter,height,diameter);
  switch(f.category){
  case 'light':pole(6.25);add('box','steel',.14,6.18,0,.4,.12,.15);add('box','cream',.15,6.35,0,.4,.18,.3);add('box','emissive',.15,6.245,0,.32,.035,.24);break;
- case 'signal':pole(5.2,.16);add('box','steel',.22,4.65,0,.8,.1,.12);add('box','dark',.12,4.92,0,1.04,.36,.28);for(const x of [-.22,.12,.46])add('sphere','lens',x,4.92,.16,.22,.22,.06);add('box','dark',0,2.6,0,.28,.5,.22);add('box','lens',0,2.6,.12,.19,.34,.035);break;
+ case 'signal':pole(5.35,.17);add('box','steel',.22,4.68,0,.82,.11,.13);add('box','dark',.12,4.94,0,1.06,.4,.28);for(const x of [-.22,.12,.46]){add('sphere','lens',x,4.94,.15,.23,.23,.06);add('box','dark',x,5.11,.10,.24,.07,.14);}add('box','dark',0,2.62,0,.3,.54,.22);add('box','lens',0,2.62,.12,.21,.38,.035);break;
  case 'rail':for(const x of [-.98,.98])pole(.97,.07,'steel',x);for(const y of [.43,.9])add('box','steel',0,y,0,2.1,.055,.055);break;
  case 'bollard':pole(.76,.15);add('cylinder','cream',0,.68,0,.17,.12,.17);break;
  case 'pole':pole(7.6,.22,'cream');add('box','steel',0,7.2,0,.6,.09,.12);for(const x of [-.25,.25])add('cylinder','dark',x,7.35,0,.1,.2,.1);add('box','dark',.15,4.1,0,.2,.5,.2);break;
