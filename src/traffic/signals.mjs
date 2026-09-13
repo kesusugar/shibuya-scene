@@ -8,7 +8,7 @@ export function buildSignals(graph,street){const groups=new Map(),crossings=new 
 }
 export class SignalController{
  constructor(groups,crossings){this.groups=groups;this.crossings=crossings;this.time=0;this.override=null;this.pedestrians=new Map();this.pedestrianClearUntil=new Map();}
- update(dt){this.time+=dt;}
+ update(dt){const boundary=(Math.floor(this.time/108)+1)*108;if(this.time<boundary&&this.time+dt>=boundary&&[...this.groups.keys()].some(id=>this.pedestrianOccupied(id))){this.time=boundary-1e-6;for(const [id,until]of this.pedestrianClearUntil)if(until>this.time)this.pedestrianClearUntil.set(id,Math.max(this.time,until-dt));return;}this.time+=dt;}
  phase(){const t=this.time%108;return t<35?['NS','GREEN',35-t]:t<39?['NS','YELLOW',39-t]:t<44?['ALL','RED',44-t]:t<79?['EW','GREEN',79-t]:t<83?['EW','YELLOW',83-t]:t<88?['ALL','RED',88-t]:['PEDESTRIAN','RED',108-t];}
  getSignalState(groupId,axis='NS'){if(!this.groups.has(groupId))return 'RED';if(this.pedestrianOccupied(groupId))return 'RED';if(this.override)return this.override;const [active,color]=this.phase();return active===axis?color:'RED';}
  pedestrianOccupied(groupId){return (this.pedestrians.get(groupId)?.size??0)>0||this.time<(this.pedestrianClearUntil.get(groupId)??0);}

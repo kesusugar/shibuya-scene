@@ -9,6 +9,8 @@ const EXPECTED_PNGS = [
   'qfront-night.png',
   'scramble-high-day.png',
   'scramble-high-night.png',
+  'center-gai-day.png',
+  'center-gai-night.png',
 ];
 
 function parseArgs(argv) {

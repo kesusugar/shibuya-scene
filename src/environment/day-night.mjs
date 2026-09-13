@@ -21,6 +21,10 @@ s12Window*=mix(1.0,0.18,smoothstep(90.0,210.0,length(instanceMatrix[3].xz)));\ns
    vertex='varying vec3 s161Position;\n';fragment+='varying vec3 s161Position;\n';body='s161Position=(modelMatrix*vec4(transformed,1.0)).xyz;';
    shader.fragmentShader=shader.fragmentShader.replace('#include <emissivemap_fragment>',`#include <emissivemap_fragment>
 vec2 q=s161Position.xz;
+float alley=(1.-smoothstep(3.0,3.6,abs(q.x-q.y-4.0)))*smoothstep(-96.,-90.,q.x)*(1.-smoothstep(-35.,-31.,q.x));
+float plank=step(.1,fract((q.x+q.y)*1.4));
+diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.24,.115,.07)*mix(.65,1.,plank),alley);
+totalEmissiveRadiance+=vec3(.24,.13,.065)*alley*s12Night*(.25+.75*pow(.5+.5*cos((q.x+q.y)*.32),6.));
 float pool=0.0;
 for(int i=0;i<4;i++){vec2 c=vec2(i<2?-22.0:22.0,mod(float(i),2.0)<0.5?-19.0:19.0);pool+=(0.20+0.018*float(i))*pow(max(0.0,1.0-length(q-c)/16.0),2.4);}
 totalEmissiveRadiance+=vec3(1.0,0.69,0.38)*pool*s12Night;`);
@@ -44,19 +48,24 @@ export class DayNightSystem{
    if(/^(buildings-wall|hero-(concreteLight|concreteDark|roof)|station-.*(wall|concrete))$/.test(o.name))mode='wall';
    if(/^buildings-(windows|shopWindows)$/.test(o.name)||/^hero-panels-glass/.test(o.name))mode='window';
    if(o.name==='buildings-curtainWindows')mode='curtainWindow';
-   if(/^ground-(asphalt|sidewalk|curb|paint|tactile)$/.test(o.name))mode='groundPool';
+   if(/^ground-(asphalt|sidewalk|curb|paint|tactile|land)$/.test(o.name))mode='groundPool';
    if(/^hero-panels-glass/.test(o.name))mode='heroStorefront';
    if(o.name==='buildings-shopWindows')mode='storefront';
    if(/^train-(JR|Ginza)$/.test(o.name))mode='train';
-   if(/^signs-(print|led|heroScreen)$/.test(o.name)){night=1.2;mode='sign';}
-   if(/^traffic-.*-front$/.test(o.name))night=2.15;
+   if(/^signs-(print|led|heroScreen)$/.test(o.name)){night=3.6;mode='sign';}
+   if(o.name==='center-gai-advertisements')night=2.8;
+   if(o.name==='center-gai-light')night=7;
+   if(o.name==='center-gai-rim')night=7;
+   if(o.name==='sign-accent-bulbs')night=18;
+   if(o.name==='hero-109-finish')night=1.5;
+   if(/^traffic-.*-front$/.test(o.name))night=6;
    if(/^traffic-.*-rear$/.test(o.name)){night=1.65;mode='coloredLamp';}
    if(o.name==='s9-signal-lenses'){night=.85;mode='coloredLamp';}
-   if(/^station-detail-.*-glow$/.test(o.name))night=.45;
+   if(/^station-detail-.*-glow$/.test(o.name))night=4.5;
    if(/^streetscape-.*-emissive$/.test(o.name))night=5;
    if(o.name==='hero-cafe-frontage')night=.65;
-   if(o.name==='hero-polish-storefront')night=1.08;
-   if(o.name==='hero-polish-marquee')night=1.35;
+   if(o.name==='hero-polish-storefront')night=2.4;
+   if(o.name==='hero-polish-marquee')night=3.8;
    if(o.name==='hero-polish-canopies')night=.5;
    const wet=o.name==='ground-asphalt';if(!mode&&night===null&&!wet)continue;if(materials.has(m))continue;
    materials.set(m,{material:m,intensity:m.emissiveIntensity,night,wet,roughness:m.roughness,metalness:m.metalness,vehicle:/^traffic-.*-(front|rear)$/.test(o.name),emission:mode?installNightEmission(m,mode):null});

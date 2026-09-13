@@ -23,15 +23,16 @@ export class ScrambleChoreography {
    s.insert(p);s.stats.spawned++;active.push(p);cast++;this.cast=cast;
   }
   // The supporting cast walks reversible sidewalk routes in each district.
-  const regions=['hachiko','station','center-gai'];for(let i=0;i<q.total&&active.length<q.total;i++){const region=regions[i%3],p=s.spawn('patrol',region);if(p){p.choreographed=false;active.push(p);}}
+  const regions=['center-gai','center-gai','hachiko','station'];for(let i=0;i<q.total&&active.length<q.total;i++){const region=regions[i%regions.length],p=s.spawn('patrol',region);if(p){p.choreographed=false;active.push(p);}}
  }
  move(p,dt){const s=this.sim,t=p.track,e=p.edge>=0?s.network.edges[p.edge]:t.e;p.animationTime+=dt;p.age+=dt;p.speed=0;
-  if(!p.crossing){if(t.cooldown>0){t.cooldown-=dt;p.state=t.cooldown>.7?'exiting':'recycle';return;}p.state='waiting';const cycle=Math.floor((s.signals?.time??0)/108);if(t.lastCycle===cycle||!s.beginCrossing(p,e))return;t.lastCycle=cycle;}
+  if(!p.crossing&&!t.finishing){if(t.cooldown>0){t.cooldown-=dt;p.state=t.cooldown>.7?'exiting':'recycle';return;}p.state='waiting';const cycle=Math.floor((s.signals?.time??0)/108);if(t.lastCycle===cycle||!s.beginCrossing(p,e))return;t.lastCycle=cycle;}
+  if(p.crossing&&t.distance>t.length*.5&&s.network.ctx.safe(p.x,p.z,.35)){s.leave(p);t.finishing=true;}
   const next=Math.min(t.length,t.distance+p.baseSpeed*dt),at=t.forward?next:t.length-next;let lo=0,hi=t.lengths.length-1;
   while(lo+1<hi){const mid=(lo+hi)>>1;if(t.lengths[mid]<=at)lo=mid;else hi=mid;}
   const a=t.points[lo],b=t.points[hi],blend=(at-t.lengths[lo])/(t.lengths[hi]-t.lengths[lo]||1),x=a[0]+(b[0]-a[0])*blend,z=a[1]+(b[1]-a[1])*blend;
   if(s.vehicleOverlap(x,z,.35))return; // Pedestrian contacts deliberately do not affect speed.
   p.previousX=p.x;p.previousZ=p.z;p.x=x;p.z=z;p.heading=Math.atan2(x-p.previousX,z-p.previousZ);p.speed=p.baseSpeed;p.travelled+=next-t.distance;p.height=s.network.ctx.height(x,z);p.state='crossing';t.distance=next;p.progress=next/t.length*e.length;
-  if(next>=t.length){const key=e.crossingId+':'+e.direction;s.stats.completed[key]=(s.stats.completed[key]??0)+1;s.stats.routeCompletions++;s.leave(p);t.forward=!t.forward;t.distance=0;t.cooldown=1+(p.id%7)*.15;p.state='exiting';const back=t.forward?t.e:t.reverse;p.edge=back.id;p.route=[back.id];p.node=back.from;p.destination=back.to;p.progress=0;if(this.cast>Math.round(QUALITY[s.tier].total*.85)){this.cast--;s.despawn(p,'profile');}}
+  if(next>=t.length){const key=e.crossingId+':'+e.direction;s.stats.completed[key]=(s.stats.completed[key]??0)+1;s.stats.routeCompletions++;s.leave(p);t.finishing=false;t.forward=!t.forward;t.distance=0;t.cooldown=1+(p.id%7)*.15;p.state='exiting';const back=t.forward?t.e:t.reverse;p.edge=back.id;p.route=[back.id];p.node=back.from;p.destination=back.to;p.progress=0;if(this.cast>Math.round(QUALITY[s.tier].total*.85)){this.cast--;s.despawn(p,'profile');}}
  }
 }

@@ -63,7 +63,16 @@ export function updateRotary(sim,dt){
   const target=Math.min(3.2,Math.sqrt(6*Math.max(0,stop-.05))),old=v.speed;
   v.speed+=Math.max(-3*dt,Math.min(.8*dt,target-v.speed));
   const advance=Math.min(v.speed*dt,stop),q=pose(path,Math.min(path.length,v.progress+advance));
-  if(!sim.blocked(q,'bus',v,.3)){v.progress=Math.min(path.length,v.progress+advance);Object.assign(v,q);}else v.speed=0;
+  // Interpolation between safe 5cm samples can graze a corner of the narrow bend.
+  // Keep the full bus envelope valid at the actual sub-frame pose too.
+  if(!safePose(sim.graph.ctx,q,'bus')){
+   const base={...q};let corrected=false;
+   for(const offset of [0,-.01,.01,-.02,.02,-.04,.04,-.08,.08]){for(const yaw of [0,-.005,.005,-.01,.01,-.02,.02]){
+    const candidate={x:base.x+Math.cos(base.heading)*offset,z:base.z-Math.sin(base.heading)*offset,heading:base.heading+yaw};
+    if(safePose(sim.graph.ctx,candidate,'bus')){Object.assign(q,candidate);corrected=true;break;}
+   }if(corrected)break;}
+  }
+  if(safePose(sim.graph.ctx,q,'bus')&&!sim.blocked(q,'bus',v,.3)){v.progress=Math.min(path.length,v.progress+advance);Object.assign(v,q);}else v.speed=0;
   v.brake=v.speed<.05||v.speed<old;v.age+=dt;
   if(v.progress>exit+1&&v.locks.has('scramble')){v.locks.delete('scramble');group.locks.delete(v.id);}
   if(v.progress>=path.length-.05&&!sim.blocked(pose(path,0),'bus',v,2)){v.progress=0;v.dwell=0;v.served=false;v.speed=0;Object.assign(v,pose(path,0));sim.rotary.arrivals++;}

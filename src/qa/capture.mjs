@@ -5,7 +5,9 @@ export const QA_CAPTURES=Object.freeze([
  {camera:'street',time:'night',file:'scramble-street-night.png'},
  {camera:'qfront',time:'night',file:'qfront-night.png'},
  {camera:'scramble',time:'day',file:'scramble-high-day.png'},
- {camera:'scramble',time:'night',file:'scramble-high-night.png'}
+ {camera:'scramble',time:'night',file:'scramble-high-night.png'},
+ {camera:'center-gai',time:'day',file:'center-gai-day.png'},
+ {camera:'center-gai',time:'night',file:'center-gai-night.png'}
 ]);
 
 export const publicCameraName=id=>id==='street'?'scramble-street':id;

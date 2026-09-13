@@ -18,6 +18,7 @@ import {bounds,SpatialIndex} from '../src/geo/core.mjs';
 import {rotaryPath} from '../src/traffic/rotary-service.mjs';
 import {safePose} from '../src/traffic/graph.mjs';
 import {pose} from '../src/traffic/path.mjs';
+import {CENTER_ADS,centerGaiLayout,buildCenterGai} from '../src/signs/center-gai.mjs';
 import {lampGlows} from '../src/streetscape/lamp-glows.mjs';
 
 const pack=JSON.parse(readFileSync('public/data/shibuya-static-models.json'));
@@ -76,18 +77,18 @@ test('all rounded vehicle geometries have finite positions and normals',()=>{
   assert.ok(g.attributes.position.array.every(Number.isFinite));assert.ok(g.attributes.normal.array.every(Number.isFinite));g.dispose();
  }
 });
-test('hero traffic stages a denser, collision-free central allocation in the existing pool',()=>{
+test('hero traffic stages a denser, collision-free central allocation with dedicated approach queues',()=>{
  const graph=restoreTrafficGraph(pack.traffic.high);graph.ground=restoreGroundModel(pack.ground);graph.data=JSON.parse(readFileSync('public/data/shibuya-scene-data.json'));
  const sim=new TrafficSimulation(graph,{tier:'high',street:pack.street.high,heroStart:true});
- assert.equal(sim.pool.length,82);assert.ok(sim.stats.heroStaged>=14);
+ assert.equal(sim.pool.length,146);assert.ok(sim.stats.heroStaged>=14);
  assert.ok(sim.pool.filter(v=>v.active&&Math.hypot(v.x,v.z)<85).length>=18);
  assert.equal(sim.signals.areaVehicles.size,0,'no initial cars anywhere inside the crossing');
  assert.deepEqual(sim.audit().findings,[]);sim.dispose();
 });
 test('complete pedestrian-green interval is clear and vehicles can cross during vehicle-green',()=>{
  const graph=restoreTrafficGraph(pack.traffic.high);graph.ground=restoreGroundModel(pack.ground);graph.data=JSON.parse(readFileSync('public/data/shibuya-scene-data.json'));
- const sim=new TrafficSimulation(graph,{tier:'high',street:pack.street.high,heroStart:true});let walkFrames=0;
- for(let f=0;f<3600;f++){sim.update(1/30);
+ const sim=new TrafficSimulation(graph,{tier:'high',street:pack.street.high,heroStart:true});let walkFrames=0,maxCrossing=0;
+ for(let f=0;f<3600;f++){sim.update(1/30);maxCrossing=Math.max(maxCrossing,sim.signals.areaVehicles.size);
   if(sim.signals.getPedestrianPhase('scramble')==='WALK'){
    walkFrames++;
    for(const v of sim.pool.filter(v=>v.active))assert.equal(sim.signals.area.contains(v.x,v.z,Math.hypot(VEHICLES[v.type].width,VEHICLES[v.type].length)/2),false,'car inside pedestrian phase');
@@ -95,7 +96,8 @@ test('complete pedestrian-green interval is clear and vehicles can cross during 
   if(f%900===899)assert.deepEqual(sim.audit().findings,[]);
  }
  assert.ok(walkFrames>=590,'pedestrians get a full interval, not indefinite clearance');
- assert.ok(Object.entries(sim.stats.crossingEntries).some(([k,n])=>k.startsWith('scramble:')&&n>0),'cars must actually traverse the crossing');
+ assert.ok(sim.centralStreams.entries>=20,'sustained green-phase departures');
+ assert.ok(maxCrossing>=7,'several cars must traverse concurrently');
  assert.equal(sim.stats.redViolations,0);sim.dispose();
 });
 test('supporting cast walks while pedestrian-green keeps all cars outside',()=>{
@@ -107,4 +109,17 @@ test('supporting cast walks while pedestrian-green keeps all cars outside',()=>{
  assert.ok(patrol.filter(p=>p.travelled>2).length>=patrol.length*.95);
  for(const p of patrol)assert.ok(network.ctx.safe(p.x,p.z),'patrol stays on walkable ground');
  assert.deepEqual(traffic.audit().findings,[]);crowd.dispose();traffic.dispose();
+});
+
+test('Center-gai ads mix business-specific art without repeating a design on one building',()=>{
+ assert.equal(new Set(CENTER_ADS.map(a=>a[4])).size,27);
+ const layout=centerGaiLayout();for(const id of new Set(layout.map(s=>s.building+':'+(s.surface??'original')))){const signs=layout.filter(s=>s.building+':'+(s.surface??'original')===id);assert.equal(new Set(signs.map(s=>s.variant)).size,signs.length,id);}
+ const east=layout.filter(s=>s.surface==='east');assert.equal(east.length,25);assert.equal(east.filter(s=>s.building==='way/136691386').length,10);
+ for(const s of east){assert.ok(s.position[1]-s.height/2>10);assert.ok(Math.sin(s.heading)>.95);assert.ok(s.variant<CENTER_ADS.length);}
+ assert.ok(layout.some(s=>s.width/s.height<.3));assert.ok(layout.some(s=>s.width/s.height>2));
+ assert.equal(layout.filter(s=>s.surface==='north-feature').length,3);
+ assert.equal(layout.filter(s=>s.building==='way/114755219').length,30);
+ assert.equal(layout.filter(s=>s.surface==='roof-rear').length,3);
+ const view=buildCenterGai();assert.equal(view.stats.batches,6);assert.equal(view.stats.arches,1);
+ view.root.traverse(o=>{if(o.geometry)assert.ok(o.geometry.attributes.position.array.every(Number.isFinite));});view.dispose();
 });
