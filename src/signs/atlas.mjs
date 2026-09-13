@@ -1,7 +1,7 @@
 import {CanvasTexture,DataTexture,SRGBColorSpace,LinearFilter,RGBAFormat} from 'three';
 import {QUALITY,CATEGORIES} from './config.mjs';
 const WORDS=['渋谷書店','スクランブル珈琲','道玄坂薬局','センター街眼科','NEON RECORDS','TOKYO MOBILE','宇田川シネマ','SHIBUYA DINER','ハチ公不動産','宮益坂銀行','Q-BEAUTY','109 VISION','文化村 MUSIC','井の頭カメラ','渋谷横丁','MAGNET SPORTS','TSUTAYA BOOKS','SHIBUYA PARLOR','青山クリニック','MEGA KARAOKE','TOKYU STYLE','夜空ゲームズ','東京ラーメン','渋谷百貨店','SAKURA COSME','LIVE SHIBUYA','HACHI TAXI','CITY DRUG','DOGEN CAFE','CENTER FASHION','SHIBUYA NEWS','TOKYO CULTURE'];
-const COLORS=[['#47182e','#ff6f9f'],['#d43b25','#fff0c8'],['#103a33','#61d6a8'],['#2a173f','#e57cff'],['#075443','#ffe0a0'],['#173967','#7fd4ff'],['#584015','#ffd56d'],['#77254f','#ffd7eb']];
+const COLORS=[['#f8efe8','#db5966'],['#da4031','#fff7df'],['#f4f2dc','#32836c'],['#e8b4d3','#ffffff'],['#25856c','#fff8e8'],['#386dc0','#ffffff'],['#f2d46d','#433e39'],['#f5f4ee','#497dba']];
 export function definitions(count=32){return Array.from({length:count},(_,i)=>({id:i,category:CATEGORIES[i%8],text:WORDS[i%WORDS.length],palette:COLORS[(i+Math.floor(i/8)*3)%8],styleSeed:i,emissiveClass:i%8===6?'screen':'printed',priority:i%8===6?3:1,aspect:[3,2,.3,3,2,.5,2.2,1][i%8],regionAffinity:i%3===0?'centerGai':'any',sizeClass:i%8===4?'large':'small'}));}
 export function atlasEntries(size,count){const cols=8,rows=4,padding=Math.max(4,size/256);return Array.from({length:count},(_,id)=>{const x=id%cols*size/cols,y=Math.floor(id/cols)*size/rows,w=size/cols,h=size/rows;return {id,x,y,w,h,padding,u0:(x+padding)/size,u1:(x+w-padding)/size,v0:1-(y+h-padding)/size,v1:1-(y+padding)/size};});}
 export function paintCity(ctx,size,count){
@@ -11,7 +11,7 @@ export function paintCity(ctx,size,count){
   const d=defs[e.id],i=e.id%16,[bg,fg]=d.palette;
   ctx.fillStyle='#18212a';ctx.fillRect(e.x,e.y,e.w,e.h);
   ctx.save();ctx.beginPath();ctx.rect(e.x+e.padding,e.y+e.padding,e.w-2*e.padding,e.h-2*e.padding);ctx.clip();
-  ctx.translate(e.x,e.y);ctx.scale(e.w,e.h);ctx.fillStyle=bg;ctx.fillRect(.04,.025,.92,.95);ctx.globalAlpha=.22;ctx.fillStyle='#09131d';ctx.fillRect(.50,.025,.46,.95);ctx.globalAlpha=1;ctx.strokeStyle=fg;ctx.lineWidth=.018;ctx.strokeRect(.055,.04,.89,.92);
+  ctx.translate(e.x,e.y);ctx.scale(e.w,e.h);ctx.fillStyle=bg;ctx.fillRect(.04,.025,.92,.95);
   ctx.fillStyle=fg;ctx.textAlign='center';ctx.textBaseline='middle';
   const vertical=['blade','directory'].includes(d.category);
   if(vertical){
@@ -22,13 +22,13 @@ export function paintCity(ctx,size,count){
   }else{
    // Large pictogram, short Japanese brand, restrained secondary line.
    ctx.fillStyle=fg;
-   if(i%4===0){ctx.fillRect(.12,.18,.12,.28);ctx.fillRect(.06,.27,.24,.10);}
-   else if(i%4===1){ctx.beginPath();ctx.moveTo(.07,.40);ctx.lineTo(.18,.17);ctx.lineTo(.30,.40);ctx.fill();ctx.fillRect(.12,.37,.12,.11);}
-   else if(i%4===2){ctx.beginPath();ctx.ellipse(.18,.31,.115,.15,0,0,Math.PI*2);ctx.fill();}
-   else {ctx.font='900 .34px sans-serif';ctx.fillText(i%8===3?'¥':'✦',.18,.32,.25);}
-   ctx.font='900 .245px sans-serif';ctx.fillText(d.text,.63,.32,.64);
-   ctx.font='700 .115px sans-serif';ctx.fillText(['SHIBUYA STATION FRONT','TOKYO / SINCE 1987','SCRAMBLE CROSSING','FOOD · CULTURE · STYLE'][i%4],.5,.61,.83);
-   ctx.globalAlpha=.85;ctx.fillRect(.10,.77,.80,.025);ctx.globalAlpha=1;ctx.font='700 .075px sans-serif';ctx.fillText(['B1F–5F  OPEN 10:00–23:00','渋谷区道玄坂  OPEN DAILY','SHIBUYA / TOKYO / JAPAN','駅前徒歩1分  TAX FREE'][i%4],.5,.88,.82);
+   if(/薬|DRUG|クリニック|眼科/.test(d.text)){ctx.fillRect(.12,.18,.12,.28);ctx.fillRect(.06,.27,.24,.10);}
+   else if(/不動産/.test(d.text)){ctx.beginPath();ctx.moveTo(.07,.40);ctx.lineTo(.18,.17);ctx.lineTo(.30,.40);ctx.fill();ctx.fillRect(.12,.37,.12,.11);}
+   else if(/珈琲|CAFE|ラーメン|DINER/.test(d.text)){ctx.beginPath();ctx.ellipse(.18,.31,.115,.15,0,0,Math.PI*2);ctx.fill();}
+   else {ctx.font='900 .34px sans-serif';ctx.fillText(/銀行/.test(d.text)?'¥':/書店|BOOKS/.test(d.text)?'本':'●',.18,.32,.25);}
+   ctx.font='700 .29px sans-serif';ctx.fillText(d.text,.63,.36,.65);
+   ctx.font='500 .12px sans-serif';ctx.fillText(['渋谷駅前店','暮らしを、もっと。','SHIBUYA TOKYO','毎日を楽しもう'][i%4],.5,.75,.80);
+
   }
   ctx.restore();
  }return entries;

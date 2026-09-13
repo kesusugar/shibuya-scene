@@ -53,6 +53,7 @@ export class DayNightSystem{
    if(/^traffic-.*-rear$/.test(o.name)){night=1.65;mode='coloredLamp';}
    if(o.name==='s9-signal-lenses'){night=.85;mode='coloredLamp';}
    if(/^station-detail-.*-glow$/.test(o.name))night=.45;
+   if(/^streetscape-.*-emissive$/.test(o.name))night=5;
    if(o.name==='hero-cafe-frontage')night=.65;
    if(o.name==='hero-polish-storefront')night=1.08;
    if(o.name==='hero-polish-marquee')night=1.35;

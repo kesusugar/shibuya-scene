@@ -22,8 +22,8 @@ export class ScrambleChoreography {
    }
    s.insert(p);s.stats.spawned++;active.push(p);cast++;this.cast=cast;
   }
-  // A small fixed supporting cast keeps station, Hachiko and Center-gai visible.
-  const regions=['hachiko','station','center-gai'];for(let i=0;i<q.total&&active.length<q.total;i++){const region=regions[i%3],p=s.spawn('idle',region);if(p){p.choreographed=false;active.push(p);}}
+  // The supporting cast walks reversible sidewalk routes in each district.
+  const regions=['hachiko','station','center-gai'];for(let i=0;i<q.total&&active.length<q.total;i++){const region=regions[i%3],p=s.spawn('patrol',region);if(p){p.choreographed=false;active.push(p);}}
  }
  move(p,dt){const s=this.sim,t=p.track,e=p.edge>=0?s.network.edges[p.edge]:t.e;p.animationTime+=dt;p.age+=dt;p.speed=0;
   if(!p.crossing){if(t.cooldown>0){t.cooldown-=dt;p.state=t.cooldown>.7?'exiting':'recycle';return;}p.state='waiting';const cycle=Math.floor((s.signals?.time??0)/108);if(t.lastCycle===cycle||!s.beginCrossing(p,e))return;t.lastCycle=cycle;}

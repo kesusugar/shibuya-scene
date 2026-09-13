@@ -7,6 +7,8 @@
   },
   "scripts": {
     "bake:static": "node scripts/bake-static-models.mjs",
+    "bake:polish": "node scripts/bake-central-detail.mjs",
+    "test:polish": "node --test tests/ui-commercial-mobility.test.mjs",
     "prebuild": "npm run bake:static",
     "typecheck": "tsc --noEmit --incremental false",
     "install:ci": "bash scripts/install-ci.sh",
