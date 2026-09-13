@@ -21,6 +21,7 @@ export function constructionParts(model){
  }
  return parts;
 }
+/** @param {any} data @param {{generic?:any,time?:any,tier?:string,model?:any}} options */
 export function buildConstruction(data,{generic,time,tier='medium',model=buildConstructionModel(data,{generic})}={}){
  const root=new Group();root.name='s15-construction';const parts=constructionParts(model),box=new BoxGeometry(1,1,1),cone=new ConeGeometry(1,1,6),material=new MeshStandardMaterial({roughness:.8}),warning=new MeshStandardMaterial({roughness:.65,emissive:0xff3715,emissiveIntensity:0});
  const buckets=[{name:'structure',parts:parts.filter(p=>p.shape==='box'&&!p.marker),geometry:box,material},{name:'markers',parts:parts.filter(p=>p.shape==='box'&&p.marker),geometry:box,material:warning},{name:'cones',parts:parts.filter(p=>p.shape==='cone'),geometry:cone,material}];

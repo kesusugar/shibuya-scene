@@ -3,7 +3,7 @@ export const STARTUP_TIMING_VERSION='2.0.0';
 const round=value=>value==null?null:Math.max(0,Number(value.toFixed(3)));
 const now=()=>performance.now();
 
-export function createStartupTiming({initialTier,buildIdentity,browser,metrics=()=>({}),clock=now}){
+export function createStartupTiming({initialTier,buildIdentity,browser,metrics=(_result)=>({}),clock=now}){
  const now=clock;
  const trace={instrumentationVersion:STARTUP_TIMING_VERSION,buildIdentity,browser,tier:{initial:initialTier,final:initialTier,changes:[]},milestones:{navigationStartMs:0,appLifecycleStartMs:null,rendererReadyMs:null,dataLoadStartMs:null,dataLoadCompleteMs:null,sceneBuildStartMs:null,firstRendererFrameMs:null,firstSceneFrameMs:null,sceneBuildCompleteMs:null,finalSceneFrameMs:null,interactiveReadyMs:null},stages:[],appearanceEvents:[],rebuilds:[],queueEvents:[],browserLifecycleEvents:[],totals:{navigationToSceneCompleteMs:null,navigationToInteractiveReadyMs:null,sceneBuildWallMs:null},ready:false};
  Object.defineProperty(trace,'firstMeaningfulFrameMs',{value:-1,writable:true,enumerable:false});

@@ -1,6 +1,7 @@
 import {SpatialIndex,bounds,length,sample,distance} from '../geo/core.mjs';
 import {polygons,buffer,surface} from '../ground/model.mjs';
 import {STEP,RADIUS,district} from './config.mjs';
+import {finishSteps,finishStepsAsync} from '../quality/runtime.mjs';
 
 const bb=(x,z,r=0)=>({minX:x-r,maxX:x+r,minZ:z-r,maxZ:z+r});
 function indexed(polys){const index=new SpatialIndex(12);polys.forEach((p,i)=>index.insert(i,bounds(p.outer),p));return index;}
@@ -29,17 +30,19 @@ export function pedestrianContext(data,{ground,generic,street,core,detail}){
   safeCache.set(key,result);return result;};
  const heights=new Map();const height=(x,z)=>{const a=Math.round(x*4)/4,b=Math.round(z*4)/4,key=a+','+b;if(!heights.has(key))heights.set(key,onRoad(a,b)?.02:sidewalk.query(bb(a,b)).some(v=>inside([a,b],v.value))?ground.height([a,b]):0);return heights.get(key);};return {walk,roads,solids,onRoad,solid,safe,footwaySources:footways.map(f=>f.id),height};
 }
-export function buildPedestrianNetwork(data,options){
+export const buildPedestrianNetwork=(data,options)=>finishSteps(buildPedestrianNetworkSteps(data,options));
+export const buildPedestrianNetworkAsync=(data,options,timing)=>finishStepsAsync(buildPedestrianNetworkSteps(data,options),undefined,timing);
+export function* buildPedestrianNetworkSteps(data,options){
  const started=performance.now(),ctx=pedestrianContext(data,options),nodes=[],edges=[],grid=new Map(),crossings=[],rejected=[];
  const node=(x,z)=>{const n={id:nodes.length,x,z,edges:[],district:district(x,z),component:-1};nodes.push(n);return n;};
  const segmentSafe=(a,b,crossing=false)=>{const len=Math.hypot(b.x-a.x,b.z-a.z);for(let d=0;d<=len;d+=.1){const t=d/(len||1),x=a.x+(b.x-a.x)*t,z=a.z+(b.z-a.z)*t;if(ctx.solid(x,z,.34)||!crossing&&!ctx.safe(x,z,.32))return false;}return !ctx.solid(b.x,b.z,.34)&&(crossing||ctx.safe(b.x,b.z,.32));};
  const edge=(a,b,extra={})=>{const e={id:edges.length,from:a.id,to:b.id,length:Math.hypot(b.x-a.x,b.z-a.z),...extra};edges.push(e);a.edges.push(e.id);return e;};
- for(let ix=-198;ix<=198;ix++)for(let iz=-198;iz<=198;iz++){const x=ix*STEP,z=iz*STEP;if(ctx.safe(x,z,.38))grid.set(ix+','+iz,node(x,z));}
- for(const [key,a] of grid){const [ix,iz]=key.split(',').map(Number);for(const [dx,dz] of [[1,0],[0,1],[1,1],[1,-1]]){const b=grid.get((ix+dx)+','+(iz+dz));if(b&&segmentSafe(a,b)){edge(a,b);edge(b,a);}}}
+ for(let ix=-198;ix<=198;ix++)for(let iz=-198;iz<=198;iz++){if((iz+198)%64===0)yield;const x=ix*STEP,z=iz*STEP;if(ctx.safe(x,z,.38))grid.set(ix+','+iz,node(x,z));}
+ let connectionChunk=0;for(const [key,a] of grid){if(++connectionChunk%32===0)yield;const [ix,iz]=key.split(',').map(Number);for(const [dx,dz] of [[1,0],[0,1],[1,1],[1,-1]]){const b=grid.get((ix+dx)+','+(iz+dz));if(b&&segmentSafe(a,b)){edge(a,b);edge(b,a);}}}
  const nearest=(x,z,r=5,accept=()=>true)=>{let best=null,dist=r;for(let ix=Math.floor((x-r)/STEP);ix<=Math.ceil((x+r)/STEP);ix++)for(let iz=Math.floor((z-r)/STEP);iz<=Math.ceil((z+r)/STEP);iz++){const n=grid.get(ix+','+iz);if(!n||!accept(n))continue;const d=Math.hypot(x-n.x,z-n.z);if(d<dist){best=n;dist=d;}}return best;};
  // Connect each mapped zebra in both directions, with separate lateral tracks.
  // Endpoints extend to verified sidewalk cells; road space is only legal on these edges.
- const landingNodes=new Set();for(const source of options.ground.crossings){const used=[];const l=length(source.points),start=sample(source.points,0),end=sample(source.points,l),tracks=source.kind==='normal'?1:3;
+ const landingNodes=new Set();for(const source of options.ground.crossings){yield;const used=[];const l=length(source.points),start=sample(source.points,0),end=sample(source.points,l),tracks=source.kind==='normal'?1:3;
   for(const direction of [1,-1])for(let track=0;track<tracks;track++){
    const shift=(.45+track*.6)*direction,points=source.points.map((p,i)=>{const s=sample(source.points,Math.min(l,source.points.reduce((v,q,j)=>j>0&&j<=i?v+distance(source.points[j-1],q):v,0)));return [p[0]+s.tangent[1]*shift,p[1]-s.tangent[0]*shift];});
    const endpoint=(p,t,sign)=>{for(let d=.5;d<=14;d+=.5){const x=p[0]+t[0]*sign*d,z=p[1]+t[1]*sign*d;const n=nearest(x,z,1.8,n=>n.edges.length>1&&!used.some(p=>Math.hypot(p.x-n.x,p.z-n.z)<1.05));if(n&&segmentSafe({x:p[0],z:p[1]},n,true))return n;}return null;};
@@ -56,7 +59,7 @@ export function buildPedestrianNetwork(data,options){
  // S16: multiple safe approach/departure cells form deep, high-density waiting strips.
  // Reuse mapped road tracks and the existing signal/route machinery; no new steering solver.
  const waitingZones=[];
- for(const original of [...crossings].filter(e=>e.kind!=='normal')){
+ for(const original of [...crossings].filter(e=>e.kind!=='normal')){yield;
   const a=nodes[original.from],b=nodes[original.to],road=original.points.filter(p=>ctx.onRoad(...p));if(road.length<2)continue;
   const len=Math.hypot(b.x-a.x,b.z-a.z),tx=(b.x-a.x)/len,tz=(b.z-a.z)/len,entries=[a.id],exits=[b.id];
   for(let row=1;row<=3;row++){

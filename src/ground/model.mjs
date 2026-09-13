@@ -19,6 +19,12 @@ export function nearest(point,lines){let best={distance:Infinity};for(const line
 export function zebra(points,width,road){const out=[];for(let d=C.pitch/2;d+C.stripe/2<length(points);d+=C.pitch){const a=sample(points,d-C.stripe/2).point,b=sample(points,d+C.stripe/2).point,p=intersection(rect(a,b,width),road);if(area(p)>.01)out.push({distance:d,polygon:p});}return out;}
 // Convex junction envelope is restricted to the mapped scramble crossing anchors.
 function hull(points){const p=[...points].sort((a,b)=>a[0]-b[0]||a[1]-b[1]);const cross=(a,b,c)=>(b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]);const half=points=>{const h=[];for(const v of points){while(h.length>1&&cross(h.at(-2),h.at(-1),v)<=0)h.pop();h.push(v);}return h.slice(0,-1);};const h=[...half(p),...half(p.reverse())];return [...h,h[0]];}
+export function restoreGroundModel(model){return {...model,height:groundHeight(model.corridors,model.boundaries)};}
+function groundHeight(corridors,boundaries){
+ const corridorIndex=new SpatialIndex(10),edgeIndex=new SpatialIndex(10);polygons(corridors).forEach((p,i)=>corridorIndex.insert(i,bounds(p.outer),p));let edgeId=0;for(const r of boundaries)for(let i=1;i<r.length;i++)edgeIndex.insert(edgeId++,bounds([r[i-1],r[i]]),[r[i-1],r[i]]);
+ const height=p=>{const box={minX:p[0]-C.rampDepth,maxX:p[0]+C.rampDepth,minZ:p[1]-C.rampDepth,maxZ:p[1]+C.rampDepth};if(!corridorIndex.query({minX:p[0],maxX:p[0],minZ:p[1],maxZ:p[1]}).some(v=>inPolygon(p,v.value)))return C.curb;return C.curb*Math.min(1,nearest(p,edgeIndex.query(box).map(v=>v.value)).distance/C.rampDepth);};
+ return height;
+}
 export function buildGroundModel(data){const start=performance.now();const sources=data.roads.filter(surface);const strips=sources.map(r=>clipped(buffer(r.points,roadWidth(r)))).filter(p=>p.length);let roads=union(...strips);
  // Central OSM crossing envelope closes lane-split junction islands; no coordinate translation.
  const main=data.footways.filter(r=>r.tags['crossing:scramble']==='yes'&&marked(r));const envelope=hull(main.flatMap(r=>r.points));const central=union([[envelope]],buffer(envelope,C.mainWidth+1));
@@ -32,8 +38,7 @@ export function buildGroundModel(data){const start=performance.now();const sourc
  for(const r of [...data.crossings,...data.signals]){if(distance(r.point,data.landmarks.scramble.point)<C.centralExclusionRadius||!marked(r)||crossings.some(c=>nearest(r.point,[c.points]).distance<8))continue;const n=nearest(r.point,sources.map(r=>r.points));if(n.distance>3)continue;const road=sources.find(r=>nearest(n.point,[r.points]).distance<.01);const w=roadWidth(road)+2,t=n.tangent,p=r.point,points=[[p[0]-t[1]*w/2,p[1]+t[0]*w/2],[p[0]+t[1]*w/2,p[1]-t[0]*w/2]],stripes=zebra(points,C.normalWidth,roads);if(stripes.length)crossings.push({id:r.id,points,kind:'normal',width:C.normalWidth,stripes});}
  const corridors=union(...crossings.map(c=>{const a=sample(c.points,0),b=sample(c.points,length(c.points));return buffer([[a.point[0]-a.tangent[0]*8,a.point[1]-a.tangent[1]*8],...c.points,[b.point[0]+b.tangent[0]*8,b.point[1]+b.tangent[1]*8]],c.width);}));
  const ramps=intersection(sidewalks,corridors),flatSidewalk=difference(sidewalks,corridors);const boundaries=roads.flatMap(p=>p);
- const corridorIndex=new SpatialIndex(10),edgeIndex=new SpatialIndex(10);polygons(corridors).forEach((p,i)=>corridorIndex.insert(i,bounds(p.outer),p));let edgeId=0;for(const r of boundaries)for(let i=1;i<r.length;i++)edgeIndex.insert(edgeId++,bounds([r[i-1],r[i]]),[r[i-1],r[i]]);
- const height=p=>{const box={minX:p[0]-C.rampDepth,maxX:p[0]+C.rampDepth,minZ:p[1]-C.rampDepth,maxZ:p[1]+C.rampDepth};if(!corridorIndex.query({minX:p[0],maxX:p[0],minZ:p[1],maxZ:p[1]}).some(v=>inPolygon(p,v.value)))return C.curb;return C.curb*Math.min(1,nearest(p,edgeIndex.query(box).map(v=>v.value)).distance/C.rampDepth);};
+ const height=groundHeight(corridors,boundaries);
  const stopLines=[],guides=[],arrows=[],tactiles=[];
  for(const c of crossings.filter(c=>c.kind==='main')){const mid=sample(c.points,length(c.points)/2),n=[-mid.tangent[1],mid.tangent[0]];const center=data.landmarks.scramble.point;if((mid.point[0]-center[0])*n[0]+(mid.point[1]-center[1])*n[1]<0)n.forEach((v,i)=>n[i]=-v);const shift=C.mainWidth/2+2,p=mid.point.map((v,i)=>v+n[i]*shift),across=mid.tangent;
  stopLines.push(intersection(rect(p.map((v,i)=>v-across[i]*length(c.points)/2),p.map((v,i)=>v+across[i]*length(c.points)/2),.4),roads));

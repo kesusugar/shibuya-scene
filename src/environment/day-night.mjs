@@ -8,7 +8,7 @@ export function installNightEmission(material,mode){
   if(mode==='window'||mode==='curtainWindow'||mode==='storefront'||mode==='heroStorefront'){vertex='uniform float s13Nightglow;\nvarying float s12Window;\nvarying vec3 s12WindowTint;\n';fragment+='varying float s12Window;\nvarying vec3 s12WindowTint;\n';body=`s12Window=0.0;s12WindowTint=vec3(1.0,0.72,0.39);
 #ifdef USE_INSTANCING
 float seed=mod(abs(dot(instanceMatrix[3].xyz,vec3(12.9898,78.233,37.719))),7.0);
-s12Window=seed<3.0?1.10+seed*0.18:0.0;
+s12Window=seed<3.0?0.48+seed*0.14:0.0;
 s12Window*=mix(1.0,0.12,smoothstep(70.0,170.0,length(instanceMatrix[3].xz)));\ns12WindowTint=seed<1.0?vec3(1.0,0.56,0.22):(seed<2.0?vec3(1.0,0.82,0.55):vec3(0.54,0.78,1.0));
 #endif`;
    if(mode==='curtainWindow')body+='\n#ifdef USE_INSTANCING\ns12Window=0.65*mix(1.0,0.12,smoothstep(70.0,170.0,length(instanceMatrix[3].xz)));s12WindowTint=vec3(0.58,0.78,1.0);\n#endif';
