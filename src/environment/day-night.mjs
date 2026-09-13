@@ -63,7 +63,9 @@ export class DayNightSystem{
    if(o.name==='s9-signal-lenses'){night=.85;mode='coloredLamp';}
    if(/^station-detail-.*-glow$/.test(o.name))night=4.5;
    if(/^streetscape-.*-emissive$/.test(o.name))night=5;
-   if(o.name==='hero-cafe-frontage')night=.65;
+   if(o.name==='hero-cafe-frontage')night=.42;
+   if(o.name==='qfront-interior-warm')night=2.1;
+   if(o.name==='qfront-interior-dim')night=.16;
    if(o.name==='hero-polish-storefront')night=2.4;
    if(o.name==='hero-polish-marquee')night=3.8;
    if(o.name==='hero-polish-canopies')night=.5;
