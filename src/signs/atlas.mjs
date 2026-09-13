@@ -34,10 +34,16 @@ export function paintCity(ctx,size,count){
  }return entries;
 }
 export function paintScreen(ctx,w,h){
- const bg=ctx.createLinearGradient(0,0,w,h);if(bg?.addColorStop){bg.addColorStop(0,'#12152f');bg.addColorStop(.48,'#2a174e');bg.addColorStop(1,'#071833');ctx.fillStyle=bg;}else ctx.fillStyle='#12152f';ctx.fillRect(0,0,w,h);
- const slash=(x,color,tilt=.12)=>{ctx.fillStyle=color;ctx.beginPath();ctx.moveTo(w*x,0);ctx.lineTo(w*(x+.18),0);ctx.lineTo(w*(x+.18-tilt),h*.36);ctx.lineTo(w*(x-tilt),h*.36);ctx.closePath();ctx.fill();};slash(.03,'#ee6ea8');slash(.29,'#78d8ed',.08);slash(.57,'#bd72ed',.14);slash(.82,'#56b9ee',.09);
- ctx.fillStyle='#0d1225';ctx.fillRect(0,h*.35,w,h*.38);ctx.fillStyle='#f5f0ff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`900 ${h*.19}px sans-serif`;ctx.fillText('SHIBUYA',w*.5,h*.5,w*.82);ctx.font=`700 ${h*.055}px sans-serif`;ctx.fillStyle='#f5b9db';ctx.fillText('THE SCRAMBLE CITY',w*.5,h*.65,w*.72);
- ctx.fillStyle='#0c1833';ctx.fillRect(0,h*.73,w,h*.27);ctx.fillStyle='#73d8ed';ctx.fillRect(w*.06,h*.78,w*.22,h*.12);ctx.fillStyle='#e86ca8';ctx.fillRect(w*.36,h*.78,w*.22,h*.12);ctx.fillStyle='#9877ed';ctx.fillRect(w*.66,h*.78,w*.28,h*.12);
+ ctx.fillStyle='#14275b';ctx.fillRect(0,0,w,h);
+ for(let y=0;y<h;y+=3){ctx.fillStyle=y%6===0?'#253c79':'#101f52';ctx.fillRect(0,y,w,1);}
+ ctx.textAlign='center';ctx.textBaseline='middle';
+ ctx.fillStyle='#385edb';ctx.fillRect(0,h*.08,w,h*.2);
+ ctx.fillStyle='#fff5cf';ctx.font=`bold ${h*.075}px sans-serif`;ctx.fillText('アオゾラねっと',w*.46,h*.16,w*.8);
+ ctx.font=`bold ${h*.032}px sans-serif`;ctx.fillText('AOZORA NET — 渋谷をつなぐ',w*.5,h*.235,w*.9);
+ ctx.fillStyle='#65d6f5';ctx.fillRect(0,h*.4,w,h*.42);
+ ctx.fillStyle='#163b52';ctx.font=`bold ${h*.105}px sans-serif`;ctx.fillText('fenn.chat',w*.53,h*.59,w*.8);
+ ctx.fillStyle='#efffff';ctx.fillRect(w*.39,h*.7,w*.25,h*.035);
+ ctx.fillStyle='#b9edff';ctx.font=`bold ${h*.026}px sans-serif`;ctx.fillText('SHIBUYA  •  HARAJUKU  •  TOKYO  •  SHIBUYA',w*.5,h*.88,w*.95);
 }
 export function createSignAtlases({tier='medium',maxTextureSize=4096,canvasFactory}={}){const q=QUALITY[tier];if(!q)throw Error('Unknown signs tier');if(!(maxTextureSize>=128))throw Error('GPU texture limit too small');const cap=2**Math.floor(Math.log2(maxTextureSize)),size=Math.min(q.atlas,cap),screenWidth=Math.min(q.screen,cap),count=q.variants;
  const make=(w,h,paint)=>{const canvas=canvasFactory?canvasFactory():typeof document!=='undefined'?document.createElement('canvas'):null;let texture,mode;if(canvas){canvas.width=w;canvas.height=h;const ctx=canvas.getContext('2d');if(!ctx)throw Error('Sign Canvas 2D unavailable');paint(ctx,w,h);texture=new CanvasTexture(canvas);mode='canvas';}else{texture=new DataTexture(new Uint8Array([255,255,255,255]),1,1,RGBAFormat);mode='cpu-placeholder';}texture.colorSpace=SRGBColorSpace;texture.minFilter=LinearFilter;texture.magFilter=LinearFilter;texture.generateMipmaps=false;texture.needsUpdate=true;return {texture,mode};};

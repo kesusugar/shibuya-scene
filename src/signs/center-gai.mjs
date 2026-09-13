@@ -34,7 +34,9 @@ export const CENTER_ADS=[
  ['のどスッキリ','のど飴ダイレクト','#ef665b','#fff9ed','pill'],
  ['MOCHI HADA','もち肌スキンケア','#fff6f5','#f7b9d8','mochi'],
  ['fenn.chat','chat with your world','#61d5f4','#17405a','chat'],
- ['にじいろサウンド','MUSIC / LIVE / SHIBUYA','#c845dc','#fff8ed','rainbow']
+ ['にじいろサウンド','MUSIC / LIVE / SHIBUYA','#c845dc','#fff8ed','rainbow'],
+ ['Q F R O N T','','#08131e','#ffffff','qfront'],
+ ['Coca-Cola','','#f4f7f4','#da1826','coca']
 ];
 export function centerGaiLayout(){const signs=[];for(const [bi,f] of CENTER_FACADES.entries()){
  const dx=f.b[0]-f.a[0],dz=f.b[1]-f.a[1],length=Math.hypot(dx,dz),t=[dx/length,dz/length],heading=Math.atan2(f.normal[0],f.normal[1]);
@@ -58,7 +60,6 @@ export function centerGaiLayout(){const signs=[];for(const [bi,f] of CENTER_FACA
  for(let i=0;i<14;i++){const roof=i>=12,u=roof?(i-11.5)*wl/2:(i%4+.5)*wl/4;signs.push({building:'way/55896465',kind:roof?'roof':'advert',variant:roof?[16,18][i-12]:variants[i],position:[wall.a[0]+wx*u/wl+wall.normal[0]*.8,roof?32.4:10+Math.floor(i/4)*6,wall.a[1]+wz*u/wl+wall.normal[1]*.8],heading:wh,width:roof?10:8,height:roof?3.8:4.8});}
  // East-facing walls visible beside the main QFRONT screen; leave cafe glazing untouched.
  for(const f of [
- {building:'way/136691386',a:[4.440929,-45.318165],b:[1.040136,-31.303041],normal:[.971799,.235809],columns:2,rows:5,bottom:13.6,pitch:6.1,height:5.45},
  {building:'way/55896465',a:[15.719622,-90.703121],b:[5.897120,-49.047368],normal:[.973307,.229508],columns:5,rows:3,bottom:13,pitch:5.7,height:4.95}
  ]){
  const dx=f.b[0]-f.a[0],dz=f.b[1]-f.a[1],length=Math.hypot(dx,dz),variants=[24,3,1,21,0,4,22,10,17,20,13,23,6,14,7];
@@ -74,6 +75,8 @@ export function centerGaiLayout(){const signs=[];for(const [bi,f] of CENTER_FACA
  ];
  for(const f of rearFaces){const width=Math.hypot(f.b[0]-f.a[0],f.b[1]-f.a[1])/f.columns-.6,variants=[13,24,3,1,20,0,17,4,21,22,10,23,6,14,7];for(let row=0;row<5;row++)for(let col=0;col<f.columns;col++)signs.push({building:'way/114755219',surface:f.surface,kind:'advert',variant:variants[row*f.columns+col],position:wallAt(f,(col+.5)/f.columns,6.5+row*6.8),heading:Math.atan2(...f.normal),width,height:5.8});}
  for(const s of [{p:[-47,27.4,-34],variant:15,width:9},{p:[-53,28,-44],variant:26,width:8.4},{p:[-60.5,27.2,-35],variant:21,width:7}])signs.push({building:'way/136690966',surface:'roof-rear',kind:'roof',variant:s.variant,position:s.p,heading:.107,width:s.width,height:3.8});
+ signs.push({building:'way/136691386',surface:'crown',kind:'advert',variant:27,position:[-8,40.2,-29.3],heading:.1589,width:9.5,height:2.2});
+ signs.push({building:'way/136691386',surface:'roof-brand',kind:'roof',variant:28,position:[-9.5,47.6,-32],heading:.1589,width:18,height:5.4});
  return signs;}
 
 function atlas(factory){const canvas=factory?factory():typeof document!=='undefined'?document.createElement('canvas'):null;
@@ -84,6 +87,8 @@ function atlas(factory){const canvas=factory?factory():typeof document!=='undefi
   const text=(value,size,px,py,width=470)=>{c.font=`bold ${size}px "Yu Gothic","Meiryo",sans-serif`;c.fillText(value,px,py,width);};
   const circle=(cx,cy,r)=>{c.beginPath();c.arc(cx,cy,r,0,Math.PI*2);c.fill();};
   // Artwork uses a different icon, composition and colour treatment for each business.
+  if(style==='coca'){c.font='italic bold 112px "Brush Script MT","Segoe Script",cursive';c.fillText('Coca-Cola',256,243,476);c.strokeStyle=fg;c.lineWidth=9;c.beginPath();c.moveTo(55,333);c.bezierCurveTo(160,282,340,375,457,306);c.stroke();c.restore();return;}
+  if(style==='qfront'){text(title,91,256,256,470);c.restore();return;}
   if(style==='directory'){for(let row=0;row<6;row++){c.fillStyle=['#d8f2e5','#fff1c7','#efd7e9','#dce5fc','#f5d8d1','#def2f0'][row];c.fillRect(12,12+row*82,488,75);c.fillStyle='#37414a';text(['6F 歯科','5F 英会話','4F 音楽','3F 喫茶','2F 眼鏡','1F 食堂'][row],46,256,51+row*82);}c.restore();return;}
   if(style==='gate'){c.scale(1,5.23);c.fillStyle='#262e3c';c.fillRect(260,0,252,98);c.fillStyle='#f9d164';circle(260,49,18);c.strokeStyle='#26343c';c.lineWidth=1;c.beginPath();c.moveTo(242,49);c.lineTo(278,49);c.moveTo(260,31);c.lineTo(260,67);c.stroke();c.fillStyle='#25313a';text('渋谷センター街',23,126,32,222);text('CENTER GAI',16,126,66,216);c.fillStyle='#fff4c8';text('バスケットボール',20,389,32,210);text('STREET / SHIBUYA',12,389,66,202);c.restore();return;}
   if(style==='split'){c.fillStyle='#f7bdd7';c.fillRect(0,0,512,253);c.fillStyle='#fffbed';circle(112,256,76);text('ピタッと',75,328,170,305);text('シップ',92,328,335,310);}

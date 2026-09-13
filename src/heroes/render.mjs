@@ -7,15 +7,16 @@ import {HERO_DEFINITIONS} from './config.mjs';
 import {prepareHero,auditReservations} from './model.mjs';
 import {BUILDERS} from './builders.mjs';
 import {createQfrontCafe} from './cafe.mjs';
+import {refineQfrontGlass} from './qfront-glass.mjs';
 import {finish109} from './finish-109.mjs';
 import {createCentralPolish} from './polish.mjs';
 function sideGeometry(g){const group=g.groups.find(x=>x.materialIndex===1),result=new BufferGeometry();for(const name of ['position','normal'])result.setAttribute(name,new Float32BufferAttribute(g.attributes[name].array.slice(group.start*3,(group.start+group.count)*3),3));return result;}
 export function buildHeroScene(data){const started=performance.now(),audit=auditReservations(data),root=new Group();root.name='s4-hero-landmarks';const heroes=[],missing=[],failures=[];
- const materials={concreteLight:new MeshStandardMaterial({color:0xd0d1c9,roughness:.55,metalness:.05,envMapIntensity:.45}),concreteDark:new MeshStandardMaterial({color:0x5a6064,roughness:.9}),glass:new MeshStandardMaterial({color:0x688595,roughness:.24,metalness:.55,envMapIntensity:1.3}),glassDark:new MeshStandardMaterial({color:0x354b59,roughness:.24,metalness:.45,envMapIntensity:1.25}),metal:new MeshStandardMaterial({color:0xa6afb5,roughness:.38,metalness:.7,envMapIntensity:1}),trim:new MeshStandardMaterial({color:0xffffff,roughness:.75}),screenPlaceholder:new MeshStandardMaterial({color:0x202c35,roughness:.78,emissive:0x000000}),roof:new MeshStandardMaterial({color:0x767d7e,roughness:.94})};
+ const materials={qfrontGlass:new MeshStandardMaterial({color:0x08131e,roughness:.12,metalness:.72,envMapIntensity:1.8}),concreteLight:new MeshStandardMaterial({color:0xd0d1c9,roughness:.55,metalness:.05,envMapIntensity:.45}),concreteDark:new MeshStandardMaterial({color:0x5a6064,roughness:.9}),glass:new MeshStandardMaterial({color:0x688595,roughness:.24,metalness:.55,envMapIntensity:1.3}),glassDark:new MeshStandardMaterial({color:0x354b59,roughness:.24,metalness:.45,envMapIntensity:1.25}),metal:new MeshStandardMaterial({color:0xa6afb5,roughness:.38,metalness:.7,envMapIntensity:1}),trim:new MeshStandardMaterial({color:0xffffff,roughness:.75}),screenPlaceholder:new MeshStandardMaterial({color:0x202c35,roughness:.78,emissive:0x000000}),roof:new MeshStandardMaterial({color:0x767d7e,roughness:.94})};
  const statics=Object.fromEntries(Object.keys(materials).map(k=>[k,[]])),panelRecords={glass:[],glassDark:[],screenPlaceholder:[]},detailRecords=[],builders=[],staticGeometries=[];const plane=new PlaneGeometry(1,1),box=new BoxGeometry(1,1);
  for(const def of HERO_DEFINITIONS){if(!data.buildings.some(s=>s.id===def.id)){missing.push(def.key);continue;}
   if(!audit.some(r=>r.id===def.id&&r.phase==='S4')){failures.push({id:def.id,reason:'source-not-reserved'});continue;}
-  const h=prepareHero(data,def);BUILDERS[def.builder](h);h.triangles=0;
+  const h=prepareHero(data,def);BUILDERS[def.builder](h);refineQfrontGlass(h);h.triangles=0;
   for(const m of h.masses){const full=extrude(m.polygon,m.top-m.bottom,m.bottom),sides=sideGeometry(full);full.dispose();statics[m.material].push(sides);h.triangles+=triangleCount(sides);
    const above=union(...h.masses.filter(n=>n!==m&&n.bottom<=m.top+.001&&n.top>m.top+.001).map(n=>multi(n.polygon)));
    for(const p of polygons(difference(multi(m.polygon),above))){if(area(multi(p))<1e-6)continue;const g=polygonGeometry(p,m.top);statics.roof.push(g);h.triangles+=triangleCount(g);}

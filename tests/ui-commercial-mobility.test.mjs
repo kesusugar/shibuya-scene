@@ -112,9 +112,9 @@ test('supporting cast walks while pedestrian-green keeps all cars outside',()=>{
 });
 
 test('Center-gai ads mix business-specific art without repeating a design on one building',()=>{
- assert.equal(new Set(CENTER_ADS.map(a=>a[4])).size,27);
+ assert.equal(new Set(CENTER_ADS.map(a=>a[4])).size,29);
  const layout=centerGaiLayout();for(const id of new Set(layout.map(s=>s.building+':'+(s.surface??'original')))){const signs=layout.filter(s=>s.building+':'+(s.surface??'original')===id);assert.equal(new Set(signs.map(s=>s.variant)).size,signs.length,id);}
- const east=layout.filter(s=>s.surface==='east');assert.equal(east.length,25);assert.equal(east.filter(s=>s.building==='way/136691386').length,10);
+ const east=layout.filter(s=>s.surface==='east');assert.equal(east.length,15);assert.equal(east.filter(s=>s.building==='way/136691386').length,0);
  for(const s of east){assert.ok(s.position[1]-s.height/2>10);assert.ok(Math.sin(s.heading)>.95);assert.ok(s.variant<CENTER_ADS.length);}
  assert.ok(layout.some(s=>s.width/s.height<.3));assert.ok(layout.some(s=>s.width/s.height>2));
  assert.equal(layout.filter(s=>s.surface==='north-feature').length,3);
