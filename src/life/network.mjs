@@ -2,6 +2,7 @@ import {SpatialIndex,bounds,length,sample,distance} from '../geo/core.mjs';
 import {polygons,buffer,surface} from '../ground/model.mjs';
 import {STEP,RADIUS,district} from './config.mjs';
 import {finishSteps,finishStepsAsync} from '../quality/runtime.mjs';
+import {packContext,restoreContext} from '../quality/static-context.mjs';
 
 const bb=(x,z,r=0)=>({minX:x-r,maxX:x+r,minZ:z-r,maxZ:z+r});
 function indexed(polys){const index=new SpatialIndex(12);polys.forEach((p,i)=>index.insert(i,bounds(p.outer),p));return index;}
@@ -9,6 +10,19 @@ const ringBands=new WeakMap();
 function inRingFast(p,ring){let bands=ringBands.get(ring);if(!bands){bands=new Map();for(let i=0;i<ring.length;i++){const a=ring[i],b=ring[(i+1)%ring.length];if(a[1]===b[1])continue;for(let z=Math.floor(Math.min(a[1],b[1])/2);z<=Math.floor(Math.max(a[1],b[1])/2);z++){if(!bands.has(z))bands.set(z,[]);bands.get(z).push([a,b]);}}ringBands.set(ring,bands);}let hit=false;for(const [a,b] of bands.get(Math.floor(p[1]/2))??[])if((a[1]>p[1])!==(b[1]>p[1])&&p[0]<(b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0])hit=!hit;return hit;}
 const inside=(p,poly)=>inRingFast(p,poly.outer)&&!(poly.holes??[]).some(h=>inRingFast(p,h));
 function edgeDistance(x,z,a,b){const dx=b[0]-a[0],dz=b[1]-a[1],t=Math.max(0,Math.min(1,((x-a[0])*dx+(z-a[1])*dz)/(dx*dx+dz*dz||1)));return Math.hypot(x-a[0]-dx*t,z-a[1]-dz*t);}
+function bindPedestrianContext(context,ground){
+ const {sidewalk,walk,roads,solids,roadEdges,footwaySources}=context;
+ const onRoad=(x,z)=>roads.query(bb(x,z)).some(v=>inside([x,z],v.value));
+ const solid=(x,z,r=RADIUS)=>solids.query(bb(x,z,r)).some(({value:s})=>inside([x,z],s.polygon)||s.polygon.outer.some((a,i)=>edgeDistance(x,z,a,s.polygon.outer[(i+1)%s.polygon.outer.length])<r));
+ const walkPoint=(x,z)=>!onRoad(x,z)&&walk.query(bb(x,z)).some(v=>inside([x,z],v.value));
+ const safeCache=new Map();
+ const safe=(x,z,r=RADIUS+.06)=>{const ix=Math.round(x*10),iz=Math.round(z*10),key=ix+','+iz;let result=safeCache.get(key);if(result!==undefined)return result;const a=ix/10,b=iz/10,margin=.43;result=!solid(a,b,margin)&&walkPoint(a,b);
+  if(result&&roadEdges.query(bb(a,b,margin)).some(({value:[p,q]})=>edgeDistance(a,b,p,q)<margin))result=false;
+  if(result)for(let i=0;i<8;i++)if(!walkPoint(a+Math.cos(i*Math.PI/4)*margin,b+Math.sin(i*Math.PI/4)*margin)){result=false;break;}
+  safeCache.set(key,result);return result;};
+ const heights=new Map();const height=(x,z)=>{const a=Math.round(x*4)/4,b=Math.round(z*4)/4,key=a+','+b;if(!heights.has(key))heights.set(key,onRoad(a,b)?.02:sidewalk.query(bb(a,b)).some(v=>inside([a,b],v.value))?ground.height([a,b]):0);return heights.get(key);};
+ return {sidewalk,walk,roads,solids,roadEdges,onRoad,solid,safe,footwaySources,height};
+}
 export function pedestrianContext(data,{ground,generic,street,core,detail}){
  const footways=data.footways.filter(f=>surface(f)&&f.highway!=='steps'&&f.tags.footway!=='crossing'&&!['no','private'].includes(f.tags.access));
  const footPolys=footways.flatMap(f=>f.tags.area==='yes'&&f.points.length>3?[{outer:f.points,holes:[]}]:polygons(buffer(f.points,Number(f.tags.width)|| (f.name?.includes('センター')?5: f.highway==='pedestrian'?3.2:1.8))));
@@ -19,16 +33,21 @@ export function pedestrianContext(data,{ground,generic,street,core,detail}){
  for(const f of [...street.fixtures,...(detail?.fixtures??[])])add(f.polygon,'fixture',f.bottom,f.top);
  for(const s of core.supports)add(s.polygon,'support',s.base,s.top);
  const roadEdges=new SpatialIndex(4);let rid=0;for(const p of polygons(ground.roads))for(const ring of [p.outer,...p.holes])for(let i=0;i<ring.length;i++)roadEdges.insert(rid++,bounds([ring[i],ring[(i+1)%ring.length]]),[ring[i],ring[(i+1)%ring.length]]);
- const onRoad=(x,z)=>roads.query(bb(x,z)).some(v=>inside([x,z],v.value));
- const solid=(x,z,r=RADIUS)=>solids.query(bb(x,z,r)).some(({value:s})=>inside([x,z],s.polygon)||s.polygon.outer.some((a,i)=>edgeDistance(x,z,a,s.polygon.outer[(i+1)%s.polygon.outer.length])<r));
- const walkPoint=(x,z)=>!onRoad(x,z)&&walk.query(bb(x,z)).some(v=>inside([x,z],v.value));
- // Fixed conservative domain for every actor size: cache cells include the full body radius plus quantization error.
- const safeCache=new Map();
- const safe=(x,z,r=RADIUS+.06)=>{const ix=Math.round(x*10),iz=Math.round(z*10),key=ix+','+iz;let result=safeCache.get(key);if(result!==undefined)return result;const a=ix/10,b=iz/10,margin=.43;result=!solid(a,b,margin)&&walkPoint(a,b);
-  if(result&&roadEdges.query(bb(a,b,margin)).some(({value:[p,q]})=>edgeDistance(a,b,p,q)<margin))result=false;
-  if(result)for(let i=0;i<8;i++)if(!walkPoint(a+Math.cos(i*Math.PI/4)*margin,b+Math.sin(i*Math.PI/4)*margin)){result=false;break;}
-  safeCache.set(key,result);return result;};
- const heights=new Map();const height=(x,z)=>{const a=Math.round(x*4)/4,b=Math.round(z*4)/4,key=a+','+b;if(!heights.has(key))heights.set(key,onRoad(a,b)?.02:sidewalk.query(bb(a,b)).some(v=>inside([a,b],v.value))?ground.height([a,b]):0);return heights.get(key);};return {walk,roads,solids,onRoad,solid,safe,footwaySources:footways.map(f=>f.id),height};
+ return bindPedestrianContext({sidewalk,walk,roads,solids,roadEdges,footwaySources:footways.map(f=>f.id)},ground);
+}
+export function packPedestrianNetwork(network){
+ const nodes=network.nodes.map(node=>[node.x,node.z,node.edges,node.district,node.component]);
+ const edges=network.edges.map(edge=>[edge.from,edge.to,edge.length,edge.crossingId??null,edge.sourcePoints??null,edge.width??null,edge.kind??null,edge.direction??null,edge.track??null,edge.points??null,edge.waitingRow??null]);
+ return {compact:1,ctx:packContext(network.ctx),nodes,edges,crossings:network.crossings.map(edge=>edge.id),components:network.components,eligible:network.eligible.map(node=>node.id),landingNodes:[...network.landingNodes],rejected:network.rejected,waitingZones:network.waitingZones,choreographySlots:network.choreographySlots,stats:network.stats};
+}
+export function restorePedestrianNetwork(model,ground){
+ const ctx=bindPedestrianContext(restoreContext(model.ctx),ground);
+ const nodes=model.compact?model.nodes.map(([x,z,edges,district,component],id)=>({id,x,z,edges,district,component})):model.nodes;
+ const edges=model.compact?model.edges.map(([from,to,length,crossingId,sourcePoints,width,kind,direction,track,points,waitingRow],id)=>({id,from,to,length,...(crossingId===null?{}:{crossingId,sourcePoints,width,kind,direction,track,points,...(waitingRow===null?{}:{waitingRow})})})):model.edges;
+ const grid=new Map(nodes.map(node=>[Math.round(node.x/STEP)+','+Math.round(node.z/STEP),node]));
+ const nearest=(x,z,r=5,accept=()=>true)=>{let best=null,dist=r;for(let ix=Math.floor((x-r)/STEP);ix<=Math.ceil((x+r)/STEP);ix++)for(let iz=Math.floor((z-r)/STEP);iz<=Math.ceil((z+r)/STEP);iz++){const n=grid.get(ix+','+iz);if(!n||!accept(n))continue;const d=Math.hypot(x-n.x,z-n.z);if(d<dist){best=n;dist=d;}}return best;};
+ const segmentSafe=(a,b,crossing=false)=>{const len=Math.hypot(b.x-a.x,b.z-a.z);for(let d=0;d<=len;d+=.1){const t=d/(len||1),x=a.x+(b.x-a.x)*t,z=a.z+(b.z-a.z)*t;if(ctx.solid(x,z,.34)||!crossing&&!ctx.safe(x,z,.32))return false;}return !ctx.solid(b.x,b.z,.34)&&(crossing||ctx.safe(b.x,b.z,.32));};
+ return {...model,ctx,nodes,edges,crossings:model.crossings.map(id=>edges[id]),eligible:model.eligible.map(id=>nodes[id]),landingNodes:new Set(model.landingNodes),nearest,segmentSafe};
 }
 export const buildPedestrianNetwork=(data,options)=>finishSteps(buildPedestrianNetworkSteps(data,options));
 export const buildPedestrianNetworkAsync=(data,options,timing)=>finishStepsAsync(buildPedestrianNetworkSteps(data,options),undefined,timing);
@@ -76,7 +95,9 @@ export function* buildPedestrianNetworkSteps(data,options){
  let component=0;const components=[];
  for(const n of nodes){if(n.component>=0)continue;const ids=[n.id];n.component=component;for(let i=0;i<ids.length;i++)for(const eid of nodes[ids[i]].edges){const next=nodes[edges[eid].to];if(next.component<0){next.component=component;ids.push(next.id);}}components.push(ids);component++;}
  const eligible=nodes.filter(n=>components[n.component].length>=35&&n.edges.some(id=>!edges[id].crossingId));
- return {ctx,nodes,edges,crossings,components,eligible,landingNodes,nearest,segmentSafe,rejected,waitingZones,stats:{waitingCells:new Set(waitingZones.flatMap(z=>z.entries)).size,nodes:nodes.length,edges:edges.length,crossingPaths:crossings.length,scramblePaths:crossings.filter(c=>c.kind!=='normal').length,components:components.length,eligible:eligible.length,footwaySources:ctx.footwaySources.length,rejectedCrossings:rejected.length,generationMs:Math.round(performance.now()-started)}};
+ // Candidate curb slots are deterministic and geometry-only. Baking them avoids repeating tens of thousands of safety samples at every HIGH startup.
+ const choreographySlots=[];for(const id of new Set(crossings.filter(edge=>edge.kind!=='normal').flatMap(edge=>[edge.from,edge.to]))){yield;const target=nodes[id],candidates=[];for(let i=0;i<360;i++){const angle=i*2.399963,radius=.3+(i%60)*.095,x=target.x+Math.cos(angle)*radius,z=target.z+Math.sin(angle)*radius;if(ctx.safe(x,z,.29)&&segmentSafe({x,z},target,false))candidates.push([x,z,Math.round(x/.32)+','+Math.round(z/.32)]);}choreographySlots.push([id,candidates]);}
+ return {ctx,nodes,edges,crossings,components,eligible,landingNodes,nearest,segmentSafe,rejected,waitingZones,choreographySlots,stats:{waitingCells:new Set(waitingZones.flatMap(z=>z.entries)).size,nodes:nodes.length,edges:edges.length,crossingPaths:crossings.length,scramblePaths:crossings.filter(c=>c.kind!=='normal').length,components:components.length,eligible:eligible.length,footwaySources:ctx.footwaySources.length,rejectedCrossings:rejected.length,generationMs:Math.round(performance.now()-started)}};
 }
 // A* with a binary heap. Paths are built at destination changes, never per frame.
 export function route(network,from,to){

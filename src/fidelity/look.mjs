@@ -1,4 +1,4 @@
-import {Group,PointLight,SpotLight,Scene,PMREMGenerator,Vector3,FogExp2,PCFSoftShadowMap,LinearMipmapLinearFilter,LinearFilter} from 'three';
+import {Group,PointLight,SpotLight,Scene,PMREMGenerator,Vector3,FogExp2,PCFShadowMap,LinearMipmapLinearFilter,LinearFilter} from 'three';
 import {Sky} from 'three/addons/objects/Sky.js';
 import {createFidelityPipeline,noAO,FIDELITY} from './pipeline.mjs';
 export class RenderFidelity{
@@ -8,7 +8,7 @@ export class RenderFidelity{
  setTier(t){this.tier=t;this.refresh();}
  refresh(){if(!this.disposed)this.environment.apply();}
  applyLook(){if(this.disposed)return;const active=this.environment.active,high=active&&this.tier==='high',dark=active&&this.time.isDark();const main=this.environment.key;
- if(this.renderer){this.renderer.shadowMap.enabled=high;this.renderer.shadowMap.type=PCFSoftShadowMap;if(high)this.renderer.toneMappingExposure=dark?FIDELITY.exposureNight:FIDELITY.exposureDay;}main.castShadow=high;main.shadow.mapSize.set(FIDELITY.shadow,FIDELITY.shadow);main.shadow.radius=2;main.shadow.bias=-.0006;main.shadow.normalBias=.06;Object.assign(main.shadow.camera,{left:-85,right:85,top:85,bottom:-85,near:1,far:400});main.shadow.camera.updateProjectionMatrix();
+ if(this.renderer){this.renderer.shadowMap.enabled=high;this.renderer.shadowMap.type=PCFShadowMap;if(high)this.renderer.toneMappingExposure=dark?FIDELITY.exposureNight:FIDELITY.exposureDay;}main.castShadow=high;main.shadow.mapSize.set(FIDELITY.shadow,FIDELITY.shadow);main.shadow.radius=2;main.shadow.bias=-.0006;main.shadow.normalBias=.06;Object.assign(main.shadow.camera,{left:-85,right:85,top:85,bottom:-85,near:1,far:400});main.shadow.camera.updateProjectionMatrix();
  for(const r of this.environment.roots.values())for(const b of r.lights)if(high&&b.light.isDirectionalLight)b.light.intensity=0;if(high)main.intensity=dark?.08:1.2;
  for(const {records} of this.roots.values())for(const {o,cast,receive} of records){if(o.name==='s163-halo'){o.material.uniforms.night.value=dark?1:0;o.visible=this.tier!=='low'&&dark;}const opaque=!o.userData.noAO&&!(Array.isArray(o.material)?o.material.some(m=>m.transparent):o.material?.transparent);o.castShadow=high&&opaque&&(/^(crowd-(body[0-3]|head|hair[0-2])|buildings-wall|hero-(concrete|glass|metal|roof)|station-)/.test(o.name))||cast;o.receiveShadow=high&&opaque||receive;}
  const count=high?6:active&&this.tier==='medium'?2:0;this.lights.forEach((l,i)=>{l.visible=i<count;l.intensity=dark&&i<count?l.userData.nightIntensity:0;});this.spots.forEach(l=>{l.visible=high;l.intensity=dark&&high?l.userData.nightIntensity:0;});

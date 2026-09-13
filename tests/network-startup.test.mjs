@@ -9,6 +9,12 @@ test('CPU construction yields without waiting for a GPU animation frame',async()
  try{await yieldFrame();}finally{if(previous===undefined)delete globalThis.requestAnimationFrame;else globalThis.requestAnimationFrame=previous;}
 });
 
+test('CPU yield does not depend on background-throttled timers',async()=>{
+ const previous=globalThis.setTimeout;
+ globalThis.setTimeout=()=>{throw Error('CPU yield must not use a throttled timer');};
+ try{await yieldFrame();}finally{globalThis.setTimeout=previous;}
+});
+
 test('cooperative pedestrian build preserves graph and yields to the event loop',async()=>{
  const data={footways:[]};
  const options={ground:{sidewalks:[[[[-6,-6],[6,-6],[6,6],[-6,6],[-6,-6]]]],roads:[],crossings:[],height:()=>0},generic:{buildings:[]},street:{context:{solids:{items:new Map()}},fixtures:[]},core:{supports:[]}};

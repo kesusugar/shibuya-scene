@@ -2,7 +2,7 @@ import {QUALITY,ARCHETYPES} from './config.mjs';
 // The existing actor/mesh pool and vehicle signal locks are shared with ambient life.
 // Only the Scramble cast uses fixed, reversible tracks and ignores pedestrian occupancy.
 export class ScrambleChoreography {
- constructor(sim){this.sim=sim;this.occupied=new Set();this.candidates=new Map();this.cursor=0;this.inactiveCursor=0;this.cast=0;}
+ constructor(sim){this.sim=sim;this.occupied=new Set();this.candidates=new Map(sim.network.choreographySlots??[]);this.cursor=0;this.inactiveCursor=0;this.cast=0;}
  slot(node,serial){const n=this.sim.network;
   const cacheKey=node.id??node.x+','+node.z;let candidates=this.candidates.get(cacheKey);if(!candidates){candidates=[];for(let i=0;i<360;i++){const angle=i*2.399963,radius=.3+(i%60)*.095,x=node.x+Math.cos(angle)*radius,z=node.z+Math.sin(angle)*radius;if(n.ctx.safe(x,z,.29)&&n.segmentSafe({x,z},node,false))candidates.push([x,z,Math.round(x/.32)+','+Math.round(z/.32)]);}this.candidates.set(cacheKey,candidates);}
   for(const unique of [true,false])for(let i=0;i<candidates.length;i++){const candidate=candidates[(serial+i)%candidates.length],occupied=this.occupied.has(candidate[2]);if(unique&&occupied||this.sim.vehicleOverlap(candidate[0],candidate[1],.35))continue;if(!occupied)this.occupied.add(candidate[2]);return [candidate[0],candidate[1],occupied?null:candidate[2]];}return null;

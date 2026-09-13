@@ -15,7 +15,14 @@ export function afterPaint(run,_meta=undefined){
 }
 // CPU construction needs an event-loop yield, not a completed GPU frame.
 // Waiting for rAF here couples every 8 ms compute slice to expensive HIGH rendering.
-export const yieldFrame=()=>new Promise(resolve=>setTimeout(resolve,0));
+export const yieldFrame=()=>new Promise(resolve=>{
+ // Timer nesting/background throttling can turn hundreds of slices into minutes.
+ // A posted message remains a real task boundary without waiting for a GPU frame.
+ if(typeof MessageChannel==='undefined'){setTimeout(resolve,0);return;}
+ const channel=new MessageChannel();
+ channel.port1.onmessage=()=>{channel.port1.close();channel.port2.close();resolve(undefined);};
+ channel.port2.postMessage(null);
+});
 export function finishSteps(steps){let item;do{item=steps.next();}while(!item.done);return item.value;}
 export async function finishStepsAsync(steps,pause=yieldFrame,timing=null){
  let sliceStart=performance.now();try{while(true){const start=performance.now(),item=steps.next();if(timing)timing.computeMs=(timing.computeMs??0)+performance.now()-start;if(item.done)return item.value;
