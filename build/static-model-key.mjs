@@ -2,7 +2,9 @@ import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {resolve,dirname,relative} from 'node:path';
 export const STATIC_SCHEMA=1;
-export const STATIC_ROOTS=['src/ground/model.mjs','src/buildings/model.mjs','src/station/model.mjs','src/station-detail/model.mjs','src/signs/model.mjs','src/streetscape/model.mjs','src/traffic/graph.mjs','src/life/network.mjs','src/life/choreography.mjs','src/quality/static-context.mjs'];
+// Only inputs used while baking geometry belong here. Runtime rendering, motion and
+// choreography changes must not discard the expensive ground/network artifact.
+export const STATIC_ROOTS=['src/ground/model.mjs','src/buildings/model.mjs','src/station/model.mjs','src/station-detail/model.mjs','src/signs/model.mjs','src/streetscape/model.mjs','src/traffic/graph.mjs','src/life/network.mjs','src/quality/static-context.mjs'];
 export function staticModelKey(root){
  const files=new Set(['public/data/shibuya-scene-data.json','package-lock.json']);
  function visit(file){if(files.has(file))return;files.add(file);const text=readFileSync(resolve(root,file),'utf8');for(const match of text.matchAll(/from\s+['"]([^'"]+)['"]/g)){if(match[1].startsWith('.'))visit(relative(root,resolve(root,dirname(file),match[1])).replaceAll('\\','/'));}}

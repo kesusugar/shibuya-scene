@@ -8,8 +8,8 @@ export function installNightEmission(material,mode){
   if(mode==='window'||mode==='curtainWindow'||mode==='storefront'||mode==='heroStorefront'){vertex='uniform float s13Nightglow;\nvarying float s12Window;\nvarying vec3 s12WindowTint;\n';fragment+='varying float s12Window;\nvarying vec3 s12WindowTint;\n';body=`s12Window=0.0;s12WindowTint=vec3(1.0,0.72,0.39);
 #ifdef USE_INSTANCING
 float seed=mod(abs(dot(instanceMatrix[3].xyz,vec3(12.9898,78.233,37.719))),7.0);
-s12Window=seed<3.0?0.48+seed*0.14:0.0;
-s12Window*=mix(1.0,0.12,smoothstep(70.0,170.0,length(instanceMatrix[3].xz)));\ns12WindowTint=seed<1.0?vec3(1.0,0.56,0.22):(seed<2.0?vec3(1.0,0.82,0.55):vec3(0.54,0.78,1.0));
+s12Window=seed<4.0?0.38+seed*0.12:0.0;
+s12Window*=mix(1.0,0.18,smoothstep(90.0,210.0,length(instanceMatrix[3].xz)));\ns12WindowTint=seed<1.0?vec3(1.0,0.48,0.16):(seed<2.0?vec3(1.0,0.72,0.34):(seed<3.0?vec3(1.0,0.88,0.66):vec3(0.82,0.90,1.0)));
 #endif`;
    if(mode==='curtainWindow')body+='\n#ifdef USE_INSTANCING\ns12Window=0.65*mix(1.0,0.12,smoothstep(70.0,170.0,length(instanceMatrix[3].xz)));s12WindowTint=vec3(0.58,0.78,1.0);\n#endif';
    if(mode==='heroStorefront')body+='\n#ifdef USE_INSTANCING\nif(instanceMatrix[3].y<14.0&&length(instanceMatrix[3].xz)<95.0)s12Window=max(s12Window,1.48);\n#endif';
@@ -22,8 +22,8 @@ s12Window*=mix(1.0,0.12,smoothstep(70.0,170.0,length(instanceMatrix[3].xz)));\ns
    shader.fragmentShader=shader.fragmentShader.replace('#include <emissivemap_fragment>',`#include <emissivemap_fragment>
 vec2 q=s161Position.xz;
 float pool=0.0;
-for(int i=0;i<4;i++){vec2 c=vec2(i<2?-20.0:20.0,mod(float(i),2.0)<0.5?-18.0:18.0);pool+=(0.30+0.025*float(i))*pow(max(0.0,1.0-length(q-c)/24.0),2.0);}
-totalEmissiveRadiance+=vec3(0.65,0.78,1.0)*pool*s12Night;`);
+for(int i=0;i<4;i++){vec2 c=vec2(i<2?-22.0:22.0,mod(float(i),2.0)<0.5?-19.0:19.0);pool+=(0.20+0.018*float(i))*pow(max(0.0,1.0-length(q-c)/16.0),2.4);}
+totalEmissiveRadiance+=vec3(1.0,0.69,0.38)*pool*s12Night;`);
   }else if(mode==='sign'){vertex='attribute float s13GlowWeight;\nvarying float s13Sign;\n';fragment+='varying float s13Sign;\n';body='s13Sign=s13GlowWeight;';shader.fragmentShader=shader.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\ntotalEmissiveRadiance *= 1.0+s13Nightglow*(max(s13Sign,0.8)-1.0);');
   }else if(mode==='train'){vertex='attribute vec3 s12Emission;\nattribute float s12LampEnd;\nattribute vec2 s12Cab;\nvarying vec3 s12Train;\n';fragment+='varying vec3 s12Train;\n';body=`s12Train=s12Emission;
 float cab=s12LampEnd< -0.5?s12Cab.x:(s12LampEnd>0.5?s12Cab.y:0.0);
@@ -49,11 +49,14 @@ export class DayNightSystem{
    if(o.name==='buildings-shopWindows')mode='storefront';
    if(/^train-(JR|Ginza)$/.test(o.name))mode='train';
    if(/^signs-(print|led|heroScreen)$/.test(o.name)){night=1.2;mode='sign';}
-   if(/^traffic-.*-front$/.test(o.name))night=1.4;
-   if(/^traffic-.*-rear$/.test(o.name)){night=1.1;mode='coloredLamp';}
+   if(/^traffic-.*-front$/.test(o.name))night=2.15;
+   if(/^traffic-.*-rear$/.test(o.name)){night=1.65;mode='coloredLamp';}
    if(o.name==='s9-signal-lenses'){night=.85;mode='coloredLamp';}
    if(/^station-detail-.*-glow$/.test(o.name))night=.45;
    if(o.name==='hero-cafe-frontage')night=.65;
+   if(o.name==='hero-polish-storefront')night=1.08;
+   if(o.name==='hero-polish-marquee')night=1.35;
+   if(o.name==='hero-polish-canopies')night=.5;
    const wet=o.name==='ground-asphalt';if(!mode&&night===null&&!wet)continue;if(materials.has(m))continue;
    materials.set(m,{material:m,intensity:m.emissiveIntensity,night,wet,roughness:m.roughness,metalness:m.metalness,vehicle:/^traffic-.*-(front|rear)$/.test(o.name),emission:mode?installNightEmission(m,mode):null});
   }});
