@@ -66,7 +66,7 @@ export class DayNightSystem{
    if(o.name==='buildings-shopWindows')mode='storefront';
    if(/^train-(JR|Ginza)$/.test(o.name))mode='train';
    // Keep printed colors below the display peak; bulbs and rims remain separate.
-   if(/^signs-(print|led|heroScreen)$/.test(o.name)){night=o.name==='signs-print'?1.15:o.name==='signs-led'?1.8:1.6;mode='sign';}
+   if(/^signs-(print|led|heroScreen|reference|referenceVision)$/.test(o.name)){night=o.name==='signs-print'?1.15:o.name==='signs-led'?1.8:o.name==='signs-reference'?1.45:o.name==='signs-referenceVision'?2.3:1.6;mode='sign';}
    if(o.name==='center-gai-advertisements')night=1.2;
    if(o.name==='center-gai-light')night=7;
    if(o.name==='center-gai-rim')night=7;

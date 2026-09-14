@@ -225,10 +225,63 @@ export function resolveReferenceAds(hosts, camera, view = REFERENCE_VIEW) {
   const y = roof
    ? hit.host.top + height / 2
    : Math.min(Math.max(hit.point[1], hit.host.bottom + height / 2 + margin), hit.host.top - height / 2 - margin);
-  placed.push({ad, host: hit.host, edge: hit.edge, along, y, point: hit.point, distance: hit.distance,
+  placed.push({ad, host: hit.host, edge: hit.edge, along, y, point: hit.point, distance: hit.distance, rayWidth: size.width,
    width, height, foreshortening: size.foreshortening, roof, lowered: !!hit.lowered,
    clamped: width < size.width - 1e-6 || height < size.height - 1e-6,
    category: MOUNT_CATEGORY[ad.mount] ?? 'billboard'});
  }
- return {basis, placed, unplaced};
+ return {basis, placed: fitGroupsToWalls(placed), unplaced};
+}
+
+// A wall needs this much clear edge around its advertisements.
+const WALL_MARGIN = .3;
+// Below this many advertisements a shared wall is not a facade grid, so each one keeps the
+// size the raycast gave it rather than being stretched to fill the wall.
+const GRID_MINIMUM = 3;
+
+/**
+ * Re-lay advertisements that share a wall.
+ *
+ * Each slot is sized independently from its own screen coverage, which is right in
+ * isolation but collides once several slots land on the same facade: the reference frame's
+ * left block carries nine advertisements across a facade far wider than the wall this
+ * scene models, so nine correctly-sized panels overlap into an unreadable stack.
+ *
+ * For a wall carrying a grid of them, the group's screen rectangle is mapped linearly onto
+ * the wall instead. That reproduces the reference arrangement — same columns, same rows,
+ * same relative sizes — and cannot overlap, because the reference rectangles do not.
+ */
+export function fitGroupsToWalls(placed) {
+ const groups = new Map();
+ for (const p of placed) {
+  if (p.roof) continue;
+  const key = p.host.key + ':' + p.edge.index;
+  if (!groups.has(key)) groups.set(key, []);
+  groups.get(key).push(p);
+ }
+ for (const group of groups.values()) {
+  if (group.length < GRID_MINIMUM) continue;
+  const left = Math.min(...group.map(p => p.ad.left)), right = Math.max(...group.map(p => p.ad.left + p.ad.width));
+  const top = Math.min(...group.map(p => p.ad.top)), bottom = Math.max(...group.map(p => p.ad.top + p.ad.height));
+  const spanX = right - left, spanY = bottom - top;
+  if (!(spanX > 0 && spanY > 0)) continue;
+  const host = group[0].host, edge = group[0].edge;
+  const usableX = edge.length - WALL_MARGIN * 2;
+  // Keep the grid inside the storeys the raycast actually found it on, not the whole tower.
+  const foundTop = Math.max(...group.map(p => p.y + p.height / 2));
+  const foundBottom = Math.min(...group.map(p => p.y - p.height / 2));
+  const ceiling = Math.min(host.top - WALL_MARGIN, foundTop);
+  const floor = Math.max(host.bottom + WALL_MARGIN, foundBottom);
+  const usableY = ceiling - floor;
+  if (!(usableX > 1 && usableY > 1)) continue;
+  for (const p of group) {
+   p.width = p.ad.width / spanX * usableX;
+   p.height = p.ad.height / spanY * usableY;
+   p.along = WALL_MARGIN + (p.ad.left + p.ad.width / 2 - left) / spanX * usableX;
+   p.y = ceiling - (p.ad.top + p.ad.height / 2 - top) / spanY * usableY;
+   p.griddedWith = group.length;
+   p.clamped = p.clamped || p.width < p.rayWidth - 1e-6;
+  }
+ }
+ return placed;
 }
