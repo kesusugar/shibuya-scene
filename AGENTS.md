@@ -30,7 +30,7 @@ For normal changes, run:
 
 ```powershell
 npm run typecheck
-node --test tests/*.test.mjs
+npm run test:ci
 ```
 
 For final or integration changes, run `npm test` from PowerShell, another shell, or CI. Visual changes also require settled HIGH day/night inspection at fixed camera presets. Record visual limitations honestly.
@@ -38,6 +38,8 @@ For final or integration changes, run `npm test` from PowerShell, another shell,
 ## Evidence policy
 
 Files under `evidence/` are tracked validation snapshots, not scratch files. Update them only by intentionally running their producing verification script. Commit evidence separately from implementation whenever practical. Machine-dependent timing values are diagnostic and are not portable performance acceptance.
+
+`npm run test:legacy` executes frozen historical stage tests. Several intentionally assert that later stages do not exist, so it is an audit tool rather than a merge gate. Do not weaken current behavior merely to satisfy an obsolete stage lock.
 
 ## Handoff
 

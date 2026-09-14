@@ -7,8 +7,8 @@
 ## Validation
 
 - [ ] `npm run typecheck`
-- [ ] Relevant targeted tests
-- [ ] Full `npm test` for integration changes
+- [ ] `npm run test:ci` or relevant targeted tests
+- [ ] Full `npm test` for integration changes (portable build plus current suite)
 - [ ] No new browser console or shader errors
 - [ ] HIGH day inspected after startup settled
 - [ ] HIGH night inspected after startup settled

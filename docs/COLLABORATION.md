@@ -35,12 +35,14 @@ Replace the branch suffix with the actual task. Commit only files belonging to t
 
 ```powershell
 npm run typecheck
-node --test tests/*.test.mjs
+npm run test:ci
 git status --short
 git push -u origin claude/lighting-pass
 ```
 
 Open a PR into `master`, use the template, and attach fixed-camera before/after images for visual changes. Prefer squash merge for a noisy exploratory branch and normal merge/rebase when its commits are already coherent.
+
+`npm run test:legacy` is retained for historical audits. It contains frozen stage assertions that deliberately reject later systems, so it is not a required PR check.
 
 After merge, every other machine should run:
 

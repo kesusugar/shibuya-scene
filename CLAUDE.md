@@ -27,7 +27,7 @@ Keep implementation, generated evidence, and collaboration-document changes in s
 
 ```powershell
 npm run typecheck
-node --test tests/*.test.mjs
+npm run test:ci
 npm test
 git status --short
 git push -u origin claude/<short-topic>

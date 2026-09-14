@@ -33,5 +33,5 @@ jobs:
       - name: Type check
         run: npm run typecheck
 
-      - name: Build and run regression suite
+      - name: Build and run current regression suite
         run: npm test

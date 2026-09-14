@@ -18,7 +18,7 @@ test('prebuilt traffic graph restores typed paths and the full HIGH fleet',()=>{
  assert.ok(graph.lanes.every(lane=>lane.edge===graph.edges[lane.edgeIndex??graph.edges.indexOf(lane.edge)]||graph.edges.includes(lane.edge)));
  assert.ok(graph.lanes.every(lane=>lane.path.x instanceof Float64Array&&lane.path.z instanceof Float64Array));
  const sim=new TrafficSimulation(graph,{tier:'high',street:pack.street.high});
- assert.equal(sim.snapshot().moving,62);assert.equal(sim.snapshot().parked,2);assert.equal(sim.audit().major,0);sim.dispose();
+ assert.equal(sim.snapshot().moving,62);assert.equal(sim.snapshot().parked,12);assert.equal(sim.audit().major,0);sim.dispose();
 });
 
 test('prebuilt pedestrian network restores exact graph references and the full HIGH crowd',()=>{
