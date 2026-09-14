@@ -19,6 +19,7 @@ const files=[
  'tests/qfront-interior.test.mjs',
  'tests/r1-crowd-density.test.mjs',
  'tests/real-brands.test.mjs',
+ 'tests/reference-ads.test.mjs',
  'tests/rendered-html.test.mjs',
  'tests/retail-frontage.test.mjs',
  'tests/road-spill.test.mjs',
