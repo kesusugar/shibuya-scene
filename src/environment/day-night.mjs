@@ -60,8 +60,9 @@ export class DayNightSystem{
    if(/^hero-panels-glass/.test(o.name))mode='heroStorefront';
    if(o.name==='buildings-shopWindows')mode='storefront';
    if(/^train-(JR|Ginza)$/.test(o.name))mode='train';
-   if(/^signs-(print|led|heroScreen)$/.test(o.name)){night=3.6;mode='sign';}
-   if(o.name==='center-gai-advertisements')night=2.8;
+   // Keep printed colors below the display peak; bulbs and rims remain separate.
+   if(/^signs-(print|led|heroScreen)$/.test(o.name)){night=o.name==='signs-print'?1.15:o.name==='signs-led'?1.8:1.6;mode='sign';}
+   if(o.name==='center-gai-advertisements')night=1.2;
    if(o.name==='center-gai-light')night=7;
    if(o.name==='center-gai-rim')night=7;
    if(o.name==='sign-accent-bulbs')night=18;
