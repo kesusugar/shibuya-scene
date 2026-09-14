@@ -3,13 +3,18 @@ import assert from 'node:assert/strict';
 import {Scene,Group,Mesh,PlaneGeometry,MeshStandardMaterial,ShaderLib} from 'three';
 import {DayNightSystem} from '../src/environment/day-night.mjs';
 import {TimeState} from '../src/app/foundation.mjs';
-import {ROAD_WET_RESPONSE} from '../src/nightglow/road-spill.mjs';
+import {ROAD_WET_RESPONSE,ROAD_SPILL_GLSL} from '../src/nightglow/road-spill.mjs';
+test('road shader avoids reserved GLSL identifiers in local declarations',()=>{
+ // patch was accepted by our string-injection tests but rejected by WebGL.
+ assert.doesNotMatch(ROAD_SPILL_GLSL,/\b(?:float|vec[234]|int)\s+(?:patch|sample|input|output|filter)\b/);
+ assert.match(ROAD_SPILL_GLSL,/float wetNoise=/);
+});
 test('wet response preserves visible distant color without removing wet/dry contrast',()=>{
  const r=ROAD_WET_RESPONSE;
  assert.ok(r.dryFloor>0&&r.dryFloor<r.wetPeak);
  assert.ok(r.distantRipple>=r.rippleFloor&&r.distantRipple<=r.rippleFloor+r.rippleRange);
  const average=(r.dryFloor+r.wetPeak)*.5*r.distantRipple;
- assert.ok(average>.5&&average<1,'distant color must survive attenuation without a uniform boost above source');
+ assert.ok(average>.35&&average<.6,'distant spill should remain visible without overwhelming asphalt');
  assert.ok(r.wetPeak*(r.rippleFloor+r.rippleRange)<2);
 });
 test('billboard spill affects only asphalt, follows day/night, and restores on removal',()=>{

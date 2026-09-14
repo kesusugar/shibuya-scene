@@ -1,6 +1,6 @@
 // Art-directed billboard spill, not screen-space or ray-traced reflection.
 // Shared asphalt shader only: no extra draw calls, textures or lights.
-export const ROAD_WET_RESPONSE=Object.freeze({dryFloor:.32,wetPeak:1.45,distantRipple:.72,rippleFloor:.38,rippleRange:.72});
+export const ROAD_WET_RESPONSE=Object.freeze({dryFloor:.25,wetPeak:.9,distantRipple:.72,rippleFloor:.38,rippleRange:.72});
 export const ROAD_SPILL_GLSL = `
 float roadHash(vec2 p) {
  return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);
@@ -20,10 +20,10 @@ float roadStreak(vec2 q, vec2 origin, vec2 axis, float width, float reach) {
 vec3 billboardRoadSpill(vec2 q) {
  // World-anchored wet patches and stretched ripples, shared across all sources.
  // Fade subpixel detail with derivatives to avoid distant shimmer.
- float patch=roadNoise(q*.42);
+ float wetNoise=roadNoise(q*.42);
  float ripple=roadNoise(vec2(q.x*1.8,q.y*5.5));
  float detail=1.0-smoothstep(.15,.65,length(fwidth(q*5.5)));
- float wet=smoothstep(.23,.76,patch);
+ float wet=smoothstep(.23,.76,wetNoise);
  float breakup=mix(${ROAD_WET_RESPONSE.distantRipple},${ROAD_WET_RESPONSE.rippleFloor}+${ROAD_WET_RESPONSE.rippleRange}*ripple,detail);
  vec3 light=vec3(0.0);
  light+=vec3(.12,.26,.68)*roadStreak(q,vec2(-9.,-23.),vec2(0.,1.),3.8,33.);
