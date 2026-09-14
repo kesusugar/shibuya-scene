@@ -13,6 +13,8 @@ const vite = await createServer({
   appType: "custom",
   configFile: false,
   root,
+  // Do not invalidate a concurrently running scene preview's dependency cache.
+  cacheDir: path.join(root, 'node_modules', '.vite-ui-tests'),
   resolve: { alias: { "@": root } },
   server: { middlewareMode: true },
 });

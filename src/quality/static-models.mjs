@@ -6,7 +6,7 @@ import {restorePedestrianNetwork} from '../life/network.mjs';
 let pending;
 export function loadStaticModels(){
  if(typeof location!=='undefined'&&new URLSearchParams(location.search).get('prebuilt')==='0')return Promise.resolve(null);
- return pending??=fetch('data/shibuya-static-models.json').then(async response=>{
+ return pending??=fetch('data/shibuya-static-models.json?v='+expectedKey).then(async response=>{
   if(!response.ok)throw Error('HTTP '+response.status);
   const pack=await response.json();
   if(pack.schema!==1||pack.key!==expectedKey)throw Error('stale static models');
