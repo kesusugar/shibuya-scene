@@ -1,6 +1,7 @@
 import {CanvasTexture,DataTexture,RGBAFormat,SRGBColorSpace,MeshStandardMaterial,PlaneGeometry,Mesh} from 'three';
 import {edges,facadePoint} from './model.mjs';
 import {merge} from '../geo/geometry.mjs';
+import {createCafeFrames} from './cafe-frames.mjs';
 
 // A shared two-storey shopfront texture; geometry remains on the existing footprint.
 export function paintCafe(ctx,w,h){
@@ -56,5 +57,6 @@ export function createQfrontCafe(hero,{canvasFactory}={}){
  const geometry=merge(pieces);pieces.forEach(g=>g.dispose());
  const material=new MeshStandardMaterial({map:texture,emissiveMap:texture,emissive:0xffffff,emissiveIntensity:.12,roughness:.42,metalness:.08});
  const mesh=new Mesh(geometry,material);mesh.name='hero-cafe-frontage';mesh.userData.noAO=true;
- return {mesh,fronts,triangles:fronts.length*2,dispose(){mesh.removeFromParent();geometry.dispose();material.dispose();texture.dispose();}};
+ const frames=createCafeFrames(fronts);mesh.add(frames.root);let disposed=false;
+ return {mesh,fronts,frames,triangles:fronts.length*2+frames.triangles,dispose(){if(disposed)return;disposed=true;frames.dispose();mesh.removeFromParent();geometry.dispose();material.dispose();texture.dispose();}};
 }
