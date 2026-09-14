@@ -43,6 +43,13 @@ Estimated visual progress toward the supplied target: 45–55%. This is a planni
 - Performance readings collected during HMR or on different machines are not comparable acceptance data.
 - Generated evidence contains machine-dependent timing fields and should be committed independently.
 - A successful unit test does not compile every material variant on the GPU; browser QA remains mandatory.
+- The 2026-09-15 historical audit also exposed unresolved long-run findings: reference choreography can report crosswalk-boundary contacts, and an older three-minute crowd/traffic audit did not observe the expected scramble traffic resume. Other failures were obsolete stage locks or stale constants. These long-run findings belong to stages 6–7 and are not claimed fixed by the current PR gate.
+
+## Test lanes
+
+- `npm run test:ci`: maintained current contracts used as the pull-request gate.
+- `npm test`: portable production build followed by the current contracts.
+- `npm run test:legacy`: expensive historical audit, including frozen stage locks and long simulations. Its failures must be classified, not blindly converted into current requirements or ignored.
 
 ## Handoff checklist
 
