@@ -82,7 +82,7 @@ export class DayNightSystem{
    if(o.name==='qfront-interior-shell')night=.28;
    if(o.name==='qfront-interior-wood')night=.2;
    if(o.name==='qfront-interior-dim')night=.16;
-   if(o.name==='hero-polish-storefront')night=2.4;
+   if(o.name==='hero-polish-storefront')night=.85;
    if(o.name==='hero-polish-marquee')night=3.8;
    if(o.name==='hero-polish-canopies')night=.5;
    const wet=o.name==='ground-asphalt';if(!mode&&night===null&&!wet)continue;if(materials.has(m))continue;
