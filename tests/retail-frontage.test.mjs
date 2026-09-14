@@ -4,6 +4,18 @@ import {paintCentralRetail,createCentralPolish} from '../src/heroes/polish.mjs';
 import {DayNightSystem} from '../src/environment/day-night.mjs';
 import {TimeState} from '../src/app/foundation.mjs';
 import {Scene} from 'three';
+import {RETAIL_LAYOUT,retailPoint} from '../src/heroes/retail-layout.mjs';
+
+test('door artwork and physical frame coordinates share a bounded layout',()=>{
+ for(const length of [4.1,12,38,75]){
+  const left=retailPoint(length,0,0,.5),right=retailPoint(length,12,0,.5);
+  assert.equal(left.along,.14);assert.ok(Math.abs(right.along-(length-.14))<1e-8);
+  for(const bay of RETAIL_LAYOUT.doors)for(const u of [.1,.43,.49,.55,.88]){
+   const p=retailPoint(length,bay,u,.735);
+   assert.ok(p.along>0&&p.along<length&&p.y>.5&&p.y<3.5);
+  }
+ }
+});
 
 test('retail includes recessed entrances and bounded deterministic artwork',()=>{
  const calls=[],ctx=new Proxy({createLinearGradient(){return {addColorStop(){}};}},{get(t,k){return t[k]??=(...a)=>calls.push([k,...a]);}});
