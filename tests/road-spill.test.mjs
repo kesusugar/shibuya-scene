@@ -3,6 +3,15 @@ import assert from 'node:assert/strict';
 import {Scene,Group,Mesh,PlaneGeometry,MeshStandardMaterial,ShaderLib} from 'three';
 import {DayNightSystem} from '../src/environment/day-night.mjs';
 import {TimeState} from '../src/app/foundation.mjs';
+import {ROAD_WET_RESPONSE} from '../src/nightglow/road-spill.mjs';
+test('wet response preserves visible distant color without removing wet/dry contrast',()=>{
+ const r=ROAD_WET_RESPONSE;
+ assert.ok(r.dryFloor>0&&r.dryFloor<r.wetPeak);
+ assert.ok(r.distantRipple>=r.rippleFloor&&r.distantRipple<=r.rippleFloor+r.rippleRange);
+ const average=(r.dryFloor+r.wetPeak)*.5*r.distantRipple;
+ assert.ok(average>.5&&average<1,'distant color must survive attenuation without a uniform boost above source');
+ assert.ok(r.wetPeak*(r.rippleFloor+r.rippleRange)<2);
+});
 test('billboard spill affects only asphalt, follows day/night, and restores on removal',()=>{
  const scene=new Scene(),time=new TimeState(),env=new DayNightSystem(scene,null,time),root=new Group();
  const objects=['ground-asphalt','ground-paint','ground-sidewalk'].map(name=>{const mesh=new Mesh(new PlaneGeometry(),new MeshStandardMaterial());mesh.name=name;root.add(mesh);return mesh;});
