@@ -20,6 +20,7 @@ const files=[
  'tests/r1-crowd-density.test.mjs',
  'tests/real-brands.test.mjs',
  'tests/reference-ads.test.mjs',
+ 'tests/reference-art.test.mjs',
  'tests/rendered-html.test.mjs',
  'tests/retail-frontage.test.mjs',
  'tests/road-spill.test.mjs',
