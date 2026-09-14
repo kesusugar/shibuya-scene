@@ -9,6 +9,8 @@ test('billboard spill affects only asphalt, follows day/night, and restores on r
  scene.add(root);env.enable();env.register(root);
  for(const mesh of objects){const shader={uniforms:{},vertexShader:ShaderLib.standard.vertexShader,fragmentShader:ShaderLib.standard.fragmentShader};mesh.material.onBeforeCompile(shader);
  assert.equal(shader.fragmentShader.includes('vec3 billboardRoadSpill'),mesh.name==='ground-asphalt');
+ assert.equal(shader.fragmentShader.includes('float roadNoise'),mesh.name==='ground-asphalt');
+ assert.equal(shader.fragmentShader.includes('fwidth(q*5.5)'),mesh.name==='ground-asphalt');
  assert.equal(shader.fragmentShader.includes('vec3 frontageSpill'),mesh.name==='ground-sidewalk');
  assert.equal(shader.uniforms.s12Night.value,0);time.set('night');assert.equal(shader.uniforms.s12Night.value,1);time.set('day');assert.equal(shader.uniforms.s12Night.value,0);}
  assert.equal(env.snapshot().pointLights,0);env.unregister(root);assert.equal(env.roots.size,0);
