@@ -1,4 +1,5 @@
 import {Group,Color,HemisphereLight,DirectionalLight} from 'three';
+import {ROAD_SPILL_GLSL} from '../nightglow/road-spill.mjs';
 export const DAY_NIGHT=Object.freeze({day:{sky:0x9fb5ce,exposure:.9,ambient:.4,key:1.2},night:{sky:0x03060c,exposure:1,ambient:.22,key:.08}});
 // One uniform per existing shared material. No geometry, extra pass, or per-frame allocation.
 export function installNightEmission(material,mode){
@@ -17,7 +18,8 @@ s12Window*=mix(1.0,0.18,smoothstep(90.0,210.0,length(instanceMatrix[3].xz)));\ns
    shader.fragmentShader=shader.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\ntotalEmissiveRadiance += s12WindowTint*s12Window*s12Night*(1.0+0.65*s13Nightglow);');
   }else if(mode==='wall'){
    shader.fragmentShader=shader.fragmentShader.replace('#include <color_fragment>','#include <color_fragment>\ndiffuseColor.rgb *= mix(vec3(0.68,0.70,0.72),vec3(0.32,0.37,0.46),s12Night);');
-  }else if(mode==='groundPool'){
+  }else if(mode==='groundPool'||mode==='groundPoolRoad'){
+   if(mode==='groundPoolRoad')fragment+=ROAD_SPILL_GLSL;
    vertex='varying vec3 s161Position;\n';fragment+='varying vec3 s161Position;\n';body='s161Position=(modelMatrix*vec4(transformed,1.0)).xyz;';
    shader.fragmentShader=shader.fragmentShader.replace('#include <emissivemap_fragment>',`#include <emissivemap_fragment>
 vec2 q=s161Position.xz;
@@ -25,6 +27,7 @@ float alley=(1.-smoothstep(3.0,3.6,abs(q.x-q.y-4.0)))*smoothstep(-96.,-90.,q.x)*
 float plank=step(.1,fract((q.x+q.y)*1.4));
 diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.24,.115,.07)*mix(.65,1.,plank),alley);
 totalEmissiveRadiance+=vec3(.24,.13,.065)*alley*s12Night*(.25+.75*pow(.5+.5*cos((q.x+q.y)*.32),6.));
+${mode==='groundPoolRoad'?'totalEmissiveRadiance+=billboardRoadSpill(q)*s12Night;':''}
 float pool=0.0;
 for(int i=0;i<4;i++){vec2 c=vec2(i<2?-22.0:22.0,mod(float(i),2.0)<0.5?-19.0:19.0);pool+=(0.20+0.018*float(i))*pow(max(0.0,1.0-length(q-c)/16.0),2.4);}
 totalEmissiveRadiance+=vec3(1.0,0.69,0.38)*pool*s12Night;`);
@@ -49,6 +52,7 @@ export class DayNightSystem{
    if(/^buildings-(windows|shopWindows)$/.test(o.name)||/^hero-panels-glass/.test(o.name))mode='window';
    if(o.name==='buildings-curtainWindows')mode='curtainWindow';
    if(/^ground-(asphalt|sidewalk|curb|paint|tactile|land)$/.test(o.name))mode='groundPool';
+   if(o.name==='ground-asphalt')mode='groundPoolRoad';
    if(/^hero-panels-glass/.test(o.name))mode='heroStorefront';
    if(o.name==='buildings-shopWindows')mode='storefront';
    if(/^train-(JR|Ginza)$/.test(o.name))mode='train';
