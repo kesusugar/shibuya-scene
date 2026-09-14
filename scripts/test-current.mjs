@@ -3,6 +3,7 @@ import {spawn} from 'node:child_process';
 // Maintained contracts for the current integrated scene. Historical S0-S15
 // stage-lock tests remain available through `npm run test:legacy`.
 const files=[
+ 'tests/launch-config.test.mjs',
  'tests/asphalt-material.test.mjs',
  'tests/build-runner.test.mjs',
  'tests/build-scheduling.test.mjs',

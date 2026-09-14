@@ -25,7 +25,8 @@ import {loadStaticModels} from '../src/quality/static-models.mjs';
 import {loadSceneData,summarize} from '../src/data/normalize.mjs';
 import {buildDataDebug} from '../src/data/debug.mjs';
 import { Switch } from '@/components/ui/switch';
-import { CAMERAS, MODULES, PROFILES, parseConfig, TimeState, ModuleSystem } from '../src/app/foundation.mjs';
+import { CAMERAS, MODULES, PROFILES, TimeState, ModuleSystem } from '../src/app/foundation.mjs';
+import {parseLaunchConfig} from '../src/app/launch-config.mjs';
 import {QA_CAPTURES,publicCameraName,canvasToPng,createQAPack,downloadBlob} from '../src/qa/capture.mjs';
 import {createStartupTiming,formatStartupDuration} from '../src/quality/startup-timing.mjs';
 export default function Home(){
@@ -42,11 +43,12 @@ export default function Home(){
  const [trafficReport,setTrafficReport]=useState<any>(null);
  const [streetReport,setStreetReport]=useState<any>(null);
  const [signReport,setSignReport]=useState<any>(null);
- const [camera,setCamera]=useState('overview'),[tier,setTier]=useState('medium'),[time,setTime]=useState('day'),[modules,setModules]=useState<any[]>([]),[stats,setStats]=useState<any>(null),[error,setError]=useState('');
+ const [camera,setCamera]=useState('scramble'),[tier,setTier]=useState('high'),[time,setTime]=useState('night'),[modules,setModules]=useState<any[]>([]),[stats,setStats]=useState<any>(null),[error,setError]=useState('');
  useEffect(()=>{let disposed=false;let cleanup=()=>{},appLifecycleStart=performance.now();
  (async()=>{const THREE=await import('three');const {OrbitControls}=await import('three/addons/controls/OrbitControls.js');if(disposed||!mount.current)return;
- const params=new URLSearchParams(location.search),config=parseConfig(location.search),s5TimingEnabled=params.get('s5Timing')==='1',startupTimingEnabled=params.get('startupTiming')==='1',scene=new THREE.Scene();setS5TimingVisible(s5TimingEnabled);scene.background=new THREE.Color('#111923');
+ const params=new URLSearchParams(location.search),config=parseLaunchConfig(location.search),s5TimingEnabled=params.get('s5Timing')==='1',startupTimingEnabled=params.get('startupTiming')==='1',scene=new THREE.Scene();setS5TimingVisible(s5TimingEnabled);scene.background=new THREE.Color('#111923');
  let timingTier=config.tier,startup:any=null,startupTrace:any=null;
+ setTier(config.tier);setTime(config.time);setCamera(config.camera);
  const groups:any={};for(const name of ['world','dynamic','overlay']){groups[name]=new THREE.Group();groups[name].name=name;scene.add(groups[name]);}
  const canvas=document.createElement('canvas');const context=canvas.getContext('webgl2',{antialias:false,powerPreference:'high-performance'});const renderer=context?new THREE.WebGLRenderer({canvas,context,antialias:false,powerPreference:'high-performance'}):null;if(renderer){renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;}else{setError('この検証環境ではWebGL 2を利用できません。描画・FPSは未検証です。');}mount.current.appendChild(canvas);
  const stopShaderErrors=watchShaderErrors(renderer,setError);
