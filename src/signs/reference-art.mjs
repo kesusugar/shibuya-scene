@@ -13,10 +13,17 @@
 import {CanvasTexture, DataTexture, SRGBColorSpace, LinearFilter, RGBAFormat} from 'three';
 import {REFERENCE_ADS} from './reference-ads.mjs';
 
-export const REFERENCE_QUALITY = Object.freeze({high: 4096, medium: 2048, low: 1024});
+// 4096 was measured at 11.7 s to rasterise its 64 MB backing store, against 0.4 s for the
+// 16 MB sheet, and it cannot be prebaked away: a committed PNG still has to decode and
+// upload the same 64 MB bitmap. HIGH therefore matches the city atlas at 2048, which still
+// gives each reference panel 409x341 against a shared city tile's 256x512.
+export const REFERENCE_QUALITY = Object.freeze({high: 2048, medium: 1024, low: 512});
+// Columns follow the number of panels actually being drawn, so a sheet built for the
+// advertisements this scene places does not reserve pixels for the ones it does not.
 export const REFERENCE_COLUMNS = 5;
+export const columnsFor = count => Math.max(1, Math.ceil(Math.sqrt(Math.max(1, count))));
 
-export function referenceAtlasEntries(size, count, columns = REFERENCE_COLUMNS) {
+export function referenceAtlasEntries(size, count, columns = columnsFor(count)) {
  const rows = Math.max(1, Math.ceil(count / columns)), w = size / columns, h = size / rows;
  const padding = Math.max(2, size / 1024);
  return Array.from({length: count}, (_, id) => {
@@ -234,7 +241,7 @@ export const REFERENCE_ART = Object.freeze({
 /** Ids the inventory carries that this sheet can draw. */
 export const PAINTED_IDS = Object.freeze(Object.keys(REFERENCE_ART).map(Number).sort((a, b) => a - b));
 
-export function paintReferenceAtlas(ctx, size, ids = PAINTED_IDS, columns = REFERENCE_COLUMNS) {
+export function paintReferenceAtlas(ctx, size, ids = PAINTED_IDS, columns = columnsFor(ids.length)) {
  const entries = referenceAtlasEntries(size, ids.length, columns);
  ctx.fillStyle = '#05070b'; ctx.fillRect(0, 0, size, size);
  ids.forEach((id, index) => {

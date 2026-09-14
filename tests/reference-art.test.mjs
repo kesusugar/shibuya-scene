@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {REFERENCE_ADS} from '../src/signs/reference-ads.mjs';
 import {REFERENCE_ART, PAINTED_IDS, PAINTED_ADS, REFERENCE_QUALITY, REFERENCE_COLUMNS,
- referenceAtlasEntries, paintReferenceAtlas, createReferenceAtlas} from '../src/signs/reference-art.mjs';
+ referenceAtlasEntries, paintReferenceAtlas, createReferenceAtlas, columnsFor} from '../src/signs/reference-art.mjs';
 
 /** Record every drawing call a painter makes, so its composition can be inspected. */
 function record() {
@@ -74,11 +74,27 @@ test('the sheet packs without overlap and stays inside the texture', () => {
  }
 });
 
-test('a reference tile carries far more pixels than a generic city tile', () => {
- const entry = referenceAtlasEntries(REFERENCE_QUALITY.high, PAINTED_IDS.length)[0];
- // The city atlas spreads 32 tiles over an 8x4 grid at 2048.
+test('a reference tile carries more pixels than a generic city tile', () => {
+ // The city atlas spreads 32 tiles over an 8x4 grid at 2048, and every one of them is
+ // shared by many faces. The point of a separate sheet is that the advertisements the
+ // camera reads get their own tile, and a bigger one - which only holds if the sheet is
+ // built for the advertisements a scene actually places rather than the whole inventory.
  const cityTile = (2048 / 8) * (2048 / 4);
- assert.ok(entry.w * entry.h > cityTile * 2, `reference tile ${entry.w}x${entry.h} is not a meaningful gain`);
+ for (const count of [8, 12, 16]) {
+  const entry = referenceAtlasEntries(REFERENCE_QUALITY.high, count)[0];
+  assert.ok(entry.w * entry.h >= cityTile * 2,
+   `${count} panels give a ${Math.round(entry.w)}x${Math.round(entry.h)} tile, no gain over the city atlas`);
+ }
+});
+
+test('the sheet grid stays square as the panel count changes', () => {
+ for (const count of [1, 5, 15, 30]) {
+  const entries = referenceAtlasEntries(REFERENCE_QUALITY.high, count);
+  assert.equal(entries.length, count);
+  const columns = columnsFor(count);
+  assert.ok(columns * columns >= count, `${count} panels do not fit ${columns} columns`);
+  assert.ok((columns - 1) * (columns - 1) < count || count === 1, `${count} panels waste a column`);
+ }
 });
 
 test('painting the sheet draws every panel inside its own clip', () => {
