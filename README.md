@@ -1,5 +1,11 @@
 # RUN S9 — Traffic System
 
+## Current development and collaboration
+
+This repository is now developed beyond the historical RUN S9 baseline described below. Read [the current implementation status](docs/IMPLEMENTATION-STATUS.md) before editing. Shared agent rules are in [AGENTS.md](AGENTS.md), Claude Code setup is in [CLAUDE.md](CLAUDE.md), and the GitHub branch/PR workflow is documented in [docs/COLLABORATION.md](docs/COLLABORATION.md).
+
+On Windows, install dependencies with `npm ci` and start the local preview with `npm run dev:local`. The printed local URL is authoritative.
+
 S9 adds directed OSM traffic lanes, left-side travel, curved legal connections, seven procedural vehicle types, pooled movement and selected curb parking. Following uses nearby spatial buckets and a 25m route lookahead; intersection entry checks reserve exit space. Signals expose a read-only-by-convention S10 interface (`signalAPI.getSignalState`, `getPedestrianPhase`, `getCrossingTrafficState`). No pedestrians, trains, gameplay or night lighting are implemented.
 
 Traffic densities start at HIGH 62 / MEDIUM 30 / LOW 14 moving vehicles, plus parked vehicles. Safety and available route capacity take priority. Cars follow a conservative route graph; unusable continuations and stuck traffic recover through the fixed pool. S8 physical signals receive shared colored lens instances. Existing renderer profiles, cameras and debug controls remain.

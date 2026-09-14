@@ -16,7 +16,7 @@ test('facade daylight response and bounded night pavement pools retain shader li
   const shader={uniforms:{},vertexShader:ShaderLib.standard.vertexShader,fragmentShader:ShaderLib.standard.fragmentShader};
   m.onBeforeCompile(shader);
   assert.equal(shader.uniforms.s12Night,hook.uniform);
-  assert.ok(shader.fragmentShader.includes(mode==='wall'?'vec3(0.68,0.70,0.72)':'length(q-c)/24.0'));
+  assert.ok(shader.fragmentShader.includes(mode==='wall'?'vec3(0.68,0.70,0.72)':'length(q-c)/16.0'));
   hook.restore();assert.equal(m.onBeforeCompile,original);m.dispose();
  }
 });
