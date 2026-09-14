@@ -2,11 +2,12 @@ import {Color,Vector3,Mesh,SphereGeometry,ShaderMaterial,BackSide} from 'three';
 
 export const SOLAR_PHASES=Object.freeze({
  dawn:{angle:.10,night:.45,sky:0x947d99,horizon:0xffc594,sun:0xffbf80,key:1.0,fill:.30,exposure:.78},
- day:{angle:1.12,night:0,sky:0x91c9ed,horizon:0xe4eef3,sun:0xfff3dc,key:2.1,fill:.38,exposure:.78},
+ day:{angle:1.12,night:0,sky:0x80acd1,horizon:0xc9d0d5,sun:0xfff3e2,key:1.65,fill:.30,exposure:.74},
  dusk:{angle:3.00,night:.55,sky:0x635c8b,horizon:0xffa46b,sun:0xff985a,key:.85,fill:.24,exposure:.80},
  night:{angle:3.55,night:1,sky:0x03060c,horizon:0x101727,sun:0xacc5ec,key:.08,fill:.22,exposure:.86}
 });
 export function solarSample(from,to,t){const a=SOLAR_PHASES[from],b=SOLAR_PHASES[to],s=Math.max(0,Math.min(1,t));return blend(a,b,s*s*(3-2*s));}
+const WHITE=new Color(0xffffff),DAY_FILL=new Color(0xfff6e9);
 function blend(a,b,t){const out={};for(const k of ['angle','night','key','fill','exposure'])out[k]=a[k]+(b[k]-a[k])*t;for(const k of ['sky','horizon','sun'])out[k]=new Color(a[k]).lerp(new Color(b[k]),t);return out;}
 export class SolarCycle{
  constructor(scene,environment,fidelity,clock){Object.assign(this,{scene,environment,fidelity,clock});this.phase=clock.value;this.state=blend(SOLAR_PHASES[this.phase],SOLAR_PHASES[this.phase],0);this.transition=null;
@@ -17,7 +18,7 @@ export class SolarCycle{
  update(dt){if(this.transition){const tr=this.transition;tr.elapsed+=Math.max(0,dt);const t=Math.min(1,tr.elapsed/5),s=t*t*(3-2*t);this.state=blend(tr.from,tr.to,s);if(t===1)this.transition=null;}
   const e=this.environment,f=this.fidelity,s=this.state;if(!e.active){this.sky.visible=false;return;}this.sky.visible=true;
   const direction=this.material.uniforms.direction.value.set(-Math.cos(s.angle),Math.sin(s.angle),.25).normalize();
-  e.key.position.copy(direction).multiplyScalar(220);if(direction.y<0)e.key.position.y=80;e.key.color.copy(s.sun);e.key.intensity=s.key;e.fill.intensity=s.fill;e.fill.color.copy(s.sky).lerp(new Color(0xffffff),.65);
+  e.key.position.copy(direction).multiplyScalar(220);if(direction.y<0)e.key.position.y=80;e.key.color.copy(s.sun);e.key.intensity=s.key;e.fill.intensity=s.fill;e.fill.color.copy(s.sky).lerp(WHITE,.65).lerp(DAY_FILL,(1-s.night)*.7);
   if(e.renderer)e.renderer.toneMappingExposure=s.exposure;
   this.material.uniforms.top.value.copy(s.sky);this.material.uniforms.horizon.value.copy(s.horizon);this.material.uniforms.sunColor.value.copy(s.sun);this.material.uniforms.sunVisible.value=Math.max(0,Math.min(1,direction.y*15));
   if(this.scene.fog)this.scene.fog.color.copy(s.horizon);
