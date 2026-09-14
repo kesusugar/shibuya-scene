@@ -71,6 +71,24 @@ it on a real roof. It sits lower in frame than the reference because the buildin
 it in this scene is shorter than the reference building; the placement is flagged
 `lowered` rather than faked.
 
+## Overlap resolution
+
+The placement audit in `model.mjs` guarantees the *model* signs do not intersect, but two
+layers run after it and neither was audited. `commercialLayout` replaces dense faces with a
+freshly generated grid, and the reference layer adds advertisements aimed from a
+photograph. Both can land a panel on a panel the audit already accepted.
+
+Measured on the render list: **61 intersecting pairs on master**, before any of this work.
+They are almost all a generated `:commercial:` cell cutting into an audited model sign on
+the same wall — for example `way/60739635:0:0:1:1` against
+`way/60739635:0:0:0:0:commercial:0:0`.
+
+`src/signs/overlap.mjs` is the last word before geometry is built. Panels are accepted in
+priority order — hero screens, then reference advertisements, then hero signs, then audited
+model signs, then generated filler — and anything that cuts into an accepted panel is
+dropped. The result is **0 intersecting pairs**, at the cost of 41 generated filler cells
+out of 615 faces. No hero screen, reference advertisement or audited model sign is dropped.
+
 ## Advertisements with no building
 
 These fifteen are not placed. The buildings that carry them in the reference frame do not

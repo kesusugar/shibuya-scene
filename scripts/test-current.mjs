@@ -21,6 +21,7 @@ const files=[
  'tests/real-brands.test.mjs',
  'tests/reference-ads.test.mjs',
  'tests/reference-art.test.mjs',
+ 'tests/sign-overlap.test.mjs',
  'tests/rendered-html.test.mjs',
  'tests/retail-frontage.test.mjs',
  'tests/road-spill.test.mjs',
