@@ -33,7 +33,7 @@ npm run typecheck
 node --test tests/*.test.mjs
 ```
 
-For final or integration changes, run `npm test` from Git Bash or CI. Visual changes also require settled HIGH day/night inspection at fixed camera presets. Record visual limitations honestly.
+For final or integration changes, run `npm test` from PowerShell, another shell, or CI. Visual changes also require settled HIGH day/night inspection at fixed camera presets. Record visual limitations honestly.
 
 ## Evidence policy
 

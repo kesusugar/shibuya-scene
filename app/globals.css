@@ -1,4 +1,6 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "../vendor/shadcn-tailwind-4.13.0.css";
 
 /* Reference-inspired compact overlay, without changing game controls. */
 .presentation header h1 { font-size:clamp(28px,4vw,52px); font-weight:900; letter-spacing:1px; line-height:1; text-shadow:0 3px 16px #0008; }
@@ -21,9 +23,6 @@
 .presentation .workspace { height:100dvh !important; min-height:360px; }
 .presentation .view-label { top:auto !important; bottom:18px; padding:8px 12px; background:#08101ca8; border-radius:8px; }
 .presentation .stats { top:auto !important; bottom:16px; background:#08101cb8; }
-@import "tw-animate-css";
-@import "../vendor/shadcn-tailwind-4.13.0.css";
-
 @utility scrollbar-thin {
   scrollbar-width: thin;
 }

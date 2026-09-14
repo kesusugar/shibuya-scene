@@ -28,11 +28,14 @@ Keep implementation, generated evidence, and collaboration-document changes in s
 ```powershell
 npm run typecheck
 node --test tests/*.test.mjs
+npm test
 git status --short
 git push -u origin claude/<short-topic>
 ```
 
 Create a pull request into `master` and complete the repository PR checklist. Do not work directly on the same branch as another agent.
+
+The build entrypoint is cross-platform and does not require WSL or Git Bash. It invokes the local Vinext CLI with a three-minute default timeout; override it with `SITES_BUILD_TIMEOUT_MS` only when necessary.
 
 ## Project map
 
