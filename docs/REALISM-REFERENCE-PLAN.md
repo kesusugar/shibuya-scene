@@ -27,7 +27,7 @@
 1. Reference ledger: initial sources recorded; exact era and billboard asset set remain provisional.
 2. QFRONT: interior depth, glass and display separation in progress. Exit gate requires settled day/night screenshots, readable monitor, no facade bleed-through and acceptable frame time.
 3. Principal real advertisements: started with reconstructed UC and Hisamitsu/Salonpas artwork. Two existing roof slots are provisional, not surveyed host locations. Other major advertisers and exact host placement remain pending.
-4. Lighting/materials: started solar daylight calibration with day/night integration tests; material reflection tint, spill and dry/wet road variants remain pending. See DAYLIGHT-CALIBRATION-2026-09-14.md.
+4. Lighting/materials (CURRENT): solar daylight, differentiated sign exposure, storefront spill and road color breakup implemented. Wet patches now also vary asphalt roughness at night; visual acceptance and true reflected scenery remain open. See DAYLIGHT-CALIBRATION-2026-09-14.md and ROAD-ROUGHNESS-2026-09-14.md.
 5. Stores/street fixtures: entrances, interiors and clearance validation.
 6. People/vehicles: variation without regressing traffic phase separation.
 7. Integrated QA and optimization: paired visual and performance evidence.

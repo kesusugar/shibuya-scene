@@ -20,7 +20,12 @@ s12Window*=mix(1.0,0.18,smoothstep(90.0,210.0,length(instanceMatrix[3].xz)));\ns
   }else if(mode==='wall'){
    shader.fragmentShader=shader.fragmentShader.replace('#include <color_fragment>','#include <color_fragment>\ndiffuseColor.rgb *= mix(vec3(0.68,0.70,0.72),vec3(0.32,0.37,0.46),s12Night);');
   }else if(mode==='groundPool'||mode==='groundPoolRoad'||mode==='groundPoolWalk'){
-   if(mode==='groundPoolRoad')fragment+=ROAD_SPILL_GLSL;
+   if(mode==='groundPoolRoad'){
+    fragment+=ROAD_SPILL_GLSL;
+    shader.fragmentShader=shader.fragmentShader.replace('#include <roughnessmap_fragment>',`#include <roughnessmap_fragment>
+float roadWetMask=smoothstep(.23,.76,roadNoise(s161Position.xz*.42));
+roughnessFactor=mix(roughnessFactor,mix(.82,.28,roadWetMask),s12Night*s13Nightglow);`);
+   }
    if(mode==='groundPoolWalk')fragment+=FRONTAGE_SPILL_GLSL;
    vertex='varying vec3 s161Position;\n';fragment+='varying vec3 s161Position;\n';body='s161Position=(modelMatrix*vec4(transformed,1.0)).xyz;';
    shader.fragmentShader=shader.fragmentShader.replace('#include <emissivemap_fragment>',`#include <emissivemap_fragment>
