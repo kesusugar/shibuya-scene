@@ -1,6 +1,6 @@
 # Implementation status and handoff
 
-Updated: 2026-09-14
+Updated: 2026-09-14 (reference advertisement pass)
 
 ## Target
 
@@ -12,7 +12,7 @@ The target is a dense, recognizable Shibuya night scene with believable building
 | --- | --- | --- |
 | 1. Reference ledger | Started | Settle visual era, authoritative references, and permitted artwork set. |
 | 2. QFRONT | In progress | Final day/night comparison, monitor readability, facade bleed check, production branding decision, frame-time acceptance. |
-| 3. Principal advertisements | In progress | Complete host placement and major skyline hierarchy; distinguish reconstructed from authorized assets. |
+| 3. Principal advertisements | In progress | 21 of 30 reference slots placed and all 30 drawn; 9 await buildings that do not exist yet. Skyline hierarchy still open. |
 | 4. Lighting and materials | Current | Improve shaped reflections, glass response, exposure balance, and fixed-camera visual acceptance. |
 | 5. Stores and street fixtures | Started | Add convincing lower interiors, entrances, pavement furniture, and clearance validation. |
 | 6. People and vehicles | Pending refinement | Increase variation and perceived continuity without signal-phase or performance regressions. |
@@ -28,6 +28,28 @@ Estimated visual progress toward the supplied target: 45–55%. This is a planni
 - Asphalt now has subtle relief and wetness-dependent roughness.
 - A reserved GLSL identifier that made asphalt disappear was fixed; shader failures now raise a visible alert.
 - Relevant lifecycle, material, storefront, road-shader, and type checks pass at the latest recorded implementation commit.
+- The committed static model pack was stale against its own inputs, so every clean checkout
+  silently rebuilt ground, station, signage, streetscape, traffic and crowd geometry at
+  runtime on each HIGH load. The pack is rebaked and loads again; see the stage 0 note below.
+- The reference advertisement inventory is placed on real facades and drawn on its own
+  high-resolution sheet. See `docs/REFERENCE-ADS-2026-09-14.md`.
+
+## Stage 0 findings (2026-09-14)
+
+- `public/data/shibuya-static-models.json` stored key `5ab11510...` while its inputs hash to
+  `a52355fa...`, and the mismatch predates the pack's own bake commit `78ca60e`. HIGH
+  therefore logged `[Static models] runtime fallback Error: stale static models` on every
+  clean checkout and paid full runtime generation. Rebaking fixed it.
+- The mismatch was masked locally because `npm test` runs `prebuild`, which rebakes before
+  the suite. Only `npm run test:ci` on a fresh clone exposed it, and
+  `tests/launch-config.test.mjs` was failing on master for exactly this reason.
+- Same-machine A/B under software rendering: with the pack, all 13 stages reported in 45.5 s;
+  forcing runtime generation with `?prebuilt=0` had reached only stage 6 at 54 s. These are
+  software-renderer figures and are diagnostic only, not performance acceptance.
+- `tests/rendered-html.test.mjs` and `tests/ui-components.test.mjs` each fail one case on
+  master in this environment, unrelated to scene work. Not yet diagnosed.
+- `tests/s7-signage.test.mjs` has three cases failing on master. It is not in the
+  `test:ci` lane, which is why the failures went unnoticed.
 
 ## Highest-priority next work
 
