@@ -31,6 +31,26 @@ A slot is accepted only when it lands on a camera-facing wall, within the range 
 reference frame covers, and at a size its mount type is actually built at. 21 of 30
 resolve. The rest are reported with a reason rather than relocated.
 
+`src/signs/reference-layer.mjs` applies the result at render time, not during the static
+bake, so re-aiming or redrawing an advertisement does not invalidate the geometry pack.
+Generated panels whose world footprint a slot covers are cleared by footprint rather than
+by host identity, because a slot measured from the frame routinely straddles panels
+belonging to a neighbouring host.
+
+### The placement audit
+
+Geometry that satisfies the raycast can still be wrong. Slots 19 and 20 resolved onto the
+QFRONT facade at the same position as that building's own large screen, so IKEA and ACN
+rendered stuck through the middle of it; two more hung out over the roadway. The raycast
+only ever asked "does this land on a wall", never "is that wall already occupied".
+
+Reference advertisements now clear the same `placementIssues` audit the procedural signs
+clear, accepted one at a time against everything already standing, so two reference slots
+resolving onto one wall are caught against each other as well. `vertical-host-bounds` is
+excluded because a rooftop mount is meant to stand above its host's roofline.
+
+This drops the placed count from 21 to 15. Those six were never buildable.
+
 ### Walls carrying a grid
 
 Sizing each slot from its own screen coverage is right in isolation but collides once
@@ -51,15 +71,9 @@ it on a real roof. It sits lower in frame than the reference because the buildin
 it in this scene is shorter than the reference building; the placement is flagged
 `lowered` rather than faked.
 
-`src/signs/reference-layer.mjs` applies the result at render time, not during the static
-bake, so re-aiming or redrawing an advertisement does not invalidate the geometry pack.
-Generated panels whose world footprint a slot covers are cleared by footprint rather than
-by host identity, because a slot measured from the frame routinely straddles panels
-belonging to a neighbouring host.
-
 ## Advertisements with no building
 
-These nine are not placed. The buildings that carry them in the reference frame do not
+These fifteen are not placed. The buildings that carry them in the reference frame do not
 exist in this scene, and inventing a wall would put the advertisement somewhere the
 reference never showed it. Artwork for all of them is already drawn, so adding the
 buildings is the only remaining work.
@@ -75,12 +89,20 @@ buildings is the only remaining work.
 | 26 | STARBUCKS | high | no-host-on-ray |
 | 29 | CITY DRUG | low | no-host-on-ray |
 | 30 | サンドラッグ | high | no-host-on-ray |
+| 12 | SHIBUYA 109 | medium | placement-audit:facade-distance |
+| 13 | UC | high | placement-audit:road-projection |
+| 14 | 龍角散ダイレクト | medium | placement-audit:road-projection |
+| 17 | もん字 | low | placement-audit:facade-distance |
+| 19 | IKEA | high | placement-audit:duplicate-overlap |
+| 20 | ACN | medium | placement-audit:duplicate-overlap |
 
 `no-host-on-ray` means the sight line leaves the scene without meeting a building.
 `facade-recedes-from-view` means the wall it met runs away from the camera, so the recorded
 screen coverage would demand an implausibly long sign. `resolved-wider-than-mount-allows`
 and `host-beyond-reference-range` both mean the ray flew past the intended mid-distance
-building and struck something far behind it.
+building and struck something far behind it. A `placement-audit:` reason means the slot
+found a wall but failed the shared sign audit — it overlapped an existing sign, stood off
+its facade, or projected over the roadway.
 
 ## Artwork
 

@@ -5,7 +5,7 @@
 // the display signs the procedural layout produced and swaps the generic panels that
 // occupy a reference slot for the reference advertisement itself.
 
-import {makePlacement} from './model.mjs';
+import {makePlacement, placementIssues} from './model.mjs';
 import {CAMERAS} from '../app/foundation.mjs';
 import {resolveReferenceAds} from './reference-ads.mjs';
 
@@ -21,7 +21,24 @@ function overlaps(a, b, margin = 0) {
  * sign is dropped when it shares a facade with a reference slot and their footprints
  * overlap, so the reference artwork never renders on top of a sticker it did not replace.
  */
-export function applyReferenceAds(signs, hosts, {camera = CAMERAS.find(c => c.id === 'scramble'), variantOf} = {}) {
+/**
+ * Placement faults that disqualify a reference advertisement outright.
+ *
+ * A reference slot is aimed from a photograph, so it can land on a wall that already
+ * carries something — most visibly QFRONT's own screen, which a slot measured beside it
+ * will happily sit on top of. These are the faults the procedural signs are already
+ * audited for; reference advertisements must clear the same bar rather than bypass it.
+ *
+ * `vertical-host-bounds` is deliberately absent: a rooftop mount is supposed to stand
+ * above its host's roofline, which that check reads as leaving the building.
+ */
+export const FATAL_ISSUES = Object.freeze([
+ 'invalid-transform', 'invalid-normal', 'backface', 'corner-overrun', 'facade-distance',
+ 'host-penetration', 'neighbor-penetration', 'duplicate-overlap', 'near-overlap',
+ 'road-projection', 'crosswalk-projection', 'rail-clearance', 'tile-edge'
+]);
+
+export function applyReferenceAds(signs, hosts, {camera = CAMERAS.find(c => c.id === 'scramble'), variantOf, context} = {}) {
  if (!hosts?.length) return {signs, placed: [], unplaced: []};
  const {placed, unplaced} = resolveReferenceAds(hosts, camera);
  // Reference slots are measured from the frame, not from the procedural grid, so a slot
@@ -44,6 +61,7 @@ export function applyReferenceAds(signs, hosts, {camera = CAMERAS.find(c => c.id
   });
  });
 
+ const rejected = [];
  const added = placed.map(p => {
   const vertical = VERTICAL.has(p.ad.mount);
   const sign = makePlacement(
@@ -59,5 +77,18 @@ export function applyReferenceAds(signs, hosts, {camera = CAMERAS.find(c => c.id
   sign.emissive = {...sign.emissive, class: p.category === 'screen' || p.roof ? 'screen' : 'commercial'};
   return sign;
  });
- return {signs: [...kept, ...added], placed, unplaced, replaced: signs.length - kept.length};
+
+ // Audit the reference advertisements against everything that survived, exactly as the
+ // procedural signs are audited. Accepting them one at a time means two reference slots
+ // resolving onto the same wall are caught against each other too.
+ const accepted = [];
+ for (const sign of added) {
+  const issues = context ? placementIssues(sign, context, [...kept, ...accepted]) : [];
+  const fatal = issues.filter(issue => FATAL_ISSUES.includes(issue));
+  if (fatal.length) rejected.push({...sign.referenceAd, reason: 'placement-audit:' + fatal.join('+')});
+  else accepted.push(sign);
+ }
+ const keptIds = new Set(accepted.map(s => s.referenceAd.id));
+ return {signs: [...kept, ...accepted], placed: placed.filter(p => keptIds.has(p.ad.id)),
+  unplaced: [...unplaced, ...rejected], rejected, replaced: signs.length - kept.length};
 }

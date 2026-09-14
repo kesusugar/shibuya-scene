@@ -11,6 +11,8 @@ import {CAMERAS} from '../src/app/foundation.mjs';
 import {REFERENCE_ADS, REFERENCE_VIEW, MOUNT_CATEGORY, MAX_WIDTH, MAX_RANGE, MIN_FACING,
  referenceBasis, adRay, intersectHosts, resolveReferenceAds} from '../src/signs/reference-ads.mjs';
 import {applyReferenceAds} from '../src/signs/reference-layer.mjs';
+import {buildSignModel} from '../src/signs/model.mjs';
+import {commercialLayout} from '../src/signs/commercial-layout.mjs';
 
 const data = JSON.parse(readFileSync('public/data/shibuya-scene-data.json'));
 const ground = buildGroundModel(data), generic = buildBuildingModel(data);
@@ -102,6 +104,39 @@ test('the render layer clears the panels a reference slot covers', () => {
   assert.ok(Math.abs(Math.hypot(...sign.normal) - 1) < 1e-6);
   assert.equal(sign.emissive.class, ['screen', 'rooftop'].includes(sign.category) ? 'screen' : 'commercial');
  }
+});
+
+test('a reference slot is audited like any other sign and never stamped onto one', () => {
+ // Regression: slots 19 and 20 resolved onto the QFRONT facade at the same position as
+ // that building's own large screen, so IKEA and ACN rendered stuck through the middle of
+ // it. Two more hung over the roadway. Reference advertisements must clear the same
+ // placement audit the procedural signs already clear.
+ const model = buildSignModel(data, {generic, ground, core, heroes, tier: 'high'});
+ const layout = commercialLayout(model.signs, 32);
+ const audited = applyReferenceAds(layout, model.hosts, {camera, context: model.context});
+ const unaudited = applyReferenceAds(layout, model.hosts, {camera});
+
+ const screens = audited.signs.filter(s => s.screenUV);
+ assert.ok(screens.length, 'the scene must still carry its hero screens');
+ for (const ad of audited.signs.filter(s => s.referenceAd)) {
+  for (const screen of screens) {
+   const dx = ad.position[0] - screen.position[0], dz = ad.position[2] - screen.position[2];
+   const offPlane = Math.abs(dx * screen.normal[0] + dz * screen.normal[2]);
+   const across = Math.abs(dx * screen.normal[2] - dz * screen.normal[0]);
+   const apart = offPlane > 2.5 || across >= (ad.width + screen.width) / 2 ||
+    Math.abs(ad.position[1] - screen.position[1]) >= (ad.height + screen.height) / 2;
+   assert.ok(apart, `${ad.referenceAd.brand} is stamped onto ${screen.id}`);
+  }
+ }
+ // The audit must be doing the work, not luck: it has to reject placements that the
+ // unaudited path accepts, and every rejection has to name the fault it found.
+ assert.ok(audited.rejected.length > 0, 'the audit rejected nothing at all');
+ assert.ok(audited.placed.length < unaudited.placed.length, 'the audit changed no outcome');
+ for (const r of audited.rejected) {
+  assert.match(r.reason, /^placement-audit:/);
+  assert.ok(!audited.placed.some(p => p.ad.id === r.ad?.id ?? r.id), 'a rejected slot is still placed');
+ }
+ assert.equal(audited.placed.length + audited.unplaced.length, REFERENCE_ADS.length);
 });
 
 test('an empty host set leaves the procedural signs untouched', () => {
