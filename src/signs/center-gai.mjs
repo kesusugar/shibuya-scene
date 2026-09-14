@@ -1,5 +1,6 @@
 import {Group,Mesh,BoxGeometry,PlaneGeometry,MeshStandardMaterial,CanvasTexture,DataTexture,SRGBColorSpace,BufferGeometry,Float32BufferAttribute,LineSegments,LineBasicMaterial,TubeGeometry,CatmullRomCurve3,Vector3} from 'three';
 import {merge} from '../geo/geometry.mjs';
+import {REAL_BRANDS,paintRealBrand} from './real-brands.mjs';
 
 // Surveyed alley-facing edges, not the road-facing facade chosen by generic signage.
 export const CENTER_FACADES=[
@@ -36,7 +37,8 @@ export const CENTER_ADS=[
  ['fenn.chat','chat with your world','#61d5f4','#17405a','chat'],
  ['にじいろサウンド','MUSIC / LIVE / SHIBUYA','#c845dc','#fff8ed','rainbow'],
  ['Q F R O N T','','#08131e','#ffffff','qfront'],
- ['Coca-Cola','','#d41422','#fff8ee','coca']
+ ['Coca-Cola','','#d41422','#fff8ee','coca'],
+ ...REAL_BRANDS
 ];
 export function centerGaiLayout(){const signs=[];for(const [bi,f] of CENTER_FACADES.entries()){
  const dx=f.b[0]-f.a[0],dz=f.b[1]-f.a[1],length=Math.hypot(dx,dz),t=[dx/length,dz/length],heading=Math.atan2(f.normal[0],f.normal[1]);
@@ -77,6 +79,10 @@ export function centerGaiLayout(){const signs=[];for(const [bi,f] of CENTER_FACA
  for(const s of [{p:[-47,27.4,-34],variant:15,width:9},{p:[-53,28,-44],variant:26,width:8.4},{p:[-60.5,27.2,-35],variant:21,width:7}])signs.push({building:'way/136690966',surface:'roof-rear',kind:'roof',variant:s.variant,position:s.p,heading:.107,width:s.width,height:3.8});
  signs.push({building:'way/136691386',surface:'crown',kind:'advert',variant:27,position:[-8,40.2,-29.3],heading:.1589,width:9.5,height:2.2});
  signs.push({building:'way/136691386',surface:'roof-brand',kind:'roof',variant:28,position:[-9.5,47.6,-32],heading:.1589,width:18,height:5.4});
+ // First reference-brand pass reuses two existing rooftop supports. Host positions
+ // are provisional and deliberately identified for the next placement audit.
+ const roofSlots=signs.filter(s=>s.surface==='roof-rear'),brandSlots=[roofSlots[2],roofSlots[0]];
+ for(const [i,variant] of [29,30].entries()){const s=brandSlots[i];s.variant=variant;s.width=6.4;s.height=6.4;s.position[1]+=1.3;s.referencePlacement='provisional-existing-slot';}
  return signs;}
 
 function atlas(factory){const canvas=factory?factory():typeof document!=='undefined'?document.createElement('canvas'):null;
@@ -86,6 +92,7 @@ function atlas(factory){const canvas=factory?factory():typeof document!=='undefi
   const x=i%4*512,y=Math.floor(i/4)*512;c.save();c.translate(x,y);c.fillStyle=bg;c.fillRect(0,0,512,512);c.fillStyle=fg;c.strokeStyle=fg;c.lineWidth=12;c.textAlign='center';c.textBaseline='middle';
   const text=(value,size,px,py,width=470)=>{c.font=`bold ${size}px "Yu Gothic","Meiryo",sans-serif`;c.fillText(value,px,py,width);};
   const circle=(cx,cy,r)=>{c.beginPath();c.arc(cx,cy,r,0,Math.PI*2);c.fill();};
+  if(paintRealBrand(c,style)){c.restore();return;}
   // Artwork uses a different icon, composition and colour treatment for each business.
   if(style==='coca'){c.font='italic bold 210px "Brush Script MT","Segoe Script",cursive';c.fillText('Coca-Cola',230,252,410);c.strokeStyle=fg;c.lineWidth=9;c.beginPath();c.moveTo(55,333);c.bezierCurveTo(160,282,340,375,457,306);c.stroke();c.restore();return;}
   if(style==='qfront'){text(title,91,256,256,470);c.restore();return;}

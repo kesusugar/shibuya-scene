@@ -26,7 +26,7 @@
 ## Stages
 1. Reference ledger: initial sources recorded; exact era and billboard asset set remain provisional.
 2. QFRONT: interior depth, glass and display separation in progress. Exit gate requires settled day/night screenshots, readable monitor, no facade bleed-through and acceptable frame time.
-3. Principal real advertisements: research individual hosts and artwork rights before replacement.
+3. Principal real advertisements: started with reconstructed UC and Hisamitsu/Salonpas artwork. Two existing roof slots are provisional, not surveyed host locations. Other major advertisers and exact host placement remain pending.
 4. Lighting/materials: contrast, spill and dry/wet road variants.
 5. Stores/street fixtures: entrances, interiors and clearance validation.
 6. People/vehicles: variation without regressing traffic phase separation.
@@ -34,3 +34,10 @@
 
 ## Current iteration
 Upper glass now has actual transparency over bounded shallow room geometry. Six representative upper levels supplement the retained low two-storey frontage. Furniture, dark occupants and alternating warm/dim ceiling lights use five merged batches, with no dynamic point lights. Exact interiors, production logos and full visual acceptance are not yet claimed.
+
+## Reference-brand pass
+- UC reference: https://www2.uccard.co.jp/uc/profile/news_r/pdf/news_r640.pdf establishes the Shibuya brand sign's history, not current artwork or placement measurements.
+- Hisamitsu reference: https://www.hisamitsu.co.jp/company/pdf/news_release_200515.pdf establishes the crossing's Salonpas sign and 2020 blue-light campaign; that temporary lighting is not the selected artwork.
+- Colors and lettering follow the user's supplied daylight photograph. These are reconstructed Canvas drawings, not downloaded official artwork, and do not establish licensing or endorsement.
+- Two existing rooftop supports reuse the same 2048 x 4096 atlas and material batches. No added point lights. Provisional positions must be corrected in the host-building pass.
+- Live night overview inspected: initial depth overlap led to spacing the two brands into separate roof slots. Stage 2 daylight calibration and performance gate are still open. Stages 4–7 remain planned, not completed.
