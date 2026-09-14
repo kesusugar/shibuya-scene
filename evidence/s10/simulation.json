@@ -1,243 +1,168 @@
 {
   "seconds": 180,
   "network": {
+    "waitingCells": 49,
     "nodes": 12860,
-    "edges": 54064,
-    "crossingPaths": 100,
-    "scramblePaths": 25,
+    "edges": 54101,
+    "crossingPaths": 137,
+    "scramblePaths": 62,
     "components": 571,
     "eligible": 10460,
     "footwaySources": 222,
     "rejectedCrossings": 54,
-    "generationMs": 14991
+    "generationMs": 26096
   },
   "crowd": {
-    "spawned": 514,
-    "despawned": 94,
+    "spawned": 1276,
+    "despawned": 386,
     "reasons": {
-      "stuck": 93,
-      "invalid-route": 1
+      "stuck": 386
     },
-    "recoveries": 93,
-    "stuck": 93,
-    "routeCompletions": 445,
+    "recoveries": 386,
+    "stuck": 386,
+    "routeCompletions": 317,
     "signalViolations": 0,
     "entries": {
-      "way/355248081:1": 4,
-      "way/355248083:-1": 3,
-      "node/2253567072:1": 1,
-      "way/355248078:1": 4,
-      "way/355248078:-1": 7,
-      "way/700497155:1": 1,
-      "way/1507031455:1": 3,
-      "way/355252211:1": 2,
-      "way/664877555:1": 1,
-      "way/1151968435:-1": 5,
-      "node/1685220983:1": 1,
-      "way/1507031461:-1": 4,
-      "way/754454449:1": 4,
-      "way/355248081:-1": 7,
+      "way/355248078:1": 9,
       "way/754454449:-1": 4,
-      "node/10157692127:1": 2,
       "way/1462471075:-1": 4,
-      "way/355248080:1": 5,
-      "way/906194284:-1": 1,
-      "way/1112568720:-1": 1,
-      "way/553526347:-1": 1,
-      "way/664532507:1": 1,
-      "way/1391515614:1": 1,
-      "way/647401094:-1": 2,
-      "way/355248423:-1": 1,
-      "node/2253589606:1": 2,
-      "node/10605619818:-1": 2,
-      "way/355252210:1": 2,
-      "way/372165785:1": 1,
-      "way/355248083:1": 2,
-      "way/665967927:1": 1,
-      "way/355254046:-1": 1,
-      "way/355248080:-1": 3,
-      "way/1507031455:-1": 2,
-      "node/2253567072:-1": 4,
-      "way/1462471075:1": 2,
-      "way/355252211:-1": 4,
-      "way/1151968435:1": 1,
-      "node/10157692127:-1": 1,
-      "way/1112568720:1": 1,
-      "way/754454448:1": 1,
-      "node/2253589606:-1": 1
+      "way/1507031461:-1": 2,
+      "way/355248081:1": 10,
+      "way/355248080:-1": 5,
+      "way/1151968435:-1": 1,
+      "way/355248083:1": 4,
+      "way/1507031461:1": 2
     },
     "completed": {
-      "way/700497155:1": 1,
-      "way/1507031455:1": 2,
-      "node/2253567072:1": 1,
-      "node/10157692127:1": 2,
-      "way/1112568720:-1": 1,
-      "node/1685220983:1": 1,
-      "way/1151968435:-1": 5,
-      "way/355248423:-1": 1,
-      "node/2253589606:1": 2,
-      "way/1391515614:1": 1,
-      "way/647401094:-1": 2,
-      "node/10605619818:-1": 2,
-      "way/1507031461:-1": 4,
-      "way/664877555:1": 1,
-      "way/355254046:-1": 1,
+      "way/1507031461:-1": 2,
+      "way/1151968435:-1": 1,
       "way/1462471075:-1": 4,
-      "way/355252211:1": 2,
-      "way/665967927:1": 1,
-      "way/355252210:1": 2,
-      "way/355248078:-1": 6,
-      "way/664532507:1": 1,
-      "way/355248080:1": 5,
-      "way/355248078:1": 2,
-      "way/553526347:-1": 1,
-      "way/372165785:1": 1,
-      "way/355248081:-1": 1,
-      "node/2253589606:-1": 1,
-      "way/355248081:1": 2,
-      "way/355252211:-1": 1,
-      "way/754454449:-1": 4,
-      "way/355248080:-1": 1,
-      "way/355248083:-1": 3,
-      "way/906194284:-1": 1,
-      "way/754454448:1": 1,
-      "way/754454449:1": 3
+      "way/355248080:-1": 5,
+      "way/355248081:1": 3,
+      "way/355248078:1": 5,
+      "way/355248083:1": 3,
+      "way/754454449:-1": 4
     },
-    "neighborChecks": 10251411,
-    "avoidanceChecks": 654836,
-    "updateMs": 5.376470000017434,
-    "throttled": 1189734,
-    "spawnDeferred": 0,
-    "cancelledCurbAdmissions": 31,
-    "total": 420,
+    "neighborChecks": 69381827,
+    "avoidanceChecks": 1566513,
+    "updateMs": 41.713899999973364,
+    "throttled": 1597826,
+    "spawnDeferred": 2668,
+    "cancelledCurbAdmissions": 14,
+    "target": 1978,
+    "choreographed": 0,
+    "waitingCells": 49,
+    "total": 890,
     "tier": "high",
     "archetypes": {
-      "office": 40,
-      "student": 39,
-      "casual": 44,
-      "hoodie": 41,
-      "shopper": 40,
-      "tourist": 43,
-      "elderly": 39,
-      "jogger": 40,
-      "pastel": 41,
-      "umbrella": 40,
-      "kid": 13
+      "office": 86,
+      "student": 89,
+      "casual": 90,
+      "hoodie": 86,
+      "shopper": 87,
+      "tourist": 88,
+      "elderly": 87,
+      "jogger": 87,
+      "pastel": 88,
+      "umbrella": 87,
+      "kid": 15
     },
     "modes": {
       "idle": 64,
       "milling": 36,
       "group": 45,
-      "ambient": 275
+      "ambient": 745
     },
     "states": {
       "idle": 64,
       "milling": 36,
-      "walking": 231,
-      "waiting": 89
+      "walking": 668,
+      "waiting": 122
     },
     "lod": {
-      "far": 176,
-      "near": 161,
-      "mid": 83
+      "far": 126,
+      "near": 236,
+      "mid": 528
     },
     "regions": {
-      "center-gai": 126,
-      "hachiko": 170,
-      "commercial": 112,
-      "station": 12
+      "station": 45,
+      "hachiko": 209,
+      "center-gai": 70,
+      "commercial": 566
     },
-    "hachiko": 177,
-    "centerGai": 122,
-    "groupCount": 18,
+    "hachiko": 238,
+    "centerGai": 65,
+    "groupCount": 16,
     "queueSizes": {
-      "way/355248080:-1": 5,
-      "way/355248083:1": 7,
-      "way/355248081:-1": 8,
-      "way/355248078:1": 4,
-      "way/754454449:1": 6,
-      "way/372165785:1": 0,
-      "way/355248081:1": 2,
-      "node/10605619818:-1": 0,
-      "way/1507031455:-1": 2,
-      "way/355248078:-1": 1,
-      "way/754454449:-1": 7,
-      "way/355248083:-1": 1,
-      "node/1685220983:1": 0,
-      "node/10157692127:1": 1,
-      "way/1462471075:1": 3,
-      "way/1151968435:-1": 3,
-      "node/2253567072:-1": 5,
-      "way/665967927:1": 0,
-      "way/355248080:1": 0,
-      "way/355252210:1": 0,
+      "way/355248081:-1": 17,
+      "way/355248078:-1": 13,
+      "way/355248083:1": 10,
+      "way/355248080:1": 7,
+      "way/754454449:-1": 6,
+      "way/355248078:1": 12,
+      "way/355248080:-1": 6,
+      "way/355248083:-1": 10,
+      "way/1507031461:-1": 0,
+      "way/355248081:1": 10,
+      "way/754454449:1": 7,
       "way/1462471075:-1": 1,
-      "way/355252211:-1": 4,
-      "way/906194284:-1": 1,
-      "way/700497155:1": 1,
-      "way/1507031455:1": 2,
-      "node/2253589606:1": 0,
-      "way/1112568720:1": 3,
-      "way/355252211:1": 1,
-      "way/1151968435:1": 2,
-      "way/1507031461:-1": 1,
-      "way/1112568720:-1": 1,
-      "way/1391515614:1": 0,
-      "way/647401094:-1": 0,
-      "way/355248423:-1": 0,
-      "way/664877555:1": 1,
-      "way/553526347:-1": 0,
-      "node/2253567072:1": 0,
-      "way/355254046:-1": 0,
-      "way/664532507:1": 0,
-      "node/10157692127:-1": 2,
-      "way/1391515614:-1": 2,
-      "way/647401094:1": 2,
-      "way/553526347:1": 1,
-      "way/553526351:1": 1,
-      "way/665967927:-1": 1,
-      "node/2253589606:-1": 1,
-      "way/553526349:1": 2,
       "way/1507031461:1": 2,
-      "node/2071048416:-1": 1,
-      "way/355248423:1": 1
+      "way/1151968435:-1": 1,
+      "way/1391515614:-1": 1,
+      "node/8007279067:1": 1,
+      "way/1507031455:-1": 1,
+      "node/2253567072:-1": 2,
+      "node/10157692127:1": 1,
+      "way/1151968435:1": 1,
+      "way/1330873756:-1": 1,
+      "way/664877555:1": 1,
+      "way/1112568720:-1": 2,
+      "node/2393500042:-1": 1,
+      "way/355252211:-1": 2,
+      "way/664532507:1": 1,
+      "way/647401094:-1": 1,
+      "node/10605619818:-1": 1,
+      "way/355248423:-1": 1,
+      "way/1391515614:1": 1,
+      "node/2253590793:1": 1
     }
   },
   "traffic": {
-    "spawned": 149,
+    "spawned": 152,
     "admissions": {
-      "junction:1:-3:NS": 356,
-      "junction:1:-2:NS": 3,
+      "junction:1:-3:NS": 5,
+      "junction:1:-2:NS": 5,
       "junction:4:-2:NS": 3,
-      "junction:-3:-3:NS": 1197,
+      "junction:-3:-3:NS": 1297,
       "junction:1:5:NS": 3,
-      "scramble:NS": 3,
+      "scramble:NS": 2,
       "junction:4:0:NS": 7,
-      "junction:0:2:NS": 5,
+      "junction:0:2:NS": 6,
       "junction:0:-4:EW": 4,
-      "junction:-5:4:EW": 2,
+      "junction:-5:4:EW": 3,
       "junction:-3:-3:EW": 1,
       "junction:-4:-3:EW": 813,
       "junction:-4:-1:EW": 2,
-      "scramble:EW": 5,
+      "scramble:EW": 4,
       "junction:3:0:EW": 4,
       "junction:4:-2:EW": 3,
-      "junction:-2:-3:EW": 2,
+      "junction:-2:-3:EW": 4,
       "junction:5:3:EW": 6,
       "junction:-5:-4:EW": 1,
       "junction:4:0:EW": 2,
       "junction:4:-4:EW": 1,
       "junction:1:-4:EW": 3,
       "junction:-2:-3:NS": 1,
-      "junction:1:-4:NS": 1
+      "junction:1:-4:NS": 1,
+      "junction:0:-2:EW": 1
     },
     "crossingEntries": {
-      "junction:1:-3:NS": 3,
+      "junction:1:-3:NS": 5,
       "junction:4:-2:NS": 3,
       "junction:4:0:NS": 10,
-      "junction:1:-2:NS": 3,
-      "junction:0:2:NS": 5,
-      "scramble:NS": 9,
+      "junction:1:-2:NS": 5,
+      "junction:0:2:NS": 6,
+      "scramble:NS": 6,
       "junction:4:0:EW": 3,
       "junction:1:5:NS": 1,
       "junction:0:-4:EW": 4,
@@ -245,44 +170,45 @@
       "junction:-4:-1:EW": 2,
       "junction:3:0:EW": 8,
       "junction:4:-4:EW": 1,
-      "junction:-2:-3:EW": 1,
+      "junction:-2:-3:EW": 5,
       "junction:-3:-3:EW": 1,
-      "scramble:EW": 9,
+      "scramble:EW": 7,
       "junction:-5:-4:EW": 1,
-      "junction:-5:4:EW": 2,
+      "junction:-5:4:EW": 3,
       "junction:-4:-3:EW": 3,
       "junction:4:-2:EW": 3,
       "junction:1:-4:EW": 3,
       "junction:1:-4:NS": 4,
-      "junction:-2:-3:NS": 1
+      "junction:-2:-3:NS": 1,
+      "junction:0:-2:EW": 1
     },
-    "junctionEntries": 173,
-    "distanceTravelled": 9020.657698859313,
-    "despawned": 76,
-    "recoveries": 20,
-    "routeFailures": 56,
-    "permitYields": 2363,
-    "stuck": 20,
+    "junctionEntries": 190,
+    "distanceTravelled": 9625.72039664636,
+    "despawned": 79,
+    "recoveries": 19,
+    "routeFailures": 60,
+    "permitYields": 2111,
+    "stuck": 19,
     "redViolations": 0,
     "redEvents": [],
     "overlaps": 0,
-    "blockedEntries": 92275,
-    "neighborChecks": 12597601,
-    "updateMs": 1.82221500002197,
+    "blockedEntries": 89521,
+    "neighborChecks": 11942063,
+    "updateMs": 3.812999999965541,
     "reasons": {
-      "route-end": 56,
-      "stuck": 20
+      "route-end": 60,
+      "stuck": 19
     },
     "tier": "high",
     "moving": 61,
     "parked": 12,
     "types": {
-      "taxi": 11,
-      "sedan": 15,
+      "taxi": 12,
+      "sedan": 16,
       "kei": 19,
       "van": 13,
       "bus": 7,
-      "keiTruck": 5,
+      "keiTruck": 3,
       "scooter": 3
     },
     "signalGroups": 40
@@ -291,8 +217,8 @@
     "major": 0,
     "trafficMajor": 0,
     "minor": {
-      "stuck": 93,
-      "groupSeparation": 12
+      "stuck": 490,
+      "groupSeparation": 8
     },
     "samples": []
   },
@@ -307,8 +233,8 @@
       "states": {
         "idle": 64,
         "milling": 36,
-        "walking": 317,
-        "waiting": 3
+        "walking": 266,
+        "waiting": 5
       },
       "vehicleEntries": {}
     },
@@ -322,8 +248,8 @@
       "states": {
         "idle": 64,
         "milling": 36,
-        "walking": 262,
-        "waiting": 58
+        "walking": 267,
+        "waiting": 64
       },
       "vehicleEntries": {
         "junction:1:-3:NS": 1,
@@ -344,8 +270,8 @@
       "states": {
         "idle": 64,
         "milling": 36,
-        "walking": 251,
-        "waiting": 69
+        "walking": 321,
+        "waiting": 70
       },
       "vehicleEntries": {
         "junction:1:-3:NS": 1,
@@ -368,8 +294,8 @@
       "states": {
         "idle": 64,
         "milling": 36,
-        "walking": 244,
-        "waiting": 76
+        "walking": 379,
+        "waiting": 72
       },
       "vehicleEntries": {
         "junction:1:-3:NS": 1,
@@ -392,8 +318,8 @@
       "states": {
         "idle": 64,
         "milling": 36,
-        "walking": 239,
-        "waiting": 81
+        "walking": 419,
+        "waiting": 73
       },
       "vehicleEntries": {
         "junction:1:-3:NS": 2,
@@ -416,8 +342,8 @@
       "states": {
         "idle": 64,
         "milling": 36,
-        "walking": 233,
-        "waiting": 87
+        "walking": 419,
+        "waiting": 80
       },
       "vehicleEntries": {
         "junction:1:-3:NS": 2,
@@ -452,8 +378,8 @@
       "states": {
         "idle": 64,
         "milling": 36,
-        "walking": 231,
-        "waiting": 89
+        "walking": 459,
+        "waiting": 83
       },
       "vehicleEntries": {
         "junction:1:-3:NS": 2,
@@ -490,8 +416,8 @@
       "states": {
         "idle": 64,
         "milling": 36,
-        "walking": 228,
-        "waiting": 92
+        "walking": 495,
+        "waiting": 83
       },
       "vehicleEntries": {
         "junction:1:-3:NS": 2,
@@ -528,8 +454,8 @@
       "states": {
         "idle": 64,
         "milling": 36,
-        "walking": 227,
-        "waiting": 93
+        "walking": 487,
+        "waiting": 84
       },
       "vehicleEntries": {
         "junction:1:-3:NS": 2,
@@ -566,9 +492,9 @@
       "states": {
         "idle": 64,
         "milling": 36,
-        "walking": 222,
-        "crossing": 66,
-        "waiting": 32
+        "walking": 500,
+        "crossing": 27,
+        "waiting": 60
       },
       "vehicleEntries": {
         "junction:1:-3:NS": 2,
@@ -605,9 +531,9 @@
       "states": {
         "idle": 64,
         "milling": 36,
-        "walking": 233,
-        "crossing": 83,
-        "waiting": 4
+        "walking": 541,
+        "crossing": 36,
+        "waiting": 50
       },
       "vehicleEntries": {
         "junction:1:-3:NS": 2,
@@ -644,16 +570,16 @@
       "states": {
         "idle": 64,
         "milling": 36,
-        "walking": 252,
-        "waiting": 41,
-        "crossing": 27
+        "walking": 571,
+        "waiting": 66,
+        "crossing": 19
       },
       "vehicleEntries": {
-        "junction:1:-3:NS": 2,
+        "junction:1:-3:NS": 3,
         "junction:4:-2:NS": 2,
-        "junction:4:0:NS": 5,
+        "junction:4:0:NS": 6,
         "junction:1:-2:NS": 1,
-        "junction:0:2:NS": 3,
+        "junction:0:2:NS": 4,
         "scramble:NS": 6,
         "junction:4:0:EW": 3,
         "junction:1:5:NS": 1,
@@ -683,16 +609,16 @@
       "states": {
         "idle": 64,
         "milling": 36,
-        "walking": 252,
-        "waiting": 59,
-        "crossing": 9
+        "walking": 593,
+        "waiting": 75,
+        "crossing": 8
       },
       "vehicleEntries": {
-        "junction:1:-3:NS": 2,
+        "junction:1:-3:NS": 3,
         "junction:4:-2:NS": 3,
-        "junction:4:0:NS": 7,
-        "junction:1:-2:NS": 1,
-        "junction:0:2:NS": 3,
+        "junction:4:0:NS": 8,
+        "junction:1:-2:NS": 3,
+        "junction:0:2:NS": 5,
         "scramble:NS": 6,
         "junction:4:0:EW": 3,
         "junction:1:5:NS": 1,
@@ -723,16 +649,16 @@
       "states": {
         "idle": 64,
         "milling": 36,
-        "walking": 250,
-        "waiting": 68,
-        "crossing": 2
+        "walking": 590,
+        "waiting": 84,
+        "crossing": 1
       },
       "vehicleEntries": {
-        "junction:1:-3:NS": 3,
+        "junction:1:-3:NS": 5,
         "junction:4:-2:NS": 3,
-        "junction:4:0:NS": 9,
-        "junction:1:-2:NS": 3,
-        "junction:0:2:NS": 5,
+        "junction:4:0:NS": 10,
+        "junction:1:-2:NS": 4,
+        "junction:0:2:NS": 6,
         "scramble:NS": 6,
         "junction:4:0:EW": 3,
         "junction:1:5:NS": 1,
@@ -763,17 +689,16 @@
       "states": {
         "idle": 64,
         "milling": 36,
-        "walking": 244,
-        "waiting": 75,
-        "crossing": 1
+        "walking": 604,
+        "waiting": 91
       },
       "vehicleEntries": {
-        "junction:1:-3:NS": 3,
+        "junction:1:-3:NS": 5,
         "junction:4:-2:NS": 3,
         "junction:4:0:NS": 10,
-        "junction:1:-2:NS": 3,
-        "junction:0:2:NS": 5,
-        "scramble:NS": 8,
+        "junction:1:-2:NS": 5,
+        "junction:0:2:NS": 6,
+        "scramble:NS": 6,
         "junction:4:0:EW": 3,
         "junction:1:5:NS": 1,
         "junction:0:-4:EW": 2,
@@ -803,17 +728,16 @@
       "states": {
         "idle": 64,
         "milling": 36,
-        "walking": 241,
-        "waiting": 78,
-        "crossing": 1
+        "walking": 640,
+        "waiting": 94
       },
       "vehicleEntries": {
-        "junction:1:-3:NS": 3,
+        "junction:1:-3:NS": 5,
         "junction:4:-2:NS": 3,
         "junction:4:0:NS": 10,
-        "junction:1:-2:NS": 3,
-        "junction:0:2:NS": 5,
-        "scramble:NS": 9,
+        "junction:1:-2:NS": 5,
+        "junction:0:2:NS": 6,
+        "scramble:NS": 6,
         "junction:4:0:EW": 3,
         "junction:1:5:NS": 1,
         "junction:0:-4:EW": 2,
@@ -843,17 +767,16 @@
       "states": {
         "idle": 64,
         "milling": 36,
-        "walking": 235,
-        "waiting": 84,
-        "crossing": 1
+        "walking": 660,
+        "waiting": 102
       },
       "vehicleEntries": {
-        "junction:1:-3:NS": 3,
+        "junction:1:-3:NS": 5,
         "junction:4:-2:NS": 3,
         "junction:4:0:NS": 10,
-        "junction:1:-2:NS": 3,
-        "junction:0:2:NS": 5,
-        "scramble:NS": 9,
+        "junction:1:-2:NS": 5,
+        "junction:0:2:NS": 6,
+        "scramble:NS": 6,
         "junction:4:0:EW": 3,
         "junction:1:5:NS": 1,
         "junction:0:-4:EW": 4,
@@ -861,7 +784,7 @@
         "junction:-4:-1:EW": 2,
         "junction:3:0:EW": 6,
         "junction:4:-4:EW": 1,
-        "junction:-2:-3:EW": 1,
+        "junction:-2:-3:EW": 2,
         "junction:-3:-3:EW": 1,
         "scramble:EW": 5,
         "junction:-5:-4:EW": 1,
@@ -870,7 +793,8 @@
         "junction:4:-2:EW": 2,
         "junction:1:-4:EW": 3,
         "junction:1:-4:NS": 3,
-        "junction:-2:-3:NS": 1
+        "junction:-2:-3:NS": 1,
+        "junction:0:-2:EW": 1
       }
     },
     {
@@ -883,45 +807,46 @@
       "states": {
         "idle": 64,
         "milling": 36,
-        "walking": 233,
-        "waiting": 87
+        "walking": 638,
+        "waiting": 116
       },
       "vehicleEntries": {
-        "junction:1:-3:NS": 3,
+        "junction:1:-3:NS": 5,
         "junction:4:-2:NS": 3,
         "junction:4:0:NS": 10,
-        "junction:1:-2:NS": 3,
-        "junction:0:2:NS": 5,
-        "scramble:NS": 9,
+        "junction:1:-2:NS": 5,
+        "junction:0:2:NS": 6,
+        "scramble:NS": 6,
         "junction:4:0:EW": 3,
         "junction:1:5:NS": 1,
         "junction:0:-4:EW": 4,
-        "junction:5:3:EW": 5,
+        "junction:5:3:EW": 4,
         "junction:-4:-1:EW": 2,
         "junction:3:0:EW": 8,
         "junction:4:-4:EW": 1,
-        "junction:-2:-3:EW": 1,
+        "junction:-2:-3:EW": 4,
         "junction:-3:-3:EW": 1,
-        "scramble:EW": 7,
+        "scramble:EW": 5,
         "junction:-5:-4:EW": 1,
-        "junction:-5:4:EW": 2,
+        "junction:-5:4:EW": 3,
         "junction:-4:-3:EW": 2,
         "junction:4:-2:EW": 2,
         "junction:1:-4:EW": 3,
         "junction:1:-4:NS": 4,
-        "junction:-2:-3:NS": 1
+        "junction:-2:-3:NS": 1,
+        "junction:0:-2:EW": 1
       }
     }
   ],
   "crossers": [],
   "crowdCPU": {
-    "median": 2.577961000002688,
-    "p95": 7.869654000009177,
-    "max": 183.5189089999767
+    "median": 7.152600000030361,
+    "p95": 14.483299999963492,
+    "max": 56.35540000000037
   },
   "trafficCPU": {
-    "median": 1.9102560000028461,
-    "p95": 3.9714380000077654,
-    "max": 25.979032000002917
+    "median": 3.048000000009779,
+    "p95": 5.6032999999588355,
+    "max": 15.821500000020023
   }
 }

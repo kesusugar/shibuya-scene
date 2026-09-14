@@ -36,7 +36,7 @@
     },
     "neighborChecks": 72312,
     "avoidanceChecks": 0,
-    "updateMs": 0.5862990000023274,
+    "updateMs": 2.3630999999586493,
     "throttled": 1247400,
     "spawnDeferred": 0,
     "target": 1978,
@@ -145,7 +145,7 @@
     "overlaps": 0,
     "blockedEntries": 76177,
     "neighborChecks": 10266095,
-    "updateMs": 0.8896950000053039,
+    "updateMs": 4.426200000103563,
     "reasons": {
       "route-end": 52,
       "stuck": 15

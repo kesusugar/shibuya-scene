@@ -6,7 +6,7 @@
     "lanes": 334,
     "transitions": 777,
     "rejectedLanes": 26,
-    "generationMs": 11790
+    "generationMs": 47162
   },
   "simulation": {
     "spawned": 153,
@@ -75,7 +75,7 @@
     "overlaps": 0,
     "blockedEntries": 93286,
     "neighborChecks": 12146207,
-    "updateMs": 0.7690550000115763,
+    "updateMs": 3.628499999991618,
     "reasons": {
       "route-end": 62,
       "stuck": 18
@@ -99,9 +99,9 @@
     "samples": []
   },
   "updateMs": {
-    "median": 0.8629559999972116,
-    "p95": 1.3780990000086604,
-    "max": 40.13108000000648
+    "median": 4.07650000002468,
+    "p95": 6.85820000001695,
+    "max": 22.76469999999972
   },
   "rendering": {
     "high": {
@@ -110,7 +110,7 @@
       "lanes": 334,
       "transitions": 777,
       "rejectedLanes": 26,
-      "generationMs": 11790,
+      "generationMs": 47162,
       "spawned": 64,
       "admissions": {},
       "crossingEntries": {},
@@ -143,12 +143,12 @@
         "scooter": 4
       },
       "signalGroups": 40,
-      "geometries": 35,
-      "materials": 6,
+      "geometries": 37,
+      "materials": 8,
       "textures": 0,
-      "batches": 35,
+      "batches": 37,
       "pointLights": 0,
-      "triangles": 18088,
+      "triangles": 20530,
       "debugBatches": 0
     },
     "medium": {
@@ -157,7 +157,7 @@
       "lanes": 334,
       "transitions": 777,
       "rejectedLanes": 26,
-      "generationMs": 11790,
+      "generationMs": 47162,
       "spawned": 36,
       "admissions": {},
       "crossingEntries": {},
@@ -190,12 +190,12 @@
         "scooter": 3
       },
       "signalGroups": 40,
-      "geometries": 35,
-      "materials": 6,
+      "geometries": 37,
+      "materials": 8,
       "textures": 0,
-      "batches": 35,
+      "batches": 37,
       "pointLights": 0,
-      "triangles": 12144,
+      "triangles": 14522,
       "debugBatches": 0
     },
     "low": {
@@ -204,7 +204,7 @@
       "lanes": 334,
       "transitions": 777,
       "rejectedLanes": 26,
-      "generationMs": 11790,
+      "generationMs": 47162,
       "spawned": 17,
       "admissions": {},
       "crossingEntries": {},
@@ -237,12 +237,12 @@
         "scooter": 2
       },
       "signalGroups": 40,
-      "geometries": 35,
-      "materials": 6,
+      "geometries": 37,
+      "materials": 8,
       "textures": 0,
-      "batches": 35,
+      "batches": 37,
       "pointLights": 0,
-      "triangles": 8084,
+      "triangles": 10430,
       "debugBatches": 0
     }
   },

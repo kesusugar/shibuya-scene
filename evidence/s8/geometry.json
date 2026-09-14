@@ -32,9 +32,9 @@
       "rejected": 761,
       "major": 0,
       "minor": 0,
-      "generationMs": 60757,
+      "generationMs": 119401,
       "tier": "high",
-      "triangles": 30548,
+      "triangles": 31460,
       "materials": 9,
       "geometries": 5,
       "textures": 1,
@@ -43,11 +43,11 @@
         1024
       ],
       "atlasMode": "cpu-placeholder",
-      "instances": 1200,
+      "instances": 1276,
       "batches": 14,
       "debugBatches": 0,
       "pointLights": 0,
-      "buildTimeMs": 25,
+      "buildTimeMs": 64,
       "checks": {
         "box": {
           "nonFinite": 0,
@@ -88,13 +88,6 @@
             "maxZ": 0.5
           }
         }
-      },
-      "sceneCPU": {
-        "triangles": 384346,
-        "batches": 68,
-        "materials": 53,
-        "textures": 6,
-        "method": "Unchanged S0-S7 runtime: saved S7 geometry plus current S8. Batches exclude S0 grid/axes and S1 diagnostic lines. Not GPU drawCalls."
       }
     },
     "medium": {
@@ -128,9 +121,9 @@
       "rejected": 515,
       "major": 0,
       "minor": 0,
-      "generationMs": 23728,
+      "generationMs": 59287,
       "tier": "medium",
-      "triangles": 22242,
+      "triangles": 23154,
       "materials": 9,
       "geometries": 5,
       "textures": 1,
@@ -139,11 +132,11 @@
         512
       ],
       "atlasMode": "cpu-placeholder",
-      "instances": 849,
+      "instances": 925,
       "batches": 14,
       "debugBatches": 0,
       "pointLights": 0,
-      "buildTimeMs": 11,
+      "buildTimeMs": 23,
       "checks": {
         "box": {
           "nonFinite": 0,
@@ -184,13 +177,6 @@
             "maxZ": 0.5
           }
         }
-      },
-      "sceneCPU": {
-        "triangles": 363610,
-        "batches": 68,
-        "materials": 53,
-        "textures": 6,
-        "method": "Unchanged S0-S7 runtime: saved S7 geometry plus current S8. Batches exclude S0 grid/axes and S1 diagnostic lines. Not GPU drawCalls."
       }
     },
     "low": {
@@ -216,9 +202,9 @@
       "rejected": 132,
       "major": 0,
       "minor": 0,
-      "generationMs": 5480,
+      "generationMs": 11520,
       "tier": "low",
-      "triangles": 8664,
+      "triangles": 9576,
       "materials": 8,
       "geometries": 3,
       "textures": 1,
@@ -227,11 +213,11 @@
         256
       ],
       "atlasMode": "cpu-placeholder",
-      "instances": 274,
+      "instances": 350,
       "batches": 8,
       "debugBatches": 0,
       "pointLights": 0,
-      "buildTimeMs": 3,
+      "buildTimeMs": 12,
       "checks": {
         "box": {
           "nonFinite": 0,
@@ -272,13 +258,6 @@
             "maxZ": 0.5
           }
         }
-      },
-      "sceneCPU": {
-        "triangles": 341932,
-        "batches": 62,
-        "materials": 52,
-        "textures": 6,
-        "method": "Unchanged S0-S7 runtime: saved S7 geometry plus current S8. Batches exclude S0 grid/axes and S1 diagnostic lines. Not GPU drawCalls."
       }
     }
   },
@@ -287,20 +266,5 @@
     "minor": 0,
     "minorCategories": {},
     "findings": []
-  },
-  "regression": {
-    "groundTriangles": 47829,
-    "genericCount": 378,
-    "genericTriangles": 160925,
-    "heroCount": 9,
-    "heroTriangles": 33170,
-    "stationTriangles": 75568
-  },
-  "browser": {
-    "webgl2": false,
-    "fps": null,
-    "gpuDrawCalls": null,
-    "cameras": "CAM-02/03/04/05/06/07: rendered scene unavailable; CPU geometry and UI only",
-    "console": "Final HIGH ready, 0 application errors; 2 chrome-extension metadata errors. S8 369 fixtures / 35 cable runs, S7 763 signs. See browser-high.json."
   }
 }
