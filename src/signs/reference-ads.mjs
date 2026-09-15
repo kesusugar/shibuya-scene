@@ -60,16 +60,43 @@ export const REFERENCE_ADS = Object.freeze([
 // above which, and how large each is relative to its neighbours — and the arrangement is
 // mapped onto the facade a viewer can actually see. Keys come from the scene's own
 // building data, not from the reference.
-// Chosen by measured visible wall area, not by facing: of the buildings beside the block,
-// 136690966 shows 684 m² of unbroken facade and 136691379 shows 87 m², against 43 m² for
-// 136691389, the nearer neighbour that facing alone would have picked.
-const CENTRE_BLOCK = 'way/136690966:0:0';   // 123 m out, 24 m roof, 28 m facade, fully visible
-const CENTRE_RIGHT = 'way/136691379:0:0';   // 174 m out, 23 m roof, mostly hidden behind its neighbour
+// Chosen by measured visible wall area, not by facing. The plot immediately left of QFRONT,
+// where the reference puts these signs, keeps only a 2.9 m strip of its 14 m facade clear of
+// the blocks in front at any height below 58 m, and even then the advertisements resolve
+// about a third of the size. This wall is one block further west than the reference's, and
+// shows 28.4 x 38.0 m completely unobstructed.
+const CENTRE_BLOCK = 'way/136690966:0:0';   // 118 m out, raised to 38 m, fully visible
 
+// Three, not the reference's six. A column of six on this wall resolves each panel at about
+// half the width, and the reference stack's own neighbours (Hisamitsu, サロンパス, もん字)
+// belong to a taller building than this plot has. Carrying the three that name the block —
+// the sheet, the vision below it and the bookshop fascia at its foot — keeps each large
+// enough to read.
 export const AD_ANCHORS = Object.freeze({
- 15: CENTRE_BLOCK, 16: CENTRE_BLOCK, 17: CENTRE_BLOCK,
- 18: CENTRE_BLOCK, 21: CENTRE_BLOCK, 22: CENTRE_BLOCK,
- 19: CENTRE_RIGHT, 20: CENTRE_RIGHT
+ 18: CENTRE_BLOCK, 21: CENTRE_BLOCK, 22: CENTRE_BLOCK
+});
+
+/**
+ * Proportions for the anchored column, taken from a photograph of the real building rather
+ * than from the reference frame.
+ *
+ * The frame's percentages describe a facade seen nearly head-on. Unprojecting them through
+ * this scene's view, which meets that wall at about 39 degrees, divides the width by the
+ * foreshortening and so turns the portrait vision screen into a landscape one — the panel
+ * covers the right share of the reference frame and is the wrong shape as an object. For a
+ * column on a named wall the object is what matters, so its shape is stated directly:
+ * `width` as a share of the usable wall, `aspect` as width over height. Order down the wall
+ * follows the inventory's own top-to-bottom order.
+ */
+// Which wall of an anchored host carries its group. The centre block's signs hang on the
+// narrow return that faces QFRONT, not on the broad west face the visibility scan would
+// otherwise choose — see bestCameraEdge for what that costs and why it is worth it.
+export const AD_ANCHOR_FACE = Object.freeze({[CENTRE_BLOCK]: 'rightmost'});
+
+export const ANCHOR_SHAPES = Object.freeze({
+ 18: {width: .72, aspect: 1.35},  // the large sheet at the top
+ 21: {width: .42, aspect: .78},   // the vision panel, portrait, narrower than the sheet
+ 22: {width: .96, aspect: 5.2}    // the bookshop fascia, full width across the foot
 });
 
 // How much of a wall a group may be squeezed into before it is not worth carrying. Below
@@ -335,19 +362,36 @@ export function visibleWallPatch(host, edge, basis, hosts) {
  };
 }
 
+/** Where the midpoint of a wall falls across the reference frame, 0 at the left edge, 100 at the right. */
+function edgeFramePosition(edge, host, basis) {
+ const mid = [(edge.a[0] + edge.b[0]) / 2, (host.bottom + host.top) / 2, (edge.a[1] + edge.b[1]) / 2];
+ const d = sub(mid, basis.origin), z = dot(d, basis.forward);
+ if (z <= .01) return -Infinity;
+ return (dot(d, basis.right) / (z * basis.tanHalf * basis.aspect) + 1) * 50;
+}
+
 /**
- * The facade of a host that best carries advertisements. Without a host set that is the
- * widest wall still turned toward the viewer; with one it is the wall showing the largest
- * unbroken patch a viewer can actually see, which is not the same thing — the widest facade
- * of a building in a street this dense is often the one behind its neighbour.
+ * The facade of a host that carries an anchored group.
+ *
+ * By default this is the wall showing the largest unbroken patch a viewer can actually see,
+ * which is not the same as the widest wall facing the camera — the broadest facade of a
+ * building in a street this dense is often the one behind its neighbour.
+ *
+ * `prefer: 'rightmost'` overrides that with the camera-facing wall furthest right in the
+ * frame. On the centre block that is the narrow return facing QFRONT, which is where these
+ * signs actually hang; it carries less than a third of the area the broad west face does,
+ * and the advertisements resolve correspondingly smaller. That cost is accepted, because
+ * being on the right wall is the point of a reference inventory.
  */
-export function bestCameraEdge(host, basis, hosts = null, minFacing = MIN_FACING) {
+export function bestCameraEdge(host, basis, hosts = null, {prefer = 'visible', minFacing = MIN_FACING} = {}) {
  let best = null;
  for (const edge of hostEdges(host.polygon)) {
   const facing = -dot([edge.normal[0], 0, edge.normal[1]], basis.forward);
   if (facing < minFacing) continue;
   const patch = hosts ? visibleWallPatch(host, edge, basis, hosts) : null;
-  const score = patch ? (patch.along[1] - patch.along[0]) * (patch.y[1] - patch.y[0]) : facing * edge.length;
+  const score = prefer === 'rightmost' ? edgeFramePosition(edge, host, basis)
+   : patch ? (patch.along[1] - patch.along[0]) * (patch.y[1] - patch.y[0])
+   : facing * edge.length;
   if (!best || score > best.score) best = {edge, facing, score, patch};
  }
  return best;
@@ -358,6 +402,10 @@ export function bestCameraEdge(host, basis, hosts = null, minFacing = MIN_FACING
 const COLUMN_OVERLAP = .2;
 // Bare wall left between two advertisements in a column.
 const MIN_GAP = .25;
+// The ground floor is the shop, and in this scene it is a band of bright lit storefront.
+// Signage starts above it on a real building, and an advertisement hung across it here is
+// simply washed out — which is what happened to 大盛堂書店 at the foot of the centre stack.
+export const SHOPFRONT_CLEARANCE = 4.5;
 
 /** Advertisements sharing a column of the wall, ordered top to bottom. */
 function stackColumns(ads) {
@@ -388,7 +436,7 @@ function stackColumns(ads) {
  * column is solved separately, so a blade beside the stack keeps its own room.
  */
 export function placeAnchorGroup(ads, host, basis, hosts) {
- const pick = bestCameraEdge(host, basis, hosts);
+ const pick = bestCameraEdge(host, basis, hosts, {prefer: AD_ANCHOR_FACE[host.key]});
  if (!pick) return null;
  const {edge} = pick;
  const mid = [(edge.a[0] + edge.b[0]) / 2, (host.bottom + host.top) / 2, (edge.a[1] + edge.b[1]) / 2];
@@ -410,33 +458,46 @@ export function placeAnchorGroup(ads, host, basis, hosts) {
  // stack laid down a 24 m facade puts its lower half behind whatever stands in front.
  const patch = pick.patch;
  const lowAlong = (patch?.along[0] ?? 0) + WALL_MARGIN, highAlong = (patch?.along[1] ?? edge.length) - WALL_MARGIN;
- const floor = (patch?.y[0] ?? host.bottom) + WALL_MARGIN, ceiling = (patch?.y[1] ?? host.top) - WALL_MARGIN;
+ const floor = Math.max(patch?.y[0] ?? host.bottom, host.bottom + SHOPFRONT_CLEARANCE) + WALL_MARGIN;
+ const ceiling = (patch?.y[1] ?? host.top) - WALL_MARGIN;
  const usableX = highAlong - lowAlong, usableY = ceiling - floor;
  if (!(usableX > 1 && usableY > 1)) return null;
 
+ // Panel size before fitting: from the stated shape where there is one, otherwise from
+ // unprojecting the reference rectangle.
+ const sized = new Map(ads.map(ad => {
+  const shape = ANCHOR_SHAPES[ad.id];
+  const w = shape ? shape.width * usableX : ad.width * perX;
+  return [ad.id, {w, h: shape ? w / shape.aspect : ad.height * perY}];
+ }));
  const columns = stackColumns(ads);
- let fit = Math.min(1, usableX / groupWidth);
- // A mount type that never gets built at the resolved width shrinks the whole group, so the
- // arrangement stays intact instead of one panel being squashed out of proportion.
- for (const ad of ads) fit = Math.min(fit, (MAX_WIDTH[ad.mount] ?? 18) / (ad.width * perX));
+ let fit = 1;
+ for (const ad of ads) {
+  const {w} = sized.get(ad.id);
+  // A mount type that never gets built at the resolved width shrinks the whole group, so
+  // the arrangement stays intact instead of one panel being squashed out of proportion.
+  fit = Math.min(fit, (MAX_WIDTH[ad.mount] ?? 18) / w, usableX / w);
+ }
  // Each column must fit its own advertisements plus the minimum wall between them.
  for (const col of columns) {
   const room = usableY - (col.length - 1) * MIN_GAP;
   if (room <= 0) return {tooSmall: true, fit: 0, patch};
-  fit = Math.min(fit, room / col.reduce((total, ad) => total + ad.height * perY, 0));
+  fit = Math.min(fit, room / col.reduce((total, ad) => total + sized.get(ad.id).h, 0));
  }
  if (fit < MIN_ANCHOR_FIT) return {tooSmall: true, fit, patch};
 
  const width = groupWidth * fit;
- const originAlong = lowAlong + (usableX - width) / 2;
+ const centre = lowAlong + usableX / 2;
  const out = [];
  for (const col of columns) {
-  const heights = col.map(ad => ad.height * perY * fit);
+  const heights = col.map(ad => sized.get(ad.id).h * fit);
   const stack = heights.reduce((a, b) => a + b, 0);
   // Keep the reference spacing where the wall allows it, and take the slack out of the gaps
-  // — never out of the advertisements — where it does not.
+  // — never out of the advertisements — where it does not. The gap is measured against the
+  // panel above it rather than unprojected on its own, so a stated shape carries its
+  // spacing with it instead of keeping a gap scaled for the size it is not.
   const wanted = col.slice(1).map((ad, i) =>
-   Math.max(0, (ad.top - (col[i].top + col[i].height)) * perY * fit));
+   Math.max(0, (ad.top - (col[i].top + col[i].height)) * heights[i] / col[i].height));
   const slack = usableY - stack - (col.length - 1) * MIN_GAP;
   const over = wanted.reduce((total, g) => total + Math.max(0, g - MIN_GAP), 0);
   const squeeze = over > 1e-9 ? Math.min(1, slack / over) : 0;
@@ -448,11 +509,14 @@ export function placeAnchorGroup(ads, host, basis, hosts) {
    const category = MOUNT_CATEGORY[ad.mount] ?? 'billboard';
    const h = heights[i], y = cursor - h / 2;
    cursor -= h;
-   const w = fitMount(category, ad.width * perX * fit);
-   const along = originAlong + (ad.left + ad.width / 2 - left) * perX * fit;
+   const w = fitMount(category, sized.get(ad.id).w * fit);
+   // A stated shape is a panel on this wall, so it is centred on it; a rectangle carried
+   // over from the reference frame keeps its place across the group instead.
+   const along = ANCHOR_SHAPES[ad.id] ? centre
+    : lowAlong + (usableX - width) / 2 + (ad.left + ad.width / 2 - left) * perX * fit;
    out.push({ad, host, edge, along, y,
     point: [edge.a[0] + edge.tangent[0] * along, y, edge.a[1] + edge.tangent[1] * along],
-    distance: depth, rayWidth: ad.width * perX, width: w, height: h,
+    distance: depth, rayWidth: sized.get(ad.id).w, width: w, height: h,
     foreshortening, roof: false, lowered: false, anchored: true, anchoredWith: ads.length,
     column: col.length, visibleCoverage: patch?.coverage ?? 1, clamped: fit < 1 - 1e-6, category});
   });
@@ -562,7 +626,10 @@ export function fitGroupsToWalls(placed) {
   const usableY = ceiling - floor;
   if (!(usableX > 1 && usableY > 1)) continue;
   for (const p of group) {
-   p.width = p.ad.width / spanX * usableX;
+   // Through fitMount, because a blade's width is its reach over the street: stretching one
+   // to fill its share of the wall hangs a neon sign metres above the pavement, and the
+   // placement audit throws it out for standing too far off the facade.
+   p.width = fitMount(p.category, p.ad.width / spanX * usableX);
    p.height = p.ad.height / spanY * usableY;
    p.along = WALL_MARGIN + (p.ad.left + p.ad.width / 2 - left) / spanX * usableX;
    p.y = ceiling - (p.ad.top + p.ad.height / 2 - top) / spanY * usableY;

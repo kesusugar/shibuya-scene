@@ -165,10 +165,12 @@ export const REFERENCE_ART = Object.freeze({
   c.shadowBlur = 0;
   c.fillStyle = '#ffe066'; text('お好み焼', .07, .5, .88);},
 
- 18(c) {const {text, box} = tools(c); box(0, 0, 1, 1, '#111111');
-  box(.05, .22, .9, .4, '#bf0000');
-  c.fillStyle = '#ffffff'; text('Rakuten', .18, .5, .42, {family: '"Times New Roman",Georgia,serif', weight: '700'});
-  c.fillStyle = '#ffffff'; text('楽天市場', .13, .5, .75);},
+ // A crimson sheet, not a red band floating on black: the near-black ground this started
+ // with vanished against a night facade, leaving only the band reading as the whole sign.
+ 18(c) {const {text, box} = tools(c); box(0, 0, 1, 1, '#bf0000');
+  box(0, .66, 1, .34, '#8e0000');
+  c.fillStyle = '#ffffff'; text('Rakuten', .22, .5, .33, {family: '"Times New Roman",Georgia,serif', weight: '700'});
+  c.fillStyle = '#ffffff'; text('楽天市場', .17, .5, .82);},
 
  19(c) {const {text, box} = tools(c); box(0, 0, 1, 1, '#0058a3');
   box(.07, .24, .86, .38, '#ffda1a');
@@ -190,10 +192,12 @@ export const REFERENCE_ART = Object.freeze({
   box(.2, .72, .6, .04, '#ffd400');
   c.fillStyle = '#9aa7c4'; text('SHIBUYA VISION', .06, .5, .87, {family: 'Arial,sans-serif'});},
 
- 22(c) {const {text, box} = tools(c); box(0, 0, 1, 1, '#fbfaf5');
-  c.fillStyle = '#17223a'; text('大盛堂書店', .21, .5, .36);
-  box(.16, .55, .68, .015, '#b8912f');
-  c.fillStyle = '#6a6a6a'; text('TAISEIDO BOOK STORE', .062, .5, .7, {family: 'Arial,sans-serif'});},
+ // A bookshop fascia: cream ground with a dark frame, because an unframed near-white panel
+ // is indistinguishable from the pale generated stickers on the walls beside it.
+ 22(c) {const {text, box} = tools(c); box(0, 0, 1, 1, '#17223a'); box(.035, .08, .93, .84, '#fbfaf5');
+  c.fillStyle = '#17223a'; text('大盛堂書店', .3, .5, .42);
+  box(.18, .66, .64, .022, '#b8912f');
+  c.fillStyle = '#4a4a4a'; text('TAISEIDO BOOK STORE', .085, .5, .8, {family: 'Arial,sans-serif'});},
 
  24(c) {const {text, box} = tools(c); box(0, 0, 1, 1, '#16181d');
   c.fillStyle = '#e8ecf2'; text('QFRONT', .28, .5, .5, {family: 'Arial,sans-serif', weight: '300'});},

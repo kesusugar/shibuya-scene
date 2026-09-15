@@ -10,7 +10,7 @@ import {HERO_DEFINITIONS} from '../src/heroes/config.mjs';
 import {CAMERAS} from '../src/app/foundation.mjs';
 import {REFERENCE_ADS, REFERENCE_VIEW, MOUNT_CATEGORY, MAX_WIDTH, MAX_RANGE, MIN_FACING,
  AD_ANCHORS, EXCLUDED_ADS, MAX_BLADE_WIDTH, referenceBasis, adRay, intersectHosts,
- bestCameraEdge, placeAnchorGroup, visibleWallPatch, resolveReferenceAds} from '../src/signs/reference-ads.mjs';
+ bestCameraEdge, placeAnchorGroup, visibleWallPatch, ANCHOR_SHAPES, AD_ANCHOR_FACE, resolveReferenceAds} from '../src/signs/reference-ads.mjs';
 import {applyReferenceAds} from '../src/signs/reference-layer.mjs';
 import {buildSignModel} from '../src/signs/model.mjs';
 import {commercialLayout} from '../src/signs/commercial-layout.mjs';
@@ -169,17 +169,27 @@ test('an anchored group keeps the reference arrangement without overlapping', ()
     Math.abs(a.y - b.y) >= (a.height + b.height) / 2 - 1e-9;
    assert.ok(apart, `${a.ad.brand} overlaps ${b.ad.brand}`);
   }
-  // Scaling the group uniformly is what preserves the reference proportions; check the two
-  // that sit one above the other kept their relative sizes.
-  const [wide, tall] = [...group].sort((a, b) => b.width * b.height - a.width * a.height);
-  if (wide.category !== 'blade' && tall.category !== 'blade')
-   assert.ok(Math.abs(wide.width / tall.width - wide.ad.width / tall.ad.width) < 1e-6, `${key} lost its proportions`);
+  // A panel with a stated shape is built to that shape; one without keeps the proportions
+  // its reference rectangle implies. Either way the group scales by a single factor.
+  const shaped = group.filter(p => ANCHOR_SHAPES[p.ad.id]);
+  for (const p of shaped)
+   assert.ok(Math.abs(p.width / p.height / ANCHOR_SHAPES[p.ad.id].aspect - 1) < 1e-6,
+    `${p.ad.brand} is ${(p.width / p.height).toFixed(2)} wide for one tall, not ${ANCHOR_SHAPES[p.ad.id].aspect}`);
+  if (shaped.length > 1) {
+   const [a, b] = shaped;
+   assert.ok(Math.abs(a.width / b.width - ANCHOR_SHAPES[a.ad.id].width / ANCHOR_SHAPES[b.ad.id].width) < 1e-6,
+    `${key} lost the stated width ratio`);
+  }
+  const plain = group.filter(p => !ANCHOR_SHAPES[p.ad.id] && p.category !== 'blade');
+  for (let i = 1; i < plain.length; i++)
+   assert.ok(Math.abs(plain[i].width / plain[0].width - plain[i].ad.width / plain[0].ad.width) < 1e-6,
+    `${key} lost its proportions`);
  }
 });
 
 test('the visibility scan reports what standing in front of a wall does to it', () => {
  const basis = referenceBasis(camera, REFERENCE_VIEW);
- const host = hosts.find(h => h.key === AD_ANCHORS[15]);
+ const host = hosts.find(h => h.key === AD_ANCHORS[22]);
  const edge = bestCameraEdge(host, basis, hosts).edge;
  const open = visibleWallPatch(host, edge, basis, hosts);
  assert.ok(open && open.coverage > .9, 'the anchor wall should be effectively unobstructed');
@@ -202,28 +212,64 @@ test('a short wall costs the gaps between advertisements, never their size', () 
  // fit, which is what made them unreadable; the empty wall between them gives way instead.
  const stack = resolved.placed.filter(p => p.anchored && p.host.key === AD_ANCHORS[22])
   .sort((a, b) => b.y - a.y);
- assert.ok(stack.length >= 4, 'the centre stack lost members');
+ assert.ok(stack.length >= 3, 'the centre stack lost members');
 
- // Every advertisement keeps the aspect its own reference rectangle implies on this wall.
- const shape = p => p.width / p.height / (p.ad.width / p.ad.height);
- const shapes = stack.filter(p => p.category !== 'blade').map(shape);
- for (const s of shapes) assert.ok(Math.abs(s / shapes[0] - 1) < 1e-6, 'an advertisement was distorted');
+ // Every advertisement is built to the shape it is meant to have — the stated one where
+ // there is one, otherwise the one its reference rectangle implies on this wall.
+ for (const p of stack.filter(p => p.category !== 'blade')) {
+  const want = ANCHOR_SHAPES[p.ad.id]?.aspect;
+  if (want) assert.ok(Math.abs(p.width / p.height / want - 1) < 1e-6, `${p.ad.brand} was distorted`);
+ }
+ const plain = stack.filter(p => p.category !== 'blade' && !ANCHOR_SHAPES[p.ad.id]);
+ for (const p of plain)
+  assert.ok(Math.abs(p.width / p.height / (p.ad.width / p.ad.height) /
+   (plain[0].width / plain[0].height / (plain[0].ad.width / plain[0].ad.height)) - 1) < 1e-6,
+   `${p.ad.brand} was distorted`);
 
  // The tallest column is stacked clear, top to bottom, inside the wall.
  const column = stack.filter(p => p.category !== 'blade').sort((a, b) => b.y - a.y);
- assert.ok(column.length >= 4, 'the stacked column lost members');
+ assert.ok(column.length >= 3, 'the stacked column lost members');
  for (let i = 1; i < column.length; i++) {
   const gap = (column[i - 1].y - column[i - 1].height / 2) - (column[i].y + column[i].height / 2);
   assert.ok(gap >= -1e-6, `${column[i].ad.brand} runs into ${column[i - 1].ad.brand}`);
  }
- // And the compression bought real size: fitting the column's whole reference rectangle,
- // gaps included, would have shrunk every advertisement by the ratio of gaps to content.
+ // No gap is ever wider than the reference spacing measured against the panel above it:
+ // gaps may be compressed to fit the wall, never stretched to fill it. Measuring against
+ // the neighbour is what lets a panel built to a stated shape carry its own spacing.
+ for (let i = 1; i < column.length; i++) {
+  const above = column[i - 1];
+  const wanted = (column[i].ad.top - (above.ad.top + above.ad.height)) * above.height / above.ad.height;
+  const built = (above.y - above.height / 2) - (column[i].y + column[i].height / 2);
+  assert.ok(built <= Math.max(wanted, .25) + 1e-6,
+   `the wall under ${above.ad.brand} was stretched to ${built.toFixed(2)} m against ${wanted.toFixed(2)} m`);
+ }
+
+ // Shortening the wall has to come out of the gaps before it comes out of the panels. The
+ // centre column states its own shapes and already sits at the minimum gap here, and no
+ // two inventory rectangles left on the raycast path share a column with room to spare, so
+ // the rule is exercised on a pair built for it: same size, a wide gap between them.
+ const basis = referenceBasis(camera, REFERENCE_VIEW);
  const host = hosts.find(h => h.key === AD_ANCHORS[22]);
- const spread = Math.max(...column.map(p => p.ad.top + p.ad.height)) - Math.min(...column.map(p => p.ad.top));
- const content = column.reduce((t, p) => t + p.ad.height, 0);
- assert.ok(spread > content * 1.05, 'this column has no gaps to compress, so the test proves nothing');
- assert.ok(column.reduce((t, p) => t + p.height, 0) > (host.top - host.bottom) * content / spread,
-  'the advertisements were shrunk rather than the wall between them');
+ const pair = [
+  {id: 901, brand: 'upper', left: 45, top: 20, width: 6, height: 6, mount: 'wall_panel'},
+  {id: 902, brand: 'lower', left: 45, top: 45, width: 6, height: 6, mount: 'wall_panel'}
+ ];
+ assert.ok(pair.every(a => !ANCHOR_SHAPES[a.id]), 'this pair is meant to have no stated shapes');
+ const tall = placeAnchorGroup(pair, {...host, top: host.bottom + 80}, basis, hosts);
+ const squat = placeAnchorGroup(pair, {...host, top: host.bottom + 20}, basis, hosts);
+ assert.ok(Array.isArray(tall) && Array.isArray(squat), 'both walls should carry the pair');
+ const gapOf = col => {
+  const s = [...col].sort((a, b) => b.y - a.y);
+  return (s[0].y - s[0].height / 2) - (s[1].y + s[1].height / 2);
+ };
+ assert.ok(gapOf(squat) < gapOf(tall) - 1e-9,
+  `the short wall did not compress the gap (${gapOf(squat).toFixed(2)} vs ${gapOf(tall).toFixed(2)} m)`);
+ assert.ok(gapOf(squat) > 0, 'the panels were pushed into each other');
+ for (const p of squat) {
+  const roomyOne = tall.find(q => q.ad.id === p.ad.id);
+  assert.ok(p.height >= roomyOne.height - 1e-9,
+   `${p.ad.brand} was shrunk instead of the wall between them`);
+ }
 });
 
 test('a blade is sized by how far it may stand off the wall', () => {
@@ -241,34 +287,51 @@ test('an excluded advertisement is reported, not placed and not forgotten', () =
  }
 });
 
-test('the wall an anchored group lands on is the one the camera can see most of', () => {
+test('an anchored group lands on the wall its anchor asks for', () => {
  // Facing alone picks the widest wall, which in a street this dense is regularly the one
- // standing behind its neighbour. Measured visibility has to be what decides.
+ // standing behind its neighbour, so measured visibility decides by default. The centre
+ // block overrides that: its signs hang on the narrow return facing QFRONT, and being on
+ // the right wall outranks being on the wall with the most of it showing.
  const basis = referenceBasis(camera, REFERENCE_VIEW);
  for (const key of new Set(Object.values(AD_ANCHORS))) {
   const host = hosts.find(h => h.key === key);
   assert.ok(host, `anchor host ${key} is missing from the scene`);
-  const seen = bestCameraEdge(host, basis, hosts);
-  assert.ok(seen?.patch, `${key} shows no visible facade`);
-  assert.ok(seen.facing >= MIN_FACING && seen.edge.length > 1);
+  const prefer = AD_ANCHOR_FACE[key];
+  const asked = bestCameraEdge(host, basis, hosts, {prefer});
+  assert.ok(asked?.patch, `${key} shows no visible facade`);
+  assert.ok(asked.facing >= MIN_FACING && asked.edge.length > 1);
   for (const p of resolved.placed.filter(p => p.host.key === key && p.anchored)) {
-   assert.equal(p.edge.index, seen.edge.index, `${p.ad.brand} is not on the most visible wall`);
+   assert.equal(p.edge.index, asked.edge.index, `${p.ad.brand} is not on the wall its anchor asks for`);
    // And the panel has to sit inside the patch that scan found, not merely on that wall.
-   assert.ok(p.along - p.width / 2 >= seen.patch.along[0] - 1e-6 &&
-    p.along + p.width / 2 <= seen.patch.along[1] + 1e-6, `${p.ad.brand} runs past the visible patch`);
-   assert.ok(p.y - p.height / 2 >= seen.patch.y[0] - 1e-6 &&
-    p.y + p.height / 2 <= seen.patch.y[1] + 1e-6, `${p.ad.brand} sits outside the visible band`);
+   assert.ok(p.along - p.width / 2 >= asked.patch.along[0] - 1e-6 &&
+    p.along + p.width / 2 <= asked.patch.along[1] + 1e-6, `${p.ad.brand} runs past the visible patch`);
+   assert.ok(p.y - p.height / 2 >= asked.patch.y[0] - 1e-6 &&
+    p.y + p.height / 2 <= asked.patch.y[1] + 1e-6, `${p.ad.brand} sits outside the visible band`);
   }
   // Geometry-only selection remains available and must still answer.
   assert.ok(bestCameraEdge(host, basis), `${key} shows no facade to the camera`);
  }
+
+ // The override has to be doing work: the centre block's preferred wall is NOT the one the
+ // visibility scan would choose, and it is the one further right in the frame.
+ const host = hosts.find(h => h.key === AD_ANCHORS[22]);
+ const visible = bestCameraEdge(host, basis, hosts);
+ const asked = bestCameraEdge(host, basis, hosts, {prefer: 'rightmost'});
+ assert.notEqual(asked.edge.index, visible.edge.index, 'the preferred wall is the default one, so nothing is proved');
+ const midX = e => {
+  const m = [(e.a[0] + e.b[0]) / 2, (host.bottom + host.top) / 2, (e.a[1] + e.b[1]) / 2];
+  const d = [m[0] - basis.origin[0], m[1] - basis.origin[1], m[2] - basis.origin[2]];
+  const z = d[0] * basis.forward[0] + d[1] * basis.forward[1] + d[2] * basis.forward[2];
+  return (d[0] * basis.right[0] + d[1] * basis.right[1] + d[2] * basis.right[2]) / (z * basis.tanHalf * basis.aspect);
+ };
+ assert.ok(midX(asked.edge) > midX(visible.edge), 'the preferred wall is not the one nearer QFRONT');
 });
 
 test('a wall too hidden to read carries nothing at all', () => {
  // Squeezing a group into a sliver produces panels smaller than the procedural stickers
  // beside them, which reads as litter on the facade rather than as an advertisement.
  const basis = referenceBasis(camera, REFERENCE_VIEW);
- const host = hosts.find(h => h.key === AD_ANCHORS[19]);
+ const host = hosts.find(h => h.key === AD_ANCHORS[22]);
  const ads = REFERENCE_ADS.filter(a => AD_ANCHORS[a.id] === host.key);
  const sliver = {...host, polygon: host.polygon, bottom: host.bottom, top: host.bottom + .9};
  const out = placeAnchorGroup(ads, sliver, basis, hosts);
