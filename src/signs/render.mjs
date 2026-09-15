@@ -7,8 +7,6 @@ import {merge,InstancedBuilder,triangleCount} from '../geo/geometry.mjs';
 import {inspectGeometry} from '../ground/render.mjs';
 import {createSignAtlases} from './atlas.mjs';
 import {createReferenceAtlas} from './reference-art.mjs';
-// Self-lit displays are driven harder than printed sheets at night.
-const VISION_MOUNTS=new Set(['large_led_vision','rooftop_large_led_vision','neon_sign_vertical']);
 import {buildSignModel,buildSignModelSteps} from './model.mjs';
 import {commercialLayout} from './commercial-layout.mjs';
 import {applyReferenceAds} from './reference-layer.mjs';
@@ -32,10 +30,14 @@ export function buildSignage(data,options={}){const start=performance.now(),mode
  const referenceAtlas=createReferenceAtlas({...options,tier:model.tier,ids:referenceIds});
  const accents=model.tier==='high'?buildSignAccents(displaySigns):null;if(accents)root.add(accents.root);
  const centerGai=model.tier==='high'?buildCenterGai(options):null;if(centerGai)root.add(centerGai.root);
- materials.reference=new MeshStandardMaterial({map:referenceAtlas.texture,roughness:.55,emissive:0xffffff,emissiveMap:referenceAtlas.texture,emissiveIntensity:.42});
- materials.referenceVision=new MeshStandardMaterial({map:referenceAtlas.texture,roughness:.3,emissive:0xffffff,emissiveMap:referenceAtlas.texture,emissiveIntensity:.8});
- const lists={print:[],led:[],heroScreen:[],reference:[],referenceVision:[]},geometries=[],checks={},box=new BoxGeometry(1,1,1),frames=new InstancedBuilder(box,materials.frame,Math.max(1,displaySigns.length));
- for(const source of displaySigns){const s=source;const referenceEntry=s.referenceAd?referenceAtlas.entryFor(s.referenceAd.id):null;const entry=referenceEntry??(s.screenUV?{u0:s.screenUV[0]*.98+.01,u1:s.screenUV[1]*.98+.01,v0:.02,v1:.98}:atlas.entries[s.variant%atlas.count]);const channel=referenceEntry?(VISION_MOUNTS.has(s.referenceMount)?'referenceVision':'reference'):s.screenUV?'heroScreen':s.category==='screen'?'led':'print';lists[channel].push(signFace(s,entry));if(s.category==='blade')lists[channel].push(signFace(s,entry,true));frames.add(...s.position,s.heading,[s.width+(s.screenUV?.length?.3:.015),s.height+(s.screenUV?.length?.35:.015),s.depth],0xffffff);}
+ // A single reference material, not one per mount type: two distinct shader programs in
+ // this stage previously added a measured ~7.5s of first-use GPU shader-compile stall to
+ // startup (Windows/ANGLE compiles each new program synchronously on first draw). Printed
+ // panels and self-lit displays now share one program at a mid-point night intensity; the
+ // per-mount day/night distinction this cost is a trade this stage no longer makes.
+ materials.reference=new MeshStandardMaterial({map:referenceAtlas.texture,roughness:.42,emissive:0xffffff,emissiveMap:referenceAtlas.texture,emissiveIntensity:.58});
+ const lists={print:[],led:[],heroScreen:[],reference:[]},geometries=[],checks={},box=new BoxGeometry(1,1,1),frames=new InstancedBuilder(box,materials.frame,Math.max(1,displaySigns.length));
+ for(const source of displaySigns){const s=source;const referenceEntry=s.referenceAd?referenceAtlas.entryFor(s.referenceAd.id):null;const entry=referenceEntry??(s.screenUV?{u0:s.screenUV[0]*.98+.01,u1:s.screenUV[1]*.98+.01,v0:.02,v1:.98}:atlas.entries[s.variant%atlas.count]);const channel=referenceEntry?'reference':s.screenUV?'heroScreen':s.category==='screen'?'led':'print';lists[channel].push(signFace(s,entry));if(s.category==='blade')lists[channel].push(signFace(s,entry,true));frames.add(...s.position,s.heading,[s.width+(s.screenUV?.length?.3:.015),s.height+(s.screenUV?.length?.35:.015),s.depth],0xffffff);}
  for(const [key,list] of Object.entries(lists)){if(!list.length)continue;const g=merge(list);list.forEach(g=>g.dispose());const mesh=new Mesh(g,materials[key]);mesh.name='signs-'+key;mesh.castShadow=false;root.add(mesh);checks[key]=inspectGeometry(g);geometries.push(g);}
  if(frames.count)root.add(frames.build());const halos=options.fidelity?createHeroHalos(model):null;if(halos)root.add(halos.mesh);let debug=null;if(options.debug){const g=debugGeometry(model),mat=new LineBasicMaterial({vertexColors:true,depthTest:false});debug=new LineSegments(g,mat);debug.name='s7-anchor-normal-bounds-rejections-regions';debug.renderOrder=10;root.add(debug);}
  const stats={overlapsDropped:resolved.dropped.length,referenceAds:reference.placed.length,referenceUnplaced:reference.unplaced.map(u=>({id:u.id,brand:u.brand,priority:u.priority,reason:u.reason})),referenceReplaced:reference.replaced,accentLights:accents?.count??0,centerGai:centerGai?.stats,...model.stats,sourceSignCount:model.signs.length,displaySignCount:displaySigns.length,tier:model.tier,atlasCount:3,referenceAtlasSize:referenceAtlas.size,referenceAtlasMode:referenceAtlas.mode,referencePainted:displaySigns.filter(s=>s.referenceAd&&referenceAtlas.entryFor(s.referenceAd.id)).length,atlasDimensions:[[atlas.size,atlas.size],[atlas.screenWidth,atlas.screenWidth/2]],graphicVariants:atlas.count+1,atlasMode:atlas.city.mode,materials:4+(halos?1:0)+(accents?2:0),batches:geometries.length+(frames.count?1:0)+(halos?1:0)+(accents?2:0),drawCallContribution:geometries.length+(frames.count?1:0)+(halos?1:0)+(accents?2:0),triangles:geometries.reduce((s,g)=>s+triangleCount(g),0)+frames.count*12+(halos?.count??0)*2+(accents?.triangles??0),debugBatches:debug?1:0,checks,buildTimeMs:Math.round(performance.now()-start),haloCount:halos?.count??0,haloBatches:halos?1:0,emissiveDayOnly:true,pointLights:0};let disposed=false;
