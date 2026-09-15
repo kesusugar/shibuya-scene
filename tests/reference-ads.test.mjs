@@ -9,7 +9,7 @@ import {BUILDERS} from '../src/heroes/builders.mjs';
 import {HERO_DEFINITIONS} from '../src/heroes/config.mjs';
 import {CAMERAS} from '../src/app/foundation.mjs';
 import {REFERENCE_ADS, REFERENCE_VIEW, MOUNT_CATEGORY, MAX_WIDTH, MAX_RANGE, MIN_FACING,
- AD_ANCHORS, EXCLUDED_ADS, MAX_BLADE_WIDTH, referenceBasis, adRay, intersectHosts,
+ AD_ANCHORS, EXCLUDED_ADS, MAX_BLADE_WIDTH, PANELS, referenceBasis, adRay, intersectHosts,
  bestCameraEdge, placeAnchorGroup, visibleWallPatch, ANCHOR_SHAPES, AD_ANCHOR_FACE, resolveReferenceAds} from '../src/signs/reference-ads.mjs';
 import {applyReferenceAds} from '../src/signs/reference-layer.mjs';
 import {buildSignModel} from '../src/signs/model.mjs';
@@ -75,7 +75,9 @@ test('advertisements with no building are reported, never relocated', () => {
   assert.ok(u.reason, `${u.id} rejected without a reason`);
   assert.ok(!resolved.placed.some(p => p.ad.id === u.id), `${u.id} is both placed and unplaced`);
  }
- assert.equal(resolved.placed.length + resolved.unplaced.length, REFERENCE_ADS.length);
+ // PANELS: the inventory plus the panels the scene adds, every one of which is either
+ // placed or reported.
+ assert.equal(resolved.placed.length + resolved.unplaced.length, PANELS.length);
 });
 
 test('placement is deterministic', () => {
@@ -137,7 +139,7 @@ test('a reference slot is audited like any other sign and never stamped onto one
   assert.match(r.reason, /^placement-audit:/);
   assert.ok(!audited.placed.some(p => p.ad.id === r.ad?.id ?? r.id), 'a rejected slot is still placed');
  }
- assert.equal(audited.placed.length + audited.unplaced.length, REFERENCE_ADS.length);
+ assert.equal(audited.placed.length + audited.unplaced.length, PANELS.length);
 });
 
 test('an anchored advertisement sits on the building it was anchored to', () => {

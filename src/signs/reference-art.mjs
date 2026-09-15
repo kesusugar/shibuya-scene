@@ -11,7 +11,7 @@
 // with far more pixels per panel.
 
 import {CanvasTexture, DataTexture, SRGBColorSpace, LinearFilter, RGBAFormat} from 'three';
-import {REFERENCE_ADS} from './reference-ads.mjs';
+import {REFERENCE_ADS, PANELS} from './reference-ads.mjs';
 
 // 4096 was measured at 11.7 s to rasterise its 64 MB backing store, against 0.4 s for the
 // 16 MB sheet, and it cannot be prebaked away: a committed PNG still has to decode and
@@ -252,7 +252,27 @@ export const REFERENCE_ART = Object.freeze({
   box(.05, .08, .9, .46, '#ffffff');
   c.fillStyle = '#e2001a'; text('サンドラッグ', .17, .5, .31);
   c.fillStyle = '#ffffff'; text('SUN DRUG', .12, .5, .68, {family: 'Arial,sans-serif', weight: '900'});
-  c.fillStyle = '#ffd9dc'; text('処方せん受付', .075, .5, .87);}
+  c.fillStyle = '#ffd9dc'; text('処方せん受付', .075, .5, .87);},
+
+ // A vision screen running a key visual: no wordmark, no strapline, just artwork, which is
+ // what the block's real screen carries between spots. Drawn from primitives like every
+ // other panel here — a generic figure in a house style, not a likeness of any character,
+ // and nothing is downloaded. At 130 m what reads is the colour split, the hair silhouette
+ // and the pose, so those carry the composition and the detail stays cheap.
+ 101(c) {const {box, disc} = tools(c);
+  const poly = (fill, pts) => {c.fillStyle = fill; c.beginPath(); pts.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)); c.closePath(); c.fill();};
+  box(0, 0, 1, 1, '#0b2f7a');
+  poly('#eaf1ff', [[0, .88], [1, .66], [1, 1], [0, 1]]);                 // the diagonal sweep, low
+  for (const [x, y, r] of [[.12, .78, .05], [.26, .88, .03], [.82, .62, .055], [.93, .72, .028]])
+   disc(x, y, r, '#7fb2ff');                                            // splash marks over the split
+  poly('#f4f7fc', [[.18, 1], [.3, .6], [.7, .6], [.82, 1]]);            // shoulders, filling the foot
+  poly('#1b46a8', [[.4, .6], [.5, .78], [.6, .6]]);                     // open collar
+  disc(.5, .4, .19, '#ffdfc6');                                         // face, the subject
+  poly('#8fd694', [[.29, .4], [.33, .1], [.42, .27], [.5, .05],         // hair, spiked
+   [.58, .27], [.67, .1], [.71, .4], [.64, .3], [.5, .24], [.36, .3]]);
+  box(.41, .41, .045, .07, '#2a2f3a'); box(.545, .41, .045, .07, '#2a2f3a');
+  disc(.78, .66, .085, '#ffdfc6');                                      // raised fist
+  poly('#ffdfc6', [[.7, .78], [.86, .74], [.84, 1], [.72, 1]]);}        // forearm
 });
 
 /** Ids the inventory carries that this sheet can draw. */
@@ -322,4 +342,4 @@ export function createReferenceAtlas({tier = 'high', maxTextureSize = 4096, canv
 }
 
 /** Inventory entries this sheet has artwork for, for reporting and tests. */
-export const PAINTED_ADS = Object.freeze(REFERENCE_ADS.filter(ad => REFERENCE_ART[ad.id]));
+export const PAINTED_ADS = Object.freeze(PANELS.filter(ad => REFERENCE_ART[ad.id]));

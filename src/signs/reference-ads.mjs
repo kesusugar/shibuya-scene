@@ -50,6 +50,26 @@ export const REFERENCE_ADS = Object.freeze([
  {id:30,zone:'right_edge_building_red',brand:'サンドラッグ',category:'drugstore',left:90.2,top:69.6,width:9.7,height:8.0,aspect:1.212,mount:'wall_panel',priority:'high'}
 ]);
 
+/**
+ * Panels this scene adds that the reference frame does not show.
+ *
+ * REFERENCE_ADS is a transcription of one photograph and stays that way, so anything the
+ * scene hangs for its own reasons lives here instead of being smuggled into the inventory.
+ * These are placed only by anchor — they have no measured position to raycast from — and
+ * their ids start at 101 so they can never collide with an inventory entry.
+ *
+ * `textless` panels carry artwork instead of a name, the way a vision screen runs a key
+ * visual rather than a wordmark.
+ */
+export const EXTRA_PANELS = Object.freeze([
+ {id: 101, zone: 'centre_block_vision_lower', brand: 'アニメ キービジュアル', category: 'anime_key_visual',
+  left: 0, top: 0, width: 0, height: 0, aspect: 1, mount: 'large_led_vision', priority: 'medium',
+  textless: true, extra: true}
+]);
+
+/** Everything that can be placed: the inventory plus the scene's own additions. */
+export const PANELS = Object.freeze([...REFERENCE_ADS, ...EXTRA_PANELS]);
+
 // Buildings this scene actually has where the reference frame's centre block sits.
 //
 // The inventory percentages describe the reference image, and the reference image is not
@@ -73,7 +93,7 @@ const CENTRE_BLOCK = 'way/136690966:0:0';   // 118 m out, raised to 38 m, fully 
 // the sheet, the vision below it and the bookshop fascia at its foot — keeps each large
 // enough to read.
 export const AD_ANCHORS = Object.freeze({
- 16: CENTRE_BLOCK, 18: CENTRE_BLOCK, 21: CENTRE_BLOCK, 22: CENTRE_BLOCK
+ 18: CENTRE_BLOCK, 21: CENTRE_BLOCK, 22: CENTRE_BLOCK, 101: CENTRE_BLOCK
 });
 
 // Which wall of an anchored host carries its group. The centre block's signs hang on the
@@ -101,10 +121,9 @@ export const AD_ANCHOR_FACE = Object.freeze({[CENTRE_BLOCK]: 'rightmost'});
 export const ANCHOR_SHAPES = Object.freeze({
  18: {width: .72, top: .99, bottom: .87},  // the sheet across the top
  21: {width: 1, top: .86, bottom: .50},    // the vision, full width, down to the building's middle
- // The storey between the vision and the fascia, which the three of them left bare. A
- // pharmacy panel suits the block: its real neighbour is a drugstore, and this one is
- // already drawn and otherwise has nowhere in the scene to go.
- 16: {width: .95, top: .48, bottom: .27},
+ // The storey between the vision and the fascia, which the other three left bare: a key
+ // visual with no wordmark, the way the block's real vision screen runs one.
+ 101: {width: .95, top: .48, bottom: .27},
  // The bookshop fascia: the building's full width, from just above the lit ground-floor
  // windows up to the storey below the vision. It is the nearest of the three to the camera
  // and the one a passer-by reads, so it gets the depth the other two do not need.
@@ -572,7 +591,9 @@ export function resolveReferenceAds(hosts, camera, view = REFERENCE_VIEW) {
  const basis = referenceBasis(camera, view), placed = [], unplaced = [];
  const byKey = new Map(hosts.map(h => [h.key, h]));
  const anchorGroups = new Map();
- for (const ad of REFERENCE_ADS) {
+ // PANELS, not REFERENCE_ADS: the scene's own additions are placed by anchor only, and the
+ // raycast pass below stays with the inventory, which is the only thing it can aim.
+ for (const ad of PANELS) {
   const key = AD_ANCHORS[ad.id];
   if (!key || EXCLUDED_ADS[ad.id]) continue;
   if (!anchorGroups.has(key)) anchorGroups.set(key, []);
