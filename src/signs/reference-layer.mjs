@@ -7,7 +7,7 @@
 
 import {makePlacement, placementIssues} from './model.mjs';
 import {CAMERAS} from '../app/foundation.mjs';
-import {resolveReferenceAds} from './reference-ads.mjs';
+import {resolveReferenceAds, referenceBasis} from './reference-ads.mjs';
 
 /** Vertical mounts read as blades; everything else keeps the facade plane. */
 const VERTICAL = new Set(['wall_panel_vertical', 'sleeve_sign_vertical', 'sleeve_sign_vertical_banner', 'neon_sign_vertical']);
@@ -39,9 +39,11 @@ export const FATAL_ISSUES = Object.freeze([
 ]);
 
 // How much of a generated panel may sit across a reference advertisement in the frame
-// before the panel gives way, and how far from it that panel has to be to be someone
-// else's problem rather than clutter in front of this one.
-const CLUTTER_OVERLAP = .2, CLUTTER_RANGE = 60;
+// before the panel gives way, how much of the advertisement it may cover whatever its own
+// size, and how far from it that panel has to be to be someone else's problem rather than
+// clutter in front of this one. Both share tests are needed: a tall narrow blade crossing a
+// wide shallow fascia covers almost none of itself and most of the fascia.
+const CLUTTER_OVERLAP = .2, CLUTTER_COVER = .12, CLUTTER_RANGE = 60;
 
 /**
  * Drop generated panels that land across a reference advertisement in the frame.
@@ -53,11 +55,15 @@ const CLUTTER_OVERLAP = .2, CLUTTER_RANGE = 60;
  * leaves it half legible. Generated filler is the lowest-priority signage in the scene, so
  * where the two compete for the same pixels the filler goes.
  */
-function clearLineOfSight(kept, accepted, basis) {
+export function clearLineOfSight(kept, accepted, basis) {
  if (!accepted.length) return kept;
  const box = s => {
-  if (!s.normal || !s.position || !(s.width > 0) || !(s.height > 0)) return null;
-  const t = [s.normal[2], 0, -s.normal[0]];
+  if (!s.position || !(s.width > 0) || !(s.height > 0)) return null;
+  // Signs from the sign model carry a normal; the centre-gai layout carries only a
+  // heading. Accepting both is what lets the same rule cover the second subsystem.
+  const n = s.normal ?? (Number.isFinite(s.heading) ? [Math.sin(s.heading), 0, Math.cos(s.heading)] : null);
+  if (!n) return null;
+  const t = [n[2], 0, -n[0]];
   const pts = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([u, v]) => {
    const p = [s.position[0] + t[0] * u * s.width / 2, s.position[1] + v * s.height / 2,
     s.position[2] + t[2] * u * s.width / 2];
@@ -73,7 +79,13 @@ function clearLineOfSight(kept, accepted, basis) {
    y0: Math.min(...pts.map(p => p[1])), y1: Math.max(...pts.map(p => p[1])),
    depth: pts.reduce((t, p) => t + p[2], 0) / 4};
  };
- const ads = accepted.map(box).filter(Boolean);
+ // An advertisement may reserve wall above itself. A panel on the storey over it can clip
+ // its top edge by too little to trip either share test and still crowd it.
+ const ads = accepted.map(s => {
+  const b = box(s);
+  if (!b || !(s.clearAbove > 0)) return b;
+  return {...b, y1: b.y1 + (b.y1 - b.y0) * s.clearAbove};
+ }).filter(Boolean);
  return kept.filter(s => {
   if (s.screenUV || s.hero) return true; // hero screens and landmarks outrank everything
   const b = box(s);
@@ -84,13 +96,15 @@ function clearLineOfSight(kept, accepted, basis) {
    if (Math.abs(a.depth - b.depth) > CLUTTER_RANGE) return false;
    const w = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0);
    const h = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
-   return w > 0 && h > 0 && w * h > area * CLUTTER_OVERLAP;
+   if (!(w > 0 && h > 0)) return false;
+   const shared = w * h, adArea = (a.x1 - a.x0) * (a.y1 - a.y0);
+   return shared > area * CLUTTER_OVERLAP || (adArea > 0 && shared > adArea * CLUTTER_COVER);
   });
  });
 }
 
 export function applyReferenceAds(signs, hosts, {camera = CAMERAS.find(c => c.id === 'scramble'), variantOf, context} = {}) {
- if (!hosts?.length) return {signs, placed: [], unplaced: []};
+ if (!hosts?.length) return {signs, placed: [], unplaced: [], basis: referenceBasis(camera)};
  const {basis, placed, unplaced} = resolveReferenceAds(hosts, camera);
  // Reference slots are measured from the frame, not from the procedural grid, so a slot
  // routinely straddles several generated panels on a neighbouring host key. Clearing by
@@ -124,6 +138,7 @@ export function applyReferenceAds(signs, hosts, {camera = CAMERAS.find(c => c.id
   sign.referenceAd = p.ad;
   sign.referenceMount = p.ad.mount;
   sign.referenceLowered = p.lowered;
+  sign.clearAbove = p.clearAbove ?? 0;
   // Roof and vision mounts are lit as displays; painted wall panels stay printed.
   sign.emissive = {...sign.emissive, class: p.category === 'screen' || p.roof ? 'screen' : 'commercial'};
   return sign;
@@ -141,7 +156,7 @@ export function applyReferenceAds(signs, hosts, {camera = CAMERAS.find(c => c.id
  }
  const keptIds = new Set(accepted.map(s => s.referenceAd.id));
  const clear = clearLineOfSight(kept, accepted, basis);
- return {signs: [...clear, ...accepted], placed: placed.filter(p => keptIds.has(p.ad.id)),
+ return {basis, signs: [...clear, ...accepted], placed: placed.filter(p => keptIds.has(p.ad.id)),
   unplaced: [...unplaced, ...rejected], rejected,
   replaced: signs.length - kept.length, decluttered: kept.length - clear.length};
 }

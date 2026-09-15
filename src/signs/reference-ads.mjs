@@ -73,30 +73,47 @@ const CENTRE_BLOCK = 'way/136690966:0:0';   // 118 m out, raised to 38 m, fully 
 // the sheet, the vision below it and the bookshop fascia at its foot — keeps each large
 // enough to read.
 export const AD_ANCHORS = Object.freeze({
- 18: CENTRE_BLOCK, 21: CENTRE_BLOCK, 22: CENTRE_BLOCK
+ 16: CENTRE_BLOCK, 18: CENTRE_BLOCK, 21: CENTRE_BLOCK, 22: CENTRE_BLOCK
 });
 
-/**
- * Proportions for the anchored column, taken from a photograph of the real building rather
- * than from the reference frame.
- *
- * The frame's percentages describe a facade seen nearly head-on. Unprojecting them through
- * this scene's view, which meets that wall at about 39 degrees, divides the width by the
- * foreshortening and so turns the portrait vision screen into a landscape one — the panel
- * covers the right share of the reference frame and is the wrong shape as an object. For a
- * column on a named wall the object is what matters, so its shape is stated directly:
- * `width` as a share of the usable wall, `aspect` as width over height. Order down the wall
- * follows the inventory's own top-to-bottom order.
- */
 // Which wall of an anchored host carries its group. The centre block's signs hang on the
 // narrow return that faces QFRONT, not on the broad west face the visibility scan would
 // otherwise choose — see bestCameraEdge for what that costs and why it is worth it.
 export const AD_ANCHOR_FACE = Object.freeze({[CENTRE_BLOCK]: 'rightmost'});
 
+/**
+ * Where the centre block's advertisements sit on their wall, as bands rather than as a
+ * stack, taken from a photograph of the real building.
+ *
+ * Two earlier attempts got this wrong for the same reason: they derived position from the
+ * reference frame's percentages. Those describe a facade seen nearly head-on, so
+ * unprojecting them through a view that meets this wall at about 39 degrees divides the
+ * width by the foreshortening and turns the portrait vision screen into a landscape one —
+ * the right share of the frame, the wrong object. Stacking the results top to bottom then
+ * chose the vertical positions by arithmetic rather than by where the signs actually hang.
+ *
+ * So the band is stated directly. `width` is a share of the usable wall; `top` and `bottom`
+ * are heights up the host, 0 at the pavement and 1 at the roof. Each advertisement is
+ * independent, which is what lets the vision run the full width of the building from just
+ * under the sheet down to its middle, and the bookshop fascia sit just clear of the lit
+ * ground floor instead of wherever a stack happens to end.
+ */
 export const ANCHOR_SHAPES = Object.freeze({
- 18: {width: .72, aspect: 1.35},  // the large sheet at the top
- 21: {width: .42, aspect: .78},   // the vision panel, portrait, narrower than the sheet
- 22: {width: .96, aspect: 5.2}    // the bookshop fascia, full width across the foot
+ 18: {width: .72, top: .99, bottom: .87},  // the sheet across the top
+ 21: {width: 1, top: .86, bottom: .50},    // the vision, full width, down to the building's middle
+ // The storey between the vision and the fascia, which the three of them left bare. A
+ // pharmacy panel suits the block: its real neighbour is a drugstore, and this one is
+ // already drawn and otherwise has nowhere in the scene to go.
+ 16: {width: .95, top: .48, bottom: .27},
+ // The bookshop fascia: the building's full width, from just above the lit ground-floor
+ // windows up to the storey below the vision. It is the nearest of the three to the camera
+ // and the one a passer-by reads, so it gets the depth the other two do not need.
+ // `shift` moves it across the FRAME, as a share of the usable wall — negative is toward
+ // the left of the picture, whichever way the wall's own tangent happens to run.
+ // `clearAbove` reserves wall above it, as a share of its own height: the storey over the
+ // fascia carries a generated panel that only clips its top edge, too little to trip the
+ // clutter test but enough to crowd the one sign a passer-by is meant to read.
+ 22: {width: .95, top: .24, bottom: .075, shift: -.02, clearAbove: 1.1}
 });
 
 // How much of a wall a group may be squeezed into before it is not worth carrying. Below
@@ -463,16 +480,41 @@ export function placeAnchorGroup(ads, host, basis, hosts) {
  const usableX = highAlong - lowAlong, usableY = ceiling - floor;
  if (!(usableX > 1 && usableY > 1)) return null;
 
- // Panel size before fitting: from the stated shape where there is one, otherwise from
- // unprojecting the reference rectangle.
- const sized = new Map(ads.map(ad => {
+ const centre = lowAlong + usableX / 2;
+ // Does running further along this wall move right or left across the frame? Bands state
+ // their shift in frame terms, so the wall's own winding must not decide which way they go.
+ const rightward = dot([edge.tangent[0], 0, edge.tangent[1]], basis.right) >= 0 ? 1 : -1;
+ const out = [];
+
+ // An advertisement with a stated band owns its own piece of the wall, so it is placed
+ // directly and takes no part in the stacking below.
+ const banded = ads.filter(ad => ANCHOR_SHAPES[ad.id]);
+ const span = host.top - host.bottom;
+ for (const ad of banded) {
   const shape = ANCHOR_SHAPES[ad.id];
-  const w = shape ? shape.width * usableX : ad.width * perX;
-  return [ad.id, {w, h: shape ? w / shape.aspect : ad.height * perY}];
- }));
- const columns = stackColumns(ads);
+  const category = MOUNT_CATEGORY[ad.mount] ?? 'billboard';
+  const top = Math.min(host.bottom + shape.top * span, ceiling);
+  const bottom = Math.max(host.bottom + shape.bottom * span, host.bottom + WALL_MARGIN);
+  const h = top - bottom;
+  const w = fitMount(category, Math.min(shape.width * usableX, MAX_WIDTH[ad.mount] ?? 18));
+  if (!(h > .3 && w > .4)) continue;
+  const y = (top + bottom) / 2;
+  const along = Math.min(Math.max(centre + rightward * (shape.shift ?? 0) * usableX, lowAlong + w / 2), highAlong - w / 2);
+  out.push({ad, host, edge, along, y,
+   point: [edge.a[0] + edge.tangent[0] * along, y, edge.a[1] + edge.tangent[1] * along],
+   distance: depth, rayWidth: shape.width * usableX, width: w, height: h,
+   foreshortening, roof: false, lowered: false, anchored: true, anchoredWith: ads.length,
+   banded: true, clearAbove: shape.clearAbove ?? 0, visibleCoverage: patch?.coverage ?? 1,
+   clamped: w < shape.width * usableX - 1e-6, category});
+ }
+
+ const rest = ads.filter(ad => !ANCHOR_SHAPES[ad.id]);
+ if (!rest.length) return out.length ? out : {tooSmall: true, fit: 0, patch};
+
+ const sized = new Map(rest.map(ad => [ad.id, {w: ad.width * perX, h: ad.height * perY}]));
+ const columns = stackColumns(rest);
  let fit = 1;
- for (const ad of ads) {
+ for (const ad of rest) {
   const {w} = sized.get(ad.id);
   // A mount type that never gets built at the resolved width shrinks the whole group, so
   // the arrangement stays intact instead of one panel being squashed out of proportion.
@@ -487,8 +529,6 @@ export function placeAnchorGroup(ads, host, basis, hosts) {
  if (fit < MIN_ANCHOR_FIT) return {tooSmall: true, fit, patch};
 
  const width = groupWidth * fit;
- const centre = lowAlong + usableX / 2;
- const out = [];
  for (const col of columns) {
   const heights = col.map(ad => sized.get(ad.id).h * fit);
   const stack = heights.reduce((a, b) => a + b, 0);
@@ -510,10 +550,7 @@ export function placeAnchorGroup(ads, host, basis, hosts) {
    const h = heights[i], y = cursor - h / 2;
    cursor -= h;
    const w = fitMount(category, sized.get(ad.id).w * fit);
-   // A stated shape is a panel on this wall, so it is centred on it; a rectangle carried
-   // over from the reference frame keeps its place across the group instead.
-   const along = ANCHOR_SHAPES[ad.id] ? centre
-    : lowAlong + (usableX - width) / 2 + (ad.left + ad.width / 2 - left) * perX * fit;
+   const along = lowAlong + (usableX - width) / 2 + (ad.left + ad.width / 2 - left) * perX * fit;
    out.push({ad, host, edge, along, y,
     point: [edge.a[0] + edge.tangent[0] * along, y, edge.a[1] + edge.tangent[1] * along],
     distance: depth, rayWidth: sized.get(ad.id).w, width: w, height: h,

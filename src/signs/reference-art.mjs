@@ -192,12 +192,25 @@ export const REFERENCE_ART = Object.freeze({
   box(.2, .72, .6, .04, '#ffd400');
   c.fillStyle = '#9aa7c4'; text('SHIBUYA VISION', .06, .5, .87, {family: 'Arial,sans-serif'});},
 
- // A bookshop fascia: cream ground with a dark frame, because an unframed near-white panel
- // is indistinguishable from the pale generated stickers on the walls beside it.
- 22(c) {const {text, box} = tools(c); box(0, 0, 1, 1, '#17223a'); box(.035, .08, .93, .84, '#fbfaf5');
-  c.fillStyle = '#17223a'; text('大盛堂書店', .3, .5, .42);
-  box(.18, .66, .64, .022, '#b8912f');
-  c.fillStyle = '#4a4a4a'; text('TAISEIDO BOOK STORE', .085, .5, .8, {family: 'Arial,sans-serif'});},
+ // 大盛堂書店, drawn from a photograph of the shopfront rather than from the reference
+ // frame, which is too far away to show it. The sign is a white ground inside a cobalt
+ // frame, the five characters set across it in that same cobalt, the middle three boxed in
+ // red the way the shop boxes them, and the English underneath in the red. It is a wide,
+ // shallow fascia, so it is drawn through trueShape: without that the characters come out
+ // stretched half again as wide as they are tall.
+ 22(c, aspect) {const {text, box} = tools(c);
+  const cobalt = '#14409b', red = '#e0231b';
+  box(0, 0, 1, 1, cobalt);
+  box(.028, .05, .944, .9, '#ffffff');
+  trueShape(c, aspect, wide => {
+   const span = .84 * wide;
+   // Three characters, sized so they stay square whatever shape the panel resolves to:
+   // fitting five would only cost the name the height that makes it readable at 130 m.
+   const size = Math.min(.66, span / 3.1);
+   c.strokeStyle = red; c.lineWidth = .026;
+   c.strokeRect(.5 - span / 2, .5 - size * .72, span, size * 1.44);
+   c.fillStyle = cobalt; text('大盛堂', size, .5, .5, {max: span * .93});
+  });},
 
  24(c) {const {text, box} = tools(c); box(0, 0, 1, 1, '#16181d');
   c.fillStyle = '#e8ecf2'; text('QFRONT', .28, .5, .5, {family: 'Arial,sans-serif', weight: '300'});},
@@ -245,7 +258,16 @@ export const REFERENCE_ART = Object.freeze({
 /** Ids the inventory carries that this sheet can draw. */
 export const PAINTED_IDS = Object.freeze(Object.keys(REFERENCE_ART).map(Number).sort((a, b) => a - b));
 
-export function paintReferenceAtlas(ctx, size, ids = PAINTED_IDS, columns = columnsFor(ids.length)) {
+/**
+ * Paint the sheet.
+ *
+ * `aspects` maps an advertisement id to the width-over-height of the panel it will be
+ * rendered on. Every tile is square and is stretched onto whatever shape its panel turns
+ * out to be, so a painter that ignores this draws type that comes out squashed or, on the
+ * wide bookshop fascia, stretched half again as wide as it should be. Painters that care
+ * take the value and compensate; the rest are unaffected, and 1 is the old behaviour.
+ */
+export function paintReferenceAtlas(ctx, size, ids = PAINTED_IDS, columns = columnsFor(ids.length), aspects = {}) {
  const entries = referenceAtlasEntries(size, ids.length, columns);
  ctx.fillStyle = '#05070b'; ctx.fillRect(0, 0, size, size);
  ids.forEach((id, index) => {
@@ -255,13 +277,26 @@ export function paintReferenceAtlas(ctx, size, ids = PAINTED_IDS, columns = colu
   ctx.beginPath(); ctx.rect(e.x + e.padding, e.y + e.padding, e.w - 2 * e.padding, e.h - 2 * e.padding); ctx.clip();
   ctx.translate(e.x, e.y); ctx.scale(e.w, e.h);
   ctx.lineJoin = 'round';
-  paint(ctx);
+  paint(ctx, aspects[id] > 0 ? aspects[id] : 1);
   ctx.restore();
  });
  return entries;
 }
 
-export function createReferenceAtlas({tier = 'high', maxTextureSize = 4096, canvasFactory, ids = PAINTED_IDS} = {}) {
+/**
+ * Draw inside a horizontally widened space so that shapes come out true on a panel that is
+ * `aspect` times wider than it is tall. Inside the callback x still runs 0..1 across the
+ * panel, but a square drawn there renders square instead of stretched.
+ */
+export function trueShape(c, aspect, draw) {
+ if (!(aspect > 0) || Math.abs(aspect - 1) < 1e-6) return draw(1);
+ c.save();
+ c.translate(.5, 0); c.scale(1 / aspect, 1); c.translate(-.5, 0);
+ draw(aspect);
+ c.restore();
+}
+
+export function createReferenceAtlas({tier = 'high', maxTextureSize = 4096, canvasFactory, ids = PAINTED_IDS, aspects = {}} = {}) {
  const requested = REFERENCE_QUALITY[tier];
  if (!requested) throw Error('Unknown reference atlas tier');
  if (!(maxTextureSize >= 128)) throw Error('GPU texture limit too small');
@@ -272,7 +307,7 @@ export function createReferenceAtlas({tier = 'high', maxTextureSize = 4096, canv
   canvas.width = size; canvas.height = size;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw Error('Reference sign Canvas 2D unavailable');
-  paintReferenceAtlas(ctx, size, ids);
+  paintReferenceAtlas(ctx, size, ids, undefined, aspects);
   texture = new CanvasTexture(canvas); mode = 'canvas';
  } else {
   texture = new DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1, RGBAFormat); mode = 'cpu-placeholder';

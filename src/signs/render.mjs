@@ -9,7 +9,7 @@ import {createSignAtlases} from './atlas.mjs';
 import {createReferenceAtlas} from './reference-art.mjs';
 import {buildSignModel,buildSignModelSteps} from './model.mjs';
 import {commercialLayout} from './commercial-layout.mjs';
-import {applyReferenceAds} from './reference-layer.mjs';
+import {applyReferenceAds, clearLineOfSight} from './reference-layer.mjs';
 import {resolveFaceOverlaps} from './overlap.mjs';
 import {REGIONS} from './config.mjs';
 
@@ -27,9 +27,13 @@ export function buildSignage(data,options={}){const start=performance.now(),mode
  // Only the advertisements that survived placement get sheet space: reserving tiles for
  // slots this scene cannot host would halve the pixels the visible ones receive.
  const referenceIds=[...new Set(displaySigns.filter(s=>s.referenceAd).map(s=>s.referenceAd.id))].sort((a,b)=>a-b);
- const referenceAtlas=createReferenceAtlas({...options,tier:model.tier,ids:referenceIds});
+ // Tiles are square and get stretched onto whatever shape the panel resolved to, so the
+ // painters are told that shape. Without it a wide fascia draws type half again too wide.
+ const referenceAspects={};for(const s of displaySigns)if(s.referenceAd&&s.height>0)referenceAspects[s.referenceAd.id]=s.width/s.height;
+ const referenceAtlas=createReferenceAtlas({...options,tier:model.tier,ids:referenceIds,aspects:referenceAspects});
  const accents=model.tier==='high'?buildSignAccents(displaySigns):null;if(accents)root.add(accents.root);
- const centerGai=model.tier==='high'?buildCenterGai(options):null;if(centerGai)root.add(centerGai.root);
+ const referenceSigns=displaySigns.filter(s=>s.referenceAd);
+ const centerGai=model.tier==='high'?buildCenterGai({...options,clearFor:signs=>clearLineOfSight(signs,referenceSigns,reference.basis)}):null;if(centerGai)root.add(centerGai.root);
  // A single reference material, not one per mount type: two distinct shader programs in
  // this stage previously added a measured ~7.5s of first-use GPU shader-compile stall to
  // startup (Windows/ANGLE compiles each new program synchronously on first draw). Printed

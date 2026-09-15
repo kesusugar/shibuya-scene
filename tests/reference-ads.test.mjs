@@ -169,17 +169,19 @@ test('an anchored group keeps the reference arrangement without overlapping', ()
     Math.abs(a.y - b.y) >= (a.height + b.height) / 2 - 1e-9;
    assert.ok(apart, `${a.ad.brand} overlaps ${b.ad.brand}`);
   }
-  // A panel with a stated shape is built to that shape; one without keeps the proportions
-  // its reference rectangle implies. Either way the group scales by a single factor.
-  const shaped = group.filter(p => ANCHOR_SHAPES[p.ad.id]);
-  for (const p of shaped)
-   assert.ok(Math.abs(p.width / p.height / ANCHOR_SHAPES[p.ad.id].aspect - 1) < 1e-6,
-    `${p.ad.brand} is ${(p.width / p.height).toFixed(2)} wide for one tall, not ${ANCHOR_SHAPES[p.ad.id].aspect}`);
-  if (shaped.length > 1) {
-   const [a, b] = shaped;
-   assert.ok(Math.abs(a.width / b.width - ANCHOR_SHAPES[a.ad.id].width / ANCHOR_SHAPES[b.ad.id].width) < 1e-6,
-    `${key} lost the stated width ratio`);
+  // A panel with a stated band occupies exactly that band of the wall, so the vision can
+  // run the building's full width down to its middle and the fascia can sit just clear of
+  // the lit ground floor, rather than each landing wherever a stack happens to reach.
+  const span = p => p.host.top - p.host.bottom;
+  for (const p of group.filter(p => ANCHOR_SHAPES[p.ad.id])) {
+   const band = ANCHOR_SHAPES[p.ad.id];
+   const top = (p.y + p.height / 2 - p.host.bottom) / span(p);
+   const bottom = (p.y - p.height / 2 - p.host.bottom) / span(p);
+   assert.ok(Math.abs(top - band.top) < .02, `${p.ad.brand} tops out at ${top.toFixed(3)}, not ${band.top}`);
+   assert.ok(Math.abs(bottom - band.bottom) < .02, `${p.ad.brand} bottoms at ${bottom.toFixed(3)}, not ${band.bottom}`);
+   assert.ok(p.width <= band.width * p.edge.length + 1e-6, `${p.ad.brand} is wider than its share of the wall`);
   }
+  // Panels without a band keep the proportions their reference rectangles imply.
   const plain = group.filter(p => !ANCHOR_SHAPES[p.ad.id] && p.category !== 'blade');
   for (let i = 1; i < plain.length; i++)
    assert.ok(Math.abs(plain[i].width / plain[0].width - plain[i].ad.width / plain[0].ad.width) < 1e-6,
@@ -206,48 +208,10 @@ test('the visibility scan reports what standing in front of a wall does to it', 
  assert.ok(!blocked || blocked.coverage < open.coverage, 'a wall in the way changed nothing');
 });
 
-test('a short wall costs the gaps between advertisements, never their size', () => {
- // The reference building is about twice the height of the one this scene has on that
- // bearing. Preserving the stack's full vertical extent would halve every advertisement to
- // fit, which is what made them unreadable; the empty wall between them gives way instead.
- const stack = resolved.placed.filter(p => p.anchored && p.host.key === AD_ANCHORS[22])
-  .sort((a, b) => b.y - a.y);
- assert.ok(stack.length >= 3, 'the centre stack lost members');
-
- // Every advertisement is built to the shape it is meant to have — the stated one where
- // there is one, otherwise the one its reference rectangle implies on this wall.
- for (const p of stack.filter(p => p.category !== 'blade')) {
-  const want = ANCHOR_SHAPES[p.ad.id]?.aspect;
-  if (want) assert.ok(Math.abs(p.width / p.height / want - 1) < 1e-6, `${p.ad.brand} was distorted`);
- }
- const plain = stack.filter(p => p.category !== 'blade' && !ANCHOR_SHAPES[p.ad.id]);
- for (const p of plain)
-  assert.ok(Math.abs(p.width / p.height / (p.ad.width / p.ad.height) /
-   (plain[0].width / plain[0].height / (plain[0].ad.width / plain[0].ad.height)) - 1) < 1e-6,
-   `${p.ad.brand} was distorted`);
-
- // The tallest column is stacked clear, top to bottom, inside the wall.
- const column = stack.filter(p => p.category !== 'blade').sort((a, b) => b.y - a.y);
- assert.ok(column.length >= 3, 'the stacked column lost members');
- for (let i = 1; i < column.length; i++) {
-  const gap = (column[i - 1].y - column[i - 1].height / 2) - (column[i].y + column[i].height / 2);
-  assert.ok(gap >= -1e-6, `${column[i].ad.brand} runs into ${column[i - 1].ad.brand}`);
- }
- // No gap is ever wider than the reference spacing measured against the panel above it:
- // gaps may be compressed to fit the wall, never stretched to fill it. Measuring against
- // the neighbour is what lets a panel built to a stated shape carry its own spacing.
- for (let i = 1; i < column.length; i++) {
-  const above = column[i - 1];
-  const wanted = (column[i].ad.top - (above.ad.top + above.ad.height)) * above.height / above.ad.height;
-  const built = (above.y - above.height / 2) - (column[i].y + column[i].height / 2);
-  assert.ok(built <= Math.max(wanted, .25) + 1e-6,
-   `the wall under ${above.ad.brand} was stretched to ${built.toFixed(2)} m against ${wanted.toFixed(2)} m`);
- }
-
- // Shortening the wall has to come out of the gaps before it comes out of the panels. The
- // centre column states its own shapes and already sits at the minimum gap here, and no
- // two inventory rectangles left on the raycast path share a column with room to spare, so
- // the rule is exercised on a pair built for it: same size, a wide gap between them.
+test('a short wall costs the gaps between stacked advertisements, never their size', () => {
+ // This is the stacking path, used by any anchored group without stated bands. The centre
+ // column no longer goes through it — each of its three states its own band — so the rule
+ // is exercised on a pair built for it: same size, a wide gap between them.
  const basis = referenceBasis(camera, REFERENCE_VIEW);
  const host = hosts.find(h => h.key === AD_ANCHORS[22]);
  const pair = [
