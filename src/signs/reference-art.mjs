@@ -259,20 +259,109 @@ export const REFERENCE_ART = Object.freeze({
  // other panel here — a generic figure in a house style, not a likeness of any character,
  // and nothing is downloaded. At 130 m what reads is the colour split, the hair silhouette
  // and the pose, so those carry the composition and the detail stays cheap.
- 101(c) {const {box, disc} = tools(c);
-  const poly = (fill, pts) => {c.fillStyle = fill; c.beginPath(); pts.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)); c.closePath(); c.fill();};
-  box(0, 0, 1, 1, '#0b2f7a');
-  poly('#eaf1ff', [[0, .88], [1, .66], [1, 1], [0, 1]]);                 // the diagonal sweep, low
-  for (const [x, y, r] of [[.12, .78, .05], [.26, .88, .03], [.82, .62, .055], [.93, .72, .028]])
-   disc(x, y, r, '#7fb2ff');                                            // splash marks over the split
-  poly('#f4f7fc', [[.18, 1], [.3, .6], [.7, .6], [.82, 1]]);            // shoulders, filling the foot
-  poly('#1b46a8', [[.4, .6], [.5, .78], [.6, .6]]);                     // open collar
-  disc(.5, .4, .19, '#ffdfc6');                                         // face, the subject
-  poly('#8fd694', [[.29, .4], [.33, .1], [.42, .27], [.5, .05],         // hair, spiked
-   [.58, .27], [.67, .1], [.71, .4], [.64, .3], [.5, .24], [.36, .3]]);
-  box(.41, .41, .045, .07, '#2a2f3a'); box(.545, .41, .045, .07, '#2a2f3a');
-  disc(.78, .66, .085, '#ffdfc6');                                      // raised fist
-  poly('#ffdfc6', [[.7, .78], [.86, .74], [.84, 1], [.72, 1]]);}        // forearm
+ 101(c) {const {disc} = tools(c);
+  const shape = (style, draw) => {c.fillStyle = style; c.beginPath(); draw(); c.closePath(); c.fill();};
+  const poly = (style, pts) => shape(style, () => pts.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)));
+  // Canvas gradients are not available on every context this sheet is painted through, so
+  // depth is built from stacked washes instead. Cheap, and it survives the CPU path.
+  const oval = (x, y, rx, ry, style, turn = 0) => {
+   c.save(); c.translate(x, y); c.rotate(turn); c.scale(1, ry / rx);
+   disc(0, 0, rx, style); c.restore();
+  };
+
+  // Field: night blue lifted behind the head, so the figure reads without an outline.
+  c.fillStyle = '#061a4c'; c.fillRect(0, 0, 1, 1);
+  [[.66, '#0c2d78'], [.5, '#12409e'], [.34, '#1a54bb'], [.2, '#2f6fd6']]
+   .forEach(([r, s]) => disc(.48, .4, r, s));
+  // The diagonal sweep a key visual is built on, with the spray that sells the motion.
+  poly('#eef4ff', [[0, .9], [1, .68], [1, 1], [0, 1]]);
+  poly('#cfe0ff', [[0, .9], [1, .68], [1, .72], [0, .94]]);
+  for (const [x, y, r] of [[.1, .8, .045], [.22, .9, .026], [.85, .63, .05], [.95, .73, .024],
+   [.3, .96, .018], [.72, .58, .02]]) disc(x, y, r, '#a9c8ff');
+
+  // Body, under the head so the jaw overlaps the collar.
+  poly('#e9edf6', [[.16, 1], [.3, .64], [.7, .64], [.84, 1]]);          // shirt
+  poly('#cdd6e6', [[.16, 1], [.3, .64], [.38, .64], [.3, 1]]);         // shaded side
+  poly('#123a94', [[.41, .63], [.5, .8], [.59, .63]]);                  // open collar
+  poly('#2b5fd0', [[.47, .72], [.53, .72], [.55, .92], [.45, .92]]);    // tie
+
+  // Hair behind the head first, so the face sits into it rather than on top of it.
+  shape('#37764a', () => {
+   c.moveTo(.235, .66);
+   c.bezierCurveTo(.185, .30, .30, .10, .50, .10);
+   c.bezierCurveTo(.70, .10, .815, .30, .765, .66);
+   c.bezierCurveTo(.72, .44, .66, .30, .50, .30);
+   c.bezierCurveTo(.34, .30, .28, .44, .235, .66);
+  });
+
+  // Head. An anime skull is a wide cranium tapering to a narrow chin, so it is drawn as
+  // curves rather than a circle — a circle is what made the first attempt read as a doll.
+  shape('#ffe3ce', () => {
+   c.moveTo(.315, .38);
+   c.bezierCurveTo(.315, .19, .685, .19, .685, .38);
+   c.bezierCurveTo(.685, .50, .60, .60, .50, .665);
+   c.bezierCurveTo(.40, .60, .315, .50, .315, .38);
+  });
+  shape('#f3cab1', () => {                                              // shade down the far side
+   c.moveTo(.625, .28); c.bezierCurveTo(.70, .36, .665, .52, .50, .665);
+   c.bezierCurveTo(.60, .53, .635, .40, .625, .28);
+  });
+  poly('#e7b49a', [[.445, .645], [.555, .645], [.535, .70], [.465, .70]]);  // neck, in shade
+
+  // Eyes. The lash line is a curved band rather than a bar, the iris is banded light to
+  // dark, and two highlights sit off-centre; that combination is what reads as an eye.
+  for (const [x, dir] of [[.425, -1], [.575, 1]]) {
+   oval(x, .462, .058, .072, '#ffffff');
+   oval(x + dir * .004, .472, .046, .060, '#2f93df');
+   oval(x + dir * .004, .480, .035, .047, '#1663ab');
+   oval(x + dir * .004, .478, .019, .029, '#0a1c33');
+   disc(x - dir * .020, .433, .017, '#ffffff');
+   disc(x + dir * .022, .502, .009, '#cfe9ff');
+   shape('#23283a', () => {                                            // upper lash
+    c.moveTo(x - .063, .424); c.quadraticCurveTo(x, .378, x + .063, .420);
+    c.quadraticCurveTo(x, .408, x - .063, .444);
+   });
+   c.strokeStyle = '#35774a'; c.lineWidth = .015; c.lineCap = 'round';  // brow
+   c.beginPath(); c.moveTo(x - dir * .052, .368);
+   c.quadraticCurveTo(x, .336, x + dir * .050, .360); c.stroke();
+  }
+  oval(.5, .552, .012, .008, '#e9bfa5');                                // nose
+  shape('#c06a63', () => {                                              // mouth
+   c.moveTo(.474, .592); c.quadraticCurveTo(.5, .616, .526, .592);
+   c.quadraticCurveTo(.5, .602, .474, .592);
+  });
+  oval(.383, .535, .035, .017, '#ffc2b1');                              // blush, inside the cheek
+  oval(.617, .535, .035, .017, '#ffc2b1');
+
+  // Bangs: locks that hang DOWN from the crown to the brow, each with a pointed tip and
+  // each overlapping the next. Spikes pointing up read as a crown, not as hair.
+  for (const [x0, x1, tipX, tipY] of [
+   [.285, .40, .325, .47], [.375, .495, .445, .425], [.485, .605, .545, .455], [.595, .715, .675, .40]
+  ]) shape('#6cc07f', () => {
+   c.moveTo(x0, .235); c.quadraticCurveTo((x0 + x1) / 2, .16, x1, .235);
+   c.quadraticCurveTo(x1 - .01, .37, tipX, tipY);
+   c.quadraticCurveTo(x0 + .015, .35, x0, .235);
+  });
+  for (const dir of [-1, 1])                                           // side locks past the jaw
+   shape('#4f9c63', () => {
+    const x = .5 + dir * .215;
+    c.moveTo(x - dir * .045, .24);
+    c.quadraticCurveTo(x + dir * .075, .40, x + dir * .028, .70);
+    c.quadraticCurveTo(x - dir * .012, .52, x - dir * .075, .42);
+    c.quadraticCurveTo(x - dir * .075, .30, x - dir * .045, .24);
+   });
+  // The bangs throw a shadow across the forehead. Without it the hair reads as a hat.
+  shape('#f0c2a8', () => {
+   c.moveTo(.33, .36); c.quadraticCurveTo(.5, .46, .67, .36);
+   c.quadraticCurveTo(.5, .40, .33, .36);
+  });
+  for (const [x0, x1] of [[.335, .40], [.55, .615]])                    // highlight streaks
+   poly('#b6ecc2', [[x0, .30], [x1, .27], [x1 - .014, .215], [x0 + .01, .238]]);
+  // Light streaks across the field, which is what gives a key visual its motion.
+  c.globalAlpha = .16;
+  for (const [x, w] of [[.06, .035], [.18, .018], [.86, .04], [.96, .02]])
+   poly('#ffffff', [[x, 0], [x + w, 0], [x + w - .10, .68], [x - .10, .68]]);
+  c.globalAlpha = 1;}
 });
 
 /** Ids the inventory carries that this sheet can draw. */
