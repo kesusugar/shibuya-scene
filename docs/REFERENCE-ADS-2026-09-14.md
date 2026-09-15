@@ -17,7 +17,9 @@ canvas the viewer happens to have.
 
 ## Placement
 
-`src/signs/reference-ads.mjs` raycasts each slot against the scene's own sign hosts.
+`src/signs/reference-ads.mjs` raycasts each slot against the scene's own sign hosts, except
+for the centre block, which is anchored to named buildings instead — see **Host anchoring**
+below for why and how.
 
 - Wall mounts take the nearest facade that faces the camera.
 - Roof mounts resolve against roof planes instead, because a ray aimed at a rooftop sign
@@ -28,8 +30,8 @@ canvas the viewer happens to have.
   much of the facade survives projection, then trimmed to the wall it landed on.
 
 A slot is accepted only when it lands on a camera-facing wall, within the range the
-reference frame covers, and at a size its mount type is actually built at. 21 of 30
-resolve. The rest are reported with a reason rather than relocated.
+reference frame covers, and at a size its mount type is actually built at. 21 of 30 survive
+placement and the audit. The rest are reported with a reason rather than relocated.
 
 `src/signs/reference-layer.mjs` applies the result at render time, not during the static
 bake, so re-aiming or redrawing an advertisement does not invalidate the geometry pack.
@@ -89,30 +91,91 @@ model signs, then generated filler — and anything that cuts into an accepted p
 dropped. The result is **0 intersecting pairs**, at the cost of 41 generated filler cells
 out of 615 faces. No hero screen, reference advertisement or audited model sign is dropped.
 
+## Host anchoring for the centre block
+
+Unprojecting the percentages assumes the reference image and this scene compose the same
+way. For the centre block they do not, and the numbers say by how much: the reference puts
+its centre stack at x 45–52% of the frame, while this scene's buildings on that bearing sit
+at x 33–46% and stand 14–24 m where the reference tower is far taller. Eight sight lines
+aimed through the recorded percentages therefore passed 26–38 m over every roof in their
+path and reached the ground 111–212 m out, or landed on a neighbouring plot, or crossed the
+roadway. No amount of raycasting accuracy fixes that — the percentages name a direction in
+a composition this scene does not have.
+
+For that block the percentages are read as an **arrangement** instead: which advertisement
+sits above which, and how large each is relative to its neighbours. `AD_ANCHORS` names the
+building each one belongs to, taken from a nearest-hit visibility scan of what a viewer can
+actually see in the centre band:
+
+| host | distance | roof | visible facade | carries |
+| --- | --- | --- | --- | --- |
+| `way/136690966:0:0` | 123 m | 24 m | 28.4 × 24.1 m, 100% open | 15 Hisamitsu, 16 サロンパス, 17 もん字, 18 Rakuten, 21 DMM, 22 大盛堂書店 |
+| `way/136691379:0:0` | 174 m | 23 m | 3.8 × 23.0 m, 46% open | 19 IKEA, 20 ACN |
+
+`placeAnchorGroup` unprojects the group's rectangle at the wall's own depth and
+foreshortening, then scales the result **uniformly** until it fits and every mount stays
+within the width its type is built at. Scaling uniformly is what keeps this honest: the
+arrangement and every proportion survive, only the overall scale changes, and because the
+reference rectangles do not overlap neither can the resulting panels.
+
+Anchored placements skip `fitGroupsToWalls` — re-fitting an arrangement already chosen to
+fit that wall would stretch it — but they still clear the shared `placementIssues` audit
+and the overlap pass like everything else. Nothing bypasses those.
+
+### Visible wall, not facing wall
+
+A facade that faces the viewer is not a facade the viewer can see. In a street this dense a
+nearer block routinely hides most of one, and a group laid across the whole wall then puts
+half its advertisements behind a building — which is exactly what the first attempt did to
+Rakuten, DMM and 大盛堂書店.
+
+`visibleWallPatch` samples a 24 × 20 grid over a wall, tests each point against every
+facade that could stand in front of it, and returns the largest unbroken rectangle that
+survives. `bestCameraEdge` uses that area to choose the wall, and `placeAnchorGroup`
+confines the group to that rectangle. The measurement is what picked both hosts:
+
+| candidate | facing | wall | visible patch | verdict |
+| --- | --- | --- | --- | --- |
+| `way/136690966` | .78 | 28 m | 684 m², 100% | carries the stack |
+| `way/136691379` | .81 | 8 m | 87 m², 46% | carries IKEA and ACN |
+| `way/136691389` | .82 | 14 m | 43 m², 13% | rejected — facing alone would have picked it |
+
+A group squeezed below `MIN_ANCHOR_FIT` of its intended size is dropped with
+`anchor-wall-too-hidden-to-read` rather than placed: panels smaller than the procedural
+stickers beside them read as litter on the facade, not as advertisements.
+
+The scan costs 12–36 ms for the whole resolve, so it runs at render time with the rest of
+the layer. The cost is entirely in hoisting the blocker list out of the sample loop and
+dropping walls behind the target — done naively it takes two seconds per wall.
+
+### Blade widths
+
+A blade stands perpendicular to its facade, so its width is how far it reaches out over the
+street, not how wide it reads on the wall. The audit rejects a blade projecting more than
+1.1 m, and a placement reaches `width / 2 + .16` m out, so a blade sized like a painted
+panel is always rejected however well it was aimed — which is why もん字 kept failing
+`facade-distance`. `fitMount` clamps blade widths to `MAX_BLADE_WIDTH`, giving the tall
+narrow proportions a 袖看板 actually has.
+
 ## Advertisements with no building
 
-These fifteen are not placed. The buildings that carry them in the reference frame do not
-exist in this scene, and inventing a wall would put the advertisement somewhere the
-reference never showed it. Artwork for all of them is already drawn, so adding the
-buildings is the only remaining work.
+These nine are not placed. Eight belong to buildings the reference frame carries and this
+scene does not, and inventing a wall would put the advertisement somewhere the reference
+never showed it; artwork for all of them is already drawn, so adding the buildings is the
+only remaining work. SHIBUYA 109 is a deliberate exclusion, recorded in `EXCLUDED_ADS`
+rather than deleted so the inventory stays a complete transcription of the frame.
 
 | id | brand | priority | reason |
 | --- | --- | --- | --- |
 | 4 | Cafeレストラン ガスト | medium | facade-recedes-from-view |
 | 8 | もんじゃ | medium | no-host-on-ray |
-| 15 | Hisamitsu | high | resolved-wider-than-mount-allows |
-| 21 | DMM | medium | no-host-on-ray |
-| 22 | 大盛堂書店 | low | no-host-on-ray |
+| 12 | SHIBUYA 109 | medium | out-of-scope-for-this-scene |
 | 24 | QFRONT | low | host-beyond-reference-range |
 | 26 | STARBUCKS | high | no-host-on-ray |
 | 29 | CITY DRUG | low | no-host-on-ray |
 | 30 | サンドラッグ | high | no-host-on-ray |
-| 12 | SHIBUYA 109 | medium | placement-audit:facade-distance |
 | 13 | UC | high | placement-audit:road-projection |
 | 14 | 龍角散ダイレクト | medium | placement-audit:road-projection |
-| 17 | もん字 | low | placement-audit:facade-distance |
-| 19 | IKEA | high | placement-audit:duplicate-overlap |
-| 20 | ACN | medium | placement-audit:duplicate-overlap |
 
 `no-host-on-ray` means the sight line leaves the scene without meeting a building.
 `facade-recedes-from-view` means the wall it met runs away from the camera, so the recorded
