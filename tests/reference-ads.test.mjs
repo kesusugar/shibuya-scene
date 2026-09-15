@@ -9,7 +9,8 @@ import {BUILDERS} from '../src/heroes/builders.mjs';
 import {HERO_DEFINITIONS} from '../src/heroes/config.mjs';
 import {CAMERAS} from '../src/app/foundation.mjs';
 import {REFERENCE_ADS, REFERENCE_VIEW, MOUNT_CATEGORY, MAX_WIDTH, MAX_RANGE, MIN_FACING,
- referenceBasis, adRay, intersectHosts, resolveReferenceAds} from '../src/signs/reference-ads.mjs';
+ AD_ANCHORS, EXCLUDED_ADS, MAX_BLADE_WIDTH, referenceBasis, adRay, intersectHosts,
+ bestCameraEdge, placeAnchorGroup, visibleWallPatch, resolveReferenceAds} from '../src/signs/reference-ads.mjs';
 import {applyReferenceAds} from '../src/signs/reference-layer.mjs';
 import {buildSignModel} from '../src/signs/model.mjs';
 import {commercialLayout} from '../src/signs/commercial-layout.mjs';
@@ -137,6 +138,111 @@ test('a reference slot is audited like any other sign and never stamped onto one
   assert.ok(!audited.placed.some(p => p.ad.id === r.ad?.id ?? r.id), 'a rejected slot is still placed');
  }
  assert.equal(audited.placed.length + audited.unplaced.length, REFERENCE_ADS.length);
+});
+
+test('an anchored advertisement sits on the building it was anchored to', () => {
+ // Regression: the centre block's percentages were measured off a reference image whose
+ // composition is not this scene's, so unprojecting them sent Hisamitsu, Rakuten, DMM and
+ // 大盛堂書店 onto neighbouring plots, over the roadway, or past every roof into open sky.
+ // Naming the host makes the placement follow the scene's own geometry.
+ const anchored = resolved.placed.filter(p => p.anchored);
+ assert.equal(anchored.length, Object.keys(AD_ANCHORS).length, 'an anchored slot went missing');
+ for (const p of anchored) {
+  assert.equal(p.host.key, AD_ANCHORS[p.ad.id], `${p.ad.brand} drifted off its anchor`);
+  assert.ok(p.foreshortening >= MIN_FACING, `${p.ad.brand} sits on a wall turned from the camera`);
+ }
+});
+
+test('an anchored group keeps the reference arrangement without overlapping', () => {
+ for (const key of new Set(Object.values(AD_ANCHORS))) {
+  const group = resolved.placed.filter(p => p.anchored && p.host.key === key);
+  assert.ok(group.length >= 2, `${key} carries no group`);
+  // One wall, so a shared facade rectangle: the panels must tile it, not stack on it.
+  assert.equal(new Set(group.map(p => p.edge.index)).size, 1, `${key} spread across walls`);
+  for (const p of group) {
+   assert.ok(p.along - p.width / 2 > 0 && p.along + p.width / 2 < p.edge.length, `${p.ad.brand} overruns its wall`);
+   assert.ok(p.y - p.height / 2 >= p.host.bottom && p.y + p.height / 2 <= p.host.top, `${p.ad.brand} leaves its host`);
+  }
+  for (const a of group) for (const b of group) {
+   if (a.ad.id >= b.ad.id) continue;
+   const apart = Math.abs(a.along - b.along) >= (a.width + b.width) / 2 - 1e-9 ||
+    Math.abs(a.y - b.y) >= (a.height + b.height) / 2 - 1e-9;
+   assert.ok(apart, `${a.ad.brand} overlaps ${b.ad.brand}`);
+  }
+  // Scaling the group uniformly is what preserves the reference proportions; check the two
+  // that sit one above the other kept their relative sizes.
+  const [wide, tall] = [...group].sort((a, b) => b.width * b.height - a.width * a.height);
+  if (wide.category !== 'blade' && tall.category !== 'blade')
+   assert.ok(Math.abs(wide.width / tall.width - wide.ad.width / tall.ad.width) < 1e-6, `${key} lost its proportions`);
+ }
+});
+
+test('the visibility scan reports what standing in front of a wall does to it', () => {
+ const basis = referenceBasis(camera, REFERENCE_VIEW);
+ const host = hosts.find(h => h.key === AD_ANCHORS[15]);
+ const edge = bestCameraEdge(host, basis, hosts).edge;
+ const open = visibleWallPatch(host, edge, basis, hosts);
+ assert.ok(open && open.coverage > .9, 'the anchor wall should be effectively unobstructed');
+ assert.ok(open.along[1] > open.along[0] && open.y[1] > open.y[0]);
+ assert.ok(open.along[0] >= -1e-9 && open.along[1] <= edge.length + 1e-9);
+
+ // Drop a wall in front of it and the reported patch has to shrink.
+ const t = edge.tangent, n = edge.normal, mid = 40;
+ const c = [edge.a[0] + t[0] * edge.length / 2 + n[0] * mid, edge.a[1] + t[1] * edge.length / 2 + n[1] * mid];
+ const wall = {key: 'test:wall', bottom: 0, top: 60, polygon: {outer: [
+  [c[0] - t[0] * 60 - n[0], c[1] - t[1] * 60 - n[1]], [c[0] + t[0] * 60 - n[0], c[1] + t[1] * 60 - n[1]],
+  [c[0] + t[0] * 60 + n[0], c[1] + t[1] * 60 + n[1]], [c[0] - t[0] * 60 + n[0], c[1] - t[1] * 60 + n[1]]]}};
+ const blocked = visibleWallPatch(host, edge, basis, [...hosts, wall]);
+ assert.ok(!blocked || blocked.coverage < open.coverage, 'a wall in the way changed nothing');
+});
+
+test('a blade is sized by how far it may stand off the wall', () => {
+ // A blade's width is its reach over the street, so panel-sized widths put a neon sign
+ // metres above the pavement and the placement audit throws it out.
+ for (const p of resolved.placed.filter(p => p.category === 'blade'))
+  assert.ok(p.width <= MAX_BLADE_WIDTH, `${p.ad.brand} reaches ${p.width} m off its facade`);
+});
+
+test('an excluded advertisement is reported, not placed and not forgotten', () => {
+ for (const [id, reason] of Object.entries(EXCLUDED_ADS)) {
+  assert.ok(REFERENCE_ADS.some(a => a.id === Number(id)), `${id} is excluded but not in the inventory`);
+  assert.ok(!resolved.placed.some(p => p.ad.id === Number(id)), `${id} is excluded but placed`);
+  assert.equal(resolved.unplaced.find(u => u.id === Number(id))?.reason, reason);
+ }
+});
+
+test('the wall an anchored group lands on is the one the camera can see most of', () => {
+ // Facing alone picks the widest wall, which in a street this dense is regularly the one
+ // standing behind its neighbour. Measured visibility has to be what decides.
+ const basis = referenceBasis(camera, REFERENCE_VIEW);
+ for (const key of new Set(Object.values(AD_ANCHORS))) {
+  const host = hosts.find(h => h.key === key);
+  assert.ok(host, `anchor host ${key} is missing from the scene`);
+  const seen = bestCameraEdge(host, basis, hosts);
+  assert.ok(seen?.patch, `${key} shows no visible facade`);
+  assert.ok(seen.facing >= MIN_FACING && seen.edge.length > 1);
+  for (const p of resolved.placed.filter(p => p.host.key === key && p.anchored)) {
+   assert.equal(p.edge.index, seen.edge.index, `${p.ad.brand} is not on the most visible wall`);
+   // And the panel has to sit inside the patch that scan found, not merely on that wall.
+   assert.ok(p.along - p.width / 2 >= seen.patch.along[0] - 1e-6 &&
+    p.along + p.width / 2 <= seen.patch.along[1] + 1e-6, `${p.ad.brand} runs past the visible patch`);
+   assert.ok(p.y - p.height / 2 >= seen.patch.y[0] - 1e-6 &&
+    p.y + p.height / 2 <= seen.patch.y[1] + 1e-6, `${p.ad.brand} sits outside the visible band`);
+  }
+  // Geometry-only selection remains available and must still answer.
+  assert.ok(bestCameraEdge(host, basis), `${key} shows no facade to the camera`);
+ }
+});
+
+test('a wall too hidden to read carries nothing at all', () => {
+ // Squeezing a group into a sliver produces panels smaller than the procedural stickers
+ // beside them, which reads as litter on the facade rather than as an advertisement.
+ const basis = referenceBasis(camera, REFERENCE_VIEW);
+ const host = hosts.find(h => h.key === AD_ANCHORS[19]);
+ const ads = REFERENCE_ADS.filter(a => AD_ANCHORS[a.id] === host.key);
+ const sliver = {...host, polygon: host.polygon, bottom: host.bottom, top: host.bottom + .9};
+ const out = placeAnchorGroup(ads, sliver, basis, hosts);
+ assert.ok(!Array.isArray(out), 'a wall with no room still produced placements');
 });
 
 test('an empty host set leaves the procedural signs untouched', () => {

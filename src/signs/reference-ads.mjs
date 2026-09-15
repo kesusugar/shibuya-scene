@@ -50,6 +50,37 @@ export const REFERENCE_ADS = Object.freeze([
  {id:30,zone:'right_edge_building_red',brand:'サンドラッグ',category:'drugstore',left:90.2,top:69.6,width:9.7,height:8.0,aspect:1.212,mount:'wall_panel',priority:'high'}
 ]);
 
+// Buildings this scene actually has where the reference frame's centre block sits.
+//
+// The inventory percentages describe the reference image, and the reference image is not
+// this scene: its centre block is a single tall tower, ours is a row of 14-24 m blocks at a
+// different bearing, so an unprojected sight line through those percentages lands on a
+// neighbouring plot, on the road, or on nothing at all. For that block the percentages are
+// therefore read as an arrangement rather than as a direction — which advertisement sits
+// above which, and how large each is relative to its neighbours — and the arrangement is
+// mapped onto the facade a viewer can actually see. Keys come from the scene's own
+// building data, not from the reference.
+// Chosen by measured visible wall area, not by facing: of the buildings beside the block,
+// 136690966 shows 684 m² of unbroken facade and 136691379 shows 87 m², against 43 m² for
+// 136691389, the nearer neighbour that facing alone would have picked.
+const CENTRE_BLOCK = 'way/136690966:0:0';   // 123 m out, 24 m roof, 28 m facade, fully visible
+const CENTRE_RIGHT = 'way/136691379:0:0';   // 174 m out, 23 m roof, mostly hidden behind its neighbour
+
+export const AD_ANCHORS = Object.freeze({
+ 15: CENTRE_BLOCK, 16: CENTRE_BLOCK, 17: CENTRE_BLOCK,
+ 18: CENTRE_BLOCK, 21: CENTRE_BLOCK, 22: CENTRE_BLOCK,
+ 19: CENTRE_RIGHT, 20: CENTRE_RIGHT
+});
+
+// How much of a wall a group may be squeezed into before it is not worth carrying. Below
+// this the panels resolve smaller than the procedural stickers around them and read as
+// litter on the facade rather than as the advertisements they are.
+export const MIN_ANCHOR_FIT = .12;
+
+// Advertisements deliberately left out of this scene. Recorded rather than deleted so the
+// inventory stays a complete transcription of the reference frame.
+export const EXCLUDED_ADS = Object.freeze({12: 'out-of-scope-for-this-scene'});
+
 // Mount types describe how the advertisement is carried, which decides both the sign
 // category used for placement auditing and how brightly the face is driven at night.
 export const MOUNT_CATEGORY = Object.freeze({
@@ -70,6 +101,19 @@ export const MAX_WIDTH = Object.freeze({
  wall_panel_vertical: 12, facade_logo: 16, building_nameplate: 22,
  sleeve_sign_vertical: 9, sleeve_sign_vertical_banner: 9, neon_sign_vertical: 12
 });
+
+// A blade stands perpendicular to its facade, so its "width" is how far it reaches out over
+// the street rather than how wide it reads on the wall. The placement audit rejects a blade
+// projecting more than 1.1 m, and a placement reaches width / 2 + .16 m out, so a blade
+// sized like a painted panel is always rejected however well it was aimed. Sizing blades to
+// this instead keeps the tall narrow proportions a 袖看板 actually has. The 2 cm is slack:
+// the audit compares strictly, so a width that lands exactly on the limit still fails.
+export const MAX_BLADE_WIDTH = (1.1 - .16) * 2 - .02;
+
+/** Width a mount can actually be built at on a facade. */
+export function fitMount(category, width) {
+ return category === 'blade' ? Math.min(width, MAX_BLADE_WIDTH) : width;
+}
 
 // Hits past this range are behind the buildings the reference frame actually shows.
 export const MAX_RANGE = 220;
@@ -195,6 +239,176 @@ export function groundedRoofHost(ray, hosts, minHeight = 18) {
  return best;
 }
 
+// Sampling resolution for the visibility scan. Fine enough to find the gap a foreground
+// block leaves, coarse enough that the scan stays a few milliseconds of render-time work.
+const SCAN_COLUMNS = 24, SCAN_ROWS = 20;
+
+/**
+ * Walls that could stand between the camera and a target at most `reach` away, flattened
+ * once per scan. Rebuilding the edge list inside the sample loop costs seconds per wall;
+ * hoisting it and dropping everything behind the target costs milliseconds.
+ */
+function blockerEdges(basis, hosts, self, reach) {
+ const out = [];
+ for (const host of hosts) {
+  if (host === self) continue;
+  for (const e of hostEdges(host.polygon)) {
+   const near = Math.min(
+    Math.hypot(e.a[0] - basis.origin[0], e.a[1] - basis.origin[2]),
+    Math.hypot(e.b[0] - basis.origin[0], e.b[1] - basis.origin[2]));
+   if (near > reach) continue; // entirely behind the wall being scanned
+   out.push({ax: e.a[0], az: e.a[1], tx: e.tangent[0], tz: e.tangent[1],
+    nx: e.normal[0], nz: e.normal[1], length: e.length, bottom: host.bottom, top: host.top});
+  }
+ }
+ return out;
+}
+
+/** Is anything standing between the camera and this point on a wall? */
+function occluded(point, basis, edges, reach) {
+ const ox = basis.origin[0], oy = basis.origin[1], oz = basis.origin[2];
+ const span = Math.hypot(point[0] - ox, point[1] - oy, point[2] - oz);
+ const dx = (point[0] - ox) / span, dy = (point[1] - oy) / span, dz = (point[2] - oz) / span;
+ for (const e of edges) {
+  const denom = e.nx * dx + e.nz * dz;
+  if (denom > -1e-9 && denom < 1e-9) continue;
+  const t = (e.nx * (e.ax - ox) + e.nz * (e.az - oz)) / denom;
+  if (!(t > .5) || t >= reach - .5) continue;
+  const y = oy + dy * t;
+  if (y < e.bottom || y > e.top) continue;
+  const along = (ox + dx * t - e.ax) * e.tx + (oz + dz * t - e.az) * e.tz;
+  if (along >= 0 && along <= e.length) return true;
+ }
+ return false;
+}
+
+/** Largest all-true axis-aligned block in a row-major grid, as {col, row, width, height} in cells. */
+function largestBlock(grid, columns, rows) {
+ const heights = new Array(columns).fill(0);
+ let best = {col: 0, row: 0, width: 0, height: 0, area: 0};
+ for (let row = 0; row < rows; row++) {
+  for (let c = 0; c < columns; c++) heights[c] = grid[row * columns + c] ? heights[c] + 1 : 0;
+  // Standard histogram sweep: each bar is extended left and right while the bars stay tall.
+  const stack = [];
+  for (let c = 0; c <= columns; c++) {
+   const h = c < columns ? heights[c] : 0;
+   while (stack.length && heights[stack[stack.length - 1]] >= h) {
+    const top = stack.pop(), height = heights[top];
+    const leftEdge = stack.length ? stack[stack.length - 1] + 1 : 0;
+    const area = height * (c - leftEdge);
+    if (area > best.area) best = {col: leftEdge, row: row - height + 1, width: c - leftEdge, height, area};
+   }
+   stack.push(c);
+  }
+ }
+ return best;
+}
+
+/**
+ * The largest unbroken patch of a wall the camera can actually see, as fractions of the
+ * wall. A facade that faces the viewer is not the same as a facade the viewer can see: in a
+ * street this dense a nearer block routinely hides most of one, and a group laid across the
+ * whole wall then puts four of its six advertisements behind a building.
+ */
+export function visibleWallPatch(host, edge, basis, hosts) {
+ const height = host.top - host.bottom;
+ if (!(edge.length > 0 && height > 0)) return null;
+ const corners = [edge.a, edge.b].map(p => Math.hypot(p[0] - basis.origin[0], p[1] - basis.origin[2]));
+ const edges = blockerEdges(basis, hosts, host, Math.max(...corners));
+ const grid = new Uint8Array(SCAN_COLUMNS * SCAN_ROWS);
+ for (let row = 0; row < SCAN_ROWS; row++) {
+  const y = host.top - (row + .5) / SCAN_ROWS * height;
+  for (let c = 0; c < SCAN_COLUMNS; c++) {
+   const along = (c + .5) / SCAN_COLUMNS * edge.length;
+   const point = [edge.a[0] + edge.tangent[0] * along + edge.normal[0] * .25, y,
+    edge.a[1] + edge.tangent[1] * along + edge.normal[1] * .25];
+   const reach = Math.hypot(point[0] - basis.origin[0], point[1] - basis.origin[1], point[2] - basis.origin[2]);
+   grid[row * SCAN_COLUMNS + c] = occluded(point, basis, edges, reach) ? 0 : 1;
+  }
+ }
+ const block = largestBlock(grid, SCAN_COLUMNS, SCAN_ROWS);
+ if (!block.area) return null;
+ return {
+  along: [block.col / SCAN_COLUMNS * edge.length, (block.col + block.width) / SCAN_COLUMNS * edge.length],
+  y: [host.top - (block.row + block.height) / SCAN_ROWS * height, host.top - block.row / SCAN_ROWS * height],
+  coverage: block.area / (SCAN_COLUMNS * SCAN_ROWS)
+ };
+}
+
+/**
+ * The facade of a host that best carries advertisements. Without a host set that is the
+ * widest wall still turned toward the viewer; with one it is the wall showing the largest
+ * unbroken patch a viewer can actually see, which is not the same thing — the widest facade
+ * of a building in a street this dense is often the one behind its neighbour.
+ */
+export function bestCameraEdge(host, basis, hosts = null, minFacing = MIN_FACING) {
+ let best = null;
+ for (const edge of hostEdges(host.polygon)) {
+  const facing = -dot([edge.normal[0], 0, edge.normal[1]], basis.forward);
+  if (facing < minFacing) continue;
+  const patch = hosts ? visibleWallPatch(host, edge, basis, hosts) : null;
+  const score = patch ? (patch.along[1] - patch.along[0]) * (patch.y[1] - patch.y[0]) : facing * edge.length;
+  if (!best || score > best.score) best = {edge, facing, score, patch};
+ }
+ return best;
+}
+
+/**
+ * Lay a group of anchored advertisements onto one facade.
+ *
+ * The group's rectangle in the reference frame is unprojected at the facade's own depth and
+ * foreshortening, which gives the world size it would need to cover the same share of the
+ * view. That size is then scaled down uniformly until it fits the wall and every mount
+ * stays within the width its type is built at. Scaling uniformly is what keeps this honest:
+ * the arrangement and every proportion survive, only the overall scale changes, and because
+ * the reference rectangles do not overlap neither can the panels.
+ */
+export function placeAnchorGroup(ads, host, basis, hosts) {
+ const pick = bestCameraEdge(host, basis, hosts);
+ if (!pick) return null;
+ const {edge} = pick;
+ const mid = [(edge.a[0] + edge.b[0]) / 2, (host.bottom + host.top) / 2, (edge.a[1] + edge.b[1]) / 2];
+ const depth = dot(sub(mid, basis.origin), basis.forward);
+ if (!(depth > 0)) return null;
+ const foreshortening = Math.abs(dot([edge.tangent[0], 0, edge.tangent[1]], basis.right));
+ const rise = Math.abs(dot([0, 1, 0], basis.up));
+
+ const left = Math.min(...ads.map(a => a.left)), right = Math.max(...ads.map(a => a.left + a.width));
+ const top = Math.min(...ads.map(a => a.top)), bottom = Math.max(...ads.map(a => a.top + a.height));
+ const spanX = right - left, spanY = bottom - top;
+ if (!(spanX > 0 && spanY > 0)) return null;
+
+ const groupWidth = (spanX / 50) * depth * basis.tanHalf * basis.aspect / Math.max(foreshortening, .15);
+ const groupHeight = (spanY / 50) * depth * basis.tanHalf / Math.max(rise, .15);
+
+ // Confine the group to the part of the wall the camera can actually see. Without this a
+ // stack laid down a 24 m facade puts its lower half behind whatever stands in front.
+ const patch = pick.patch;
+ const lowAlong = (patch?.along[0] ?? 0) + WALL_MARGIN, highAlong = (patch?.along[1] ?? edge.length) - WALL_MARGIN;
+ const floor = (patch?.y[0] ?? host.bottom) + WALL_MARGIN, ceiling = (patch?.y[1] ?? host.top) - WALL_MARGIN;
+ const usableX = highAlong - lowAlong, usableY = ceiling - floor;
+ if (!(usableX > 1 && usableY > 1)) return null;
+ let fit = Math.min(1, usableX / groupWidth, usableY / groupHeight);
+ // A mount type that never gets built at the resolved width shrinks the whole group, so the
+ // arrangement stays intact instead of one panel being squashed out of proportion.
+ for (const ad of ads) fit = Math.min(fit, (MAX_WIDTH[ad.mount] ?? 18) / (ad.width / spanX * groupWidth));
+ if (fit < MIN_ANCHOR_FIT) return {tooSmall: true, fit, patch};
+
+ const width = groupWidth * fit, height = groupHeight * fit;
+ const originAlong = lowAlong + (usableX - width) / 2;
+ return ads.map(ad => {
+  const category = MOUNT_CATEGORY[ad.mount] ?? 'billboard';
+  const w = fitMount(category, ad.width / spanX * width), h = ad.height / spanY * height;
+  const along = originAlong + (ad.left + ad.width / 2 - left) / spanX * width;
+  const y = ceiling - (ad.top + ad.height / 2 - top) / spanY * height;
+  return {ad, host, edge, along, y,
+   point: [edge.a[0] + edge.tangent[0] * along, y, edge.a[1] + edge.tangent[1] * along],
+   distance: depth, rayWidth: ad.width / spanX * groupWidth, width: w, height: h,
+   foreshortening, roof: false, lowered: false, anchored: true, anchoredWith: ads.length,
+   visibleCoverage: patch?.coverage ?? 1, clamped: fit < 1 - 1e-6, category};
+ });
+}
+
 /**
  * Resolve the inventory against real hosts. A slot is only accepted when the ray lands on
  * a facade that faces the camera, within the range the reference frame covers, and at a
@@ -204,7 +418,27 @@ export function groundedRoofHost(ray, hosts, minHeight = 18) {
  */
 export function resolveReferenceAds(hosts, camera, view = REFERENCE_VIEW) {
  const basis = referenceBasis(camera, view), placed = [], unplaced = [];
+ const byKey = new Map(hosts.map(h => [h.key, h]));
+ const anchorGroups = new Map();
  for (const ad of REFERENCE_ADS) {
+  const key = AD_ANCHORS[ad.id];
+  if (!key || EXCLUDED_ADS[ad.id]) continue;
+  if (!anchorGroups.has(key)) anchorGroups.set(key, []);
+  anchorGroups.get(key).push(ad);
+ }
+ for (const [key, ads] of anchorGroups) {
+  const host = byKey.get(key);
+  const group = host ? placeAnchorGroup(ads, host, basis, hosts) : null;
+  if (Array.isArray(group)) {placed.push(...group); continue;}
+  const reason = !host ? 'anchor-host-missing'
+   : group?.tooSmall ? 'anchor-wall-too-hidden-to-read'
+   : 'anchor-host-has-no-usable-facade';
+  for (const ad of ads) unplaced.push({...ad, reason, anchor: key, ...(group?.fit ? {fit: group.fit} : {})});
+ }
+
+ for (const ad of REFERENCE_ADS) {
+  if (EXCLUDED_ADS[ad.id]) {unplaced.push({...ad, reason: EXCLUDED_ADS[ad.id], excluded: true}); continue;}
+  if (AD_ANCHORS[ad.id]) continue;
   const roof = ROOF_MOUNTS.has(ad.mount);
   const hit = roof ? roofHost(ad, basis, hosts) : intersectHosts(adRay(ad, basis), hosts);
   if (!hit) {unplaced.push({...ad, reason: roof ? 'no-roof-under-ray' : 'no-host-on-ray'}); continue;}
@@ -216,8 +450,9 @@ export function resolveReferenceAds(hosts, camera, view = REFERENCE_VIEW) {
   const limit = MAX_WIDTH[ad.mount] ?? 18;
   if (size.width > limit) {unplaced.push({...ad, reason: 'resolved-wider-than-mount-allows', width: size.width, limit}); continue;}
   // Trim to the wall it landed on rather than overhanging a corner or the roofline.
+  const category = MOUNT_CATEGORY[ad.mount] ?? 'billboard';
   const margin = .3, room = hit.edge.length - margin * 2;
-  const width = Math.min(size.width, room);
+  const width = fitMount(category, Math.min(size.width, room));
   const span = hit.host.top - hit.host.bottom - margin * 2;
   const height = Math.min(size.height, roof ? size.height : span);
   if (!(width > .4 && height > .3)) {unplaced.push({...ad, reason: 'no-room-on-host-face'}); continue;}
@@ -227,8 +462,7 @@ export function resolveReferenceAds(hosts, camera, view = REFERENCE_VIEW) {
    : Math.min(Math.max(hit.point[1], hit.host.bottom + height / 2 + margin), hit.host.top - height / 2 - margin);
   placed.push({ad, host: hit.host, edge: hit.edge, along, y, point: hit.point, distance: hit.distance, rayWidth: size.width,
    width, height, foreshortening: size.foreshortening, roof, lowered: !!hit.lowered,
-   clamped: width < size.width - 1e-6 || height < size.height - 1e-6,
-   category: MOUNT_CATEGORY[ad.mount] ?? 'billboard'});
+   clamped: width < size.width - 1e-6 || height < size.height - 1e-6, category});
  }
  return {basis, placed: fitGroupsToWalls(placed), unplaced};
 }
@@ -254,7 +488,9 @@ const GRID_MINIMUM = 3;
 export function fitGroupsToWalls(placed) {
  const groups = new Map();
  for (const p of placed) {
-  if (p.roof) continue;
+  // Anchored groups are already laid out as a group; re-fitting them would stretch an
+  // arrangement that was chosen to fit this wall in the first place.
+  if (p.roof || p.anchored) continue;
   const key = p.host.key + ':' + p.edge.index;
   if (!groups.has(key)) groups.set(key, []);
   groups.get(key).push(p);
