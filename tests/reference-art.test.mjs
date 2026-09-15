@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {REFERENCE_ADS} from '../src/signs/reference-ads.mjs';
+import {REFERENCE_ADS, PANELS} from '../src/signs/reference-ads.mjs';
 import {REFERENCE_ART, PAINTED_IDS, PAINTED_ADS, REFERENCE_QUALITY, REFERENCE_COLUMNS,
  referenceAtlasEntries, paintReferenceAtlas, createReferenceAtlas, columnsFor} from '../src/signs/reference-art.mjs';
 
@@ -22,8 +22,10 @@ function record() {
 }
 
 test('artwork exists for inventory entries and nothing else', () => {
- const ids = new Set(REFERENCE_ADS.map(a => a.id));
- for (const id of PAINTED_IDS) assert.ok(ids.has(id), `painted id ${id} is not in the inventory`);
+ // PANELS, not REFERENCE_ADS: the scene adds panels of its own that the reference frame
+ // does not show, and those are painted here too.
+ const ids = new Set(PANELS.map(a => a.id));
+ for (const id of PAINTED_IDS) assert.ok(ids.has(id), `painted id ${id} is in neither the inventory nor the extras`);
  assert.equal(PAINTED_ADS.length, PAINTED_IDS.length);
  // Every advertisement the reference frame shows prominently must be drawn.
  for (const ad of REFERENCE_ADS.filter(a => ['critical', 'high'].includes(a.priority))) {
@@ -36,7 +38,11 @@ test('each panel is its own composition, not one template recoloured', () => {
  for (const id of PAINTED_IDS) {
   const r = record();
   REFERENCE_ART[id](r.ctx);
-  assert.ok(r.texts().length > 0, `panel ${id} draws no text`);
+  // A panel declared textless carries artwork instead of a name, the way a vision screen
+  // runs a key visual; everything else has to say who it is for.
+  const panel = PANELS.find(a => a.id === id);
+  if (panel?.textless) assert.equal(r.texts().length, 0, `textless panel ${id} drew text`);
+  else assert.ok(r.texts().length > 0, `panel ${id} draws no text`);
   assert.ok(r.fills().length > 1, `panel ${id} uses a single flat colour`);
   perAd.set(id, r);
  }

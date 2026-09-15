@@ -4,7 +4,7 @@ import {triangulate} from '../geo/geometry.mjs';
 import {metric} from '../data/normalize.mjs';
 import {intersection,area,polygons,clipped,nearest,buffer,surface,marked,roadWidth,union} from '../ground/model.mjs';
 import {GROUND} from '../ground/config.mjs';
-import {BUILDINGS as C,reservationReason} from './config.mjs';
+import {BUILDINGS as C,HEIGHT_OVERRIDES,reservationReason} from './config.mjs';
 const cross=(a,b,c)=>(b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]);
 const on=(a,b,p)=>Math.abs(cross(a,b,p))<1e-7&&p[0]>=Math.min(a[0],b[0])-1e-7&&p[0]<=Math.max(a[0],b[0])+1e-7&&p[1]>=Math.min(a[1],b[1])-1e-7&&p[1]<=Math.max(a[1],b[1])+1e-7;
 export function intersects(a,b,c,d){const ab=[cross(a,b,c),cross(a,b,d)],cd=[cross(c,d,a),cross(c,d,b)];return (ab[0]*ab[1]<0&&cd[0]*cd[1]<0)||on(a,b,c)||on(a,b,d)||on(c,d,a)||on(c,d,b);}
@@ -25,7 +25,8 @@ export function validateFootprint(input){
 }
 export function resolveHeight(source,features={area:100,roadDistance:10,zone:'west'}){
  const height=metric(source.tags?.height??source.height),levels=metric(source.tags?.['building:levels']??source.levels);let value,method;
- if(height>0){value=height;method='height';}else if(levels>0){value=levels*C.floorHeight;method='levels';}else{const rng=seededRandom(source.id+':height');const low=features.area<65?2:features.area>500?6:3;const spread=features.roadDistance<15?6:4;value=(low+Math.floor(rng()*spread))*C.floorHeight;method='seeded';}
+ const forced=HEIGHT_OVERRIDES[source.id];
+ if(forced>0){value=forced;method='reference-match';}else if(height>0){value=height;method='height';}else if(levels>0){value=levels*C.floorHeight;method='levels';}else{const rng=seededRandom(source.id+':height');const low=features.area<65?2:features.area>500?6:3;const spread=features.roadDistance<15?6:4;value=(low+Math.floor(rng()*spread))*C.floorHeight;method='seeded';}
  const resolved=Math.max(C.minHeight,Math.min(C.maxHeight,value));const min=metric(source.tags?.min_height??source.minHeight)??0;
  return {height:resolved,method,clamped:resolved!==value,base:Math.max(C.base,Math.min(min,resolved-C.floorHeight)),levels:Math.max(1,Math.floor(resolved/C.floorHeight))};
 }

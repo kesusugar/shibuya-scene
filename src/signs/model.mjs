@@ -16,7 +16,30 @@ export function makePlacement(host,e,{id,category='flush',along=e.length/2,y,wid
  const position=[point[0]+facadeNormal[0]*projection,y,point[2]+facadeNormal[2]*projection];
  return {id,buildingId:host.id,hostKey:host.key,hostMass:host.label,category,region,hero,anchorId,position,normal,facadeNormal,width,height,depth,along,edge:e,hostBottom:host.bottom,hostTop:host.top,hostPolygon:host.polygon,heading:Math.atan2(normal[0],normal[2]),variant,screenUV,projection,priority:hero?3:1,zone:category==='rooftop'?'roofline-mounted':y<4?'ground-floor':'upper-floor',emissive:{class:category==='screen'?'screen':'commercial',day:category==='screen'?.65:.12,nightTarget:1.2,glowAnchor:position},visibilityWeight:REGIONS[region].density};
 }
-export function createAuditContext(data,generic,heroes,ground,core){const solids=new SpatialIndex(25),crossings=new SpatialIndex(20);let serial=0;for(const b of generic.buildings)solids.insert(serial++,b.bounds,{id:b.id,polygon:b.polygon,bottom:b.base,top:b.base+b.height});for(const h of heroes)for(const m of h.masses)solids.insert(serial++,bounds(m.polygon.outer),{...m,id:h.id});for(const m of core.masses)solids.insert(serial++,bounds(m.polygon.outer),{...m,id:'station:'+m.owner});for(const c of ground.crossings)for(const s of c.stripes)crossings.insert(serial++,bounds(s.polygon.flat(2)),s.polygon);return {solids,crossings,ground};}
+// The road surface is one polygon with a 1370-vertex outer ring spanning the whole scene,
+// so clipping a 2 m sign against it costs about 6 ms — 115 ms for one pass of reference
+// advertisements, and minutes across the thousands of audits a bake performs. Cutting it
+// into cells once turns that into a lookup: a sign touches one or two of them. Splitting on
+// a grid partitions the area, so summing the pieces gives the same number as clipping the
+// whole thing, which is why the threshold below can stay where it was. Verified identical
+// across all 761 signs the scene places.
+export const ROAD_CELL=25,ROAD_EXTENT=252;
+export function tileRoads(roads,cell=ROAD_CELL,extent=ROAD_EXTENT){
+ const index=new SpatialIndex(cell);let serial=0;
+ for(let x=-extent;x<extent;x+=cell)for(let z=-extent;z<extent;z+=cell){
+  const piece=intersection(roads,[[[[x,z],[x+cell,z],[x+cell,z+cell],[x,z+cell],[x,z]]]]);
+  if(piece.length)index.insert(serial++,{minX:x,maxX:x+cell,minZ:z,maxZ:z+cell},piece);
+ }
+ return index;
+}
+/** Road area under a sign footprint, summed over the cells it touches. */
+export function roadAreaUnder(ctx,polygon,box){
+ const p=multi(polygon);
+ if(!ctx.roadTiles)return area(intersection(p,ctx.ground.roads));
+ let total=0;for(const {value:tile} of ctx.roadTiles.query(box))total+=area(intersection(p,tile));
+ return total;
+}
+export function createAuditContext(data,generic,heroes,ground,core){const solids=new SpatialIndex(25),crossings=new SpatialIndex(20);let serial=0;for(const b of generic.buildings)solids.insert(serial++,b.bounds,{id:b.id,polygon:b.polygon,bottom:b.base,top:b.base+b.height});for(const h of heroes)for(const m of h.masses)solids.insert(serial++,bounds(m.polygon.outer),{...m,id:h.id});for(const m of core.masses)solids.insert(serial++,bounds(m.polygon.outer),{...m,id:'station:'+m.owner});for(const c of ground.crossings)for(const s of c.stripes)crossings.insert(serial++,bounds(s.polygon.flat(2)),s.polygon);return {solids,crossings,roadTiles:tileRoads(ground.roads),ground};}
 export function placementIssues(s,ctx,accepted=[]){const issues=[],values=[...s.position,...s.normal,...s.facadeNormal,s.width,s.height,s.depth,s.along,s.hostBottom,s.hostTop];if(!values.every(Number.isFinite)||Math.min(s.width,s.height,s.depth)<=0)return ['invalid-transform'];const bottom=s.position[1]-s.height/2,top=s.position[1]+s.height/2;
  if(Math.abs(Math.hypot(...s.normal)-1)>1e-6)issues.push('invalid-normal');
  if(bottom<Math.max(1.5,s.hostBottom+.08)||top>s.hostTop-.03)issues.push('vertical-host-bounds');
@@ -26,7 +49,7 @@ export function placementIssues(s,ctx,accepted=[]){const issues=[],values=[...s.
  if(inPolygon([base[0]+s.facadeNormal[0]*.02,base[1]+s.facadeNormal[2]*.02],s.hostPolygon,false)||!inPolygon([base[0]-s.facadeNormal[0]*.02,base[1]-s.facadeNormal[2]*.02],s.hostPolygon))issues.push('backface');
  if(s.category!=='blade'&&s.normal.reduce((sum,v,i)=>sum+v*s.facadeNormal[i],0)<.999)issues.push('backface');
  const p=signPolygon(s),box=bounds(p.outer);if(p.outer.some(p=>Math.abs(p[0])>250||Math.abs(p[1])>250))issues.push('tile-edge');
- if(area(intersection(multi(p),ctx.ground.roads))>.001)issues.push('road-projection');
+ if(roadAreaUnder(ctx,p,box)>.001)issues.push('road-projection');
  if(ctx.crossings.query(box).some(({value:stripe})=>area(intersection(multi(p),stripe))>.001))issues.push('crosswalk-projection');
  for(const {value:b} of ctx.solids.query(box)){if(top<=b.bottom||bottom>=b.top)continue;if(area(intersection(multi(p),multi(b.polygon)))>.001){issues.push(b.id===s.buildingId?'host-penetration':'neighbor-penetration');break;}}
  // Conservative station/rail envelope: station front commercial signs stay outside S5 rail corridors.
