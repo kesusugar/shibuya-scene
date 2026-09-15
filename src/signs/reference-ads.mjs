@@ -353,15 +353,39 @@ export function bestCameraEdge(host, basis, hosts = null, minFacing = MIN_FACING
  return best;
 }
 
+// Advertisements this close together in the frame share a column of the facade, so they
+// have to be stacked clear of each other rather than laid out independently.
+const COLUMN_OVERLAP = .2;
+// Bare wall left between two advertisements in a column.
+const MIN_GAP = .25;
+
+/** Advertisements sharing a column of the wall, ordered top to bottom. */
+function stackColumns(ads) {
+ const columns = [];
+ for (const ad of [...ads].sort((a, b) => a.left - b.left)) {
+  const share = columns.find(col => col.some(o => {
+   const over = Math.min(o.left + o.width, ad.left + ad.width) - Math.max(o.left, ad.left);
+   return over > COLUMN_OVERLAP * Math.min(o.width, ad.width);
+  }));
+  if (share) share.push(ad); else columns.push([ad]);
+ }
+ for (const col of columns) col.sort((a, b) => a.top - b.top);
+ return columns;
+}
+
 /**
  * Lay a group of anchored advertisements onto one facade.
  *
- * The group's rectangle in the reference frame is unprojected at the facade's own depth and
- * foreshortening, which gives the world size it would need to cover the same share of the
- * view. That size is then scaled down uniformly until it fits the wall and every mount
- * stays within the width its type is built at. Scaling uniformly is what keeps this honest:
- * the arrangement and every proportion survive, only the overall scale changes, and because
- * the reference rectangles do not overlap neither can the panels.
+ * Each advertisement's rectangle is unprojected at the facade's own depth and
+ * foreshortening, giving the world size it would need to cover the same share of the view,
+ * and all of them are then scaled by one factor so every proportion survives.
+ *
+ * What does *not* survive is the empty wall between them. The reference building is around
+ * twice the height of the one this scene has on that bearing, so preserving the stack's
+ * full vertical extent would shrink the advertisements themselves to half size to fit —
+ * which is what made them unreadable. The gaps are compressed instead, down to a minimum,
+ * exactly as a sign contractor fitting the same set to a shorter building would. Each
+ * column is solved separately, so a blade beside the stack keeps its own room.
  */
 export function placeAnchorGroup(ads, host, basis, hosts) {
  const pick = bestCameraEdge(host, basis, hosts);
@@ -374,12 +398,13 @@ export function placeAnchorGroup(ads, host, basis, hosts) {
  const rise = Math.abs(dot([0, 1, 0], basis.up));
 
  const left = Math.min(...ads.map(a => a.left)), right = Math.max(...ads.map(a => a.left + a.width));
- const top = Math.min(...ads.map(a => a.top)), bottom = Math.max(...ads.map(a => a.top + a.height));
- const spanX = right - left, spanY = bottom - top;
- if (!(spanX > 0 && spanY > 0)) return null;
+ const spanX = right - left;
+ if (!(spanX > 0)) return null;
 
- const groupWidth = (spanX / 50) * depth * basis.tanHalf * basis.aspect / Math.max(foreshortening, .15);
- const groupHeight = (spanY / 50) * depth * basis.tanHalf / Math.max(rise, .15);
+ // Screen percentage -> world metres on this wall, one factor per axis.
+ const perX = depth * basis.tanHalf * basis.aspect / Math.max(foreshortening, .15) / 50;
+ const perY = depth * basis.tanHalf / Math.max(rise, .15) / 50;
+ const groupWidth = spanX * perX;
 
  // Confine the group to the part of the wall the camera can actually see. Without this a
  // stack laid down a 24 m facade puts its lower half behind whatever stands in front.
@@ -388,25 +413,51 @@ export function placeAnchorGroup(ads, host, basis, hosts) {
  const floor = (patch?.y[0] ?? host.bottom) + WALL_MARGIN, ceiling = (patch?.y[1] ?? host.top) - WALL_MARGIN;
  const usableX = highAlong - lowAlong, usableY = ceiling - floor;
  if (!(usableX > 1 && usableY > 1)) return null;
- let fit = Math.min(1, usableX / groupWidth, usableY / groupHeight);
+
+ const columns = stackColumns(ads);
+ let fit = Math.min(1, usableX / groupWidth);
  // A mount type that never gets built at the resolved width shrinks the whole group, so the
  // arrangement stays intact instead of one panel being squashed out of proportion.
- for (const ad of ads) fit = Math.min(fit, (MAX_WIDTH[ad.mount] ?? 18) / (ad.width / spanX * groupWidth));
+ for (const ad of ads) fit = Math.min(fit, (MAX_WIDTH[ad.mount] ?? 18) / (ad.width * perX));
+ // Each column must fit its own advertisements plus the minimum wall between them.
+ for (const col of columns) {
+  const room = usableY - (col.length - 1) * MIN_GAP;
+  if (room <= 0) return {tooSmall: true, fit: 0, patch};
+  fit = Math.min(fit, room / col.reduce((total, ad) => total + ad.height * perY, 0));
+ }
  if (fit < MIN_ANCHOR_FIT) return {tooSmall: true, fit, patch};
 
- const width = groupWidth * fit, height = groupHeight * fit;
+ const width = groupWidth * fit;
  const originAlong = lowAlong + (usableX - width) / 2;
- return ads.map(ad => {
-  const category = MOUNT_CATEGORY[ad.mount] ?? 'billboard';
-  const w = fitMount(category, ad.width / spanX * width), h = ad.height / spanY * height;
-  const along = originAlong + (ad.left + ad.width / 2 - left) / spanX * width;
-  const y = ceiling - (ad.top + ad.height / 2 - top) / spanY * height;
-  return {ad, host, edge, along, y,
-   point: [edge.a[0] + edge.tangent[0] * along, y, edge.a[1] + edge.tangent[1] * along],
-   distance: depth, rayWidth: ad.width / spanX * groupWidth, width: w, height: h,
-   foreshortening, roof: false, lowered: false, anchored: true, anchoredWith: ads.length,
-   visibleCoverage: patch?.coverage ?? 1, clamped: fit < 1 - 1e-6, category};
- });
+ const out = [];
+ for (const col of columns) {
+  const heights = col.map(ad => ad.height * perY * fit);
+  const stack = heights.reduce((a, b) => a + b, 0);
+  // Keep the reference spacing where the wall allows it, and take the slack out of the gaps
+  // — never out of the advertisements — where it does not.
+  const wanted = col.slice(1).map((ad, i) =>
+   Math.max(0, (ad.top - (col[i].top + col[i].height)) * perY * fit));
+  const slack = usableY - stack - (col.length - 1) * MIN_GAP;
+  const over = wanted.reduce((total, g) => total + Math.max(0, g - MIN_GAP), 0);
+  const squeeze = over > 1e-9 ? Math.min(1, slack / over) : 0;
+  const gaps = wanted.map(g => MIN_GAP + Math.max(0, g - MIN_GAP) * squeeze);
+
+  let cursor = ceiling;
+  col.forEach((ad, i) => {
+   if (i) cursor -= gaps[i - 1];
+   const category = MOUNT_CATEGORY[ad.mount] ?? 'billboard';
+   const h = heights[i], y = cursor - h / 2;
+   cursor -= h;
+   const w = fitMount(category, ad.width * perX * fit);
+   const along = originAlong + (ad.left + ad.width / 2 - left) * perX * fit;
+   out.push({ad, host, edge, along, y,
+    point: [edge.a[0] + edge.tangent[0] * along, y, edge.a[1] + edge.tangent[1] * along],
+    distance: depth, rayWidth: ad.width * perX, width: w, height: h,
+    foreshortening, roof: false, lowered: false, anchored: true, anchoredWith: ads.length,
+    column: col.length, visibleCoverage: patch?.coverage ?? 1, clamped: fit < 1 - 1e-6, category});
+  });
+ }
+ return out;
 }
 
 /**

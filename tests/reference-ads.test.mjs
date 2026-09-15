@@ -196,6 +196,36 @@ test('the visibility scan reports what standing in front of a wall does to it', 
  assert.ok(!blocked || blocked.coverage < open.coverage, 'a wall in the way changed nothing');
 });
 
+test('a short wall costs the gaps between advertisements, never their size', () => {
+ // The reference building is about twice the height of the one this scene has on that
+ // bearing. Preserving the stack's full vertical extent would halve every advertisement to
+ // fit, which is what made them unreadable; the empty wall between them gives way instead.
+ const stack = resolved.placed.filter(p => p.anchored && p.host.key === AD_ANCHORS[22])
+  .sort((a, b) => b.y - a.y);
+ assert.ok(stack.length >= 4, 'the centre stack lost members');
+
+ // Every advertisement keeps the aspect its own reference rectangle implies on this wall.
+ const shape = p => p.width / p.height / (p.ad.width / p.ad.height);
+ const shapes = stack.filter(p => p.category !== 'blade').map(shape);
+ for (const s of shapes) assert.ok(Math.abs(s / shapes[0] - 1) < 1e-6, 'an advertisement was distorted');
+
+ // The tallest column is stacked clear, top to bottom, inside the wall.
+ const column = stack.filter(p => p.category !== 'blade').sort((a, b) => b.y - a.y);
+ assert.ok(column.length >= 4, 'the stacked column lost members');
+ for (let i = 1; i < column.length; i++) {
+  const gap = (column[i - 1].y - column[i - 1].height / 2) - (column[i].y + column[i].height / 2);
+  assert.ok(gap >= -1e-6, `${column[i].ad.brand} runs into ${column[i - 1].ad.brand}`);
+ }
+ // And the compression bought real size: fitting the column's whole reference rectangle,
+ // gaps included, would have shrunk every advertisement by the ratio of gaps to content.
+ const host = hosts.find(h => h.key === AD_ANCHORS[22]);
+ const spread = Math.max(...column.map(p => p.ad.top + p.ad.height)) - Math.min(...column.map(p => p.ad.top));
+ const content = column.reduce((t, p) => t + p.ad.height, 0);
+ assert.ok(spread > content * 1.05, 'this column has no gaps to compress, so the test proves nothing');
+ assert.ok(column.reduce((t, p) => t + p.height, 0) > (host.top - host.bottom) * content / spread,
+  'the advertisements were shrunk rather than the wall between them');
+});
+
 test('a blade is sized by how far it may stand off the wall', () => {
  // A blade's width is its reach over the street, so panel-sized widths put a neon sign
  // metres above the pavement and the placement audit throws it out.
