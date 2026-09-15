@@ -109,14 +109,34 @@ actually see in the centre band:
 
 | host | distance | roof | visible facade | carries |
 | --- | --- | --- | --- | --- |
-| `way/136690966:0:0` | 123 m | 24 m | 28.4 × 24.1 m, 100% open | 15 Hisamitsu, 16 サロンパス, 17 もん字, 18 Rakuten, 21 DMM, 22 大盛堂書店 |
+| `way/136690966:0:0` | 123 m | 34 m | fully open | 15 Hisamitsu, 16 サロンパス, 17 もん字, 18 Rakuten, 21 DMM, 22 大盛堂書店 |
 | `way/136691379:0:0` | 174 m | 23 m | 3.8 × 23.0 m, 46% open | 19 IKEA, 20 ACN |
 
-`placeAnchorGroup` unprojects the group's rectangle at the wall's own depth and
-foreshortening, then scales the result **uniformly** until it fits and every mount stays
-within the width its type is built at. Scaling uniformly is what keeps this honest: the
-arrangement and every proportion survive, only the overall scale changes, and because the
-reference rectangles do not overlap neither can the resulting panels.
+`placeAnchorGroup` unprojects each advertisement at the wall's own depth and
+foreshortening, then scales them all by **one shared factor**, so every proportion
+survives and only the overall scale changes. Because the reference rectangles do not
+overlap, neither can the resulting panels.
+
+### The gaps give way, not the advertisements
+
+The empty wall between them is not preserved. The reference building is around twice the
+height of the plot this scene has on that bearing, so keeping the stack's full vertical
+extent meant halving every advertisement to fit, and they stopped reading as signage.
+Each column is solved separately: the advertisements keep their shared scale and the gaps
+between them compress, down to a 25 cm floor — what a sign contractor fitting the same set
+to a shorter building does. Columns are split by overlap in the reference frame, so a blade
+standing beside the stack keeps its own room instead of being forced into the same run.
+
+`way/136690966` is also **raised from 24 m to 34 m** (`HEIGHT_OVERRIDES` in
+`src/buildings/config.mjs`; footprint untouched, extrusion only). 34 m is measured, not
+chosen for looks: it is where the stack stops being limited by the wall's height and starts
+being limited by its width, so it is the shortest the plot can be without costing the
+advertisements anything, and it stays under QFRONT's 39 m so the landmark hierarchy the
+reference frame has survives. The override sits in a module the static model key already
+follows, so the geometry pack invalidates and rebakes rather than the scene quietly
+rebuilding 19 MB of geometry at runtime.
+
+Together these take Hisamitsu from 7.4 m wide to 13.6 m and 大盛堂書店 from 8.5 m to 15.8 m.
 
 Anchored placements skip `fitGroupsToWalls` — re-fitting an arrangement already chosen to
 fit that wall would stretch it — but they still clear the shared `placementIssues` audit
