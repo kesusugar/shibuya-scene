@@ -4,13 +4,17 @@ export const ARCHETYPES=['plain','shop','band','grid','balcony','curtain','zakky
 // Plots raised to carry the advertising the reference frame puts on them.
 //
 // The reference image's centre block is a single tall tower; the OSM data gives this plot
-// 24 m, which is not enough facade for the six-advertisement stack the reference shows
-// there. Fitting them down 24 m halves every panel and they stop reading as signage.
-// 34 m is where the stack stops being limited by the wall's height and starts being
-// limited by its width, so it is the shortest this plot can be without costing the
-// advertisements anything, and it stays under QFRONT's 39 m, which keeps the landmark
-// hierarchy the reference frame has. No footprint is changed, only the extrusion.
-export const HEIGHT_OVERRIDES=Object.freeze({'way/136690966':34});
+// 24 m, which is not enough facade for the advertisements the reference stacks on it.
+// 38 m is where the stack stops being limited by the wall's height and starts being limited
+// by its width, so it is the shortest this plot can be without costing the advertisements
+// anything — measured with the ground floor reserved for the shopfront, which the signage
+// has to clear. No footprint is changed, only the extrusion.
+//
+// The plot immediately left of QFRONT, where the reference actually puts these signs, was
+// measured and rejected: the blocks in front leave only a 2.9 m strip of its 14 m facade
+// visible at any height below 58 m, and even at 58 m the advertisements resolve about a
+// third of the size they reach here.
+export const HEIGHT_OVERRIDES=Object.freeze({'way/136690966':38});
 // Additional Mark City West footprint, not a dedicated building builder.
 export const RESERVED_IDS=new Set([...Object.values(HERO_IDS),'way/54500467']);
 export function reservationReason(source,landmarks={}){
