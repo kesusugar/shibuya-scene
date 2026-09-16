@@ -14,12 +14,16 @@ export const DODGE_SPEED=2;
 // vanishes at the very instant it lands and reads as a despawn rather than a knockdown.
 export const FALL_TILT=.85;
 export const FALL_SECONDS=2.4;
+// How long the slot then stays out of the crowd before that person walks back in somewhere
+// else. The pool is exactly the high-tier target, so holding a slot really does thin the
+// crowd for that long rather than being papered over by the next refill.
+export const RESPAWN_SECONDS=30;
 
 export class CrowdSimulation{
  constructor(network,{traffic=null,tier='medium',seed='shibuya-s10',choreography=false,heroStart=false}={}){
   this.network=network;this.traffic=traffic;this.signals=traffic?.signals??null;this.rng=seededRandom(seed);this.tier=tier;this.heroStart=heroStart;this.time=0;this.accumulator=0;this.camera={x:55,z:65};this.grid=new Map();this.queue=new Map();this.exits=new Map();this.groups=[];this.temp={};this.next={};this.lodClock=0;this.refillClock=0;
   this.stats={spawned:0,despawned:0,reasons:{},recoveries:0,stuck:0,routeCompletions:0,signalViolations:0,entries:{},completed:{},neighborChecks:0,avoidanceChecks:0,updateMs:0,throttled:0,spawnDeferred:0};
-  this.pool=Array.from({length:POOL_SIZE},(_,id)=>({id,active:false,x:0,z:0,heading:0,height:0,archetype:'casual',mode:'ambient',state:'walking',group:-1,leader:-1,route:[],routeIndex:0,edge:-1,progress:0,destination:-1,node:-1,speed:0,baseSpeed:1.3,age:0,stuck:0,pause:0,crossing:null,queueKey:null,lod:'near',elapsed:0,phase:0,color:0,animationTime:0,renderX:0,renderZ:0,previousX:0,previousZ:0,travelled:0,lastHeading:0,region:'commercial'}));
+  this.pool=Array.from({length:POOL_SIZE},(_,id)=>({id,active:false,x:0,z:0,heading:0,height:0,archetype:'casual',mode:'ambient',state:'walking',group:-1,leader:-1,route:[],routeIndex:0,edge:-1,progress:0,destination:-1,node:-1,speed:0,baseSpeed:1.3,age:0,stuck:0,pause:0,crossing:null,queueKey:null,lod:'near',elapsed:0,phase:0,color:0,animationTime:0,renderX:0,renderZ:0,previousX:0,previousZ:0,travelled:0,lastHeading:0,downUntil:0,region:'commercial'}));
   this.candidates=network.eligible;this.byRegion=Object.fromEntries(['hachiko','center-gai','station','commercial'].map(k=>[k,this.candidates.filter(n=>n.district===k)]));this.crossCandidates=network.crossings.filter(e=>e.kind!=='normal'&&network.nodes[e.from].component===network.nodes[e.to].component);const lanes=new Map();for(const e of this.crossCandidates){const key=e.crossingId+':'+e.direction;if(!lanes.has(key))lanes.set(key,[]);lanes.get(key).push(e);}const groups=[...lanes.values()];this.crossCandidates=[];for(let row=0;row<Math.max(0,...groups.map(g=>g.length));row++)for(const group of groups)if(group[row])this.crossCandidates.push(group[row]);this.crossCursor=0;this.choreography=choreography?new ScrambleChoreography(this):null;this.refill(true);
  }
  cell(x,z){return Math.floor(x/2)+','+Math.floor(z/2);}
@@ -41,7 +45,7 @@ export class CrowdSimulation{
  chooseDestination(p,node,short=false){if(p.mode==='patrol')return patrolRoute(this.network,p);if(p.leader>=0&&this.pool[p.leader]?.active){const lead=this.pool[p.leader],dest=lead.destination,path=route(this.network,node.id,dest);if(path.length){p.route=path;p.routeIndex=0;p.edge=path[0];p.progress=0;p.node=node.id;p.destination=dest;return true;}}const region=short?node.district:this.rng()<.55?(node.district==='hachiko'?'center-gai':'hachiko'):node.district,candidates=this.byRegion[region]?.filter(n=>n.component===node.component&&Math.hypot(n.x-node.x,n.z-node.z)>(short?3:12)&&(!short||Math.hypot(n.x-node.x,n.z-node.z)<16));let list=candidates.length?candidates:this.candidates.filter(n=>n.component===node.component&&Math.hypot(n.x-node.x,n.z-node.z)>4);if(!list.length)return false;
   for(let i=0;i<5;i++){const dest=list[Math.floor(this.rng()*list.length)],path=route(this.network,node.id,dest.id);if(!path.length)continue;if(short&&(path.some(id=>this.network.edges[id].crossingId)||path.reduce((sum,id)=>sum+this.network.edges[id].length,0)>30))continue;const first=this.network.nodes[this.network.edges[path[0]].to],dot=Math.sin(p.heading)*(first.x-node.x)+Math.cos(p.heading)*(first.z-node.z);if(p.travelled>2&&dot<-.2&&i<4)continue;p.route=path;p.routeIndex=0;p.edge=path[0];p.progress=0;p.node=node.id;p.destination=dest.id;return true;}return false;
  }
- spawn(mode='ambient',region=null,leader=null,crossIndex=-1){const p=this.pool.find(p=>!p.active);if(!p)return false;const archetypes=Object.keys(ARCHETYPES).filter(k=>k!=='kid'||leader),type=leader&&p.id%2?'kid':archetypes[p.id%archetypes.length],def=ARCHETYPES[type];
+ spawn(mode='ambient',region=null,leader=null,crossIndex=-1){const p=this.pool.find(p=>!p.active&&!(p.downUntil>this.time));if(!p)return false;p.downUntil=0;const archetypes=Object.keys(ARCHETYPES).filter(k=>k!=='kid'||leader),type=leader&&p.id%2?'kid':archetypes[p.id%archetypes.length],def=ARCHETYPES[type];
   let nodes=region?this.byRegion[region]:this.candidates,cross=null;if(crossIndex>=0&&this.crossCandidates.length){cross=this.crossCandidates[crossIndex%this.crossCandidates.length];const endpoint=this.network.nodes[cross.from];nodes=this.candidates.filter(n=>n.component===endpoint.component&&Math.hypot(n.x-endpoint.x,n.z-endpoint.z)<10);}
   if(leader)nodes=this.candidates.filter(n=>n.component===this.network.nodes[leader.node].component&&Math.hypot(n.x-leader.x,n.z-leader.z)<4);
   for(let attempt=0;attempt<100;attempt++){const n=nodes[Math.floor(this.rng()*nodes.length)];if(!n||this.network.landingNodes.has(n.id)||this.blocked(n.x,n.z,null,.9)||this.vehicleOverlap(n.x,n.z,.6)||this.time>0&&Math.hypot(n.x-this.camera.x,n.z-this.camera.z)<12)continue;
@@ -113,7 +117,7 @@ export class CrowdSimulation{
  step(dt){this.time+=dt;this.lodClock+=dt;this.refillClock+=dt;this.rebuild();if(this.lodClock>=1){this.lodClock=0;for(const p of this.pool)if(p.active){const d=Math.hypot(p.x-this.camera.x,p.z-this.camera.z);p.lod=d<65?'near':d<140?'mid':'far';}}
   // Rotate priority each fixed tick; ordering does not permanently privilege low IDs.
   const start=Math.floor(this.time*30)%this.pool.length;for(let j=0;j<this.pool.length;j++){const p=this.pool[(start+j)%this.pool.length];if(!p.active||p.controlled)continue;
-   if(p.struck!==undefined){p.struck+=dt;p.speed=0;if(p.struck>=FALL_SECONDS){p.struck=undefined;this.despawn(p,'struck');}continue;}
+   if(p.struck!==undefined){p.struck+=dt;p.speed=0;if(p.struck>=FALL_SECONDS){p.struck=undefined;this.despawn(p,'struck');p.downUntil=this.time+RESPAWN_SECONDS;}continue;}
    p.elapsed+=dt;const interval=p.crossing||p.choreographed?1/30:p.mode==='idle'?.5:p.lod==='near'?1/30:p.lod==='mid'?1/15:.2;if(p.elapsed+1e-8<interval){this.stats.throttled++;continue;}const elapsed=p.elapsed;p.elapsed=0;this.move(p,elapsed);}
   if(this.refillClock>=2){this.refillClock=0;this.refill();}
  }

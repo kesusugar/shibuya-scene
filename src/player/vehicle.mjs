@@ -20,7 +20,13 @@ export const CAR = Object.freeze({
  reverseMax: 4.5,                        // reverse is slower than forward, as it should be
  steer: 1.9,                             // rad/s at full lock
  steerEase: 6,                           // how fast the wheel reaches full lock
- grip: 14,                               // arcade: heading and travel converge quickly
+ // Inertia. `heading` is where the nose points, `course` is where the body is actually
+ // going, and they converge at `grip` per second rather than instantly -- that lag is the
+ // slide. It is self-limiting: steering authority already falls away as the car slows, so a
+ // parking car barely builds any slip while a fast turn washes out properly.
+ grip: 9,
+ slipMax: .45,                           // rad the course may lag the nose by, about 26 deg
+ carPad: .05,                            // m of clearance kept from other cars
  // Steering authority falls away as the car slows, so a stopped car does not spin on the
  // spot, and a fast one is not twitchy.
  steerLow: 1.2, steerFull: 7,
@@ -35,6 +41,9 @@ export const CAR = Object.freeze({
 });
 
 /** Do two segments cross? Used to catch a wall thinner than the car's corner spacing. */
+/** Shortest signed angle between two headings. */
+function wrapAngle(a) {return Math.atan2(Math.sin(a), Math.cos(a));}
+
 function segmentsCross(a, b, c, d) {
  const s = (p, q, r) => Math.sign((q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]));
  return s(a, b, c) !== s(a, b, d) && s(c, d, a) !== s(c, d, b);
@@ -42,7 +51,7 @@ function segmentsCross(a, b, c, d) {
 
 export function createPlayerVehicle(sim, ctx) {
  const def = VEHICLES[CAR.type];
- const state = {x: 0, z: 0, y: 0, heading: 0, speed: 0, steering: 0, active: false, slot: null};
+ const state = {x: 0, z: 0, y: 0, heading: 0, course: 0, speed: 0, steering: 0, active: false, slot: null};
  const probe = {x: 0, z: 0, heading: 0};
 
  /**
@@ -67,9 +76,17 @@ export function createPlayerVehicle(sim, ctx) {
   }
   return true;
  };
+ /**
+  * Is this pose legal at all? Solids are static, the other cars are not, and the car has to
+  * respect both -- driving through an AI car was the one thing decided but never built.
+  * The traffic simulation already answers the moving half for its own cars, against the same
+  * spatial grid the player's slot lives in, so it answers it here too; the player's own slot
+  * is excluded or the car would collide with itself.
+  */
  const poseOk = (x, z, heading) => {
-  if (clearOfSolids(x, z, heading)) return true;
-  return false;
+  if (!clearOfSolids(x, z, heading)) return false;
+  probe.x = x; probe.z = z; probe.heading = heading;
+  return !sim.blocked(probe, CAR.type, state.slot, CAR.carPad);
  };
  /** Road-only test, still used when parking the car so it starts on the carriageway. */
  const onRoadPose = (x, z, heading) => {
@@ -93,7 +110,8 @@ export function createPlayerVehicle(sim, ctx) {
      const ph = h * Math.PI / 8;
      if (!onRoadPose(px, pz, ph)) continue;
      if (!onRoadPose(px + Math.sin(ph) * 6, pz + Math.cos(ph) * 6, ph)) continue;   // road ahead
-     state.slot = slot; state.x = px; state.z = pz; state.heading = ph; state.speed = 0; state.steering = 0;
+     state.slot = slot; state.x = px; state.z = pz; state.heading = ph; state.course = ph;
+     state.speed = 0; state.steering = 0;
      Object.assign(slot, {
       active: true, controlled: true, parked: true, service: false, platoon: undefined,
       type: CAR.type, x: px, z: pz, heading: ph, speed: 0, brake: false, blinker: 0,
@@ -150,17 +168,28 @@ export function createPlayerVehicle(sim, ctx) {
    // wheel over the kerb is first tried at half lock, then straight, then at half the
    // travel, so the car scrubs along the edge of the carriageway instead of stalling every
    // other frame -- which is what killing the speed on a rejected pose used to feel like.
+   // The course chases the nose instead of matching it, and is not allowed to fall more than
+   // slipMax behind, so the car slides through a hard turn without ever ending up sideways.
+   const lag = 1 - Math.exp(-CAR.grip * dt);
+   let course = state.course + wrapAngle(heading - state.course) * lag;
+   course = heading - Math.max(-CAR.slipMax, Math.min(CAR.slipMax, wrapAngle(heading - course)));
+
+   // Give way progressively rather than refusing the whole step. A turn that would put a
+   // wheel over the kerb is first tried at half lock, then straight, then at half the
+   // travel, so the car scrubs along the edge of the carriageway instead of stalling every
+   // other frame -- which is what killing the speed on a rejected pose used to feel like.
    const travel = state.speed * dt;
-   const attempts = [[heading, travel], [(heading + state.heading) / 2, travel],
-                     [state.heading, travel], [state.heading, travel * .5]];
+   const attempts = [[heading, course, travel], [heading, state.course + wrapAngle(course - state.course) / 2, travel],
+                     [state.heading, state.course, travel], [state.heading, state.course, travel * .5]];
    let moved = false;
-   for (const [h, d] of attempts) {
-    const nx = state.x + Math.sin(h) * d, nz = state.z + Math.cos(h) * d;
+   for (const [h, c, d] of attempts) {
+    const nx = state.x + Math.sin(c) * d, nz = state.z + Math.cos(c) * d;
     if (!poseOk(nx, nz, h)) continue;
-    state.x = nx; state.z = nz; state.heading = h; moved = true; break;
+    state.x = nx; state.z = nz; state.heading = h; state.course = c; moved = true; break;
    }
    if (!moved) {
     state.speed = 0;                          // nose against something: stop, do not bounce
+    state.course = state.heading;             // and no momentum survives the impact
     // Stopping is not enough on its own. Steering authority is a function of speed, so a
     // car held at zero against a wall can never turn away from it: full throttle just
     // re-zeroes itself every frame and the only way out is reverse. Let the wheel swing the
