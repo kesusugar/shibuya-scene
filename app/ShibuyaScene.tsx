@@ -94,7 +94,7 @@ export default function Home(){
   a.x=player.state.x;a.z=player.state.z;a.heading=player.state.heading;a.speed=player.state.speed;
   a.lod='near';a.animationTime=(a.animationTime??0)+dt;a.height=a.height||0;};
  const releaseCrowdSlot=()=>{const a=crowdSlot();if(!a)return;a.controlled=false;a.active=false;a.mode='ambient';};
- const applyPlayerCamera=()=>{const c:any=playerCamera(player.state,followPose);
+ const applyPlayerCamera=()=>{const c:any=playerCamera(player.state,followPose,lifeEntry.hooks.current?.network?.ctx??null);
   view.position.set(c.x,c.y,c.z);view.lookAt(c.tx,c.ty,c.tz);
   controls.target.set(c.tx,c.ty,c.tz);};
  // A vehicle box over the player is a knock-down. The traffic simulation's own overlap test

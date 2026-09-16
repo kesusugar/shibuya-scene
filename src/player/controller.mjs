@@ -9,6 +9,12 @@
 // existing instanced renderer draws and animates the player at no extra draw call, and the
 // crowd's own neighbour avoidance sees the player and parts around them.
 
+import {inPolygon} from '../geo/core.mjs';
+
+// The camera arm. Solids are tested at the camera's own height rather than on the ground,
+// so it is a facade that pulls the camera in and not a bollard it is sailing well above.
+export const CAMERA = Object.freeze({samples: 12, pad: .5, minBack: .9});
+
 export const PLAYER = Object.freeze({
  radius: .35,          // body radius used against solids, matching the crowd's own footprint
  walk: 1.5, run: 4.2,  // m/s; the crowd walks 0.85-2.0, so walking blends into it
@@ -139,13 +145,48 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
  return api;
 }
 
-/** Where the third-person camera sits for the player's current pose, into an {x,y,z,tx,ty,tz} scratch. */
-export function playerCamera(state, out = {}) {
+/** Is anything solid at this point, at this height? */
+function solidAt(ctx, x, z, y, r) {
+ for (const {value: s} of ctx.solids.query({minX: x - r, maxX: x + r, minZ: z - r, maxZ: z + r})) {
+  if (s.bottom > y || s.top < y) continue;                 // the camera clears it
+  if (inPolygon([x, z], s.polygon)) return true;
+  const ring = s.polygon.outer;
+  for (let i = 0; i < ring.length; i++) {
+   const a = ring[i], b = ring[(i + 1) % ring.length];
+   const dx = b[0] - a[0], dz = b[1] - a[1];
+   const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz || 1)));
+   if (Math.hypot(x - a[0] - dx * t, z - a[1] - dz * t) < r) return true;
+  }
+ }
+ return false;
+}
+
+/**
+ * Where the third-person camera sits for the player's current pose, into an
+ * {x,y,z,tx,ty,tz} scratch.
+ *
+ * With a context, the arm is shortened to the last clear point between the player and where
+ * the camera would like to be, so backing into a facade slides the camera forward rather
+ * than through the wall. The look-at point does not move with it: the arm changes length,
+ * never direction, so the view does not swing when a wall is brushed.
+ */
+export function playerCamera(state, out = {}, ctx = null) {
  const s = Math.sin(state.heading), c = Math.cos(state.heading), cp = Math.cos(state.pitch);
  const eye = state.y + PLAYER.eye;
  const back = PLAYER.followBack * cp;
- out.x = state.x - s * back; out.z = state.z - c * back;
- out.y = eye + PLAYER.followUp + PLAYER.followBack * Math.sin(state.pitch);
+ const wantX = state.x - s * back, wantZ = state.z - c * back;
+ const wantY = eye + PLAYER.followUp + PLAYER.followBack * Math.sin(state.pitch);
+ out.x = wantX; out.y = wantY; out.z = wantZ;
+ if (ctx) {
+  const floor = CAMERA.minBack / Math.max(.01, PLAYER.followBack);
+  for (let i = CAMERA.samples; i >= 1; i--) {
+   const t = i / CAMERA.samples;
+   const px = state.x + (wantX - state.x) * t, pz = state.z + (wantZ - state.z) * t;
+   const py = eye + (wantY - eye) * t;
+   if (!solidAt(ctx, px, pz, py, CAMERA.pad)) {out.x = px; out.y = py; out.z = pz; break;}
+   if (t <= floor) {out.x = state.x; out.y = eye; out.z = state.z; break;}
+  }
+ }
  const ahead = 6;
  out.tx = state.x + s * cp * ahead;
  out.ty = eye + Math.sin(state.pitch) * ahead;
