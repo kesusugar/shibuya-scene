@@ -14,11 +14,11 @@ const SKIN_COLORS=[0xdfb994,0xba8868,0xeac6a7,0xc99c7e];
 const HAIR_COLORS=[0x25282a,0x4e3a30,0x706051,0xaeb0ac];
 // The played agent occupies slot 0, which by id would draw BODY_COLORS[0] -- the palette's
 // darkest navy, and so the one outfit that disappears into a night crowd. None of the twelve
-// crowd colours is saturated, so a saturated one reads instantly without looking painted on,
-// and a marker floating clear of everyone's heads keeps the player findable in a crush where
-// the body itself is hidden. The marker carries its own emissive because the crowd material
-// has none and nothing else in the scene would light it.
-const PLAYER_SHIRT=0xff3b1f,PLAYER_MARKER=0xff6a3d;
+// crowd colours is saturated, so a saturated one reads instantly without looking painted on.
+// This is the only thing the player changes here: the overhead marker is a player affordance
+// rather than a pedestrian body part, so it lives with the player and leaves the crowd's
+// thirteen geometry pools and three materials as they were.
+export const PLAYER_SHIRT=0xff3b1f;
 const rank=(id,salt=0)=>(id*37+salt)%POOL_SIZE;
 function pickVariant(id,profiles,salt=0){let r=rank(id,salt);for(const profile of profiles){if(r<profile.count)return profile.key;r-=profile.count;}return profiles.at(-1).key;}
 function transformed(g,scale,position){g.scale(...scale);g.translate(...position);return g;}
@@ -43,18 +43,18 @@ export function buildCrowd(data,options={}){
  const street=options.street?.tier==='high'?options.street:buildStreetscapeModel(data,{tier:'high',ground,generic,core});
  const detail=options.detail?.tier==='high'?options.detail:buildDetailModel(data,{tier:'high',ground,generic,core});
  const network=options.network??buildPedestrianNetwork(data,{ground,generic,core,street,detail}),sim=options.sim??new CrowdSimulation(network,options),root=new Group();root.name='r1-crowd';
- const material=new MeshStandardMaterial({color:0xffffff,roughness:.9}),headMaterial=new MeshStandardMaterial({color:0xffffff,roughness:.7}),hairMaterial=new MeshStandardMaterial({color:0xffffff,roughness:.8}),markerMaterial=new MeshStandardMaterial({color:0xffffff,roughness:.35,emissive:PLAYER_MARKER,emissiveIntensity:1.6});
+ const material=new MeshStandardMaterial({color:0xffffff,roughness:.9}),headMaterial=new MeshStandardMaterial({color:0xffffff,roughness:.7}),hairMaterial=new MeshStandardMaterial({color:0xffffff,roughness:.8});
  const geometry={};for(let i=0;i<BODY_VARIANTS.length;i++)geometry[BODY_VARIANTS[i].key]=bodyGeometry(i);geometry.head=new SphereGeometry(1,10,7);for(let i=0;i<HAIR_VARIANTS.length;i++)geometry[HAIR_VARIANTS[i].key]=hairGeometry(i);
- Object.assign(geometry,{phone:new BoxGeometry(1,1,1),bag:new BoxGeometry(1,1,1),cane:new CylinderGeometry(1,1,1,6),suitcase:suitcaseGeometry(),umbrella:new ConeGeometry(1,.35,8),marker:new ConeGeometry(1,1,6)});
- const capacities={...Object.fromEntries(BODY_VARIANTS.map(v=>[v.key,v.count])),head:POOL_SIZE,...Object.fromEntries(HAIR_VARIANTS.map(v=>[v.key,v.count])),...ACCESSORY_TARGETS,marker:1};
- const meshes={};for(const [key,g] of Object.entries(geometry)){const m=new InstancedMesh(g,key==='head'?headMaterial:key.startsWith('hair')?hairMaterial:key==='marker'?markerMaterial:material,capacities[key]);m.instanceMatrix.setUsage(DynamicDrawUsage);m.frustumCulled=false;m.name='crowd-'+key;root.add(m);meshes[key]=m;}
- const obj=new Object3D(),color=new Color(),counts={},stats={geometries:Object.keys(geometry).length,materials:4,textures:0,batches:0,triangles:0,debugBatches:0,bodyCounts:{},hairCounts:{},accessories:{}};let disposed=false,reportClock=0,markerClock=0;
+ Object.assign(geometry,{phone:new BoxGeometry(1,1,1),bag:new BoxGeometry(1,1,1),cane:new CylinderGeometry(1,1,1,6),suitcase:suitcaseGeometry(),umbrella:new ConeGeometry(1,.35,8)});
+ const capacities={...Object.fromEntries(BODY_VARIANTS.map(v=>[v.key,v.count])),head:POOL_SIZE,...Object.fromEntries(HAIR_VARIANTS.map(v=>[v.key,v.count])),...ACCESSORY_TARGETS};
+ const meshes={};for(const [key,g] of Object.entries(geometry)){const m=new InstancedMesh(g,key==='head'?headMaterial:key.startsWith('hair')?hairMaterial:material,capacities[key]);m.instanceMatrix.setUsage(DynamicDrawUsage);m.frustumCulled=false;m.name='crowd-'+key;root.add(m);meshes[key]=m;}
+ const obj=new Object3D(),color=new Color(),counts={},stats={geometries:Object.keys(geometry).length,materials:3,textures:0,batches:0,triangles:0,debugBatches:0,bodyCounts:{},hairCounts:{},accessories:{}};let disposed=false,reportClock=0;
  let debug=null;if(options.debug){const lines=[];for(const e of network.edges){if(e.id%2&&!e.crossingId)continue;const a=network.nodes[e.from],b=network.nodes[e.to];if(e.points){for(let i=1;i<e.points.length;i++)lines.push(e.points[i-1][0],.2,e.points[i-1][1],e.points[i][0],.2,e.points[i][1]);}else lines.push(a.x,.2,a.z,b.x,.2,b.z);}
   const g=new BufferGeometry();g.setAttribute('position',new Float32BufferAttribute(lines,3));debug=new LineSegments(g,new LineBasicMaterial({color:0xf8b5d1,depthTest:false}));debug.name='r1-walkable-path-grid';root.add(debug);stats.debugBatches=1;
  }
  function part(key,p,lx,y,lz,w,h,d,hex,tilt=0){const c=Math.cos(p.heading),s=Math.sin(p.heading);obj.position.set(p.renderX+c*lx+s*lz,p.height+y,p.renderZ-s*lx+c*lz);obj.rotation.set(tilt,p.heading,0);obj.scale.set(w,h,d);obj.updateMatrix();const i=counts[key]++;meshes[key].setMatrixAt(i,obj.matrix);color.setHex(hex);meshes[key].setColorAt(i,color);}
  function hasAccessory(p,key){return rank(p.id,{phone:211,bag:433,cane:677,suitcase:929,umbrella:1217}[key])<ACCESSORY_TARGETS[key];}
- function sync(dt=0){markerClock+=dt;for(const k of Object.keys(meshes))counts[k]=0;for(const p of sim.pool){if(!p.active)continue;const def=ARCHETYPES[p.archetype],h=def.height*(.96+(p.id%5)*.02),w=def.width*(1.06+(p.id%7)*.015),walk=p.speed>.05,phase=p.animationTime*(walk?7:1)+p.phase,fidelity=p.lod==='near'?1:p.lod==='mid'?.65:.15,sway=walk?Math.sin(phase)*.035*fidelity:Math.sin(phase)*.012,bob=walk?Math.abs(Math.cos(phase))*.024*fidelity:Math.sin(phase)*.008;
+ function sync(dt=0){for(const k of Object.keys(meshes))counts[k]=0;for(const p of sim.pool){if(!p.active)continue;const def=ARCHETYPES[p.archetype],h=def.height*(.96+(p.id%5)*.02),w=def.width*(1.06+(p.id%7)*.015),walk=p.speed>.05,phase=p.animationTime*(walk?7:1)+p.phase,fidelity=p.lod==='near'?1:p.lod==='mid'?.65:.15,sway=walk?Math.sin(phase)*.035*fidelity:Math.sin(phase)*.012,bob=walk?Math.abs(Math.cos(phase))*.024*fidelity:Math.sin(phase)*.008;
    const blend=dt?Math.min(1,dt*(p.lod==='far'?10:25)):1;p.renderX+=(p.x-p.renderX)*blend;p.renderZ+=(p.z-p.renderZ)*blend;
    const body=pickVariant(p.id,BODY_VARIANTS),hair=pickVariant(p.id,HAIR_VARIANTS,307),shirt=p.controlled?PLAYER_SHIRT:BODY_COLORS[p.id%BODY_COLORS.length],skin=SKIN_COLORS[p.id%SKIN_COLORS.length],hairColor=def.gray?HAIR_COLORS[3]:HAIR_COLORS[p.id%3];
    part(body,p,0,h*.02+bob,0,w,h*.78,w*.58,shirt,sway);
@@ -65,9 +65,6 @@ export function buildCrowd(data,options={}){
    if(hasAccessory(p,'cane'))part('cane',p,w*.48,h*.19,0,w*.055,h*.38,w*.055,0x8c7354,-.16);
    if(hasAccessory(p,'suitcase'))part('suitcase',p,-w*.64,h*.02,.08,w*.5,h*.38,w*.52,p.id%2?0x596579:0x6e4d45);
    if(hasAccessory(p,'umbrella'))part('umbrella',p,.08,h*.99,0,.38,.62,.38,shirt);
-   // Point-down cone, clear of the tallest heads, bobbing on its own clock so it still moves
-   // while the player stands still.
-   if(p.controlled)part('marker',p,0,h*1.14+Math.sin(markerClock*2.2)*.055,0,.17,.3,.17,PLAYER_MARKER,Math.PI);
   }
   stats.triangles=0;stats.batches=0;for(const [k,m] of Object.entries(meshes)){m.count=counts[k];if(m.count)stats.batches++;stats.triangles+=m.count*triangleCount(geometry[k]);m.instanceMatrix.needsUpdate=true;if(m.instanceColor)m.instanceColor.needsUpdate=true;}
   stats.bodyCounts=Object.fromEntries(BODY_VARIANTS.map(v=>[v.key,counts[v.key]]));stats.hairCounts=Object.fromEntries(HAIR_VARIANTS.map(v=>[v.key,counts[v.key]]));stats.accessories=Object.fromEntries(Object.keys(ACCESSORY_TARGETS).map(k=>[k,counts[k]]));stats.instanceCounts={...counts};
