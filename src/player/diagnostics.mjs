@@ -23,7 +23,7 @@ function verdict(d) {
  const moving = Math.abs(d.speed) > .15;
  if (moving) return ['dg-ok', `走っています（${d.speed.toFixed(1)} m/s）。`];
  if (!d.input || (Math.abs(d.input.forward) < .05 && Math.abs(d.input.strafe) < .05))
-  return ['dg-warn', '<b>入力が来ていません。</b>キー・パッド・タッチのいずれも 0 です。下の「前進」を押してみてください。'];
+  return ['dg-warn', '<b>入力が来ていません。</b>キー・パッド・タッチのいずれも 0 です。'];
  if (d.stalled) {
   const what = d.blockedBy?.cars ? `前に車が${d.blockedBy.cars}台います` : '壁か街の設置物に当たっています';
   return ['dg-warn', `<b>前が詰まっています。</b>${what}。<b>S</b>（下の「バック」）で下がれば抜けられます。`];
@@ -64,13 +64,13 @@ function deviceHtml() {
 }
 
 /**
- * `source` is called each frame for the current state, `onTouch` with {forward,strafe,running}
- * whenever the on-screen controls change, and `onKey` with 'drive' or 'exit' for the get-in
- * and leave buttons.
+ * `source` is called each frame for the current state, and `onKey` with 'drive' or 'exit'
+ * for the get-in and leave buttons. Movement is not here: on a touch device the real
+ * controls own it, and on a desktop the keyboard does.
  *
- * @param {{source?:()=>any, onTouch?:(axes:any)=>void, onKey?:(what:string)=>void, tab?:string}} [options]
+ * @param {{source?:()=>any, onKey?:(what:string)=>void, tab?:string}} [options]
  */
-export function createDiagnostics({source, onTouch, onKey, tab = 'drive'} = {}) {
+export function createDiagnostics({source, onKey, tab = 'drive'} = {}) {
  if (typeof document === 'undefined') return {dispose() {}};
  const root = document.createElement('section');
  root.className = 'dg';
@@ -83,12 +83,6 @@ export function createDiagnostics({source, onTouch, onKey, tab = 'drive'} = {}) 
    </header>
    <div class="dg-body"></div>
    <div class="dg-pad">
-     <div class="dg-stick">
-       <button type="button" data-hold="left">◀</button>
-       <button type="button" data-hold="fwd" class="wide">前進</button>
-       <button type="button" data-hold="right">▶</button>
-       <button type="button" data-hold="back" class="wide">バック</button>
-     </div>
      <div class="dg-acts">
        <button type="button" data-key="drive">乗る / 降りる</button>
        <button type="button" data-key="exit">観察に戻る</button>
@@ -98,24 +92,8 @@ export function createDiagnostics({source, onTouch, onKey, tab = 'drive'} = {}) 
  document.body.appendChild(root);
 
  const body = root.querySelector('.dg-body');
- const held = new Set();
  let current = tab, folded = false, raf = 0, disposed = false, latest = null;
 
- const pushTouch = () => onTouch?.({
-  forward: (held.has('fwd') ? 1 : 0) + (held.has('back') ? -1 : 0),
-  strafe: (held.has('right') ? 1 : 0) + (held.has('left') ? -1 : 0),
-  running: false
- });
-
- // Pointer events, not click: a control has to respond to being held, and a pointer that
- // leaves the button or is cancelled by a scroll must release it rather than stick down.
- for (const b of root.querySelectorAll('[data-hold]')) {
-  const name = b.dataset.hold;
-  const press = e => {e.preventDefault(); b.setPointerCapture?.(e.pointerId); held.add(name); b.classList.add('on'); pushTouch();};
-  const release = () => {held.delete(name); b.classList.remove('on'); pushTouch();};
-  b.addEventListener('pointerdown', press);
-  for (const type of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(type, release);
- }
  for (const b of root.querySelectorAll('[data-key]')) {
   b.addEventListener('click', e => {e.preventDefault(); onKey?.(b.dataset.key);});
  }
@@ -156,7 +134,7 @@ export function createDiagnostics({source, onTouch, onKey, tab = 'drive'} = {}) 
   get snapshot() {return latest;},
   dispose() {
    if (disposed) return; disposed = true;
-   cancelAnimationFrame(raf); onTouch?.({forward: 0, strafe: 0, running: false}); root.remove();
+   cancelAnimationFrame(raf); root.remove();
   }
  };
 }

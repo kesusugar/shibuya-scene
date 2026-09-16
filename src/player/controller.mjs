@@ -21,6 +21,11 @@ export const PLAYER = Object.freeze({
  eye: 1.55,            // height the camera frames the player from
  archetype: 'hoodie',  // fixed, so the player is the same person every session
  look: .0022,          // radians per pixel of mouse travel
+ // A pad stick is polled per frame rather than delivered as deltas, so it turns at its own
+ // rate and needs a deadzone, or a worn stick walks the player across the street on its own.
+ padLook: .045, padDeadzone: .18,
+ // A drag across glass covers far fewer pixels than a mouse sweep, so it turns further per px.
+ dragLook: 2.2,
  pitchLimit: 1.15,     // keeps the follow camera out of the ground and off the zenith
  followBack: 4.6, followUp: 2.1, followLerp: 9,
  // Where a session starts. Chosen by sampling the walkable surface: full kerb height, so
@@ -93,6 +98,23 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
     state.pitch = Math.max(-PLAYER.pitchLimit, Math.min(PLAYER.pitchLimit, state.pitch - e.movementY * PLAYER.look));
    };
    const click = () => {if (document.pointerLockElement !== element) element.requestPointerLock?.();};
+   // Touch looks by dragging the scene itself. It belongs on the canvas rather than on a
+   // full-screen overlay: an overlay wide enough to catch every drag also swallows every
+   // button the page already has, and the canvas is exactly the region that should turn.
+   // Mouse drags are left alone -- they are handled above, under pointer lock.
+   let touchId = null, touchLast = null;
+   const touchStart = e => {
+    if (e.pointerType !== 'touch' || touchId !== null) return;
+    touchId = e.pointerId; touchLast = {x: e.clientX, y: e.clientY};
+    element.setPointerCapture?.(e.pointerId);
+   };
+   const touchMove = e => {
+    if (e.pointerId !== touchId || !touchLast) return;
+    e.preventDefault();
+    api.look((e.clientX - touchLast.x) * PLAYER.dragLook, (e.clientY - touchLast.y) * PLAYER.dragLook);
+    touchLast = {x: e.clientX, y: e.clientY};
+   };
+   const touchEnd = e => {if (e.pointerId === touchId) {touchId = null; touchLast = null;}};
    // Edge-detected, because a held button would otherwise fire get-in/get-out every frame.
    let padPrev = {drive: false, exit: false};
    padPoll = () => {
@@ -109,10 +131,14 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    window.addEventListener('keydown', down); window.addEventListener('keyup', up);
    window.addEventListener('blur', blur);
    element.addEventListener('mousemove', move); element.addEventListener('click', click);
+   element.addEventListener('pointerdown', touchStart); element.addEventListener('pointermove', touchMove);
+   for (const type of ['pointerup', 'pointercancel']) element.addEventListener(type, touchEnd);
    detach = () => {
     window.removeEventListener('keydown', down); window.removeEventListener('keyup', up);
     window.removeEventListener('blur', blur);
     element.removeEventListener('mousemove', move); element.removeEventListener('click', click);
+    element.removeEventListener('pointerdown', touchStart); element.removeEventListener('pointermove', touchMove);
+    for (const type of ['pointerup', 'pointercancel']) element.removeEventListener(type, touchEnd);
     if (document.pointerLockElement === element) document.exitPointerLock?.();
     keys.clear(); padPoll = null; detach = null;
    };

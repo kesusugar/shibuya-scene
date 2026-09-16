@@ -35,6 +35,7 @@ import {createPlayerFigure} from '../src/player/figure.mjs';
 import {CAR,createPlayerVehicle,vehicleCamera} from '../src/player/vehicle.mjs';
 import {createPlayerAudio} from '../src/player/audio.mjs';
 import {createDiagnostics} from '../src/player/diagnostics.mjs';
+import {createTouchControls,wantsTouch} from '../src/player/touch-controls.mjs';
 import {boxOverlap} from '../src/traffic/path.mjs';
 import {VEHICLES} from '../src/traffic/config.mjs';
 export default function Home(){
@@ -55,7 +56,7 @@ export default function Home(){
  const [camera,setCamera]=useState('scramble'),[tier,setTier]=useState('high'),[time,setTime]=useState('night'),[modules,setModules]=useState<any[]>([]),[stats,setStats]=useState<any>(null),[error,setError]=useState('');
  useEffect(()=>{let disposed=false;let cleanup=()=>{},appLifecycleStart=performance.now();
  (async()=>{const THREE=await import('three');const {OrbitControls}=await import('three/addons/controls/OrbitControls.js');if(disposed||!mount.current)return;
- const params=new URLSearchParams(location.search),config=parseLaunchConfig(location.search),s5TimingEnabled=params.get('s5Timing')==='1',startupTimingEnabled=params.get('startupTiming')==='1',diagEnabled=params.get('pad')==='1'||params.get('diag')==='1',diagTab=params.get('pad')==='1'?'pad':'drive',scene=new THREE.Scene();setS5TimingVisible(s5TimingEnabled);scene.background=new THREE.Color('#111923');
+ const params=new URLSearchParams(location.search),config=parseLaunchConfig(location.search),s5TimingEnabled=params.get('s5Timing')==='1',startupTimingEnabled=params.get('startupTiming')==='1',diagEnabled=params.get('pad')==='1'||params.get('diag')==='1',touchEnabled=params.get('touch')==='1'||wantsTouch(),diagTab=params.get('pad')==='1'?'pad':'drive',scene=new THREE.Scene();setS5TimingVisible(s5TimingEnabled);scene.background=new THREE.Color('#111923');
  let timingTier=config.tier,startup:any=null,startupTrace:any=null;
  setTier(config.tier);setTime(config.time);setCamera(config.camera);
  const groups:any={};for(const name of ['world','dynamic','overlay']){groups[name]=new THREE.Group();groups[name].name=name;scene.add(groups[name]);}
@@ -87,20 +88,20 @@ export default function Home(){
  // both by the same amount instead, which stops the pan without turning the view.
  const VIEW_LIMIT=180,VIEW_CEILING=60,EYE_FLOOR=1.6;
  // The player is created once the crowd network is up, since it walks on that context.
- let player:any=null,playerMarker:any=null,playerFigure:any=null,playerCar:any=null,playerAudio:any=null,driving=false,playerMode=false;const followPose:any={x:0,y:0,z:0,tx:0,ty:0,tz:0};const playerBox={x:0,z:0,heading:0};
+ let player:any=null,playerMarker:any=null,playerFigure:any=null,playerCar:any=null,playerAudio:any=null,touchPad:any=null,driving=false,playerMode=false;const followPose:any={x:0,y:0,z:0,tx:0,ty:0,tz:0};const playerBox={x:0,z:0,heading:0};
  const playerSize={width:PLAYER.radius*2,length:PLAYER.radius*2};const PLAYER_HEIGHT=1.76;
  // Getting in and out. The car is the player's own, parked where they started, so there is
  // no question of whose it is and the AI traffic is left alone.
  const toggleDrive=()=>{
   if(!player||!playerCar)return;
   if(driving){const spot=playerCar.doorstep();if(!spot)return;                 // no pavement beside it: stay in
-   driving=false;playerCar.state.speed=0;playerCar.sync();player.place(spot[0],spot[1],playerCar.state.heading);setDriving(false);return;}
+   driving=false;playerCar.state.speed=0;playerCar.sync();player.place(spot[0],spot[1],playerCar.state.heading);setDriving(false);touchPad?.setDriving(false);return;}
   // Any parked car within reach, not just the one spawned for the player: whichever door is
   // nearest is the one that opens.
   const other=playerCar.nearestTakeover(player.state.x,player.state.z);
   if(other)playerCar.takeOver(other);
   else if(playerCar.nearestDoor(player.state.x,player.state.z)===null)return;  // too far from any door
-  driving=true;playerFigure?.hide();setDriving(true);struckCountRef=0;setStruckCount(0);
+  driving=true;playerFigure?.hide();setDriving(true);touchPad?.setDriving(true);struckCountRef=0;setStruckCount(0);
  };
  const crowdSlot=()=>lifeEntry.hooks.current?.sim?.pool?.[0]??null;
  // Writing the reserved agent before the crowd updates puts the player in the same
@@ -195,12 +196,18 @@ export default function Home(){
   // start an AudioContext. If it refuses, audio stays off and nothing else changes.
   if(!playerAudio)playerAudio=createPlayerAudio();
   playerAudio.resume();
+  // On a touch device these are the controls, not an extra: there is no keyboard to fall
+  // back to. They feed the same axes the keys and the pad feed.
+  if(touchEnabled&&!touchPad)touchPad=createTouchControls({
+   onAxes:(axes:any)=>player?.setTouch(axes),
+   onDrive:()=>toggleDrive(),onExit:()=>exitPlayer()});
+  touchPad?.setDriving(false);touchPad?.show();
   const sim=trafficEntry.hooks.current?.sim;
   if(sim&&!playerCar){playerCar=createPlayerVehicle(sim,ctx);if(!playerCar.spawn(player.state.x,player.state.z))console.warn('[Player] no room to park the car');}
   playerMode=true;controls.enabled=false;player.attach(canvas,{onExit:()=>exitPlayer(),onDrive:()=>toggleDrive()});setPlayerHit(null);setMode('player');
   (window as any).__SHIBUYA_PLAYER__=player;(window as any).__SHIBUYA_CAR__=playerCar;
   return true;};
- const exitPlayer=()=>{if(!playerMode)return;playerMode=false;driving=false;setDriving(false);playerCar?.release();playerCar=null;playerAudio?.silence();player?.detach();playerMarker?.hide();playerFigure?.hide();releaseCrowdSlot();delete (window as any).__SHIBUYA_PLAYER__;delete (window as any).__SHIBUYA_CAR__;
+ const exitPlayer=()=>{if(!playerMode)return;playerMode=false;driving=false;setDriving(false);playerCar?.release();playerCar=null;playerAudio?.silence();touchPad?.hide();player?.detach();playerMarker?.hide();playerFigure?.hide();releaseCrowdSlot();delete (window as any).__SHIBUYA_PLAYER__;delete (window as any).__SHIBUYA_CAR__;
   controls.enabled=!config.qa;setPlayerHit(null);setMode('observe');preset(currentCamera,false);};
  resize();setTier(currentTier);setTime(clock.value);setModules(system.snapshot());
  const observer=new ResizeObserver(resize);observer.observe(mount.current);
@@ -234,7 +241,6 @@ export default function Home(){
      speed:c?.speed??0,stalled:!!c?.stalled,damage:c?.damage??0,type:c?.type??'—',
      x:c&&driving?c.x:(player?.state.x??0),z:c&&driving?c.z:(player?.state.z??0),
      blockedBy:c?.stalled?blockedBy():null};},
-   onTouch:(axes:any)=>player?.setTouch(axes),
    onKey:(what:string)=>{if(what==='drive')toggleDrive();else exitPlayer();}});
   (window as any).__SHIBUYA_DIAG__=diag;
  }
@@ -257,7 +263,7 @@ export default function Home(){
  const lost=(event:Event)=>{event.preventDefault();setError('WebGL context lost — reload to retry.');};canvas.addEventListener('webglcontextlost',lost);
  const decorationTier=deferredLatest((v:string)=>{if(streetTier!==v){streetTier=v;if(streetEntry.enabled){system.setEnabled('streetscape',false);system.setEnabled('streetscape',true);}}if(signTier!==v){signTier=v;if(signsEntry.enabled){system.setEnabled('signs',false);system.setEnabled('signs',true);}}if(detailTier!==v){detailTier=v;if(detailEntry.enabled){system.setEnabled('stationDetail',false);system.setEnabled('stationDetail',true);}}});
  engine.current={preset,drive:()=>toggleDrive(),player:()=>{if(playerMode)exitPlayer();else enterPlayer();},respawn:()=>{player?.revive();setPlayerHit(null);},tier:(v:string)=>{const previousTier=currentTier;startup?.tierChange(previousTier,v,'tier-control');for(const id of ['fidelity','streetscape','signs','stationDetail'])startup?.setReason(id,'tier-change');currentTier=v;currentTrafficTier=v;buildingsTier=v;timingTier=v;frameGate.setTier(v);fidelity.setTier(v);buildQueue.enqueue(()=>measureStage('fidelity','Render Fidelity Prepare',()=>fidelity.prepare()),{key:'fidelity',name:'Render Fidelity Prepare'}).catch(e=>{console.error('[S16.3 Fidelity]',e);setError('HIGH描画の準備に失敗しました。MEDIUMを選択してください。');});buildingsEntry.hooks.current?.setTier(v);setBuildingsReport(buildingsEntry.hooks.current?{...buildingsEntry.hooks.current.stats}:null);trafficEntry.hooks.current?.setTier(v);lifeEntry.hooks.current?.setTier(v);trainsEntry.hooks.current?.setTier(v);nightglowEntry.hooks.current?.setTier(v);constructionEntry.hooks.current?.setTier(v);setConstructionReport(constructionEntry.hooks.current?{...constructionEntry.hooks.current.stats}:null);resize();setTier(v);decorationTier.set(v);},time:(v:string)=>{solar.select(v);setTime(v);},toggle:(id:string,v:boolean)=>{startup?.setReason(id,'manual-rebuild');const rebuildLife=id==='traffic'&&lifeEntry.enabled;if(rebuildLife){startup?.setReason('life','dependency-rebuild');system.setEnabled('life',false);}system.setEnabled(id,v);if(id==='environment'){nightglowEntry.hooks.current?.refresh();fidelity.refresh();}if(rebuildLife)system.setEnabled('life',true);setModules(system.snapshot());},capture};
- cleanup=()=>{player?.detach();playerAudio?.dispose();diag?.dispose();if((window as any).__SHIBUYA_DIAG__===diag)delete (window as any).__SHIBUYA_DIAG__;playerMarker?.dispose();playerFigure?.dispose();cancelAnimationFrame(raf);stopShaderErrors();timingObserver?.disconnect();startupTrace?._removeLifecycle?.();if(qaButtonTimer)window.clearInterval(qaButtonTimer);decorationTier.dispose();buildQueue.dispose();observer.disconnect();unsub();dataAbort.abort();solar.dispose();fidelity.dispose();dayNight.dispose();system.dispose();controls.dispose();canvas.removeEventListener('webglcontextlost',lost);renderer?.dispose();canvas.remove();qaButton?.remove();startupPanel?.remove();if((window as any).__SHIBUYA_QA__===qaApi)delete (window as any).__SHIBUYA_QA__;if((window as any).__SHIBUYA_STARTUP_TIMING__===startupTrace)delete (window as any).__SHIBUYA_STARTUP_TIMING__;engine.current=null;};
+ cleanup=()=>{player?.detach();playerAudio?.dispose();touchPad?.dispose();diag?.dispose();if((window as any).__SHIBUYA_DIAG__===diag)delete (window as any).__SHIBUYA_DIAG__;playerMarker?.dispose();playerFigure?.dispose();cancelAnimationFrame(raf);stopShaderErrors();timingObserver?.disconnect();startupTrace?._removeLifecycle?.();if(qaButtonTimer)window.clearInterval(qaButtonTimer);decorationTier.dispose();buildQueue.dispose();observer.disconnect();unsub();dataAbort.abort();solar.dispose();fidelity.dispose();dayNight.dispose();system.dispose();controls.dispose();canvas.removeEventListener('webglcontextlost',lost);renderer?.dispose();canvas.remove();qaButton?.remove();startupPanel?.remove();if((window as any).__SHIBUYA_QA__===qaApi)delete (window as any).__SHIBUYA_QA__;if((window as any).__SHIBUYA_STARTUP_TIMING__===startupTrace)delete (window as any).__SHIBUYA_STARTUP_TIMING__;engine.current=null;};
  })().catch(e=>{if(!disposed)setError(String(e));});return()=>{disposed=true;cleanup();};},[]);
  const timingMs=(value:number)=>`${(value/1000).toFixed(3)} s`;
  const copyS5Timing=async()=>{if(!s5TimingResult)return;await navigator.clipboard.writeText(JSON.stringify(s5TimingResult,null,2));setS5TimingCopied(true);window.setTimeout(()=>setS5TimingCopied(false),1500);};

@@ -83,13 +83,31 @@ button[data-slot=switch]{padding:0;border-radius:999px;width:32px;height:19px;mi
 /* The controls only belong on the drive tab; the others are read-only. */
 .dg-pad{display:none;gap:8px;padding:8px 10px 12px;border-top:1px solid #f2a25c33}
 .dg-driving .dg-pad{display:flex;flex-direction:column}
-.dg-stick{display:grid;grid-template-columns:64px 1fr 64px;gap:8px}
-.dg-stick button{min-height:54px;background:#1d2c3c;border:1px solid #4a5f74;border-radius:10px;color:#f6e6d6;font-size:15px;touch-action:none;user-select:none;-webkit-user-select:none}
-.dg-stick button.wide{grid-column:2}
-.dg-stick button.on{background:#f2a25c;border-color:#f2a25c;color:#1a1005;font-weight:700}
 .dg-acts{display:flex;gap:8px}
 .dg-acts button{flex:1;min-height:46px;background:#152230;border:1px solid #3a4a5a;border-radius:10px;color:#f6e6d6;font-size:14px}
 .dg-folded .dg-body,.dg-folded .dg-pad{display:none}
 @media(min-width:900px){
  .dg{left:auto;right:16px;bottom:16px;top:96px;width:400px;max-height:none;border:1px solid #f2a25c;border-radius:12px;overflow:hidden}
 }
+
+/* Touch controls. On a phone these are the controls, so they sit where thumbs rest and stay
+   out of the middle of the screen, which is the part worth looking at. The overlay itself is
+   transparent to pointers; only the zones and buttons inside it take them. */
+.tc{position:fixed;inset:0;z-index:1150;pointer-events:none}
+.tc[hidden]{display:none}
+.tc-stick{position:absolute;left:0;bottom:0;width:46%;height:46%;max-width:280px;pointer-events:auto;touch-action:none}
+.tc-base{position:absolute;width:132px;height:132px;margin:-66px 0 0 -66px;border:2px solid #f2a25c88;border-radius:50%;background:#07111a55;opacity:0;transition:opacity .12s}
+.tc-base.on{opacity:1}
+.tc-knob{position:absolute;left:50%;top:50%;width:58px;height:58px;transform:translate(-50%,-50%);border-radius:50%;background:#f2a25ccc;box-shadow:0 2px 10px #0008}
+/* Clear of the time-of-day row and the hint, both of which live along the bottom edge. */
+.tc-acts{position:absolute;right:14px;bottom:104px;display:flex;flex-direction:column;gap:10px;pointer-events:auto}
+/* The keyboard hint is noise on a device with no keyboard; the buttons say what they do. */
+body.tc-on .player-hint{display:none}
+.tc-acts button{min-width:82px;min-height:52px;padding:0 14px;background:#152230e6;border:1px solid #f2a25c88;border-radius:14px;color:#f6e6d6;font-size:15px;touch-action:none;user-select:none;-webkit-user-select:none}
+.tc-acts button.on{background:#f2a25c;border-color:#f2a25c;color:#1a1005;font-weight:700}
+.tc-acts button[hidden]{display:none}
+/* With the diagnostics panel open the controls have to clear it. */
+.dg~.tc .tc-acts{bottom:calc(56vh + 14px)}
+.dg~.tc .tc-stick{height:34%}
+@media(min-width:900px){.dg~.tc .tc-acts{bottom:104px}.dg~.tc .tc-stick{height:46%}}
+
