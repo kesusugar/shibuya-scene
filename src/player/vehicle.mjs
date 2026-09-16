@@ -9,8 +9,9 @@
 // later; this stage is about the loop -- get in, drive, get out -- being right first.
 
 import {VEHICLES} from '../traffic/config.mjs';
+import {DODGE_SPEED} from '../life/simulation.mjs';
 import {safePose} from '../traffic/graph.mjs';
-import {corners} from '../traffic/path.mjs';
+import {corners, boxOverlap} from '../traffic/path.mjs';
 import {bounds, inPolygon} from '../geo/core.mjs';
 
 export const CAR = Object.freeze({
@@ -25,6 +26,8 @@ export const CAR = Object.freeze({
  steerLow: 1.2, steerFull: 7,
  enterRange: 5.5,                        // the car parks on the road, the player waits on the kerb
  kerbLift: 9,                            // m/s the body rises and falls mounting a kerb
+ // A body is a small box for this purpose; the crowd's own radius is .25.
+ bodyWidth: .5, bodyLength: .5,
  // The camera rides further back and higher than the walking one: at 11 m/s the walking
  // arm puts the road under the bonnet and nothing else in frame.
  followBack: 8.2, followUp: 3.2, eye: 1.4
@@ -168,6 +171,34 @@ export function createPlayerVehicle(sim, ctx) {
    const slot = state.slot; if (!slot) return;
    slot.x = state.x; slot.z = state.z; slot.heading = state.heading; slot.y = state.y;
    slot.speed = Math.abs(state.speed); slot.brake = state.speed < 0 || Math.abs(state.speed) < .1;
+  },
+
+  /**
+   * Who did the car just hit?
+   *
+   * Only the crowd cells the car actually covers are looked at -- there are nearly two
+   * thousand pedestrians and the car spans a handful of two-metre cells -- and each
+   * candidate is measured with the traffic model's own box overlap, so a person is judged
+   * against the car exactly as the cars are against each other.
+   *
+   * The same threshold gates both halves of the rule. Below it the crowd treats the car as
+   * an obstacle and walks around it, so it must not knock anyone down: otherwise creeping
+   * into a queue, or braking to a stop in one, would scatter bodies at walking pace.
+   */
+  strikePedestrians(crowd) {
+   if (!state.active || !crowd || Math.abs(state.speed) < DODGE_SPEED) return 0;
+   const reach = Math.hypot(def.width, def.length) / 2 + 1;
+   const x0 = Math.floor((state.x - reach) / 2), x1 = Math.floor((state.x + reach) / 2);
+   const z0 = Math.floor((state.z - reach) / 2), z1 = Math.floor((state.z + reach) / 2);
+   const body = {width: CAR.bodyWidth, length: CAR.bodyLength};
+   let hit = 0;
+   for (let i = x0; i <= x1; i++) for (let j = z0; j <= z1; j++) {
+    for (const p of crowd.grid.get(i + ',' + j) ?? []) {
+     if (!p.active || p.controlled || p.struck !== undefined) continue;
+     if (boxOverlap(state, def, p, body, 0) && crowd.strike(p)) hit++;
+    }
+   }
+   return hit;
   },
 
   release() {

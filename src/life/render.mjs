@@ -6,7 +6,7 @@ import {buildStationModel} from '../station/model.mjs';
 import {buildDetailModel} from '../station-detail/model.mjs';
 import {buildStreetscapeModel} from '../streetscape/model.mjs';
 import {buildPedestrianNetwork} from './network.mjs';
-import {CrowdSimulation} from './simulation.mjs';
+import {CrowdSimulation,FALL_SECONDS} from './simulation.mjs';
 import {ARCHETYPES,POOL_SIZE,BODY_VARIANTS,HAIR_VARIANTS,ACCESSORY_TARGETS} from './config.mjs';
 
 const BODY_COLORS=[0x343f51,0x556173,0x29374b,0xc38966,0x738d88,0xb7b9c4,0xb98193,0xa2b29b,0xdac5a5,0xd8adbf,0xc2b9dd,0xb1d7ce];
@@ -56,7 +56,13 @@ export function buildCrowd(data,options={}){
  let debug=null;if(options.debug){const lines=[];for(const e of network.edges){if(e.id%2&&!e.crossingId)continue;const a=network.nodes[e.from],b=network.nodes[e.to];if(e.points){for(let i=1;i<e.points.length;i++)lines.push(e.points[i-1][0],.2,e.points[i-1][1],e.points[i][0],.2,e.points[i][1]);}else lines.push(a.x,.2,a.z,b.x,.2,b.z);}
   const g=new BufferGeometry();g.setAttribute('position',new Float32BufferAttribute(lines,3));debug=new LineSegments(g,new LineBasicMaterial({color:0xf8b5d1,depthTest:false}));debug.name='r1-walkable-path-grid';root.add(debug);stats.debugBatches=1;
  }
- function part(key,p,lx,y,lz,w,h,d,hex,tilt=0){const c=Math.cos(p.heading),s=Math.sin(p.heading);obj.position.set(p.renderX+c*lx+s*lz,p.height+y,p.renderZ-s*lx+c*lz);obj.rotation.set(tilt,p.heading,0);obj.scale.set(w,h,d);obj.updateMatrix();const i=counts[key]++;meshes[key].setMatrixAt(i,obj.matrix);color.setHex(hex);meshes[key].setColorAt(i,color);}
+ // A knocked-down pedestrian falls about the feet. The limbs are merged into the body, so
+ // there is nothing to fold; instead every part swings on the arc its own height describes
+ // -- rising parts travel furthest forward -- which reads as the whole figure going over.
+ function part(key,p,lx,y,lz,w,h,d,hex,tilt=0){
+  if(p.struck!==undefined){const a=Math.min(1,p.struck/FALL_SECONDS)*Math.PI/2;
+   lz+=y*Math.sin(a);y*=Math.cos(a);tilt+=a;}
+  const c=Math.cos(p.heading),s=Math.sin(p.heading);obj.position.set(p.renderX+c*lx+s*lz,p.height+y,p.renderZ-s*lx+c*lz);obj.rotation.set(tilt,p.heading,0);obj.scale.set(w,h,d);obj.updateMatrix();const i=counts[key]++;meshes[key].setMatrixAt(i,obj.matrix);color.setHex(hex);meshes[key].setColorAt(i,color);}
  function hasAccessory(p,key){return rank(p.id,{phone:211,bag:433,cane:677,suitcase:929,umbrella:1217}[key])<ACCESSORY_TARGETS[key];}
  function sync(dt=0){for(const k of Object.keys(meshes))counts[k]=0;for(const p of sim.pool){if(!p.active||p.controlled)continue;const def=ARCHETYPES[p.archetype],h=def.height*(.96+(p.id%5)*.02),w=def.width*(1.06+(p.id%7)*.015),walk=p.speed>.05,phase=p.animationTime*(walk?7:1)+p.phase,fidelity=p.lod==='near'?1:p.lod==='mid'?.65:.15,sway=walk?Math.sin(phase)*.035*fidelity:Math.sin(phase)*.012,bob=walk?Math.abs(Math.cos(phase))*.024*fidelity:Math.sin(phase)*.008;
    const blend=dt?Math.min(1,dt*(p.lod==='far'?10:25)):1;p.renderX+=(p.x-p.renderX)*blend;p.renderZ+=(p.z-p.renderZ)*blend;
