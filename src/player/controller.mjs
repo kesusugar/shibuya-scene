@@ -39,6 +39,10 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
  };
  const keys = new Set();
  let padPoll = null;
+ // On-screen controls, for a phone. Held as axes rather than as synthetic key events so a
+ // finger can be half-way down a throttle, and so releasing the screen cannot leave a key
+ // stuck the way a lost keyup does.
+ const touch = {forward: 0, strafe: 0, running: false};
  /** The first connected pad. Chrome hands back a fresh snapshot each call, never a live one. */
  const gamepad = () => {
   if (typeof navigator === 'undefined' || !navigator.getGamepads) return null;
@@ -82,7 +86,7 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
     keys.add(k === ' ' ? 'shift' : k); e.preventDefault();
    };
    const up = (e) => {const k = e.key.toLowerCase(); keys.delete(k === ' ' ? 'shift' : k);};
-   const blur = () => keys.clear();
+   const blur = () => {keys.clear(); touch.forward = 0; touch.strafe = 0; touch.running = false;};
    const move = (e) => {
     if (document.pointerLockElement !== element) return;
     state.heading -= e.movementX * PLAYER.look;
@@ -150,7 +154,9 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    let fx = 0, fz = 0;
    if (keys.has('w')) fz += 1; if (keys.has('s')) fz -= 1;
    if (keys.has('a')) fx -= 1; if (keys.has('d')) fx += 1;
-   let running = keys.has('shift');
+   let running = keys.has('shift') || touch.running;
+   if (Math.abs(touch.forward) > Math.abs(fz)) fz = touch.forward;
+   if (Math.abs(touch.strafe) > Math.abs(fx)) fx = touch.strafe;
    const pad = gamepad();
    if (pad) {
     const dead = v => Math.abs(v) < PLAYER.padDeadzone ? 0 : v;
@@ -165,6 +171,22 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    }
    return {forward: fz, strafe: fx, running};
   },
+  /**
+   * Set by the on-screen controls. Merged with the keys and the pad on the same rule the pad
+   * uses -- larger magnitude wins per axis -- so a phone, a keyboard and a controller can all
+   * be connected at once without any of them having to be selected.
+   */
+  setTouch(next = {}) {
+   touch.forward = Math.max(-1, Math.min(1, next.forward ?? 0));
+   touch.strafe = Math.max(-1, Math.min(1, next.strafe ?? 0));
+   touch.running = !!next.running;
+  },
+  /** Turn the screen by dragging, which is what the mouse does under pointer lock. */
+  look(dx, dy) {
+   state.heading -= dx * PLAYER.look;
+   state.pitch = Math.max(-PLAYER.pitchLimit, Math.min(PLAYER.pitchLimit, state.pitch - dy * PLAYER.look));
+  },
+
   /** While driving, the body rides in the car and is posed from it rather than walked. */
   rideTo(x, z, heading) {
    state.x = x; state.z = z; state.heading = heading; state.speed = 0; state.moving = false;

@@ -58,16 +58,38 @@ button[data-slot=switch]{padding:0;border-radius:999px;width:32px;height:19px;mi
 .solar-controls button{font-size:24px;min-width:48px;min-height:44px;border-radius:10px;background:transparent;border:1px solid transparent;cursor:pointer}
 .solar-controls button[aria-pressed=true]{background:#426b84;border-color:#e2efff;box-shadow:0 0 0 2px #172333}
 .solar-controls button:focus-visible{outline:2px solid white;outline-offset:2px}
-.pad-probe{position:fixed;right:16px;top:96px;z-index:1200;width:min(420px,calc(100vw - 32px));max-height:76vh;overflow:auto;padding:14px;background:#07111af2;border:1px solid #f2a25c;color:#f6e6d6;box-shadow:0 8px 30px #000c;font-variant-numeric:tabular-nums;font-size:12px}
-.pad-probe h2{margin:0 0 10px;font-size:15px;color:#f2a25c}
-.pad-probe h3{margin:12px 0 6px;font-size:12px;color:#f6e6d6;word-break:break-all}
-.pad-probe p{margin:6px 0}
-.pad-probe .pad-ok{color:#8fe3a2}
-.pad-probe .pad-warn{color:#ffb4a2}
-.pad-grid{display:grid;grid-template-columns:minmax(0,1fr) 62px minmax(0,86px);gap:1px 8px;margin:6px 0}
-.pad-axes{grid-template-columns:minmax(0,1fr) 62px}
-.pad-grid span{color:#c2a893;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pad-grid b{text-align:right}
-.pad-grid em{color:#8a7a6c;font-style:normal;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pad-grid .pad-live{color:#ffce7a}
-.pad-probe button{width:100%;margin-top:10px;text-align:center;border-color:#f2a25c}
+
+/* Diagnostics panel. Laid out for a phone first: it sits along the bottom edge where a thumb
+   reaches, every control clears the 44px tap target, and it moves to a side column only when
+   there is width to spare. */
+.dg{position:fixed;left:0;right:0;bottom:0;z-index:1200;display:flex;flex-direction:column;max-height:56vh;background:#07111af7;border-top:2px solid #f2a25c;color:#f6e6d6;font-variant-numeric:tabular-nums;font-size:14px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.dg-head{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid #f2a25c55}
+.dg-head strong{color:#f2a25c;font-size:13px;letter-spacing:.08em}
+.dg-tabs{display:flex;gap:6px;flex:1;overflow:auto}
+.dg-tabs button{min-height:40px;padding:0 16px;background:#152230;border:1px solid #3a4a5a;border-radius:999px;color:#c2a893;font-size:14px}
+.dg-tabs button.on{background:#f2a25c;border-color:#f2a25c;color:#1a1005;font-weight:700}
+.dg-fold{min-width:44px;min-height:40px;background:#152230;border:1px solid #3a4a5a;border-radius:8px;color:#f6e6d6;font-size:15px}
+.dg-body{flex:1;min-height:0;max-height:30vh;overflow:auto;padding:10px 12px}
+.dg-body h3{margin:12px 0 6px;font-size:12px;color:#f6e6d6;word-break:break-all}
+.dg-body p{margin:6px 0;line-height:1.5}
+.dg-ok{color:#8fe3a2}.dg-warn{color:#ffb4a2}.dg-note{color:#b8c6d2}
+.dg-rows{display:grid;gap:2px 10px;margin:8px 0}
+.dg-rows2{grid-template-columns:minmax(0,1fr) minmax(88px,auto)}
+.dg-rows3{grid-template-columns:minmax(0,1fr) 68px minmax(0,96px)}
+.dg-rows span{color:#c2a893;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dg-rows b{text-align:right}
+.dg-rows em{color:#8a7a6c;font-style:normal;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dg-rows .dg-live{color:#ffce7a}
+/* The controls only belong on the drive tab; the others are read-only. */
+.dg-pad{display:none;gap:8px;padding:8px 10px 12px;border-top:1px solid #f2a25c33}
+.dg-driving .dg-pad{display:flex;flex-direction:column}
+.dg-stick{display:grid;grid-template-columns:64px 1fr 64px;gap:8px}
+.dg-stick button{min-height:54px;background:#1d2c3c;border:1px solid #4a5f74;border-radius:10px;color:#f6e6d6;font-size:15px;touch-action:none;user-select:none;-webkit-user-select:none}
+.dg-stick button.wide{grid-column:2}
+.dg-stick button.on{background:#f2a25c;border-color:#f2a25c;color:#1a1005;font-weight:700}
+.dg-acts{display:flex;gap:8px}
+.dg-acts button{flex:1;min-height:46px;background:#152230;border:1px solid #3a4a5a;border-radius:10px;color:#f6e6d6;font-size:14px}
+.dg-folded .dg-body,.dg-folded .dg-pad{display:none}
+@media(min-width:900px){
+ .dg{left:auto;right:16px;bottom:16px;top:96px;width:400px;max-height:none;border:1px solid #f2a25c;border-radius:12px;overflow:hidden}
+}
