@@ -33,9 +33,11 @@ export function buildMagnet(h){
  const facing=e=>e.normal[0]*face.normal[0]+e.normal[1]*face.normal[1];
  const face=h.primaryFacade,side=edges(p).filter(e=>e.index!==face.index&&e.length>6&&facing(e)>.3&&facing(e)<.9).sort((a,b)=>b.length-a.length)[0];
  const visionWidth=Math.min(10.4,face.length-1.4),visionHeight=visionWidth/2,visionY=14.6;
- placeholder(h,face,'largeScreen',visionWidth,visionHeight,visionY,{logicalId:'magnet-main-vision'});
- anchor(h,face,'facadeSign',Math.min(9,face.length-1.4),2.4,visionY+visionHeight/2+2.4,2);
- if(side)anchor(h,side,'facadeSign',Math.min(3,side.length-.5),8,15,1);
+ // `art` names a tile on the reference sheet, so these read as this building's own signs
+ // rather than as two of the thirty-two shared designs the generic atlas hands out.
+ placeholder(h,face,'largeScreen',visionWidth,visionHeight,visionY,{logicalId:'magnet-main-vision'}).art=203;
+ anchor(h,face,'facadeSign',Math.min(9,face.length-1.4),2.4,visionY+visionHeight/2+2.4,2).art=201;
+ if(side)anchor(h,side,'facadeSign',Math.min(3,side.length-.5),8,15,1).art=202;
  anchor(h,face,'rooftopSign',face.length*.6,1.8,31);
  // Windows stop where the media wall starts, so the vision and wordmark sit on dark glass.
  const clear=[visionY-visionHeight/2-1.5,visionY+visionHeight/2+2.4+1.2+1.5];

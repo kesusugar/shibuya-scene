@@ -64,7 +64,19 @@ export const REFERENCE_ADS = Object.freeze([
 export const EXTRA_PANELS = Object.freeze([
  {id: 101, zone: 'centre_block_vision_lower', brand: 'アニメ キービジュアル', category: 'anime_key_visual',
   left: 0, top: 0, width: 0, height: 0, aspect: 1, mount: 'large_led_vision', priority: 'medium',
-  textless: true, extra: true}
+  textless: true, extra: true},
+ // The MAGNET facade carries these itself: the hero builder already puts them on measured
+ // walls, so they are listed here only to own artwork, and excluded from the raycast pass
+ // below. A sign reaches them through its anchor's brandArt id.
+ {id: 201, zone: 'right_tower_wordmark', brand: 'MAGNET', category: 'building_name',
+  left: 0, top: 0, width: 0, height: 0, aspect: 3.75, mount: 'facade_logo', priority: 'high',
+  hero: 'magnet', extra: true},
+ {id: 202, zone: 'right_tower_return_panel', brand: 'N°5', category: 'fashion_retail',
+  left: 0, top: 0, width: 0, height: 0, aspect: .375, mount: 'wall_panel_vertical', priority: 'medium',
+  hero: 'magnet', extra: true},
+ {id: 203, zone: 'right_tower_vision', brand: 'MAGNET ビジョン', category: 'culture_key_visual',
+  left: 0, top: 0, width: 0, height: 0, aspect: 2, mount: 'large_led_vision', priority: 'high',
+  hero: 'magnet', textless: true, extra: true}
 ]);
 
 /** Everything that can be placed: the inventory plus the scene's own additions. */
@@ -142,7 +154,8 @@ export const MIN_ANCHOR_FIT = .12;
 
 // Advertisements deliberately left out of this scene. Recorded rather than deleted so the
 // inventory stays a complete transcription of the reference frame.
-export const EXCLUDED_ADS = Object.freeze({12: 'out-of-scope-for-this-scene'});
+export const EXCLUDED_ADS = Object.freeze({12: 'out-of-scope-for-this-scene',
+ 201: 'carried-by-the-hero-facade', 202: 'carried-by-the-hero-facade', 203: 'carried-by-the-hero-facade'});
 
 // Mount types describe how the advertisement is carried, which decides both the sign
 // category used for placement auditing and how brightly the face is driven at night.
@@ -609,8 +622,13 @@ export function resolveReferenceAds(hosts, camera, view = REFERENCE_VIEW) {
   for (const ad of ads) unplaced.push({...ad, reason, anchor: key, ...(group?.fit ? {fit: group.fit} : {})});
  }
 
+ // Exclusions are swept over PANELS, not just the inventory: a panel the scene adds for a
+ // hero facade to carry is excluded here too, and it still has to be reported rather than
+ // vanish from the accounting.
+ for (const ad of PANELS) if (EXCLUDED_ADS[ad.id]) unplaced.push({...ad, reason: EXCLUDED_ADS[ad.id], excluded: true});
+
  for (const ad of REFERENCE_ADS) {
-  if (EXCLUDED_ADS[ad.id]) {unplaced.push({...ad, reason: EXCLUDED_ADS[ad.id], excluded: true}); continue;}
+  if (EXCLUDED_ADS[ad.id]) continue;
   if (AD_ANCHORS[ad.id]) continue;
   const roof = ROOF_MOUNTS.has(ad.mount);
   const hit = roof ? roofHost(ad, basis, hosts) : intersectHosts(adRay(ad, basis), hosts);
