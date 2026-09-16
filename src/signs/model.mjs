@@ -32,6 +32,27 @@ export function tileRoads(roads,cell=ROAD_CELL,extent=ROAD_EXTENT){
  }
  return index;
 }
+// `facade-distance` already confines a flush mount to .3 m of its wall, so everything inside
+// that band is facade rather than an obstruction over the street. That distinction matters
+// because the road surface is a centreline buffer with a guessed width: on a narrow back
+// street the guess is wider than the carriageway, so the polygon swallows the pavement and
+// the wall itself, and a panel 3.5 cm off that wall read as hanging over traffic. Clipping
+// the footprint to the part beyond the facade band asks what the rule is named for -- does
+// this sign reach out over open roadway -- and leaves blades, which reach up to 1.1 m,
+// measured exactly as before.
+export const FACADE_BAND=.3;
+/** Convex clip of a footprint ring to the half-plane at least `band` out from its wall. */
+export function beyondFacade(s,ring,band=FACADE_BAND){
+ const n=[s.facadeNormal[0],s.facadeNormal[2]];
+ const o=[s.edge.a[0]+s.edge.tangent[0]*s.along+n[0]*band,s.edge.a[1]+s.edge.tangent[1]*s.along+n[1]*band];
+ const side=p=>(p[0]-o[0])*n[0]+(p[1]-o[1])*n[1],out=[];
+ for(let i=0;i<ring.length;i++){
+  const a=ring[i],b=ring[(i+1)%ring.length],da=side(a),db=side(b);
+  if(da>=0)out.push(a);
+  if((da>=0)!==(db>=0)){const t=da/(da-db);out.push([a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t]);}
+ }
+ return out;
+}
 /** Road area under a sign footprint, summed over the cells it touches. */
 export function roadAreaUnder(ctx,polygon,box){
  const p=multi(polygon);
@@ -49,7 +70,7 @@ export function placementIssues(s,ctx,accepted=[]){const issues=[],values=[...s.
  if(inPolygon([base[0]+s.facadeNormal[0]*.02,base[1]+s.facadeNormal[2]*.02],s.hostPolygon,false)||!inPolygon([base[0]-s.facadeNormal[0]*.02,base[1]-s.facadeNormal[2]*.02],s.hostPolygon))issues.push('backface');
  if(s.category!=='blade'&&s.normal.reduce((sum,v,i)=>sum+v*s.facadeNormal[i],0)<.999)issues.push('backface');
  const p=signPolygon(s),box=bounds(p.outer);if(p.outer.some(p=>Math.abs(p[0])>250||Math.abs(p[1])>250))issues.push('tile-edge');
- if(roadAreaUnder(ctx,p,box)>.001)issues.push('road-projection');
+ const overhang=beyondFacade(s,p.outer);if(overhang.length>2&&roadAreaUnder(ctx,{outer:overhang,holes:[]},bounds(overhang))>.001)issues.push('road-projection');
  if(ctx.crossings.query(box).some(({value:stripe})=>area(intersection(multi(p),stripe))>.001))issues.push('crosswalk-projection');
  for(const {value:b} of ctx.solids.query(box)){if(top<=b.bottom||bottom>=b.top)continue;if(area(intersection(multi(p),multi(b.polygon)))>.001){issues.push(b.id===s.buildingId?'host-penetration':'neighbor-penetration');break;}}
  // Conservative station/rail envelope: station front commercial signs stay outside S5 rail corridors.
