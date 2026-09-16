@@ -10,6 +10,8 @@
 
 import {VEHICLES} from '../traffic/config.mjs';
 import {safePose} from '../traffic/graph.mjs';
+import {corners} from '../traffic/path.mjs';
+import {bounds, inPolygon} from '../geo/core.mjs';
 
 export const CAR = Object.freeze({
  type: 'sedan',
@@ -22,18 +24,51 @@ export const CAR = Object.freeze({
  // spot, and a fast one is not twitchy.
  steerLow: 1.2, steerFull: 7,
  enterRange: 5.5,                        // the car parks on the road, the player waits on the kerb
+ kerbLift: 9,                            // m/s the body rises and falls mounting a kerb
  // The camera rides further back and higher than the walking one: at 11 m/s the walking
  // arm puts the road under the bonnet and nothing else in frame.
  followBack: 8.2, followUp: 3.2, eye: 1.4
 });
+
+/** Do two segments cross? Used to catch a wall thinner than the car's corner spacing. */
+function segmentsCross(a, b, c, d) {
+ const s = (p, q, r) => Math.sign((q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]));
+ return s(a, b, c) !== s(a, b, d) && s(c, d, a) !== s(c, d, b);
+}
 
 export function createPlayerVehicle(sim, ctx) {
  const def = VEHICLES[CAR.type];
  const state = {x: 0, z: 0, y: 0, heading: 0, speed: 0, steering: 0, active: false, slot: null};
  const probe = {x: 0, z: 0, heading: 0};
 
- /** Is this pose legal for the car? Stage 1a defers to the traffic model's own test. */
+ /**
+  * Is this pose legal for the car?
+  *
+  * safePose asks two things: that all four corners sit on carriageway, and that the body
+  * touches nothing solid. Driving over a kerb means dropping the first and keeping the
+  * second -- a car may leave the road, it may not drive through a wall. The solid half is
+  * reimplemented here rather than loosened in traffic/graph.mjs, which is a STATIC_ROOT and
+  * would have moved the static pack's key for something only the player ever does.
+  */
+ const clearOfSolids = (x, z, heading) => {
+  probe.x = x; probe.z = z; probe.heading = heading;
+  const ring = corners(probe, def.width, def.length, .05);
+  for (const {value: s} of sim.graph.ctx.solid.query(bounds(ring))) {
+   const outer = s.outer ?? s.polygon?.outer; if (!outer) continue;
+   if (ring.some(p => inPolygon(p, {outer, holes: []}))) return false;
+   if (outer.some(p => inPolygon(p, {outer: ring, holes: []}))) return false;
+   // Corner-to-corner crossing, for a wall thinner than the gap between sampled points.
+   for (let i = 0; i < 4; i++) for (let j = 0; j < outer.length; j++)
+    if (segmentsCross(ring[i], ring[(i + 1) % 4], outer[j], outer[(j + 1) % outer.length])) return false;
+  }
+  return true;
+ };
  const poseOk = (x, z, heading) => {
+  if (clearOfSolids(x, z, heading)) return true;
+  return false;
+ };
+ /** Road-only test, still used when parking the car so it starts on the carriageway. */
+ const onRoadPose = (x, z, heading) => {
   probe.x = x; probe.z = z; probe.heading = heading;
   return safePose(sim.graph.ctx, probe, CAR.type, .05);
  };
@@ -52,8 +87,8 @@ export function createPlayerVehicle(sim, ctx) {
     const a = i * Math.PI / 8, px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r;
     for (let h = 0; h < 16; h++) {
      const ph = h * Math.PI / 8;
-     if (!poseOk(px, pz, ph)) continue;
-     if (!poseOk(px + Math.sin(ph) * 6, pz + Math.cos(ph) * 6, ph)) continue;   // road ahead
+     if (!onRoadPose(px, pz, ph)) continue;
+     if (!onRoadPose(px + Math.sin(ph) * 6, pz + Math.cos(ph) * 6, ph)) continue;   // road ahead
      state.slot = slot; state.x = px; state.z = pz; state.heading = ph; state.speed = 0; state.steering = 0;
      Object.assign(slot, {
       active: true, controlled: true, parked: true, service: false, platoon: undefined,
@@ -121,13 +156,17 @@ export function createPlayerVehicle(sim, ctx) {
     state.x = nx; state.z = nz; state.heading = h; moved = true; break;
    }
    if (!moved) state.speed = 0;               // nose against something: stop, do not bounce
+   // The pedestrian context is the only one that knows ground height, and a kerb is 15 cm:
+   // without this the car sinks into the pavement the moment it leaves the road.
+   const ground = ctx.height(state.x, state.z);
+   state.y += Math.sign(ground - state.y) * Math.min(Math.abs(ground - state.y), CAR.kerbLift * dt);
    api.sync();
   },
 
   /** Write the pose back to the pool slot, which is what gets drawn and what the AI sees. */
   sync() {
    const slot = state.slot; if (!slot) return;
-   slot.x = state.x; slot.z = state.z; slot.heading = state.heading;
+   slot.x = state.x; slot.z = state.z; slot.heading = state.heading; slot.y = state.y;
    slot.speed = Math.abs(state.speed); slot.brake = state.speed < 0 || Math.abs(state.speed) < .1;
   },
 
