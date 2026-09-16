@@ -12,6 +12,13 @@ import {ARCHETYPES,POOL_SIZE,BODY_VARIANTS,HAIR_VARIANTS,ACCESSORY_TARGETS} from
 const BODY_COLORS=[0x343f51,0x556173,0x29374b,0xc38966,0x738d88,0xb7b9c4,0xb98193,0xa2b29b,0xdac5a5,0xd8adbf,0xc2b9dd,0xb1d7ce];
 const SKIN_COLORS=[0xdfb994,0xba8868,0xeac6a7,0xc99c7e];
 const HAIR_COLORS=[0x25282a,0x4e3a30,0x706051,0xaeb0ac];
+// The played agent occupies slot 0, which by id would draw BODY_COLORS[0] -- the palette's
+// darkest navy, and so the one outfit that disappears into a night crowd. None of the twelve
+// crowd colours is saturated, so a saturated one reads instantly without looking painted on.
+// This is the only thing the player changes here: the overhead marker is a player affordance
+// rather than a pedestrian body part, so it lives with the player and leaves the crowd's
+// thirteen geometry pools and three materials as they were.
+export const PLAYER_SHIRT=0xff3b1f;
 const rank=(id,salt=0)=>(id*37+salt)%POOL_SIZE;
 function pickVariant(id,profiles,salt=0){let r=rank(id,salt);for(const profile of profiles){if(r<profile.count)return profile.key;r-=profile.count;}return profiles.at(-1).key;}
 function transformed(g,scale,position){g.scale(...scale);g.translate(...position);return g;}
@@ -49,7 +56,7 @@ export function buildCrowd(data,options={}){
  function hasAccessory(p,key){return rank(p.id,{phone:211,bag:433,cane:677,suitcase:929,umbrella:1217}[key])<ACCESSORY_TARGETS[key];}
  function sync(dt=0){for(const k of Object.keys(meshes))counts[k]=0;for(const p of sim.pool){if(!p.active)continue;const def=ARCHETYPES[p.archetype],h=def.height*(.96+(p.id%5)*.02),w=def.width*(1.06+(p.id%7)*.015),walk=p.speed>.05,phase=p.animationTime*(walk?7:1)+p.phase,fidelity=p.lod==='near'?1:p.lod==='mid'?.65:.15,sway=walk?Math.sin(phase)*.035*fidelity:Math.sin(phase)*.012,bob=walk?Math.abs(Math.cos(phase))*.024*fidelity:Math.sin(phase)*.008;
    const blend=dt?Math.min(1,dt*(p.lod==='far'?10:25)):1;p.renderX+=(p.x-p.renderX)*blend;p.renderZ+=(p.z-p.renderZ)*blend;
-   const body=pickVariant(p.id,BODY_VARIANTS),hair=pickVariant(p.id,HAIR_VARIANTS,307),shirt=BODY_COLORS[p.id%BODY_COLORS.length],skin=SKIN_COLORS[p.id%SKIN_COLORS.length],hairColor=def.gray?HAIR_COLORS[3]:HAIR_COLORS[p.id%3];
+   const body=pickVariant(p.id,BODY_VARIANTS),hair=pickVariant(p.id,HAIR_VARIANTS,307),shirt=p.controlled?PLAYER_SHIRT:BODY_COLORS[p.id%BODY_COLORS.length],skin=SKIN_COLORS[p.id%SKIN_COLORS.length],hairColor=def.gray?HAIR_COLORS[3]:HAIR_COLORS[p.id%3];
    part(body,p,0,h*.02+bob,0,w,h*.78,w*.58,shirt,sway);
    part('head',p,0,h*.82+bob,0,h*.15,h*.145,h*.14,skin,sway*.5);
    part(hair,p,0,h*.865+bob,0,h*.16,h*.15,h*.15,def.hood?shirt:hairColor,sway*.5);
