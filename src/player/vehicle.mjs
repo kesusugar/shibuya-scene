@@ -26,6 +26,7 @@ export const CAR = Object.freeze({
  steerLow: 1.2, steerFull: 7,
  enterRange: 5.5,                        // the car parks on the road, the player waits on the kerb
  kerbLift: 9,                            // m/s the body rises and falls mounting a kerb
+ pivot: 1.1,                             // rad/s the wheel turns the body when it cannot move
  // A body is a small box for this purpose; the crowd's own radius is .25.
  bodyWidth: .5, bodyLength: .5,
  // The camera rides further back and higher than the walking one: at 11 m/s the walking
@@ -158,7 +159,23 @@ export function createPlayerVehicle(sim, ctx) {
     if (!poseOk(nx, nz, h)) continue;
     state.x = nx; state.z = nz; state.heading = h; moved = true; break;
    }
-   if (!moved) state.speed = 0;               // nose against something: stop, do not bounce
+   if (!moved) {
+    state.speed = 0;                          // nose against something: stop, do not bounce
+    // Stopping is not enough on its own. Steering authority is a function of speed, so a
+    // car held at zero against a wall can never turn away from it: full throttle just
+    // re-zeroes itself every frame and the only way out is reverse. Let the wheel swing the
+    // body instead -- but about an axle, not about the centre. Turning about the centre
+    // drives a front corner straight into the wall the car is already touching and is
+    // always rejected; swinging about the rear axle takes the nose away from it, and about
+    // the front axle takes the tail away, which between them cover nosing in and backing in.
+    const swing = state.heading - state.steering * CAR.pivot * dt;
+    if (state.steering) for (const arm of [-def.length * .35, def.length * .35]) {
+     const px = state.x + Math.sin(state.heading) * arm, pz = state.z + Math.cos(state.heading) * arm;
+     const nx = px - Math.sin(swing) * arm, nz = pz - Math.cos(swing) * arm;
+     if (!poseOk(nx, nz, swing)) continue;
+     state.x = nx; state.z = nz; state.heading = swing; break;
+    }
+   }
    // The pedestrian context is the only one that knows ground height, and a kerb is 15 cm:
    // without this the car sinks into the pavement the moment it leaves the road.
    const ground = ctx.height(state.x, state.z);

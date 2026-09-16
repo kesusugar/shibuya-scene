@@ -6,7 +6,7 @@ import {buildStationModel} from '../station/model.mjs';
 import {buildDetailModel} from '../station-detail/model.mjs';
 import {buildStreetscapeModel} from '../streetscape/model.mjs';
 import {buildPedestrianNetwork} from './network.mjs';
-import {CrowdSimulation,FALL_SECONDS} from './simulation.mjs';
+import {CrowdSimulation,FALL_TILT} from './simulation.mjs';
 import {ARCHETYPES,POOL_SIZE,BODY_VARIANTS,HAIR_VARIANTS,ACCESSORY_TARGETS} from './config.mjs';
 
 const BODY_COLORS=[0x343f51,0x556173,0x29374b,0xc38966,0x738d88,0xb7b9c4,0xb98193,0xa2b29b,0xdac5a5,0xd8adbf,0xc2b9dd,0xb1d7ce];
@@ -60,7 +60,7 @@ export function buildCrowd(data,options={}){
  // there is nothing to fold; instead every part swings on the arc its own height describes
  // -- rising parts travel furthest forward -- which reads as the whole figure going over.
  function part(key,p,lx,y,lz,w,h,d,hex,tilt=0){
-  if(p.struck!==undefined){const a=Math.min(1,p.struck/FALL_SECONDS)*Math.PI/2;
+  if(p.struck!==undefined){const a=Math.min(1,p.struck/FALL_TILT)*Math.PI/2;
    lz+=y*Math.sin(a);y*=Math.cos(a);tilt+=a;}
   const c=Math.cos(p.heading),s=Math.sin(p.heading);obj.position.set(p.renderX+c*lx+s*lz,p.height+y,p.renderZ-s*lx+c*lz);obj.rotation.set(tilt,p.heading,0);obj.scale.set(w,h,d);obj.updateMatrix();const i=counts[key]++;meshes[key].setMatrixAt(i,obj.matrix);color.setHex(hex);meshes[key].setColorAt(i,color);}
  function hasAccessory(p,key){return rank(p.id,{phone:211,bag:433,cane:677,suitcase:929,umbrella:1217}[key])<ACCESSORY_TARGETS[key];}

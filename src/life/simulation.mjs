@@ -9,7 +9,10 @@ import {route,edgePose,inCrossing} from './network.mjs';
 // Below this the player's car is treated as an obstacle and walked around; at or above it
 // there is no time to react and it can knock people down.
 export const DODGE_SPEED=2;
-// How long a knocked-down pedestrian lies there before being recycled elsewhere.
+// How long the fall itself takes, and how long the body lies there in total before being
+// recycled elsewhere. Going over has to finish well inside the second number, or the figure
+// vanishes at the very instant it lands and reads as a despawn rather than a knockdown.
+export const FALL_TILT=.85;
 export const FALL_SECONDS=2.4;
 
 export class CrowdSimulation{
