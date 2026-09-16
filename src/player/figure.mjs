@@ -27,7 +27,12 @@ export const FIGURE = Object.freeze({
  // What the player is carrying. The crowd gets its accessories from a hash of its id; there
  // is only one player, so this is simply chosen. A shoulder bag rides on the body rather
  // than in a hand, which keeps it out of the arm swing and off the steering wheel.
- bag: 0x1d2b3a, bagStrap: 0x101820
+ //
+ // Pale, not dark. The first try was navy, which at night against a crowd of dark bodies was
+ // simply not there -- a prop nobody can see is draw cost for nothing, and the whole point of
+ // this figure is to be findable in two thousand people. Sand reads against both the night
+ // and the red of the hoodie.
+ bag: 0xe0d2b0, bagStrap: 0x3a2f24
 });
 
 const limb = (material, radius, len, geometryCache) => {
@@ -63,7 +68,9 @@ export function createPlayerFigure() {
  materials.bag = new MeshStandardMaterial({color: FIGURE.bag, roughness: .95});
  materials.strap = new MeshStandardMaterial({color: FIGURE.bagStrap, roughness: .95});
  const bag = new Mesh(new BoxGeometry(H * .16, H * .2, H * .08), materials.bag);
- bag.position.set(H * .16, H * .56, -H * .02); bag.rotation.z = -.12;
+ // Tucked behind and below the hip rather than out at the shoulder line: at the arm's own
+ // offset the two interpenetrate every stride.
+ bag.position.set(H * .135, H * .52, -H * .085); bag.rotation.z = -.1;
  owned.push(bag.geometry); root.add(bag);
  const strap = new Mesh(new BoxGeometry(H * .035, H * .3, H * .025), materials.strap);
  strap.position.set(H * .05, H * .72, H * .05); strap.rotation.z = -.5;
