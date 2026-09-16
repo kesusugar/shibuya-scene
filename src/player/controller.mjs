@@ -50,12 +50,19 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
 
  const api = {
   state,
-  /** Keyboard and pointer, attached only while the player has the scene. */
-  attach(element) {
+  /**
+   * Keyboard and pointer, attached only while the player has the scene.
+   *
+   * Pointer lock takes the cursor, so the only way back to the rest of the browser is a key.
+   * Escape releases the lock natively but a click on the scene takes it straight back, which
+   * leaves no way out at all; `onExit` is called so Escape leaves play entirely.
+   */
+  attach(element, {onExit} = {}) {
    if (detach) return;
    const down = (e) => {
     if (e.repeat) return;
     const k = e.key.toLowerCase();
+    if (k === 'escape') {keys.clear(); onExit?.(); return;}
     if (!'wasd'.includes(k) && k !== 'shift' && k !== ' ') return;
     keys.add(k === ' ' ? 'shift' : k); e.preventDefault();
    };
