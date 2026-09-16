@@ -3,7 +3,7 @@ import {bounds,distance,length,sample,seededRandom,SpatialIndex,inPolygon} from 
 import {buildGroundModel,nearest,surface,area,intersection as rawIntersection,buffer,contains,rect} from '../ground/model.mjs';
 import {buildBuildingModel,multi} from '../buildings/model.mjs';
 import {buildStationModel} from '../station/model.mjs';
-import {buildSignModel,signPolygon} from '../signs/model.mjs';
+import {buildSignModel,signPolygon,FACADE_BAND} from '../signs/model.mjs';
 import {regionAt} from '../signs/config.mjs';
 import {footprint} from '../station-detail/model.mjs';
 import {DEFINITIONS,QUALITY,REGIONS,STATION_EXCLUSION} from './config.mjs';
@@ -14,12 +14,15 @@ const rounded=v=>{if(!Array.isArray(v))return Math.round(v*1e6)/1e6;let r=roundC
 const intersection=(a,b)=>rawIntersection(rounded(a),rounded(b));
 const intersects=(p,q)=>area(intersection(multi(p),q))>.0001;
 export function contextFor(data,ground,generic,core,signs){const solids=new SpatialIndex(15),flow=new SpatialIndex(15),occupied=new SpatialIndex(8);let id=0;
- const add=(polygon,bottom,top,kind)=>solids.insert(id++,bounds(polygon.outer),{polygon,bottom,top,kind});
+ const add=(polygon,bottom,top,kind,overhang=false)=>solids.insert(id++,bounds(polygon.outer),{polygon,bottom,top,kind,overhang});
  for(const b of generic.buildings)add(b.polygon,b.base,b.base+b.height,'building');
  for(const h of signs.hosts.filter(h=>h.label!=='generic-facade'))add(h.polygon,h.bottom,h.top,'hero');
  for(const s of core.masses)add(s.polygon,s.bottom,s.top,'station');
  for(const s of core.supports)if(s.polygon)add(s.polygon,s.base??0,s.top??25,'station-support');
- for(const s of signs.signs)add(signPolygon({...s,width:s.width+.06,depth:s.depth+.06}),s.position[1]-s.height/2-.03,s.position[1]+s.height/2+.03,'sign');
+ // A flush panel sits inside the facade band its host building already occupies in this
+ // index; only a blade stands proud of the wall. Traffic reads these volumes as roadside
+ // obstacles, so it needs to tell the two apart -- see safetyContext in traffic/graph.mjs.
+ for(const s of signs.signs)add(signPolygon({...s,width:s.width+.06,depth:s.depth+.06}),s.position[1]-s.height/2-.03,s.position[1]+s.height/2+.03,'sign',s.projection>FACADE_BAND);
  for(const f of data.footways.filter(surface)){if(f.tags?.footway==='crossing')continue;for(let i=1;i<f.points.length;i++){const shape=rect(f.points[i-1],f.points[i],f.tags?.highway==='steps'?2.4:1.2);if(shape.length)flow.insert(id++,bounds(shape.flat(2)),shape);}}
  return {ground,generic,solids,flow,occupied,roads:data.roads.filter(surface).map(r=>r.points)};
 }
