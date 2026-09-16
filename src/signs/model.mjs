@@ -9,12 +9,12 @@ import {buildStationModel} from '../station/model.mjs';
 import {QUALITY,REGIONS,regionAt,HERO_SIGNS,CATEGORIES} from './config.mjs';
 
 export function signPolygon(s){const n=s.normal,t=[n[2],-n[0]],p=s.position,d=s.depth/2,w=s.width/2;return {outer:[[-w,-d],[w,-d],[w,d],[-w,d]].map(([x,z])=>[p[0]+t[0]*x+n[0]*z,p[2]+t[1]*x+n[2]*z]),holes:[]};}
-export function makePlacement(host,e,{id,category='flush',along=e.length/2,y,width,height,region,hero=null,anchorId=null,offset=.16,variant=0,screenUV=null}){
+export function makePlacement(host,e,{id,category='flush',along=e.length/2,y,width,height,region,hero=null,anchorId=null,offset=.16,variant=0,screenUV=null,brandArt=null}){
  const blade=category==='blade',depth=blade?.12:category==='box'?.16:.055;
  const facadeNormal=[e.normal[0],0,e.normal[1]],normal=blade?[e.tangent[0],0,e.tangent[1]]:facadeNormal;
  const projection=blade?width/2+.16:offset,point=[e.a[0]+e.tangent[0]*along,y,e.a[1]+e.tangent[1]*along];
  const position=[point[0]+facadeNormal[0]*projection,y,point[2]+facadeNormal[2]*projection];
- return {id,buildingId:host.id,hostKey:host.key,hostMass:host.label,category,region,hero,anchorId,position,normal,facadeNormal,width,height,depth,along,edge:e,hostBottom:host.bottom,hostTop:host.top,hostPolygon:host.polygon,heading:Math.atan2(normal[0],normal[2]),variant,screenUV,projection,priority:hero?3:1,zone:category==='rooftop'?'roofline-mounted':y<4?'ground-floor':'upper-floor',emissive:{class:category==='screen'?'screen':'commercial',day:category==='screen'?.65:.12,nightTarget:1.2,glowAnchor:position},visibilityWeight:REGIONS[region].density};
+ return {id,buildingId:host.id,hostKey:host.key,hostMass:host.label,category,region,hero,anchorId,brandArt,position,normal,facadeNormal,width,height,depth,along,edge:e,hostBottom:host.bottom,hostTop:host.top,hostPolygon:host.polygon,heading:Math.atan2(normal[0],normal[2]),variant,screenUV,projection,priority:hero?3:1,zone:category==='rooftop'?'roofline-mounted':y<4?'ground-floor':'upper-floor',emissive:{class:category==='screen'?'screen':'commercial',day:category==='screen'?.65:.12,nightTarget:1.2,glowAnchor:position},visibilityWeight:REGIONS[region].density};
 }
 // The road surface is one polygon with a 1370-vertex outer ring spanning the whole scene,
 // so clipping a 2 m sign against it costs about 6 ms — 115 ms for one pass of reference
@@ -31,6 +31,27 @@ export function tileRoads(roads,cell=ROAD_CELL,extent=ROAD_EXTENT){
   if(piece.length)index.insert(serial++,{minX:x,maxX:x+cell,minZ:z,maxZ:z+cell},piece);
  }
  return index;
+}
+// `facade-distance` already confines a flush mount to .3 m of its wall, so everything inside
+// that band is facade rather than an obstruction over the street. That distinction matters
+// because the road surface is a centreline buffer with a guessed width: on a narrow back
+// street the guess is wider than the carriageway, so the polygon swallows the pavement and
+// the wall itself, and a panel 3.5 cm off that wall read as hanging over traffic. Clipping
+// the footprint to the part beyond the facade band asks what the rule is named for -- does
+// this sign reach out over open roadway -- and leaves blades, which reach up to 1.1 m,
+// measured exactly as before.
+export const FACADE_BAND=.3;
+/** Convex clip of a footprint ring to the half-plane at least `band` out from its wall. */
+export function beyondFacade(s,ring,band=FACADE_BAND){
+ const n=[s.facadeNormal[0],s.facadeNormal[2]];
+ const o=[s.edge.a[0]+s.edge.tangent[0]*s.along+n[0]*band,s.edge.a[1]+s.edge.tangent[1]*s.along+n[1]*band];
+ const side=p=>(p[0]-o[0])*n[0]+(p[1]-o[1])*n[1],out=[];
+ for(let i=0;i<ring.length;i++){
+  const a=ring[i],b=ring[(i+1)%ring.length],da=side(a),db=side(b);
+  if(da>=0)out.push(a);
+  if((da>=0)!==(db>=0)){const t=da/(da-db);out.push([a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t]);}
+ }
+ return out;
 }
 /** Road area under a sign footprint, summed over the cells it touches. */
 export function roadAreaUnder(ctx,polygon,box){
@@ -49,7 +70,7 @@ export function placementIssues(s,ctx,accepted=[]){const issues=[],values=[...s.
  if(inPolygon([base[0]+s.facadeNormal[0]*.02,base[1]+s.facadeNormal[2]*.02],s.hostPolygon,false)||!inPolygon([base[0]-s.facadeNormal[0]*.02,base[1]-s.facadeNormal[2]*.02],s.hostPolygon))issues.push('backface');
  if(s.category!=='blade'&&s.normal.reduce((sum,v,i)=>sum+v*s.facadeNormal[i],0)<.999)issues.push('backface');
  const p=signPolygon(s),box=bounds(p.outer);if(p.outer.some(p=>Math.abs(p[0])>250||Math.abs(p[1])>250))issues.push('tile-edge');
- if(roadAreaUnder(ctx,p,box)>.001)issues.push('road-projection');
+ const overhang=beyondFacade(s,p.outer);if(overhang.length>2&&roadAreaUnder(ctx,{outer:overhang,holes:[]},bounds(overhang))>.001)issues.push('road-projection');
  if(ctx.crossings.query(box).some(({value:stripe})=>area(intersection(multi(p),stripe))>.001))issues.push('crosswalk-projection');
  for(const {value:b} of ctx.solids.query(box)){if(top<=b.bottom||bottom>=b.top)continue;if(area(intersection(multi(p),multi(b.polygon)))>.001){issues.push(b.id===s.buildingId?'host-penetration':'neighbor-penetration');break;}}
  // Conservative station/rail envelope: station front commercial signs stay outside S5 rail corridors.
@@ -73,7 +94,7 @@ export function* buildSignModelSteps(data,{tier='medium',referenceMatch=false,ge
  for(const h of heroes){const config=HERO_SIGNS[h.key],region=['qfront','magnet','seibuA','seibuB'].includes(h.key)?'frontage':h.key==='109'?'dogenzaka':'station';const heroHosts=h.masses.map((m,i)=>({id:h.id,key:h.key+':mass:'+i,...m}));hosts.push(...heroHosts);
   const sourceAnchors=h.anchors.filter(a=>!['entranceRecess','emissiveFacade'].includes(a.category)&&a.worldPosition[1]<config.upper+.2);let used=0;const screenAnchors=sourceAnchors.filter(a=>a.category==='largeScreen'),screenTotal=screenAnchors.reduce((n,a)=>n+a.width,0);let screenAlong=0;
   for(const a of sourceAnchors){if(used>=config.limit)break;const available=heroHosts.filter(m=>a.worldPosition[1]-a.height/2>m.bottom&&a.worldPosition[1]+a.height/2<m.top);const candidates=available.flatMap(host=>edges(host.polygon).map(e=>({host,e,d:nearest([a.worldPosition[0],a.worldPosition[2]],[[e.a,e.b]]).distance}))).filter(x=>x.e.normal[0]*a.normal[0]+x.e.normal[1]*a.normal[2]>.8).sort((a,b)=>a.d-b.d);const found=candidates[0];if(!found)continue;const {host,e}=found,screen=a.category==='largeScreen',category=screen?'screen':a.category==='rooftopSign'?'rooftop':'billboard';const uv=screen?[1-(screenAlong+a.width)/screenTotal,1-screenAlong/screenTotal]:null;if(screen)screenAlong+=a.width;
-   const height=Math.min(a.height,host.top-host.bottom-.25),y=Math.max(host.bottom+height/2+.1,Math.min(host.top-height/2-.1,config.upper-height/2-.05,a.worldPosition[1]));submit(makePlacement(host,e,{id:a.id+':s7',anchorId:a.id,hero:h.key,category,y,width:Math.min(a.width,e.length-.3),height,offset:Math.max(.17,a.offset+.08),region,variant:h.key==='109'?1:4,screenUV:uv}));used++;
+   const height=Math.min(a.height,host.top-host.bottom-.25),y=Math.max(host.bottom+height/2+.1,Math.min(host.top-height/2-.1,config.upper-height/2-.05,a.worldPosition[1]));submit(makePlacement(host,e,{id:a.id+':s7',anchorId:a.id,hero:h.key,category,y,width:Math.min(a.width,e.length-.3),height,offset:Math.max(.17,a.offset+.08),region,variant:h.key==='109'?1:4,screenUV:uv,brandArt:a.art??null}));used++;
   }
   const host=heroHosts[0],facades=edges(host.polygon).filter(e=>e.normal[0]*h.primaryFacade.normal[0]+e.normal[1]*h.primaryFacade.normal[1]>.5&&e.length>3).sort((a,b)=>b.length-a.length);
   for(const [i,e] of facades.slice(0,h.key==='qfront'?0:Math.max(1,config.limit-used)).entries())submit(makePlacement(host,e,{id:h.key+':lower:'+i,hero:h.key,category:'box',y:host.bottom+Math.min(4.8,(host.top-host.bottom)/2),width:Math.min(e.length-.5,h.key==='109'?5:12),height:1,region,variant:h.key==='109'?11:h.key.startsWith('seibu')?9:1}));

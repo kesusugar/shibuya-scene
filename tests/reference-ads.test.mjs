@@ -247,7 +247,9 @@ test('a blade is sized by how far it may stand off the wall', () => {
 
 test('an excluded advertisement is reported, not placed and not forgotten', () => {
  for (const [id, reason] of Object.entries(EXCLUDED_ADS)) {
-  assert.ok(REFERENCE_ADS.some(a => a.id === Number(id)), `${id} is excluded but not in the inventory`);
+  // PANELS, not REFERENCE_ADS: a panel the scene adds for a hero facade to carry is
+  // excluded from the raycast pass too, and it is an extra rather than an inventory entry.
+  assert.ok(PANELS.some(a => a.id === Number(id)), `${id} is excluded but in neither the inventory nor the extras`);
   assert.ok(!resolved.placed.some(p => p.ad.id === Number(id)), `${id} is excluded but placed`);
   assert.equal(resolved.unplaced.find(u => u.id === Number(id))?.reason, reason);
  }

@@ -361,7 +361,60 @@ export const REFERENCE_ART = Object.freeze({
   c.globalAlpha = .16;
   for (const [x, w] of [[.06, .035], [.18, .018], [.86, .04], [.96, .02]])
    poly('#ffffff', [[x, 0], [x + w, 0], [x + w - .10, .68], [x - .10, .68]]);
-  c.globalAlpha = 1;}
+  c.globalAlpha = 1;},
+
+ // The MAGNET facade's own panels. The hero builder measures where they hang; these give
+ // them a face. Drawn from scratch like every other panel here — no logo file, no brand
+ // font, and the wordmark is an approximation of a sign in the frame, not the trademark.
+ 201(c, aspect) {const {text} = tools(c);
+  c.fillStyle = '#08090b'; c.fillRect(0, 0, 1, 1);
+  trueShape(c, aspect, wide => {
+   const span = .94 * wide, left = .5 - span / 2, s = Math.min(.3, span * .085), cx = left + span * .09, cy = .44;
+   // An angular mark rather than a letter, the way the real fascia carries one.
+   c.fillStyle = '#ffffff';
+   c.beginPath();
+   c.moveTo(cx - s, cy + s); c.lineTo(cx - s * .62, cy - s); c.lineTo(cx, cy + s * .18);
+   c.lineTo(cx + s * .62, cy - s); c.lineTo(cx + s, cy + s); c.lineTo(cx + s * .52, cy + s);
+   c.lineTo(cx + s * .3, cy + s * .04); c.lineTo(cx, cy + s * .84); c.lineTo(cx - s * .3, cy + s * .04);
+   c.lineTo(cx - s * .52, cy + s); c.closePath(); c.fill();
+   c.fillStyle = '#ffffff';
+   text('MAGNET', Math.min(.56, span * .19), left + span * .6, .4,
+    {family: 'Arial,sans-serif', weight: '900', max: span * .68});
+   c.fillStyle = '#9aa0a6';
+   text('by SHIBUYA109', Math.min(.15, span * .052), left + span * .6, .76,
+    {family: 'Arial,sans-serif', weight: '700', max: span * .52});
+  });},
+
+ 202(c, aspect) {const {text, box} = tools(c);
+  box(0, 0, 1, 1, '#f5f3ef');
+  trueShape(c, aspect, wide => {
+   const span = .74 * wide, left = .5 - span / 2;
+   c.strokeStyle = '#15171b'; c.lineWidth = Math.max(.008, span * .05);
+   c.strokeRect(left, .075, span, .85);
+   c.fillStyle = '#15171b';
+   text('N°', Math.min(.3, span * .58), .5, .29,
+    {family: 'Georgia,"Times New Roman",serif', weight: '400', max: span * .66});
+   text('5', Math.min(.58, span * 1.05), .5, .64,
+    {family: 'Georgia,"Times New Roman",serif', weight: '400', max: span * .82});
+  });},
+
+ 203(c, aspect) {const {box, disc} = tools(c);
+  // The vision runs a culture spot, so it carries a key visual and no wording. Flat washes
+  // only: this sheet is painted through contexts where canvas gradients are unavailable.
+  box(0, 0, 1, 1, '#120a1e');
+  for (const [fill, x] of [['#ff2d6f', -.34], ['#ff7a3d', -.14], ['#ffd23f', .06], ['#2ee6c6', .26], ['#4d7cff', .46]]) {
+   c.fillStyle = fill; c.beginPath();
+   c.moveTo(x, 1); c.lineTo(x + .32, 0); c.lineTo(x + .48, 0); c.lineTo(x + .16, 1); c.closePath(); c.fill();
+  }
+  box(0, .84, 1, .16, '#0d0716');
+  trueShape(c, aspect, wide => {
+   const r = Math.min(.3, wide * .17), cx = .5 + wide * .1;
+   disc(cx, .42, r, '#0d0716');
+   disc(cx, .42, r * .74, '#f6f2ff');
+   disc(cx, .42, r * .26, '#0d0716');
+   box(.5 - wide * .42, .89, wide * .26, .045, '#f6f2ff');
+   box(.5 - wide * .42, .955, wide * .15, .03, '#ff2d6f');
+  });},
 });
 
 /** Ids the inventory carries that this sheet can draw. */

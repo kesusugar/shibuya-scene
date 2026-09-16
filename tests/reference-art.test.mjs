@@ -49,6 +49,9 @@ test('each panel is its own composition, not one template recoloured', () => {
  // No two panels may share their full text content: that is the repeated-sticker failure.
  const signatures = new Map();
  for (const [id, r] of perAd) {
+  // Two textless panels both draw nothing, which is what they are for; they are told apart
+  // by their artwork, which the fill and background checks around this already cover.
+  if (PANELS.find(a => a.id === id)?.textless) continue;
   const signature = r.texts().join('|');
   assert.ok(!signatures.has(signature), `panels ${signatures.get(signature)} and ${id} draw identical text`);
   signatures.set(signature, id);

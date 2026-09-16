@@ -24,8 +24,24 @@ export function buildShibuya109(h){
  roofMass(h,rear,26.5,{width:4,depth:3,height:1.8});
 }
 export function buildMagnet(h){
- const p=h.footprint,u=setback(h,.9,.94),c=setback(h,.72,.84);mass(h,'commercial-base',p,0,7,'concreteDark');mass(h,'billboard-block',p,7,24,'concreteLight');mass(h,'upper-terrace',u,24,32,'concreteDark');mass(h,'roof-parapet-crown',c,32,h.height,'metal');
- grid(h,p,1,23,{pitch:3.8,width:2.3,height:1.8});grid(h,u,24,32,{pitch:2.5,width:1.6,height:2.4});bands(h,p,[7,12,18,23.9],{thickness:.3});bands(h,u,[27.5,31.8],{thickness:.35});placeholder(h,h.primaryFacade,'facadeSign',h.primaryFacade.length*.75,8,16);anchor(h,h.primaryFacade,'rooftopSign',h.primaryFacade.length*.6,1.8,31);
+ const p=h.footprint,u=setback(h,.9,.94),c=setback(h,.72,.84);mass(h,'commercial-base',p,0,7,'concreteDark');mass(h,'media-block',p,7,24,'glassDark');mass(h,'upper-terrace',u,24,32,'concreteDark');mass(h,'roof-parapet-crown',c,32,h.height,'metal');
+ // The building reads as one dark media wall facing the crossing: a framed vision with the
+ // wordmark over it, and the return facade carrying a tall tenant panel. The vision is kept
+ // at the screen atlas's own 2:1 so its artwork is not stretched onto the quad.
+ // The return facade is the one turned partly toward the crossing with the front, not the
+ // long rear wall, which shares no facing with it at all.
+ const facing=e=>e.normal[0]*face.normal[0]+e.normal[1]*face.normal[1];
+ const face=h.primaryFacade,side=edges(p).filter(e=>e.index!==face.index&&e.length>6&&facing(e)>.3&&facing(e)<.9).sort((a,b)=>b.length-a.length)[0];
+ const visionWidth=Math.min(10.4,face.length-1.4),visionHeight=visionWidth/2,visionY=14.6;
+ // `art` names a tile on the reference sheet, so these read as this building's own signs
+ // rather than as two of the thirty-two shared designs the generic atlas hands out.
+ placeholder(h,face,'largeScreen',visionWidth,visionHeight,visionY,{logicalId:'magnet-main-vision'}).art=203;
+ anchor(h,face,'facadeSign',Math.min(9,face.length-1.4),2.4,visionY+visionHeight/2+2.4,2).art=201;
+ if(side)anchor(h,side,'facadeSign',Math.min(3,side.length-.5),8,15,1).art=202;
+ anchor(h,face,'rooftopSign',face.length*.6,1.8,31);
+ // Windows stop where the media wall starts, so the vision and wordmark sit on dark glass.
+ const clear=[visionY-visionHeight/2-1.5,visionY+visionHeight/2+2.4+1.2+1.5];
+ grid(h,p,1,23,{pitch:3.8,width:2.3,height:1.8,material:'glassDark',skip:(e,y)=>e.index===face.index&&y>clear[0]&&y<clear[1]});grid(h,u,24,32,{pitch:2.5,width:1.6,height:2.4});bands(h,p,[7,12,18,23.9],{thickness:.3});bands(h,u,[27.5,31.8],{thickness:.35});
 }
 export function buildScrambleSquare(h){
  const p=h.footprint,t=setback(h,.79,.77),upper=setback(h,.73,.72),c=setback(h,.66,.64);mass(h,'retail-podium',p,0,54,'concreteLight');mass(h,'slender-curtain-tower',t,54,199,'glass');mass(h,'upper-setback',upper,199,222,'glassDark');mass(h,'skyline-crown',c,222,h.height,'metal');
