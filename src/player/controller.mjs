@@ -61,14 +61,16 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    *
    * Pointer lock takes the cursor, so the only way back to the rest of the browser is a key.
    * Escape releases the lock natively but a click on the scene takes it straight back, which
-   * leaves no way out at all; `onExit` is called so Escape leaves play entirely.
+   * leaves no way out at all; `onExit` is called so Escape leaves play entirely. `onDrive`
+   * is the get-in/get-out key.
    */
-  attach(element, {onExit} = {}) {
+  attach(element, {onExit, onDrive} = {}) {
    if (detach) return;
    const down = (e) => {
     if (e.repeat) return;
     const k = e.key.toLowerCase();
     if (k === 'escape') {keys.clear(); onExit?.(); return;}
+    if (k === 'f') {onDrive?.(); e.preventDefault(); return;}
     if (!'wasd'.includes(k) && k !== 'shift' && k !== ' ') return;
     keys.add(k === ' ' ? 'shift' : k); e.preventDefault();
    };
@@ -113,11 +115,21 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    return false;
   },
 
-  step(dt) {
-   if (!state.alive) {state.runOver += dt; state.speed = 0; state.moving = false; return;}
+  /** The movement keys as axes, shared by walking and driving. */
+  input() {
    let fx = 0, fz = 0;
    if (keys.has('w')) fz += 1; if (keys.has('s')) fz -= 1;
    if (keys.has('a')) fx -= 1; if (keys.has('d')) fx += 1;
+   return {forward: fz, strafe: fx, running: keys.has('shift')};
+  },
+  /** While driving, the body rides in the car and is posed from it rather than walked. */
+  rideTo(x, z, heading) {
+   state.x = x; state.z = z; state.heading = heading; state.speed = 0; state.moving = false;
+  },
+
+  step(dt) {
+   if (!state.alive) {state.runOver += dt; state.speed = 0; state.moving = false; return;}
+   const {forward: fz, strafe: fx} = api.input();
    const len = Math.hypot(fx, fz);
    state.running = keys.has('shift');
    state.moving = len > 0;
