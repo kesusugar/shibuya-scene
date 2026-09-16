@@ -10,7 +10,14 @@ export function commercialLayout(signs, count=32) {
     if(list.length<4){result.push(...list.map(s=>({...s})));continue;}
     const base=list[0], left=Math.min(...list.map(s=>s.along-s.width/2)),right=Math.max(...list.map(s=>s.along+s.width/2));
     const bottom=Math.min(...list.map(s=>s.position[1]-s.height/2)),top=Math.max(...list.map(s=>s.position[1]+s.height/2));
-    const cols=Math.max(1,Math.min(3,Math.floor((right-left)/7))),rows=Math.max(1,Math.min(5,Math.floor((top-bottom)/5.5)));
+    const cols=Math.max(1,Math.min(3,Math.floor((right-left)/7)));
+    // A cell tuned for a wide facade is the wrong unit on a narrow one. Where only a single
+    // column fits, 5.5 m rows turn a tenant tower's stack of small signs into four slabs
+    // the height of a storey and a half; the narrow zakkyo fronts around the crossing read
+    // as a column of tenant panels instead, so those rows follow the panels rather than the
+    // cell. Wide faces keep the grid they were tuned for.
+    const narrow=cols===1;
+    const rows=Math.max(1,Math.min(narrow?10:5,Math.floor((top-bottom)/(narrow?2.6:5.5))));
     const cellW=(right-left)/cols,cellH=(top-bottom)/rows;
     for(let row=0;row<rows;row++)for(let col=0;col<cols;col++){
       const along=left+cellW*(col+.5), y=bottom+cellH*(row+.5), shift=along-base.along;
