@@ -12,5 +12,10 @@ vec3 frontageSpill(vec2 q){
  float warm=frontagePool(q,vec2(-38.55,-23.48),vec2(-66.75,-20.45),5.5);
  warm+=frontagePool(q,vec2(-32.22,-29.27),vec2(-58.88,-55.94),4.5)*.8;
  warm+=frontagePool(q,vec2(-31.29,-44.25),vec2(-37.98,-49.60),4.5)*.65;
+ // MAGNET's arcade, the one lit shopfront on the right of the frame. Two segments because
+ // the frontage turns a corner there, and the light spills round it; each sits 2 m out from
+ // its wall so the pool lies on the pavement rather than half inside the building.
+ warm+=frontagePool(q,vec2(49.73,-7.55),vec2(32.53,-8.43),5.5);
+ warm+=frontagePool(q,vec2(31.06,-9.19),vec2(23.98,-18.37),4.5)*.8;
  return vec3(.48,.25,.085)*min(warm,1.25);
 }`;
