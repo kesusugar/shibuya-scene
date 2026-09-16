@@ -58,3 +58,16 @@ button[data-slot=switch]{padding:0;border-radius:999px;width:32px;height:19px;mi
 .solar-controls button{font-size:24px;min-width:48px;min-height:44px;border-radius:10px;background:transparent;border:1px solid transparent;cursor:pointer}
 .solar-controls button[aria-pressed=true]{background:#426b84;border-color:#e2efff;box-shadow:0 0 0 2px #172333}
 .solar-controls button:focus-visible{outline:2px solid white;outline-offset:2px}
+.pad-probe{position:fixed;right:16px;top:96px;z-index:1200;width:min(420px,calc(100vw - 32px));max-height:76vh;overflow:auto;padding:14px;background:#07111af2;border:1px solid #f2a25c;color:#f6e6d6;box-shadow:0 8px 30px #000c;font-variant-numeric:tabular-nums;font-size:12px}
+.pad-probe h2{margin:0 0 10px;font-size:15px;color:#f2a25c}
+.pad-probe h3{margin:12px 0 6px;font-size:12px;color:#f6e6d6;word-break:break-all}
+.pad-probe p{margin:6px 0}
+.pad-probe .pad-ok{color:#8fe3a2}
+.pad-probe .pad-warn{color:#ffb4a2}
+.pad-grid{display:grid;grid-template-columns:minmax(0,1fr) 62px minmax(0,86px);gap:1px 8px;margin:6px 0}
+.pad-axes{grid-template-columns:minmax(0,1fr) 62px}
+.pad-grid span{color:#c2a893;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pad-grid b{text-align:right}
+.pad-grid em{color:#8a7a6c;font-style:normal;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pad-grid .pad-live{color:#ffce7a}
+.pad-probe button{width:100%;margin-top:10px;text-align:center;border-color:#f2a25c}
