@@ -35,6 +35,14 @@ export const CAR = Object.freeze({
  pivot: 1.1,                             // rad/s the wheel turns the body when it cannot move
  // A body is a small box for this purpose; the crowd's own radius is .25.
  bodyWidth: .5, bodyLength: .5,
+ // Getting out of the way. People react to where the car is going to be, not to where it
+ // is, so the corridor is the body swept forward by `alertLead` seconds of travel. Below
+ // `alertSpeed` a car is just traffic and nobody scatters for it.
+ alertSpeed: 3, alertLead: 1.5, alertReach: 18, alertWidth: 2.6,
+ // Damage. A hit costs speed proportional to how fast it was taken, and a wrecked car keeps
+ // only `wreckFloor` of its performance -- it never becomes undriveable.
+ damagePerSpeed: .025, wreckFloor: .45,
+ takeOverRange: 6,                       // how far you can reach another car to take it over
  // The camera rides further back and higher than the walking one: at 11 m/s the walking
  // arm puts the road under the bonnet and nothing else in frame.
  followBack: 8.2, followUp: 3.2, eye: 1.4
@@ -50,8 +58,11 @@ function segmentsCross(a, b, c, d) {
 }
 
 export function createPlayerVehicle(sim, ctx) {
- const def = VEHICLES[CAR.type];
- const state = {x: 0, z: 0, y: 0, heading: 0, course: 0, speed: 0, steering: 0, active: false, slot: null};
+ // Not const: taking over a parked van makes the player a van, and every box test from the
+ // pose check to the strike scan has to use the body that is actually being driven.
+ let def = VEHICLES[CAR.type];
+ const state = {x: 0, z: 0, y: 0, heading: 0, course: 0, speed: 0, steering: 0,
+                type: CAR.type, damage: 0, stalled: false, active: false, slot: null};
  const probe = {x: 0, z: 0, heading: 0};
 
  /**
@@ -86,12 +97,12 @@ export function createPlayerVehicle(sim, ctx) {
  const poseOk = (x, z, heading) => {
   if (!clearOfSolids(x, z, heading)) return false;
   probe.x = x; probe.z = z; probe.heading = heading;
-  return !sim.blocked(probe, CAR.type, state.slot, CAR.carPad);
+  return !sim.blocked(probe, state.type, state.slot, CAR.carPad);
  };
  /** Road-only test, still used when parking the car so it starts on the carriageway. */
  const onRoadPose = (x, z, heading) => {
   probe.x = x; probe.z = z; probe.heading = heading;
-  return safePose(sim.graph.ctx, probe, CAR.type, .05);
+  return safePose(sim.graph.ctx, probe, state.type, .05);
  };
 
  const api = {
@@ -111,7 +122,8 @@ export function createPlayerVehicle(sim, ctx) {
      if (!onRoadPose(px, pz, ph)) continue;
      if (!onRoadPose(px + Math.sin(ph) * 6, pz + Math.cos(ph) * 6, ph)) continue;   // road ahead
      state.slot = slot; state.x = px; state.z = pz; state.heading = ph; state.course = ph;
-     state.speed = 0; state.steering = 0;
+     state.speed = 0; state.steering = 0; state.type = CAR.type; state.damage = 0; state.stalled = false;
+     def = VEHICLES[CAR.type];
      Object.assign(slot, {
       active: true, controlled: true, parked: true, service: false, platoon: undefined,
       type: CAR.type, x: px, z: pz, heading: ph, speed: 0, brake: false, blinker: 0,
@@ -123,6 +135,41 @@ export function createPlayerVehicle(sim, ctx) {
     }
    }
    return false;
+  },
+
+  /**
+   * The nearest car a person standing here could get into, which need not be the one this
+   * object is currently holding. Only parked cars: stepping into moving traffic and taking
+   * the wheel mid-flow would drop a car out of its lane with a queue behind it.
+   */
+  nearestTakeover(x, z) {
+   let best = null, bestD = CAR.takeOverRange;
+   for (const v of sim.pool) {
+    if (!v.active || !v.parked || v === state.slot || v.controlled) continue;
+    const d = Math.hypot(v.x - x, v.z - z);
+    if (d < bestD) {bestD = d; best = v;}
+   }
+   return best;
+  },
+
+  /**
+   * Take the wheel of another car. The slot being left goes back to being ordinary parked
+   * traffic -- leaving it `controlled` would hide it from the AI, the audit and the tier
+   * budget for the rest of the session -- and the body being driven changes with it, so a
+   * van is a van for every box test from here on.
+   */
+  takeOver(slot) {
+   if (!slot || slot === state.slot) return false;
+   if (state.slot) {state.slot.controlled = false; state.slot.parked = true; state.slot.speed = 0;}
+   state.slot = slot; state.type = slot.type; def = VEHICLES[slot.type];
+   state.x = slot.x; state.z = slot.z; state.heading = slot.heading; state.course = slot.heading;
+   state.y = ctx.height(slot.x, slot.z); state.speed = 0; state.steering = 0; state.damage = 0; state.stalled = false;
+   Object.assign(slot, {controlled: true, parked: true, service: false, platoon: undefined,
+    speed: 0, brake: false, blinker: 0, lane: 0, transition: -1, next: -1, progress: 0,
+    age: 0, stuck: 0, junction: null});
+   slot.locks?.clear?.(); slot.passed?.clear?.(); slot.yellowStops?.clear?.();
+   state.active = true;
+   return true;
   },
 
   /** Where a person standing here could get in from. */
@@ -151,13 +198,14 @@ export function createPlayerVehicle(sim, ctx) {
   step(dt, input) {
    if (!state.active) return;
    const throttle = (input.forward ?? 0), turn = (input.strafe ?? 0);
+   const health = Math.max(CAR.wreckFloor, 1 - (1 - CAR.wreckFloor) * state.damage);
    // S brakes while moving forward, and becomes reverse once stopped.
-   if (throttle > 0) state.speed += CAR.accel * dt;
+   if (throttle > 0) state.speed += CAR.accel * health * dt;
    else if (throttle < 0) {
     if (state.speed > .2) state.speed -= CAR.brake * dt;
     else state.speed = Math.max(-CAR.reverseMax, state.speed - CAR.accel * .7 * dt);
    } else state.speed -= Math.sign(state.speed) * Math.min(Math.abs(state.speed), CAR.drag * dt);
-   state.speed = Math.max(-CAR.reverseMax, Math.min(def.speed, state.speed));
+   state.speed = Math.max(-CAR.reverseMax * health, Math.min(def.speed * health, state.speed));
 
    // Ease the wheel rather than snapping it, and give a crawling car little authority.
    state.steering += (turn - state.steering) * Math.min(1, dt * CAR.steerEase);
@@ -185,9 +233,15 @@ export function createPlayerVehicle(sim, ctx) {
    for (const [h, c, d] of attempts) {
     const nx = state.x + Math.sin(c) * d, nz = state.z + Math.cos(c) * d;
     if (!poseOk(nx, nz, h)) continue;
-    state.x = nx; state.z = nz; state.heading = h; state.course = c; moved = true; break;
+    state.x = nx; state.z = nz; state.heading = h; state.course = c; moved = true; state.stalled = false; break;
    }
    if (!moved) {
+    // Wear is charged per impact, not per frame in contact. Holding the throttle against a
+    // wall is one crash however long you lean on it: charging it every frame wrote the car
+    // off in a couple of seconds of leaning. Hitting something at 11 m/s costs more than
+    // nosing into it at walking pace, so the charge is the speed that was just lost.
+    if (!state.stalled) state.damage = Math.min(1, state.damage + Math.abs(state.speed) * CAR.damagePerSpeed);
+    state.stalled = true;
     state.speed = 0;                          // nose against something: stop, do not bounce
     state.course = state.heading;             // and no momentum survives the impact
     // Stopping is not enough on its own. Steering authority is a function of speed, so a
@@ -245,6 +299,42 @@ export function createPlayerVehicle(sim, ctx) {
     }
    }
    return hit;
+  },
+
+  /**
+   * Warn everyone the car is about to reach.
+   *
+   * This is the half that was missing: people dodged the car where it stood, but walked on
+   * regardless of one bearing down on them, so the first they knew of it was being hit.
+   * The corridor is the body swept forward by alertLead seconds of travel, and the scan
+   * runs over the crowd's own grid cells, so the cost is the corridor rather than the two
+   * thousand pedestrians. Whoever is inside it is told which way is out -- perpendicular to
+   * the car's course, towards whichever side they are already nearer -- and the crowd does
+   * the actual moving, so nobody is pushed anywhere the walkable context forbids.
+   */
+  alertPedestrians(crowd) {
+   if (!state.active || !crowd || Math.abs(state.speed) < CAR.alertSpeed) return 0;
+   const dir = Math.sign(state.speed);
+   const s = Math.sin(state.course) * dir, c = Math.cos(state.course) * dir;
+   const reach = Math.min(CAR.alertReach, Math.abs(state.speed) * CAR.alertLead) + def.length / 2;
+   const half = def.width / 2 + CAR.alertWidth;
+   // Cells covering the swept corridor, which is the body plus everything ahead of it.
+   const ex = state.x + s * reach, ez = state.z + c * reach;
+   const x0 = Math.floor((Math.min(state.x, ex) - half) / 2), x1 = Math.floor((Math.max(state.x, ex) + half) / 2);
+   const z0 = Math.floor((Math.min(state.z, ez) - half) / 2), z1 = Math.floor((Math.max(state.z, ez) + half) / 2);
+   let warned = 0;
+   for (let i = x0; i <= x1; i++) for (let j = z0; j <= z1; j++) {
+    for (const p of crowd.grid.get(i + ',' + j) ?? []) {
+     if (!p.active || p.controlled || p.struck !== undefined) continue;
+     const dx = p.x - state.x, dz = p.z - state.z;
+     const along = dx * s + dz * c, across = dx * c - dz * s;   // car-relative coordinates
+     if (along < -def.length / 2 || along > reach || Math.abs(across) > half) continue;
+     // Out is sideways, towards the shoulder they are already closer to.
+     const side = across >= 0 ? 1 : -1;
+     if (crowd.scatter(p, c * side, -s * side)) warned++;
+    }
+   }
+   return warned;
   },
 
   release() {

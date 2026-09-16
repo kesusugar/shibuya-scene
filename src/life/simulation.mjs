@@ -18,12 +18,17 @@ export const FALL_SECONDS=2.4;
 // else. The pool is exactly the high-tier target, so holding a slot really does thin the
 // crowd for that long rather than being papered over by the next refill.
 export const RESPAWN_SECONDS=30;
+// Getting out of the way: how long a warned pedestrian keeps running, and how hard the
+// warning bends their step. The bend is a blend rather than an override so the route, the
+// walkable context and the neighbour avoidance all still have the final say -- a scattering
+// pedestrian never ends up somewhere they could not have walked.
+export const SCATTER_SECONDS=1.1,SCATTER_BIAS=.8,SCATTER_SPEED=3.4;
 
 export class CrowdSimulation{
  constructor(network,{traffic=null,tier='medium',seed='shibuya-s10',choreography=false,heroStart=false}={}){
   this.network=network;this.traffic=traffic;this.signals=traffic?.signals??null;this.rng=seededRandom(seed);this.tier=tier;this.heroStart=heroStart;this.time=0;this.accumulator=0;this.camera={x:55,z:65};this.grid=new Map();this.queue=new Map();this.exits=new Map();this.groups=[];this.temp={};this.next={};this.lodClock=0;this.refillClock=0;
   this.stats={spawned:0,despawned:0,reasons:{},recoveries:0,stuck:0,routeCompletions:0,signalViolations:0,entries:{},completed:{},neighborChecks:0,avoidanceChecks:0,updateMs:0,throttled:0,spawnDeferred:0};
-  this.pool=Array.from({length:POOL_SIZE},(_,id)=>({id,active:false,x:0,z:0,heading:0,height:0,archetype:'casual',mode:'ambient',state:'walking',group:-1,leader:-1,route:[],routeIndex:0,edge:-1,progress:0,destination:-1,node:-1,speed:0,baseSpeed:1.3,age:0,stuck:0,pause:0,crossing:null,queueKey:null,lod:'near',elapsed:0,phase:0,color:0,animationTime:0,renderX:0,renderZ:0,previousX:0,previousZ:0,travelled:0,lastHeading:0,downUntil:0,region:'commercial'}));
+  this.pool=Array.from({length:POOL_SIZE},(_,id)=>({id,active:false,x:0,z:0,heading:0,height:0,archetype:'casual',mode:'ambient',state:'walking',group:-1,leader:-1,route:[],routeIndex:0,edge:-1,progress:0,destination:-1,node:-1,speed:0,baseSpeed:1.3,age:0,stuck:0,pause:0,crossing:null,queueKey:null,lod:'near',elapsed:0,phase:0,color:0,animationTime:0,renderX:0,renderZ:0,previousX:0,previousZ:0,travelled:0,lastHeading:0,downUntil:0,scatterX:0,scatterZ:0,scatterUntil:0,region:'commercial'}));
   this.candidates=network.eligible;this.byRegion=Object.fromEntries(['hachiko','center-gai','station','commercial'].map(k=>[k,this.candidates.filter(n=>n.district===k)]));this.crossCandidates=network.crossings.filter(e=>e.kind!=='normal'&&network.nodes[e.from].component===network.nodes[e.to].component);const lanes=new Map();for(const e of this.crossCandidates){const key=e.crossingId+':'+e.direction;if(!lanes.has(key))lanes.set(key,[]);lanes.get(key).push(e);}const groups=[...lanes.values()];this.crossCandidates=[];for(let row=0;row<Math.max(0,...groups.map(g=>g.length));row++)for(const group of groups)if(group[row])this.crossCandidates.push(group[row]);this.crossCursor=0;this.choreography=choreography?new ScrambleChoreography(this):null;this.refill(true);
  }
  cell(x,z){return Math.floor(x/2)+','+Math.floor(z/2);}
@@ -32,6 +37,14 @@ export class CrowdSimulation{
  blocked(x,z,p,r=RADIUS*2+.06,includeReservations=true){if(p?.choreographed)return false;if(includeReservations&&!p?.crossing)for(const [id,owners] of this.exits){const e=this.network.edges[p?.edge];if(owners.has(p?.id)||e?.crossingId&&e.to===id)continue;const n=this.network.nodes[id];const distance=Math.hypot(x-n.x,z-n.z);if(distance<.85&&(!p||distance<=Math.hypot(p.x-n.x,p.z-n.z)))return true;}const ix=Math.floor(x/2),iz=Math.floor(z/2);for(let i=ix-1;i<=ix+1;i++)for(let j=iz-1;j<=iz+1;j++)for(const q of this.grid.get(i+','+j)??[]){if(q===p||!q.active||q.choreographed)continue;this.stats.neighborChecks++;if((q.x-x)**2+(q.z-z)**2<r*r)return true;}return false;}
  vehicleOverlap(x,z,r=RADIUS+.1){if(!this.traffic)return false;const ix=Math.floor(x/15),iz=Math.floor(z/15);for(let i=ix-1;i<=ix+1;i++)for(let j=iz-1;j<=iz+1;j++)for(const v of this.traffic.grid.get(i+','+j)??[]){if(!v.active)continue;if(v.controlled&&Math.abs(v.speed)>=DODGE_SPEED)continue;const def=VEHICLES[v.type],dx=x-v.x,dz=z-v.z,c=Math.cos(v.heading),s=Math.sin(v.heading);if(Math.abs(dx*c-dz*s)<def.width/2+r&&Math.abs(dx*s+dz*c)<def.length/2+r)return true;}return false;}
  leave(p){for(const [id,owners] of this.exits){owners.delete(p.id);if(!owners.size)this.exits.delete(id);}if(p.crossing){this.signals?.leavePedestrian(p.crossing,p.id);p.crossing=null;}if(p.queueKey){this.queue.get(p.queueKey)?.delete(p.id);p.queueKey=null;}}
+ /**
+  * Tell a pedestrian to get out of the way, pointing where. Idle and paused actors are woken
+  * by it -- standing still in front of a moving car is the one thing nobody does.
+  */
+ scatter(p,dx,dz){if(!p.active||p.struck!==undefined)return false;
+  p.scatterX=dx;p.scatterZ=dz;p.scatterUntil=this.time+SCATTER_SECONDS;
+  if(p.pause>0)p.pause=0;
+  this.stats.scattered=(this.stats.scattered??0)+1;return true;}
  /**
   * Knock a pedestrian down. They stop, fall, and are recycled once the fall finishes.
   * Going through `leave` rather than clearing `crossing` by hand matters: someone struck
@@ -89,14 +102,20 @@ export class CrowdSimulation{
   // Curb waiters and idle actors yield locally to occupied crossing exits.
   // They remain on walkable ground; no recycling or position snap clears a crossing.
   if(!p.crossing){for(const [id,owners] of this.exits){const end=n.nodes[id],dx=p.x-end.x,dz=p.z-end.z,d=Math.hypot(dx,dz);if(d>=3)continue;const owner=this.pool[owners.values().next().value],incoming=n.edges[owner.edge],start=n.nodes[incoming.from],angle=Math.atan2(end.z-start.z,end.x-start.x);for(const turn of [0,.6,-.6,1.2,-1.2]){const x=p.x+Math.cos(angle+turn)*.8*dt,z=p.z+Math.sin(angle+turn)*.8*dt;if(!n.ctx.safe(x,z)||this.vehicleOverlap(x,z)||this.blocked(x,z,p,.56,false))continue;p.previousX=p.x;p.previousZ=p.z;p.x=x;p.z=z;p.height=n.ctx.height(x,z);p.speed=.8;p.heading=Math.atan2(x-p.previousX,z-p.previousZ);if(this.cell(x,z)!==oldCell){const bucket=this.grid.get(oldCell),i=bucket?.indexOf(p);if(i>=0)bucket.splice(i,1);this.insert(p);}return;}}}
-  if(p.mode==='idle'){p.state='idle';p.speed=0;if(p.age>240)this.despawn(p,'ttl');return;}
-  if(p.pause>0){p.pause-=dt;p.state='milling';p.speed=0;return;}
+  const fleeing=p.scatterUntil>this.time;
+  if(p.mode==='idle'&&!fleeing){p.state='idle';p.speed=0;if(p.age>240)this.despawn(p,'ttl');return;}
+  if(p.pause>0&&!fleeing){p.pause-=dt;p.state='milling';p.speed=0;return;}
   if(p.edge<0){if(!this.chooseDestination(p,n.nodes[p.node],p.mode==='milling'))this.despawn(p,'invalid-route');return;}
   const e=n.edges[p.edge];if(p.crossing&&p.progress<1&&n.ctx.safe(p.x,p.z)&&this.signals.phase()[0]!=='PEDESTRIAN'){this.leave(p);this.stats.cancelledCurbAdmissions=(this.stats.cancelledCurbAdmissions??0)+1;}if(e.crossingId&&!p.crossing){if(!this.beginCrossing(p,e)){p.state='waiting';p.speed=0;p.stuck=0;const key=e.crossingId+':'+e.direction;if(!this.queue.has(key))this.queue.set(key,new Set());this.queue.get(key).add(p.id);p.queueKey=key;return;}}
   p.state=p.crossing?'crossing':p.mode==='milling'?'milling':'walking';
   let speed=p.baseSpeed;
   if(p.group>=0&&!p.crossing){const g=this.groups[p.group],lead=this.pool[g?.leader];if(lead?.active){if(p.id===lead.id&&g.members.some(id=>this.pool[id].active&&Math.hypot(this.pool[id].x-p.x,this.pool[id].z-p.z)>5))speed*=.45;else if(p.id!==lead.id&&Math.hypot(lead.x-p.x,lead.z-p.z)>4)speed*=1.15;}}
   edgePose(n,e,Math.min(e.length,p.progress+.55),this.next);let dx=this.next.x-p.x,dz=this.next.z-p.z,dist=Math.hypot(dx,dz),step=Math.min(speed*dt,dist);if(dist>.0001){dx/=dist;dz/=dist;}
+  // Warned by an oncoming car: lean hard towards the shoulder and run, without ever leaving
+  // the route behind -- the blend decays as the warning ages so they settle back into it.
+  if(p.scatterUntil>this.time){const w=SCATTER_BIAS*Math.min(1,(p.scatterUntil-this.time)/SCATTER_SECONDS);
+   let bx=dx*(1-w)+p.scatterX*w,bz=dz*(1-w)+p.scatterZ*w;const bl=Math.hypot(bx,bz)||1;dx=bx/bl;dz=bz/bl;
+   speed=Math.max(speed,SCATTER_SPEED);step=speed*dt;p.state='scattering';}
   let nx=p.x+dx*step,nz=p.z+dz*step,moved=false;
   if(this.allowed(nx,nz,p,e)&&!this.blocked(nx,nz,p)){moved=true;}else if(p.lod!=='far'||p.crossing||p.stuck>1){this.stats.avoidanceChecks++;
    // Deterministic right-side passing. Candidate boundary/collision checks override steering.

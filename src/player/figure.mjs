@@ -10,7 +10,7 @@
 // The crowd slot is still reserved and still active: it is what the pedestrians' neighbour
 // avoidance sees, so they part around the player. The crowd simply does not draw it.
 
-import {CapsuleGeometry, SphereGeometry, Group, Mesh, MeshStandardMaterial} from 'three';
+import {BoxGeometry, CapsuleGeometry, SphereGeometry, Group, Mesh, MeshStandardMaterial} from 'three';
 
 export const FIGURE = Object.freeze({
  height: 1.76,
@@ -23,7 +23,11 @@ export const FIGURE = Object.freeze({
  cycle: 1.5,
  swing: .28,          // radians of limb swing per m/s, capped below
  swingMax: .85,
- bob: .028, lean: .05
+ bob: .028, lean: .05,
+ // What the player is carrying. The crowd gets its accessories from a hash of its id; there
+ // is only one player, so this is simply chosen. A shoulder bag rides on the body rather
+ // than in a hand, which keeps it out of the arm swing and off the steering wheel.
+ bag: 0x1d2b3a, bagStrap: 0x101820
 });
 
 const limb = (material, radius, len, geometryCache) => {
@@ -53,6 +57,17 @@ export function createPlayerFigure() {
  head.position.y = H * .9; owned.push(head.geometry); root.add(head);
  const hair = new Mesh(new SphereGeometry(H * .092, 12, 7, 0, Math.PI * 2, 0, Math.PI * .62), materials.hair);
  hair.position.y = H * .905; owned.push(hair.geometry); root.add(hair);
+
+ // A shoulder bag, hung on the torso so it rides the lean and the bob without needing to be
+ // posed. Two boxes: the bag itself on one hip and the strap across the chest.
+ materials.bag = new MeshStandardMaterial({color: FIGURE.bag, roughness: .95});
+ materials.strap = new MeshStandardMaterial({color: FIGURE.bagStrap, roughness: .95});
+ const bag = new Mesh(new BoxGeometry(H * .16, H * .2, H * .08), materials.bag);
+ bag.position.set(H * .16, H * .56, -H * .02); bag.rotation.z = -.12;
+ owned.push(bag.geometry); root.add(bag);
+ const strap = new Mesh(new BoxGeometry(H * .035, H * .3, H * .025), materials.strap);
+ strap.position.set(H * .05, H * .72, H * .05); strap.rotation.z = -.5;
+ owned.push(strap.geometry); root.add(strap);
 
  const legs = [], arms = [];
  for (const side of [-1, 1]) {
