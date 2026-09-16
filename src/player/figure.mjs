@@ -10,7 +10,7 @@
 // The crowd slot is still reserved and still active: it is what the pedestrians' neighbour
 // avoidance sees, so they part around the player. The crowd simply does not draw it.
 
-import {CapsuleGeometry, SphereGeometry, Group, Mesh, MeshStandardMaterial} from 'three';
+import {BoxGeometry, CapsuleGeometry, SphereGeometry, Group, Mesh, MeshStandardMaterial} from 'three';
 
 export const FIGURE = Object.freeze({
  height: 1.76,
@@ -23,7 +23,16 @@ export const FIGURE = Object.freeze({
  cycle: 1.5,
  swing: .28,          // radians of limb swing per m/s, capped below
  swingMax: .85,
- bob: .028, lean: .05
+ bob: .028, lean: .05,
+ // What the player is carrying. The crowd gets its accessories from a hash of its id; there
+ // is only one player, so this is simply chosen. A shoulder bag rides on the body rather
+ // than in a hand, which keeps it out of the arm swing and off the steering wheel.
+ //
+ // Pale, not dark. The first try was navy, which at night against a crowd of dark bodies was
+ // simply not there -- a prop nobody can see is draw cost for nothing, and the whole point of
+ // this figure is to be findable in two thousand people. Sand reads against both the night
+ // and the red of the hoodie.
+ bag: 0xe0d2b0, bagStrap: 0x3a2f24
 });
 
 const limb = (material, radius, len, geometryCache) => {
@@ -53,6 +62,19 @@ export function createPlayerFigure() {
  head.position.y = H * .9; owned.push(head.geometry); root.add(head);
  const hair = new Mesh(new SphereGeometry(H * .092, 12, 7, 0, Math.PI * 2, 0, Math.PI * .62), materials.hair);
  hair.position.y = H * .905; owned.push(hair.geometry); root.add(hair);
+
+ // A shoulder bag, hung on the torso so it rides the lean and the bob without needing to be
+ // posed. Two boxes: the bag itself on one hip and the strap across the chest.
+ materials.bag = new MeshStandardMaterial({color: FIGURE.bag, roughness: .95});
+ materials.strap = new MeshStandardMaterial({color: FIGURE.bagStrap, roughness: .95});
+ const bag = new Mesh(new BoxGeometry(H * .16, H * .2, H * .08), materials.bag);
+ // Tucked behind and below the hip rather than out at the shoulder line: at the arm's own
+ // offset the two interpenetrate every stride.
+ bag.position.set(H * .135, H * .52, -H * .085); bag.rotation.z = -.1;
+ owned.push(bag.geometry); root.add(bag);
+ const strap = new Mesh(new BoxGeometry(H * .035, H * .3, H * .025), materials.strap);
+ strap.position.set(H * .05, H * .72, H * .05); strap.rotation.z = -.5;
+ owned.push(strap.geometry); root.add(strap);
 
  const legs = [], arms = [];
  for (const side of [-1, 1]) {

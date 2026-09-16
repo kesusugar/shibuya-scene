@@ -6,26 +6,59 @@ import {QUALITY,ARCHETYPES,POOL_SIZE,RADIUS,district} from './config.mjs';
 import {route,edgePose,inCrossing} from './network.mjs';
 
 // Fixed actor objects and spatial buckets. Routes allocate only on destination changes.
+// Below this the player's car is treated as an obstacle and walked around; at or above it
+// there is no time to react and it can knock people down.
+export const DODGE_SPEED=2;
+// How long the fall itself takes, and how long the body lies there in total before being
+// recycled elsewhere. Going over has to finish well inside the second number, or the figure
+// vanishes at the very instant it lands and reads as a despawn rather than a knockdown.
+export const FALL_TILT=.85;
+export const FALL_SECONDS=2.4;
+// How long the slot then stays out of the crowd before that person walks back in somewhere
+// else. The pool is exactly the high-tier target, so holding a slot really does thin the
+// crowd for that long rather than being papered over by the next refill.
+export const RESPAWN_SECONDS=30;
+// Getting out of the way: how long a warned pedestrian keeps running, and how hard the
+// warning bends their step. The bend is a blend rather than an override so the route, the
+// walkable context and the neighbour avoidance all still have the final say -- a scattering
+// pedestrian never ends up somewhere they could not have walked.
+export const SCATTER_SECONDS=1.1,SCATTER_BIAS=.8,SCATTER_SPEED=3.4;
+
 export class CrowdSimulation{
  constructor(network,{traffic=null,tier='medium',seed='shibuya-s10',choreography=false,heroStart=false}={}){
   this.network=network;this.traffic=traffic;this.signals=traffic?.signals??null;this.rng=seededRandom(seed);this.tier=tier;this.heroStart=heroStart;this.time=0;this.accumulator=0;this.camera={x:55,z:65};this.grid=new Map();this.queue=new Map();this.exits=new Map();this.groups=[];this.temp={};this.next={};this.lodClock=0;this.refillClock=0;
   this.stats={spawned:0,despawned:0,reasons:{},recoveries:0,stuck:0,routeCompletions:0,signalViolations:0,entries:{},completed:{},neighborChecks:0,avoidanceChecks:0,updateMs:0,throttled:0,spawnDeferred:0};
-  this.pool=Array.from({length:POOL_SIZE},(_,id)=>({id,active:false,x:0,z:0,heading:0,height:0,archetype:'casual',mode:'ambient',state:'walking',group:-1,leader:-1,route:[],routeIndex:0,edge:-1,progress:0,destination:-1,node:-1,speed:0,baseSpeed:1.3,age:0,stuck:0,pause:0,crossing:null,queueKey:null,lod:'near',elapsed:0,phase:0,color:0,animationTime:0,renderX:0,renderZ:0,previousX:0,previousZ:0,travelled:0,lastHeading:0,region:'commercial'}));
+  this.pool=Array.from({length:POOL_SIZE},(_,id)=>({id,active:false,x:0,z:0,heading:0,height:0,archetype:'casual',mode:'ambient',state:'walking',group:-1,leader:-1,route:[],routeIndex:0,edge:-1,progress:0,destination:-1,node:-1,speed:0,baseSpeed:1.3,age:0,stuck:0,pause:0,crossing:null,queueKey:null,lod:'near',elapsed:0,phase:0,color:0,animationTime:0,renderX:0,renderZ:0,previousX:0,previousZ:0,travelled:0,lastHeading:0,downUntil:0,scatterX:0,scatterZ:0,scatterUntil:0,region:'commercial'}));
   this.candidates=network.eligible;this.byRegion=Object.fromEntries(['hachiko','center-gai','station','commercial'].map(k=>[k,this.candidates.filter(n=>n.district===k)]));this.crossCandidates=network.crossings.filter(e=>e.kind!=='normal'&&network.nodes[e.from].component===network.nodes[e.to].component);const lanes=new Map();for(const e of this.crossCandidates){const key=e.crossingId+':'+e.direction;if(!lanes.has(key))lanes.set(key,[]);lanes.get(key).push(e);}const groups=[...lanes.values()];this.crossCandidates=[];for(let row=0;row<Math.max(0,...groups.map(g=>g.length));row++)for(const group of groups)if(group[row])this.crossCandidates.push(group[row]);this.crossCursor=0;this.choreography=choreography?new ScrambleChoreography(this):null;this.refill(true);
  }
  cell(x,z){return Math.floor(x/2)+','+Math.floor(z/2);}
  insert(p){const k=this.cell(p.x,p.z);if(!this.grid.has(k))this.grid.set(k,[]);this.grid.get(k).push(p);}
  rebuild(){for(const b of this.grid.values())b.length=0;for(const p of this.pool)if(p.active)this.insert(p);}
  blocked(x,z,p,r=RADIUS*2+.06,includeReservations=true){if(p?.choreographed)return false;if(includeReservations&&!p?.crossing)for(const [id,owners] of this.exits){const e=this.network.edges[p?.edge];if(owners.has(p?.id)||e?.crossingId&&e.to===id)continue;const n=this.network.nodes[id];const distance=Math.hypot(x-n.x,z-n.z);if(distance<.85&&(!p||distance<=Math.hypot(p.x-n.x,p.z-n.z)))return true;}const ix=Math.floor(x/2),iz=Math.floor(z/2);for(let i=ix-1;i<=ix+1;i++)for(let j=iz-1;j<=iz+1;j++)for(const q of this.grid.get(i+','+j)??[]){if(q===p||!q.active||q.choreographed)continue;this.stats.neighborChecks++;if((q.x-x)**2+(q.z-z)**2<r*r)return true;}return false;}
- vehicleOverlap(x,z,r=RADIUS+.1){if(!this.traffic)return false;const ix=Math.floor(x/15),iz=Math.floor(z/15);for(let i=ix-1;i<=ix+1;i++)for(let j=iz-1;j<=iz+1;j++)for(const v of this.traffic.grid.get(i+','+j)??[]){if(!v.active)continue;const def=VEHICLES[v.type],dx=x-v.x,dz=z-v.z,c=Math.cos(v.heading),s=Math.sin(v.heading);if(Math.abs(dx*c-dz*s)<def.width/2+r&&Math.abs(dx*s+dz*c)<def.length/2+r)return true;}return false;}
+ vehicleOverlap(x,z,r=RADIUS+.1){if(!this.traffic)return false;const ix=Math.floor(x/15),iz=Math.floor(z/15);for(let i=ix-1;i<=ix+1;i++)for(let j=iz-1;j<=iz+1;j++)for(const v of this.traffic.grid.get(i+','+j)??[]){if(!v.active)continue;if(v.controlled&&Math.abs(v.speed)>=DODGE_SPEED)continue;const def=VEHICLES[v.type],dx=x-v.x,dz=z-v.z,c=Math.cos(v.heading),s=Math.sin(v.heading);if(Math.abs(dx*c-dz*s)<def.width/2+r&&Math.abs(dx*s+dz*c)<def.length/2+r)return true;}return false;}
  leave(p){for(const [id,owners] of this.exits){owners.delete(p.id);if(!owners.size)this.exits.delete(id);}if(p.crossing){this.signals?.leavePedestrian(p.crossing,p.id);p.crossing=null;}if(p.queueKey){this.queue.get(p.queueKey)?.delete(p.id);p.queueKey=null;}}
+ /**
+  * Tell a pedestrian to get out of the way, pointing where. Idle and paused actors are woken
+  * by it -- standing still in front of a moving car is the one thing nobody does.
+  */
+ scatter(p,dx,dz){if(!p.active||p.struck!==undefined)return false;
+  p.scatterX=dx;p.scatterZ=dz;p.scatterUntil=this.time+SCATTER_SECONDS;
+  if(p.pause>0)p.pause=0;
+  this.stats.scattered=(this.stats.scattered??0)+1;return true;}
+ /**
+  * Knock a pedestrian down. They stop, fall, and are recycled once the fall finishes.
+  * Going through `leave` rather than clearing `crossing` by hand matters: someone struck
+  * mid-crossing still occupies their signal group, and a group that never reports clear
+  * never gives the cars their window.
+  */
+ strike(p){if(!p.active||p.struck!==undefined)return false;this.leave(p);p.struck=0;p.speed=0;this.stats.struck=(this.stats.struck??0)+1;return true;}
  despawn(p,reason){if(!p.active)return;this.leave(p);p.active=false;this.stats.despawned++;this.stats.reasons[reason]=(this.stats.reasons[reason]??0)+1;if(reason==='stuck'){this.stats.stuck++;this.stats.recoveries++;}}
  setTier(tier){if(!QUALITY[tier])throw Error('Unknown crowd tier');if(tier===this.tier)return;this.tier=tier;this.choreography?.occupied.clear();for(const p of this.pool){if(p.controlled)continue;if(p.active&&!p.crossing)this.despawn(p,'profile');else if(p.active){p.group=-1;p.leader=-1;p.mode='ambient';}}this.groups.length=0;this.refill(true);}
  setCamera(x,z){this.camera.x=x;this.camera.z=z;}
  chooseDestination(p,node,short=false){if(p.mode==='patrol')return patrolRoute(this.network,p);if(p.leader>=0&&this.pool[p.leader]?.active){const lead=this.pool[p.leader],dest=lead.destination,path=route(this.network,node.id,dest);if(path.length){p.route=path;p.routeIndex=0;p.edge=path[0];p.progress=0;p.node=node.id;p.destination=dest;return true;}}const region=short?node.district:this.rng()<.55?(node.district==='hachiko'?'center-gai':'hachiko'):node.district,candidates=this.byRegion[region]?.filter(n=>n.component===node.component&&Math.hypot(n.x-node.x,n.z-node.z)>(short?3:12)&&(!short||Math.hypot(n.x-node.x,n.z-node.z)<16));let list=candidates.length?candidates:this.candidates.filter(n=>n.component===node.component&&Math.hypot(n.x-node.x,n.z-node.z)>4);if(!list.length)return false;
   for(let i=0;i<5;i++){const dest=list[Math.floor(this.rng()*list.length)],path=route(this.network,node.id,dest.id);if(!path.length)continue;if(short&&(path.some(id=>this.network.edges[id].crossingId)||path.reduce((sum,id)=>sum+this.network.edges[id].length,0)>30))continue;const first=this.network.nodes[this.network.edges[path[0]].to],dot=Math.sin(p.heading)*(first.x-node.x)+Math.cos(p.heading)*(first.z-node.z);if(p.travelled>2&&dot<-.2&&i<4)continue;p.route=path;p.routeIndex=0;p.edge=path[0];p.progress=0;p.node=node.id;p.destination=dest.id;return true;}return false;
  }
- spawn(mode='ambient',region=null,leader=null,crossIndex=-1){const p=this.pool.find(p=>!p.active);if(!p)return false;const archetypes=Object.keys(ARCHETYPES).filter(k=>k!=='kid'||leader),type=leader&&p.id%2?'kid':archetypes[p.id%archetypes.length],def=ARCHETYPES[type];
+ spawn(mode='ambient',region=null,leader=null,crossIndex=-1){const p=this.pool.find(p=>!p.active&&!(p.downUntil>this.time));if(!p)return false;p.downUntil=0;const archetypes=Object.keys(ARCHETYPES).filter(k=>k!=='kid'||leader),type=leader&&p.id%2?'kid':archetypes[p.id%archetypes.length],def=ARCHETYPES[type];
   let nodes=region?this.byRegion[region]:this.candidates,cross=null;if(crossIndex>=0&&this.crossCandidates.length){cross=this.crossCandidates[crossIndex%this.crossCandidates.length];const endpoint=this.network.nodes[cross.from];nodes=this.candidates.filter(n=>n.component===endpoint.component&&Math.hypot(n.x-endpoint.x,n.z-endpoint.z)<10);}
   if(leader)nodes=this.candidates.filter(n=>n.component===this.network.nodes[leader.node].component&&Math.hypot(n.x-leader.x,n.z-leader.z)<4);
   for(let attempt=0;attempt<100;attempt++){const n=nodes[Math.floor(this.rng()*nodes.length)];if(!n||this.network.landingNodes.has(n.id)||this.blocked(n.x,n.z,null,.9)||this.vehicleOverlap(n.x,n.z,.6)||this.time>0&&Math.hypot(n.x-this.camera.x,n.z-this.camera.z)<12)continue;
@@ -69,14 +102,20 @@ export class CrowdSimulation{
   // Curb waiters and idle actors yield locally to occupied crossing exits.
   // They remain on walkable ground; no recycling or position snap clears a crossing.
   if(!p.crossing){for(const [id,owners] of this.exits){const end=n.nodes[id],dx=p.x-end.x,dz=p.z-end.z,d=Math.hypot(dx,dz);if(d>=3)continue;const owner=this.pool[owners.values().next().value],incoming=n.edges[owner.edge],start=n.nodes[incoming.from],angle=Math.atan2(end.z-start.z,end.x-start.x);for(const turn of [0,.6,-.6,1.2,-1.2]){const x=p.x+Math.cos(angle+turn)*.8*dt,z=p.z+Math.sin(angle+turn)*.8*dt;if(!n.ctx.safe(x,z)||this.vehicleOverlap(x,z)||this.blocked(x,z,p,.56,false))continue;p.previousX=p.x;p.previousZ=p.z;p.x=x;p.z=z;p.height=n.ctx.height(x,z);p.speed=.8;p.heading=Math.atan2(x-p.previousX,z-p.previousZ);if(this.cell(x,z)!==oldCell){const bucket=this.grid.get(oldCell),i=bucket?.indexOf(p);if(i>=0)bucket.splice(i,1);this.insert(p);}return;}}}
-  if(p.mode==='idle'){p.state='idle';p.speed=0;if(p.age>240)this.despawn(p,'ttl');return;}
-  if(p.pause>0){p.pause-=dt;p.state='milling';p.speed=0;return;}
+  const fleeing=p.scatterUntil>this.time;
+  if(p.mode==='idle'&&!fleeing){p.state='idle';p.speed=0;if(p.age>240)this.despawn(p,'ttl');return;}
+  if(p.pause>0&&!fleeing){p.pause-=dt;p.state='milling';p.speed=0;return;}
   if(p.edge<0){if(!this.chooseDestination(p,n.nodes[p.node],p.mode==='milling'))this.despawn(p,'invalid-route');return;}
   const e=n.edges[p.edge];if(p.crossing&&p.progress<1&&n.ctx.safe(p.x,p.z)&&this.signals.phase()[0]!=='PEDESTRIAN'){this.leave(p);this.stats.cancelledCurbAdmissions=(this.stats.cancelledCurbAdmissions??0)+1;}if(e.crossingId&&!p.crossing){if(!this.beginCrossing(p,e)){p.state='waiting';p.speed=0;p.stuck=0;const key=e.crossingId+':'+e.direction;if(!this.queue.has(key))this.queue.set(key,new Set());this.queue.get(key).add(p.id);p.queueKey=key;return;}}
   p.state=p.crossing?'crossing':p.mode==='milling'?'milling':'walking';
   let speed=p.baseSpeed;
   if(p.group>=0&&!p.crossing){const g=this.groups[p.group],lead=this.pool[g?.leader];if(lead?.active){if(p.id===lead.id&&g.members.some(id=>this.pool[id].active&&Math.hypot(this.pool[id].x-p.x,this.pool[id].z-p.z)>5))speed*=.45;else if(p.id!==lead.id&&Math.hypot(lead.x-p.x,lead.z-p.z)>4)speed*=1.15;}}
   edgePose(n,e,Math.min(e.length,p.progress+.55),this.next);let dx=this.next.x-p.x,dz=this.next.z-p.z,dist=Math.hypot(dx,dz),step=Math.min(speed*dt,dist);if(dist>.0001){dx/=dist;dz/=dist;}
+  // Warned by an oncoming car: lean hard towards the shoulder and run, without ever leaving
+  // the route behind -- the blend decays as the warning ages so they settle back into it.
+  if(p.scatterUntil>this.time){const w=SCATTER_BIAS*Math.min(1,(p.scatterUntil-this.time)/SCATTER_SECONDS);
+   let bx=dx*(1-w)+p.scatterX*w,bz=dz*(1-w)+p.scatterZ*w;const bl=Math.hypot(bx,bz)||1;dx=bx/bl;dz=bz/bl;
+   speed=Math.max(speed,SCATTER_SPEED);step=speed*dt;p.state='scattering';}
   let nx=p.x+dx*step,nz=p.z+dz*step,moved=false;
   if(this.allowed(nx,nz,p,e)&&!this.blocked(nx,nz,p)){moved=true;}else if(p.lod!=='far'||p.crossing||p.stuck>1){this.stats.avoidanceChecks++;
    // Deterministic right-side passing. Candidate boundary/collision checks override steering.
@@ -96,12 +135,14 @@ export class CrowdSimulation{
  }
  step(dt){this.time+=dt;this.lodClock+=dt;this.refillClock+=dt;this.rebuild();if(this.lodClock>=1){this.lodClock=0;for(const p of this.pool)if(p.active){const d=Math.hypot(p.x-this.camera.x,p.z-this.camera.z);p.lod=d<65?'near':d<140?'mid':'far';}}
   // Rotate priority each fixed tick; ordering does not permanently privilege low IDs.
-  const start=Math.floor(this.time*30)%this.pool.length;for(let j=0;j<this.pool.length;j++){const p=this.pool[(start+j)%this.pool.length];if(!p.active||p.controlled)continue;p.elapsed+=dt;const interval=p.crossing||p.choreographed?1/30:p.mode==='idle'?.5:p.lod==='near'?1/30:p.lod==='mid'?1/15:.2;if(p.elapsed+1e-8<interval){this.stats.throttled++;continue;}const elapsed=p.elapsed;p.elapsed=0;this.move(p,elapsed);}
+  const start=Math.floor(this.time*30)%this.pool.length;for(let j=0;j<this.pool.length;j++){const p=this.pool[(start+j)%this.pool.length];if(!p.active||p.controlled)continue;
+   if(p.struck!==undefined){p.struck+=dt;p.speed=0;if(p.struck>=FALL_SECONDS){p.struck=undefined;this.despawn(p,'struck');p.downUntil=this.time+RESPAWN_SECONDS;}continue;}
+   p.elapsed+=dt;const interval=p.crossing||p.choreographed?1/30:p.mode==='idle'?.5:p.lod==='near'?1/30:p.lod==='mid'?1/15:.2;if(p.elapsed+1e-8<interval){this.stats.throttled++;continue;}const elapsed=p.elapsed;p.elapsed=0;this.move(p,elapsed);}
   if(this.refillClock>=2){this.refillClock=0;this.refill();}
  }
  update(dt){const start=performance.now();this.accumulator+=Math.max(0,Math.min(.25,dt));while(this.accumulator>=1/30){this.step(1/30);this.accumulator-=1/30;}this.stats.updateMs=performance.now()-start;}
  snapshot(debug=false){const active=this.pool.filter(p=>p.active),counts=key=>Object.fromEntries([...new Set(active.map(p=>p[key]))].map(k=>[k,active.filter(p=>p[key]===k).length]));return {...this.stats,target:QUALITY[this.tier].total,choreographed:active.filter(p=>p.choreographed).length,waitingCells:this.network.stats.waitingCells??0,reasons:{...this.stats.reasons},entries:{...this.stats.entries},completed:{...this.stats.completed},total:active.length,tier:this.tier,archetypes:counts('archetype'),modes:counts('mode'),states:counts('state'),lod:counts('lod'),regions:counts('region'),hachiko:active.filter(p=>district(p.x,p.z)==='hachiko').length,centerGai:active.filter(p=>district(p.x,p.z)==='center-gai').length,groupCount:this.groups.filter(g=>g.members.filter(id=>this.pool[id].active&&this.pool[id].group===g.id).length>1).length,queueSizes:Object.fromEntries([...this.queue].map(([k,s])=>[k,s.size])),...(debug?{actors:active.map(p=>({id:p.id,archetype:p.archetype,edge:p.edge,destination:p.destination,state:p.state,queue:p.queueKey,group:p.group,lod:p.lod,stuck:p.stuck,radius:RADIUS,grid:this.cell(p.x,p.z),crossing:p.crossing})),signalPhase:this.signals?.phase()??'unbound'}:{})};}
- audit(){const findings=[],minor={groupSeparation:0,stuck:0};let maxStack=0;for(const p of this.pool){if(!p.active)continue;if(![p.x,p.z,p.heading,p.height].every(Number.isFinite))findings.push({id:p.id,kind:'finite'});if(p.edge>=0&&!this.network.edges[p.edge])findings.push({id:p.id,kind:'invalid-path'});if(this.network.ctx.solid(p.x,p.z,RADIUS-.01))findings.push({id:p.id,kind:'solid'});if(!p.crossing&&!this.network.ctx.safe(p.x,p.z,RADIUS-.01))findings.push({id:p.id,kind:'road-intrusion'});if(this.vehicleOverlap(p.x,p.z,RADIUS-.02))findings.push({id:p.id,kind:'vehicle-overlap'});if(this.blocked(p.x,p.z,p,RADIUS*2-.03,false))findings.push({id:p.id,kind:'pedestrian-overlap'});if(p.crossing&&this.network.ctx.onRoad(p.x,p.z)&&!inCrossing(p.x,p.z,this.network.edges[p.edge],.23))findings.push({id:p.id,kind:'crosswalk-boundary'});if(p.crossing&&!this.signals?.groups.has(p.crossing))findings.push({id:p.id,kind:'invalid-signal'});if(p.stuck>5)minor.stuck++;if(p.leader>=0&&this.pool[p.leader].active&&Math.hypot(p.x-this.pool[p.leader].x,p.z-this.pool[p.leader].z)>8)minor.groupSeparation++;}
+ audit(){const findings=[],minor={groupSeparation:0,stuck:0};let maxStack=0;for(const p of this.pool){if(!p.active||p.struck!==undefined)continue;if(![p.x,p.z,p.heading,p.height].every(Number.isFinite))findings.push({id:p.id,kind:'finite'});if(p.edge>=0&&!this.network.edges[p.edge])findings.push({id:p.id,kind:'invalid-path'});if(this.network.ctx.solid(p.x,p.z,RADIUS-.01))findings.push({id:p.id,kind:'solid'});if(!p.crossing&&!this.network.ctx.safe(p.x,p.z,RADIUS-.01))findings.push({id:p.id,kind:'road-intrusion'});if(this.vehicleOverlap(p.x,p.z,RADIUS-.02))findings.push({id:p.id,kind:'vehicle-overlap'});if(this.blocked(p.x,p.z,p,RADIUS*2-.03,false))findings.push({id:p.id,kind:'pedestrian-overlap'});if(p.crossing&&this.network.ctx.onRoad(p.x,p.z)&&!inCrossing(p.x,p.z,this.network.edges[p.edge],.23))findings.push({id:p.id,kind:'crosswalk-boundary'});if(p.crossing&&!this.signals?.groups.has(p.crossing))findings.push({id:p.id,kind:'invalid-signal'});if(p.stuck>5)minor.stuck++;if(p.leader>=0&&this.pool[p.leader].active&&Math.hypot(p.x-this.pool[p.leader].x,p.z-this.pool[p.leader].z)>8)minor.groupSeparation++;}
   for(const s of this.queue.values())maxStack=Math.max(maxStack,s.size);return {major:findings.length,minor,findings,maxQueue:maxStack,signalViolations:this.stats.signalViolations};}
  dispose(){for(const p of this.pool)this.despawn(p,'dispose');this.grid.clear();this.queue.clear();this.exits.clear();}
 }

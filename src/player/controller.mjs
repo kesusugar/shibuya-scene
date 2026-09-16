@@ -38,6 +38,13 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
   runOver: 0, hitBy: null
  };
  const keys = new Set();
+ let padPoll = null;
+ /** The first connected pad. Chrome hands back a fresh snapshot each call, never a live one. */
+ const gamepad = () => {
+  if (typeof navigator === 'undefined' || !navigator.getGamepads) return null;
+  for (const pad of navigator.getGamepads()) if (pad?.connected) return pad;
+  return null;
+ };
  let detach = null;
 
  const standable = (x, z) => Math.abs(x) <= LIMIT && Math.abs(z) <= LIMIT && !ctx.solid(x, z, PLAYER.radius);
@@ -61,14 +68,16 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    *
    * Pointer lock takes the cursor, so the only way back to the rest of the browser is a key.
    * Escape releases the lock natively but a click on the scene takes it straight back, which
-   * leaves no way out at all; `onExit` is called so Escape leaves play entirely.
+   * leaves no way out at all; `onExit` is called so Escape leaves play entirely. `onDrive`
+   * is the get-in/get-out key.
    */
-  attach(element, {onExit} = {}) {
+  attach(element, {onExit, onDrive} = {}) {
    if (detach) return;
    const down = (e) => {
     if (e.repeat) return;
     const k = e.key.toLowerCase();
     if (k === 'escape') {keys.clear(); onExit?.(); return;}
+    if (k === 'f') {onDrive?.(); e.preventDefault(); return;}
     if (!'wasd'.includes(k) && k !== 'shift' && k !== ' ') return;
     keys.add(k === ' ' ? 'shift' : k); e.preventDefault();
    };
@@ -80,6 +89,19 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
     state.pitch = Math.max(-PLAYER.pitchLimit, Math.min(PLAYER.pitchLimit, state.pitch - e.movementY * PLAYER.look));
    };
    const click = () => {if (document.pointerLockElement !== element) element.requestPointerLock?.();};
+   // Edge-detected, because a held button would otherwise fire get-in/get-out every frame.
+   let padPrev = {drive: false, exit: false};
+   padPoll = () => {
+    const pad = gamepad(); if (!pad) return;
+    const drive = pad.buttons[0]?.pressed ?? false, exit = pad.buttons[9]?.pressed ?? false;
+    if (drive && !padPrev.drive) onDrive?.();
+    if (exit && !padPrev.exit) {keys.clear(); onExit?.();}
+    padPrev = {drive, exit};
+    const look = pad.axes[2] ?? 0, pitch = pad.axes[3] ?? 0;
+    if (Math.abs(look) > PLAYER.padDeadzone) state.heading -= look * PLAYER.padLook;
+    if (Math.abs(pitch) > PLAYER.padDeadzone)
+     state.pitch = Math.max(-PLAYER.pitchLimit, Math.min(PLAYER.pitchLimit, state.pitch - pitch * PLAYER.padLook));
+   };
    window.addEventListener('keydown', down); window.addEventListener('keyup', up);
    window.addEventListener('blur', blur);
    element.addEventListener('mousemove', move); element.addEventListener('click', click);
@@ -88,7 +110,7 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
     window.removeEventListener('blur', blur);
     element.removeEventListener('mousemove', move); element.removeEventListener('click', click);
     if (document.pointerLockElement === element) document.exitPointerLock?.();
-    keys.clear(); detach = null;
+    keys.clear(); padPoll = null; detach = null;
    };
   },
   detach() {detach?.();},
@@ -113,13 +135,46 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    return false;
   },
 
-  step(dt) {
-   if (!state.alive) {state.runOver += dt; state.speed = 0; state.moving = false; return;}
+  /**
+   * The movement axes, shared by walking and driving.
+   *
+   * A pad is merged in rather than replacing the keys, so both are live at once and neither
+   * has to be selected. Sticks are analogue and the keys are not, so the larger of the two
+   * wins per axis: resting a thumb on a drifting stick cannot then cancel a held key. The
+   * deadzone is what keeps a worn stick from walking the player across the street on its own.
+   */
+  input() {
+   // Polled here rather than in step(): driving calls input() and never calls step(), so the
+   // pad would go dead the moment the player got into a car.
+   padPoll?.();
    let fx = 0, fz = 0;
    if (keys.has('w')) fz += 1; if (keys.has('s')) fz -= 1;
    if (keys.has('a')) fx -= 1; if (keys.has('d')) fx += 1;
+   let running = keys.has('shift');
+   const pad = gamepad();
+   if (pad) {
+    const dead = v => Math.abs(v) < PLAYER.padDeadzone ? 0 : v;
+    const px = dead(pad.axes[0] ?? 0), pz = dead(-(pad.axes[1] ?? 0));
+    // Triggers drive: right is throttle, left is brake and reverse.
+    const rt = pad.buttons[7]?.value ?? 0, lt = pad.buttons[6]?.value ?? 0;
+    const drive = dead(rt - lt);
+    const wants = Math.abs(pz) > Math.abs(drive) ? pz : drive;
+    if (Math.abs(wants) > Math.abs(fz)) fz = wants;
+    if (Math.abs(px) > Math.abs(fx)) fx = px;
+    running = running || (pad.buttons[10]?.pressed ?? false) || (pad.buttons[1]?.pressed ?? false);
+   }
+   return {forward: fz, strafe: fx, running};
+  },
+  /** While driving, the body rides in the car and is posed from it rather than walked. */
+  rideTo(x, z, heading) {
+   state.x = x; state.z = z; state.heading = heading; state.speed = 0; state.moving = false;
+  },
+
+  step(dt) {
+   if (!state.alive) {state.runOver += dt; state.speed = 0; state.moving = false; return;}
+   const {forward: fz, strafe: fx, running} = api.input();
    const len = Math.hypot(fx, fz);
-   state.running = keys.has('shift');
+   state.running = running;
    state.moving = len > 0;
    if (len > 0) {
     const target = state.running ? PLAYER.run : PLAYER.walk;
