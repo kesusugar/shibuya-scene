@@ -12,7 +12,7 @@
 export const PLAYER = Object.freeze({
  radius: .35,          // body radius used against solids, matching the crowd's own footprint
  walk: 1.5, run: 4.2,  // m/s; the crowd walks 0.85-2.0, so walking blends into it
- eye: 1.55,            // camera height in first person
+ eye: 1.55,            // height the camera frames the player from
  archetype: 'hoodie',  // fixed, so the player is the same person every session
  look: .0022,          // radians per pixel of mouse travel
  pitchLimit: 1.15,     // keeps the follow camera out of the ground and off the zenith
@@ -28,7 +28,7 @@ const LIMIT = 244;
 export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startHeading} = {}) {
  const state = {
   x: start[0], z: start[1], y: 0, heading, pitch: -.12,
-  speed: 0, running: false, moving: false, alive: true, mode: 'third',
+  speed: 0, running: false, moving: false, alive: true,
   runOver: 0, hitBy: null
  };
  const keys = new Set();
@@ -132,18 +132,13 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
  return api;
 }
 
-/** Where the camera sits for the player's current pose. `out` is a {x,y,z,tx,ty,tz} scratch. */
+/** Where the third-person camera sits for the player's current pose, into an {x,y,z,tx,ty,tz} scratch. */
 export function playerCamera(state, out = {}) {
  const s = Math.sin(state.heading), c = Math.cos(state.heading), cp = Math.cos(state.pitch);
  const eye = state.y + PLAYER.eye;
- if (state.mode === 'first') {
-  out.x = state.x; out.y = eye; out.z = state.z;
- } else {
-  const back = PLAYER.followBack * cp;
-  out.x = state.x - s * back; out.z = state.z - c * back;
-  out.y = eye + PLAYER.followUp + PLAYER.followBack * Math.sin(state.pitch);
- }
- // Both modes look the same way, so switching does not swing the view.
+ const back = PLAYER.followBack * cp;
+ out.x = state.x - s * back; out.z = state.z - c * back;
+ out.y = eye + PLAYER.followUp + PLAYER.followBack * Math.sin(state.pitch);
  const ahead = 6;
  out.tx = state.x + s * cp * ahead;
  out.ty = eye + Math.sin(state.pitch) * ahead;

@@ -171,9 +171,6 @@ export default function Home(){
   if(!ctx){console.warn('[Player] the crowd network is not ready yet');return false;}
   player??=createPlayer(ctx);
   if(!player.place()){console.warn('[Player] no standable ground at the start point');return false;}
-  // Play is third person; nothing in the interface offers first person, and re-entering
-  // reuses the same player, so the view is set explicitly rather than inherited.
-  player.state.mode='third';
   playerMode=true;controls.enabled=false;player.attach(canvas);setPlayerHit(null);setMode('player');
   (window as any).__SHIBUYA_PLAYER__=player;
   return true;};
