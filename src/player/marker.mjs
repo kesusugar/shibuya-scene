@@ -8,16 +8,22 @@
 import {ConeGeometry, Mesh, MeshStandardMaterial} from 'three';
 
 export const MARKER = Object.freeze({
- color: 0xff6a3d, radius: .17, height: .3,
+ color: 0xff6a3d,
+ car: 0x3dc8ff,   // the car's own cone, so it is not mistaken for the player's
+ radius: .17, height: .3,
  clearance: 1.14,  // multiples of the figure's height, so the cone clears the tallest heads
  bob: .055, bobRate: 2.2
 });
 
-export function createPlayerMarker() {
+/**
+ * @param {number} [color] the cone's colour; the car gets its own so the two are told apart
+ *   at a glance in a street where everything else is orange neon.
+ */
+export function createPlayerMarker(color = MARKER.color) {
  const geometry = new ConeGeometry(1, 1, 6);
  // Its own emissive: the crowd material has none, and at night nothing else would light it.
  const material = new MeshStandardMaterial({
-  color: MARKER.color, roughness: .35, emissive: MARKER.color, emissiveIntensity: 1.6
+  color, roughness: .35, emissive: color, emissiveIntensity: 1.6
  });
  const mesh = new Mesh(geometry, material);
  mesh.name = 'player-marker';

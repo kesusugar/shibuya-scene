@@ -10,7 +10,7 @@
 // The crowd slot is still reserved and still active: it is what the pedestrians' neighbour
 // avoidance sees, so they part around the player. The crowd simply does not draw it.
 
-import {BoxGeometry, CapsuleGeometry, SphereGeometry, Group, Mesh, MeshStandardMaterial} from 'three';
+import {BoxGeometry, CapsuleGeometry, CylinderGeometry, SphereGeometry, Group, Mesh, MeshStandardMaterial} from 'three';
 
 export const FIGURE = Object.freeze({
  height: 1.76,
@@ -56,32 +56,46 @@ export function createPlayerFigure() {
  const geometries = new Map(), owned = [];
  const root = new Group(); root.name = 'player-figure';
 
- const torso = new Mesh(new CapsuleGeometry(H * .15, H * .3, 2, 7), materials.shirt);
+ // Hips to shoulders, 46% to 80% of the height, which is where a person's are. The old torso
+ // reached 93% and left no room for a head that was not buried in it. The width matters as
+ // much as the span: a first pass kept the old radius over the new, shorter span and produced
+ // a ball with arms floating off it.
+ const torso = new Mesh(new CapsuleGeometry(H * .115, H * .11, 2, 7), materials.shirt);
  torso.position.y = H * .63; owned.push(torso.geometry); root.add(torso);
- const head = new Mesh(new SphereGeometry(H * .085, 12, 9), materials.skin);
- head.position.y = H * .9; owned.push(head.geometry); root.add(head);
- const hair = new Mesh(new SphereGeometry(H * .092, 12, 7, 0, Math.PI * 2, 0, Math.PI * .62), materials.hair);
- hair.position.y = H * .905; owned.push(hair.geometry); root.add(hair);
+ // A head a little over life-size, carried on a neck, with its crown at the figure's full
+ // height. At the old size its chin sat twenty centimetres inside the chest, which is what
+ // made it a mushroom; at life-size it made a bowling pin. This is between the two, and
+ // matches the crowd so the player looks like one of them rather than a visitor.
+ const neck = new Mesh(new CylinderGeometry(H * .04, H * .045, H * .10, 8), materials.skin);
+ neck.position.y = H * .80; owned.push(neck.geometry); root.add(neck);
+ const head = new Mesh(new SphereGeometry(1, 12, 9), materials.skin);
+ head.scale.set(H * .076, H * .088, H * .079);
+ head.position.y = H * .912; owned.push(head.geometry); root.add(head);
+ // Hair wraps the skull and leaves the face open, rather than capping the crown and leaving
+ // the back of the head bare -- which is the view the follow camera spends its life on.
+ const hair = new Mesh(new SphereGeometry(1, 14, 8, Math.PI / 2 + .52, Math.PI * 2 - 1.04, 0, Math.PI * .72), materials.hair);
+ hair.scale.set(H * .079, H * .091, H * .082);
+ hair.position.y = H * .912; owned.push(hair.geometry); root.add(hair);
 
  // A shoulder bag, hung on the torso so it rides the lean and the bob without needing to be
  // posed. Two boxes: the bag itself on one hip and the strap across the chest.
  materials.bag = new MeshStandardMaterial({color: FIGURE.bag, roughness: .95});
  materials.strap = new MeshStandardMaterial({color: FIGURE.bagStrap, roughness: .95});
- const bag = new Mesh(new BoxGeometry(H * .16, H * .2, H * .08), materials.bag);
- // Tucked behind and below the hip rather than out at the shoulder line: at the arm's own
- // offset the two interpenetrate every stride.
- bag.position.set(H * .135, H * .52, -H * .085); bag.rotation.z = -.1;
+ const bag = new Mesh(new BoxGeometry(H * .115, H * .15, H * .07), materials.bag);
+ // Against the hip, overlapping the torso rather than hovering beside it. Sized down with
+ // the torso: at the old dimensions it was a suitcase floating a hand's width off the body.
+ bag.position.set(H * .088, H * .53, -H * .055); bag.rotation.z = -.1;
  owned.push(bag.geometry); root.add(bag);
- const strap = new Mesh(new BoxGeometry(H * .035, H * .3, H * .025), materials.strap);
- strap.position.set(H * .05, H * .72, H * .05); strap.rotation.z = -.5;
+ const strap = new Mesh(new BoxGeometry(H * .03, H * .24, H * .022), materials.strap);
+ strap.position.set(H * .04, H * .655, H * .04); strap.rotation.z = -.5;
  owned.push(strap.geometry); root.add(strap);
 
  const legs = [], arms = [];
  for (const side of [-1, 1]) {
   const leg = limb(materials.trousers, H * .05, H * .38, geometries);
-  leg.position.set(side * H * .07, H * .49, 0); root.add(leg); legs.push(leg);
+  leg.position.set(side * H * .062, H * .47, 0); root.add(leg); legs.push(leg);
   const arm = limb(materials.shirt, H * .042, H * .32, geometries);
-  arm.position.set(side * H * .155, H * .76, 0); root.add(arm); arms.push(arm);
+  arm.position.set(side * H * .125, H * .755, 0); root.add(arm); arms.push(arm);
  }
  for (const g of geometries.values()) owned.push(g);
 
