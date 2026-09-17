@@ -33,12 +33,33 @@ function bodyGeometry(index){
   parts.push(transformed(new CapsuleGeometry(.5,.55,1,5),[.19,.38,.18],[side*.2,.19,0]));
   parts.push(transformed(new CapsuleGeometry(.5,.58,1,5),[.16,.35,.16],[side*.31*shoulders[index],.55,0]));
  }
+ // A neck, merged into the body rather than added as a fourteenth geometry. Without it a
+ // properly sized head floats ten centimetres clear of the shoulders; the old head was big
+ // enough to bury its own chin in the chest, which is what made every figure a mushroom.
+ parts.push(transformed(new CylinderGeometry(1,1,1,7),[.129,.1,.222],[0,.97,0]));
  const result=merge(parts);parts.forEach(g=>g.dispose());result.computeVertexNormals();return result;
 }
+// Hair is a shell around the skull with the face left open, not a cap balanced on the crown.
+// The old shapes covered the top quarter and left the rest bare skin, which from behind --
+// which is most of the time, in a crowd walking away from you -- read as a bald dome.
+//
+// Sphere phi is measured from -X and runs towards +Z, so the opening is centred on phi=PI/2
+// to land on the face; the figures walk towards +z in their own frame.
+const FACE_GAP=1.05;                                   // radians of skull left uncovered
+function hairShell(segments,thetaLength,scale,offset){
+ const g=new SphereGeometry(1,segments,6,Math.PI/2+FACE_GAP/2,Math.PI*2-FACE_GAP,0,thetaLength);
+ g.scale(scale[0],scale[1],scale[2]);g.translate(offset[0],offset[1],offset[2]);
+ g.computeVertexNormals();return g;
+}
 function hairGeometry(index){
- if(index===0)return transformed(new SphereGeometry(1,9,6),[1,.56,.92],[0,.25,-.04]);
- if(index===1){const g=new SphereGeometry(1,9,6),p=g.attributes.position;for(let i=0;i<p.count;i++)if(p.getY(i)<-.15)p.setY(i,-.15);g.scale(1,.62,.95);g.translate(0,.2,-.04);g.computeVertexNormals();return g;}
- const brim=transformed(new CylinderGeometry(1,1,.12,9),[1,.5,.92],[0,.06,0]),cap=transformed(new SphereGeometry(1,8,5),[.82,.48,.8],[0,.28,-.02]),result=merge([brim,cap]);brim.dispose();cap.dispose();result.computeVertexNormals();return result;
+ // Long: down past the jaw at the back and sides.
+ if(index===0)return hairShell(10,Math.PI*.78,[1.04,1.03,1.06],[0,.02,-.02]);
+ // Short: stops around the ears.
+ if(index===1)return hairShell(9,Math.PI*.58,[1.03,1.02,1.05],[0,.03,-.02]);
+ // A cap, which covers the whole skull and adds a brim over the face.
+ const cap=transformed(new SphereGeometry(1,9,5,0,Math.PI*2,0,Math.PI*.55),[1.05,1.04,1.06],[0,.02,0]),
+  brim=transformed(new CylinderGeometry(1,1,.1,9),[.92,1,.92],[0,.42,.5]),
+  result=merge([cap,brim]);cap.dispose();brim.dispose();result.computeVertexNormals();return result;
 }
 function suitcaseGeometry(){const box=transformed(new BoxGeometry(1,1,1),[.7,.9,.32],[0,.43,0]),handle=transformed(new TorusGeometry(.24,.055,4,8,Math.PI),[1,1,1],[0,.98,0]),result=merge([box,handle]);box.dispose();handle.dispose();return result;}
 
@@ -70,8 +91,12 @@ export function buildCrowd(data,options={}){
    const blend=dt?Math.min(1,dt*(p.lod==='far'?10:25)):1;p.renderX+=(p.x-p.renderX)*blend;p.renderZ+=(p.z-p.renderZ)*blend;
    const body=pickVariant(p.id,BODY_VARIANTS),hair=pickVariant(p.id,HAIR_VARIANTS,307),shirt=BODY_COLORS[p.id%BODY_COLORS.length],skin=SKIN_COLORS[p.id%SKIN_COLORS.length],hairColor=def.gray?HAIR_COLORS[3]:HAIR_COLORS[p.id%3];
    part(body,p,0,h*.02+bob,0,w,h*.78,w*.58,shirt,sway);
-   part('head',p,0,h*.82+bob,0,h*.15,h*.145,h*.14,skin,sway*.5);
-   part(hair,p,0,h*.865+bob,0,h*.16,h*.15,h*.15,def.hood?shirt:hairColor,sway*.5);
+   // About 26 cm across on a 1.7 m figure: roughly half the old 51 cm, and a little over
+   // life-size rather than at it. Life-size was tried and is wrong here -- these bodies are
+   // featureless capsules, so a correctly scaled head turns them into bowling pins. The crown
+   // sits at 97% of the height with the chin just clear of the shoulders.
+   part('head',p,0,h*.882+bob,0,h*.076,h*.088,h*.079,skin,sway*.5);
+   part(hair,p,0,h*.882+bob,0,h*.076,h*.088,h*.079,def.hood?shirt:hairColor,sway*.5);
    if(hasAccessory(p,'phone'))part('phone',p,w*.43,h*.59+bob,-w*.28,w*.15,h*.16,w*.05,0x303843);
    if(hasAccessory(p,'bag'))part('bag',p,w*.55,h*.37+bob,.02,w*.36,h*.2,w*.4,p.id%2?0x9a7960:0x4e5557);
    if(hasAccessory(p,'cane'))part('cane',p,w*.48,h*.19,0,w*.055,h*.38,w*.055,0x8c7354,-.16);
