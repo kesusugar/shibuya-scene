@@ -39,12 +39,26 @@ export const SCATTER_SECONDS=1.1,SCATTER_BIAS=.8,SCATTER_SPEED=3.4;
 // at the curb does not count -- that path resets `stuck` -- so this only measures an actor
 // that was admitted and then could not take a single step.
 export const CROSSING_GIVE_UP=12;
+// How long a pedestrian stays quiet after shouting once. The alert sweep fires roughly fifty
+// times a second across only a couple of distinct people a second, so without a per-person
+// cooldown one pass through the crossing queues thousands of voices for a few dozen throats.
+// Being hit ignores it -- a scream is not a repeat of a warning.
+export const VOICE_COOLDOWN=5.5;
+// The cooldown alone gets this wrong, and measurably so: someone shouts the moment the car
+// enters their eighteen metres, which is when it is furthest away and least alarming, and is
+// then silent for the whole approach. 41 of 78 voices came out of the calmest band and the
+// scream as the car bears down almost never played. So a warning may be taken back: if the
+// situation gets this much worse, and it has been this long, they get to shout again.
+export const VOICE_REPRISE=1.1,VOICE_ESCALATION=.3;
+// The queue is drained every frame by whoever is listening. The cap is only there so that a
+// mode with nobody draining it cannot grow a list forever.
+export const VOICE_QUEUE_MAX=24;
 
 export class CrowdSimulation{
  constructor(network,{traffic=null,tier='medium',seed='shibuya-s10',choreography=false,heroStart=false}={}){
-  this.network=network;this.traffic=traffic;this.signals=traffic?.signals??null;this.rng=seededRandom(seed);this.tier=tier;this.heroStart=heroStart;this.time=0;this.accumulator=0;this.camera={x:55,z:65};this.grid=new Map();this.splashes=[];this.queue=new Map();this.exits=new Map();this.groups=[];this.temp={};this.next={};this.lodClock=0;this.refillClock=0;
+  this.network=network;this.traffic=traffic;this.signals=traffic?.signals??null;this.rng=seededRandom(seed);this.tier=tier;this.heroStart=heroStart;this.time=0;this.accumulator=0;this.camera={x:55,z:65};this.grid=new Map();this.splashes=[];this.voices=[];this.queue=new Map();this.exits=new Map();this.groups=[];this.temp={};this.next={};this.lodClock=0;this.refillClock=0;
   this.stats={spawned:0,despawned:0,reasons:{},recoveries:0,stuck:0,routeCompletions:0,signalViolations:0,entries:{},completed:{},neighborChecks:0,avoidanceChecks:0,updateMs:0,throttled:0,spawnDeferred:0};
-  this.pool=Array.from({length:POOL_SIZE},(_,id)=>({id,active:false,x:0,z:0,heading:0,height:0,archetype:'casual',mode:'ambient',state:'walking',group:-1,leader:-1,route:[],routeIndex:0,edge:-1,progress:0,destination:-1,node:-1,speed:0,baseSpeed:1.3,age:0,stuck:0,pause:0,crossing:null,queueKey:null,lod:'near',elapsed:0,phase:0,color:0,animationTime:0,renderX:0,renderZ:0,previousX:0,previousZ:0,travelled:0,lastHeading:0,downUntil:0,scatterX:0,scatterZ:0,scatterUntil:0,
+  this.pool=Array.from({length:POOL_SIZE},(_,id)=>({id,active:false,x:0,z:0,heading:0,height:0,archetype:'casual',mode:'ambient',state:'walking',group:-1,leader:-1,route:[],routeIndex:0,edge:-1,progress:0,destination:-1,node:-1,speed:0,baseSpeed:1.3,age:0,stuck:0,pause:0,crossing:null,queueKey:null,lod:'near',elapsed:0,phase:0,color:0,animationTime:0,renderX:0,renderZ:0,previousX:0,previousZ:0,travelled:0,lastHeading:0,downUntil:0,scatterX:0,scatterZ:0,scatterUntil:0,voiceUntil:0,voiceSaid:-99,voiceUrgency:0,
    flyX:0,flyY:0,flyZ:0,flyHeight:0,flyGround:0,flySettled:0,spin:0,spinRate:0,region:'commercial'}));
   this.candidates=network.eligible;this.byRegion=Object.fromEntries(['hachiko','center-gai','station','commercial'].map(k=>[k,this.candidates.filter(n=>n.district===k)]));this.crossCandidates=network.crossings.filter(e=>e.kind!=='normal'&&network.nodes[e.from].component===network.nodes[e.to].component);const lanes=new Map();for(const e of this.crossCandidates){const key=e.crossingId+':'+e.direction;if(!lanes.has(key))lanes.set(key,[]);lanes.get(key).push(e);}const groups=[...lanes.values()];this.crossCandidates=[];for(let row=0;row<Math.max(0,...groups.map(g=>g.length));row++)for(const group of groups)if(group[row])this.crossCandidates.push(group[row]);this.crossCursor=0;this.choreography=choreography?new ScrambleChoreography(this):null;this.refill(true);
  }
@@ -58,10 +72,25 @@ export class CrowdSimulation{
   * Tell a pedestrian to get out of the way, pointing where. Idle and paused actors are woken
   * by it -- standing still in front of a moving car is the one thing nobody does.
   */
- scatter(p,dx,dz){if(!p.active||p.struck!==undefined)return false;
+ scatter(p,dx,dz,urgency=.5){if(!p.active||p.struck!==undefined)return false;
   p.scatterX=dx;p.scatterZ=dz;p.scatterUntil=this.time+SCATTER_SECONDS;
   if(p.pause>0)p.pause=0;
-  this.stats.scattered=(this.stats.scattered??0)+1;return true;}
+  this.stats.scattered=(this.stats.scattered??0)+1;
+  this.say(p,'alert',urgency);return true;}
+ /**
+  * Queue something for this pedestrian to shout. Same contract as `splashes`: the simulation
+  * decides who speaks and when, and knows nothing about how -- whoever is listening drains
+  * the queue. A scream ignores the cooldown entirely: being hit is never a repeat of a
+  * warning, and the shout that goes with it must never be eaten.
+  */
+ say(p,kind,urgency=.5){
+  urgency=Math.max(0,Math.min(1,urgency));
+  if(kind!=='scream'&&this.time<p.voiceUntil&&
+     !(urgency>=p.voiceUrgency+VOICE_ESCALATION&&this.time>=p.voiceSaid+VOICE_REPRISE))return false;
+  if(this.voices.length>=VOICE_QUEUE_MAX)return false;
+  p.voiceSaid=this.time;p.voiceUntil=this.time+VOICE_COOLDOWN;p.voiceUrgency=urgency;
+  this.voices.push({id:p.id,kind,x:p.x,z:p.z,urgency});
+  this.stats.voiced=(this.stats.voiced??0)+1;return true;}
  /**
   * Knock a pedestrian down, thrown along `dx,dz` at `speed`.
   *
@@ -79,6 +108,7 @@ export class CrowdSimulation{
   p.spin=0;p.spinRate=SPIN*(carry/8)*(p.id%2?1:-1);
   // Where they were caught. Whoever draws it drains this; the simulation owns no meshes.
   this.splashes.push({x:p.x,y:p.flyGround,z:p.z,dx:p.flyX,dz:p.flyZ,scale:.8+Math.min(1,carry/10)*.7,life:FALL_SECONDS});
+  this.say(p,'scream',1);
   this.stats.struck=(this.stats.struck??0)+1;return true;}
 
  /**
@@ -115,7 +145,7 @@ export class CrowdSimulation{
   if(leader)nodes=this.candidates.filter(n=>n.component===this.network.nodes[leader.node].component&&Math.hypot(n.x-leader.x,n.z-leader.z)<4);
   for(let attempt=0;attempt<100;attempt++){const n=nodes[Math.floor(this.rng()*nodes.length)];if(!n||this.network.landingNodes.has(n.id)||this.blocked(n.x,n.z,null,.9)||this.vehicleOverlap(n.x,n.z,.6)||this.time>0&&Math.hypot(n.x-this.camera.x,n.z-this.camera.z)<12)continue;
    const jitter=this.rng()*.5-.25,jitterZ=this.rng()*.5-.25,sx=n.x+jitter,sz=n.z+jitterZ,valid=this.network.ctx.safe(sx,sz)&&!this.blocked(sx,sz,null,.65)&&!this.vehicleOverlap(sx,sz,.6),px=valid?sx:n.x,pz=valid?sz:n.z;
-   Object.assign(p,{patrol:null,active:true,choreographed:false,x:px,z:pz,renderX:px,renderZ:pz,previousX:px,previousZ:pz,heading:this.rng()*Math.PI*2,height:this.network.ctx.height(n.x,n.z),archetype:type,mode,state:mode==='idle'?'idle':'walking',group:leader?.group??-1,leader:leader?.id??-1,route:[],routeIndex:0,edge:-1,progress:0,destination:n.id,node:n.id,speed:0,baseSpeed:leader?.baseSpeed??def.speed[0]+this.rng()*(def.speed[1]-def.speed[0]),age:0,stuck:0,pause:mode==='idle'?8+this.rng()*30:0,crossing:null,queueKey:null,lod:'near',elapsed:0,phase:this.rng()*Math.PI*2,color:Math.floor(this.rng()*def.colors.length),travelled:0,region:n.district});
+   Object.assign(p,{patrol:null,active:true,choreographed:false,x:px,z:pz,renderX:px,renderZ:pz,previousX:px,previousZ:pz,heading:this.rng()*Math.PI*2,height:this.network.ctx.height(n.x,n.z),archetype:type,mode,state:mode==='idle'?'idle':'walking',group:leader?.group??-1,leader:leader?.id??-1,route:[],routeIndex:0,edge:-1,progress:0,destination:n.id,node:n.id,speed:0,baseSpeed:leader?.baseSpeed??def.speed[0]+this.rng()*(def.speed[1]-def.speed[0]),age:0,stuck:0,pause:mode==='idle'?8+this.rng()*30:0,crossing:null,queueKey:null,lod:'near',elapsed:0,phase:this.rng()*Math.PI*2,color:Math.floor(this.rng()*def.colors.length),travelled:0,voiceUntil:0,voiceSaid:-99,voiceUrgency:0,region:n.district});
    if(mode!=='idle'){
     if(cross){const approach=route(this.network,n.id,cross.from);if(n.id!==cross.from&&!approach.length){p.active=false;continue;}p.route=[...approach,cross.id];p.edge=p.route[0];p.destination=cross.to;}
     else if(!this.chooseDestination(p,n,mode==='milling')){p.active=false;continue;}
@@ -204,5 +234,5 @@ export class CrowdSimulation{
  snapshot(debug=false){const active=this.pool.filter(p=>p.active),counts=key=>Object.fromEntries([...new Set(active.map(p=>p[key]))].map(k=>[k,active.filter(p=>p[key]===k).length]));return {...this.stats,target:QUALITY[this.tier].total,choreographed:active.filter(p=>p.choreographed).length,waitingCells:this.network.stats.waitingCells??0,reasons:{...this.stats.reasons},entries:{...this.stats.entries},completed:{...this.stats.completed},total:active.length,tier:this.tier,archetypes:counts('archetype'),modes:counts('mode'),states:counts('state'),lod:counts('lod'),regions:counts('region'),hachiko:active.filter(p=>district(p.x,p.z)==='hachiko').length,centerGai:active.filter(p=>district(p.x,p.z)==='center-gai').length,groupCount:this.groups.filter(g=>g.members.filter(id=>this.pool[id].active&&this.pool[id].group===g.id).length>1).length,queueSizes:Object.fromEntries([...this.queue].map(([k,s])=>[k,s.size])),...(debug?{actors:active.map(p=>({id:p.id,archetype:p.archetype,edge:p.edge,destination:p.destination,state:p.state,queue:p.queueKey,group:p.group,lod:p.lod,stuck:p.stuck,radius:RADIUS,grid:this.cell(p.x,p.z),crossing:p.crossing})),signalPhase:this.signals?.phase()??'unbound'}:{})};}
  audit(){const findings=[],minor={groupSeparation:0,stuck:0};let maxStack=0;for(const p of this.pool){if(!p.active||p.struck!==undefined)continue;if(![p.x,p.z,p.heading,p.height].every(Number.isFinite))findings.push({id:p.id,kind:'finite'});if(p.edge>=0&&!this.network.edges[p.edge])findings.push({id:p.id,kind:'invalid-path'});if(this.network.ctx.solid(p.x,p.z,RADIUS-.01))findings.push({id:p.id,kind:'solid'});if(!p.crossing&&!this.network.ctx.safe(p.x,p.z,RADIUS-.01))findings.push({id:p.id,kind:'road-intrusion'});if(this.vehicleOverlap(p.x,p.z,RADIUS-.02))findings.push({id:p.id,kind:'vehicle-overlap'});if(this.blocked(p.x,p.z,p,RADIUS*2-.03,false))findings.push({id:p.id,kind:'pedestrian-overlap'});if(p.crossing&&this.network.ctx.onRoad(p.x,p.z)&&!inCrossing(p.x,p.z,this.network.edges[p.edge],.23))findings.push({id:p.id,kind:'crosswalk-boundary'});if(p.crossing&&!this.signals?.groups.has(p.crossing))findings.push({id:p.id,kind:'invalid-signal'});if(p.stuck>5)minor.stuck++;if(p.leader>=0&&this.pool[p.leader].active&&Math.hypot(p.x-this.pool[p.leader].x,p.z-this.pool[p.leader].z)>8)minor.groupSeparation++;}
   for(const s of this.queue.values())maxStack=Math.max(maxStack,s.size);return {major:findings.length,minor,findings,maxQueue:maxStack,signalViolations:this.stats.signalViolations};}
- dispose(){for(const p of this.pool)this.despawn(p,'dispose');this.splashes.length=0;this.grid.clear();this.queue.clear();this.exits.clear();}
+ dispose(){for(const p of this.pool)this.despawn(p,'dispose');this.splashes.length=0;this.voices.length=0;this.grid.clear();this.queue.clear();this.exits.clear();}
 }
