@@ -9,8 +9,7 @@ import {route,edgePose,inCrossing} from './network.mjs';
 // Below this the player's car is treated as an obstacle and walked around; at or above it
 // there is no time to react and it can knock people down.
 export const DODGE_SPEED=2;
-// How long the fall itself takes, and how long the body lies there in total before being
-// recycled elsewhere. Going over has to finish well inside the second number, or the figure
+// How long going over takes. It has to finish well inside FALL_SECONDS, or the figure
 // vanishes at the very instant it lands and reads as a despawn rather than a knockdown.
 export const FALL_TILT=.85;
 // Being hit launches the body rather than folding it where it stood. The crowd's limbs are
@@ -23,7 +22,10 @@ export const FALL_TILT=.85;
 // at roughly ten metres and well overhead, with air time long enough for the tumble to read,
 // while a nudge at the dodge threshold stays a shove: the floor is low enough not to launch it.
 export const LAUNCH=.92,LAUNCH_MIN=2.2,LIFT=.62,GRAVITY=16,GROUND_DRAG=1.6,AIR_DRAG=.14,SPIN=3.4;
-export const FALL_SECONDS=2.4;
+// How long a body stays on the street, and so how long the marks it leaves last: long
+// enough to be something you drove past and can come back to, rather than something that
+// blinks out while you are still braking.
+export const FALL_SECONDS=14;
 // How long the slot then stays out of the crowd before that person walks back in somewhere
 // else. The pool is exactly the high-tier target, so holding a slot really does thin the
 // crowd for that long rather than being papered over by the next refill.
@@ -57,12 +59,6 @@ export class CrowdSimulation{
   if(p.pause>0)p.pause=0;
   this.stats.scattered=(this.stats.scattered??0)+1;return true;}
  /**
-  * Knock a pedestrian down. They stop, fall, and are recycled once the fall finishes.
-  * Going through `leave` rather than clearing `crossing` by hand matters: someone struck
-  * mid-crossing still occupies their signal group, and a group that never reports clear
-  * never gives the cars their window.
-  */
- /**
   * Knock a pedestrian down, thrown along `dx,dz` at `speed`.
   *
   * Going through `leave` rather than clearing `crossing` by hand matters: someone struck
@@ -78,7 +74,7 @@ export class CrowdSimulation{
   // that depends on which way the body was facing when it was caught.
   p.spin=0;p.spinRate=SPIN*(carry/8)*(p.id%2?1:-1);
   // Where they were caught. Whoever draws it drains this; the simulation owns no meshes.
-  this.splashes.push({x:p.x,y:p.flyGround,z:p.z,dx:p.flyX,dz:p.flyZ,scale:.8+Math.min(1,carry/10)*.7});
+  this.splashes.push({x:p.x,y:p.flyGround,z:p.z,dx:p.flyX,dz:p.flyZ,scale:.8+Math.min(1,carry/10)*.7,life:FALL_SECONDS});
   this.stats.struck=(this.stats.struck??0)+1;return true;}
 
  /**
@@ -100,7 +96,8 @@ export class CrowdSimulation{
   // And where they come to rest, twelve metres on: a mark only at the point of impact reads
   // as unconnected to the body lying somewhere else entirely.
   if(!airborne&&!p.flySettled&&Math.hypot(p.flyX,p.flyZ)<.6){p.flySettled=1;
-   this.splashes.push({x:p.x,y:p.flyGround,z:p.z,dx:p.flyX,dz:p.flyZ,scale:.9});}
+   // Whatever the body has left, so this clears with it rather than outliving it.
+   this.splashes.push({x:p.x,y:p.flyGround,z:p.z,dx:p.flyX,dz:p.flyZ,scale:.9,life:Math.max(.2,FALL_SECONDS-p.struck)});}
   if(!airborne&&Math.hypot(p.flyX,p.flyZ)<.15){p.flyX=0;p.flyZ=0;p.spinRate*=.6;}
  }
  despawn(p,reason){if(!p.active)return;this.leave(p);p.active=false;this.stats.despawned++;this.stats.reasons[reason]=(this.stats.reasons[reason]??0)+1;if(reason==='stuck'){this.stats.stuck++;this.stats.recoveries++;}}

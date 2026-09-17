@@ -277,7 +277,7 @@ export default function Home(){
    // The crowd queues a mark where a body is caught and another where it stops sliding;
    // draining it here keeps the simulation free of anything that draws.
    const queue=crowdSim?.splashes;
-   if(queue?.length){for(const q of queue)blood?.splash(q.x,q.y,q.z,q.dx,q.dz,q.scale);queue.length=0;}
+   if(queue?.length){for(const q of queue)blood?.splash(q.x,q.y,q.z,q.dx,q.dz,q.scale,q.life);queue.length=0;}
    // An impact is a step that lost its speed: compare before and after rather than having
    // the vehicle call back into the app.
    if(carSpeedLast>1&&Math.abs(c.speed)<carSpeedLast*.3){playerAudio?.impact(carSpeedLast,playerCar.def.speed);}
