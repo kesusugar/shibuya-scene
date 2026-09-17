@@ -19,7 +19,12 @@ const TABS = [['drive', '運転'], ['pad', 'パッド'], ['device', '端末']];
  */
 function verdict(d) {
  if (!d.playerMode) return ['dg-note', 'プレイヤーモードではありません。「プレイヤー」を押してください。'];
- if (!d.driving) return ['dg-note', '徒歩です。車の近くで <b>F</b>（またはパッドA / 下の「乗る」）で乗れます。'];
+ if (!d.driving) {
+  if (!d.hasCar) return ['dg-warn', '<b>車がまだ作られていません。</b>交通シミュレーションの読み込み待ちです。もう一度「乗る」を押すと作り直します。'];
+  if (d.reach && !d.reach.inRange)
+   return ['dg-warn', `<b>車まで ${Math.round(d.reach.distance)} m あります。</b>${Math.round(d.reach.range)} m 以内まで歩いてください。ボタンは範囲外では距離を表示します。`];
+  return ['dg-note', '徒歩です。<b>F</b>（またはパッドA / 画面の「乗る」）で乗れます。'];
+ }
  const moving = Math.abs(d.speed) > .15;
  if (moving) return ['dg-ok', `走っています（${d.speed.toFixed(1)} m/s）。`];
  if (!d.input || (Math.abs(d.input.forward) < .05 && Math.abs(d.input.strafe) < .05))

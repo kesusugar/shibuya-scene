@@ -93,14 +93,21 @@ export default function Home(){
  // Getting in and out. The car is the player's own, parked where they started, so there is
  // no question of whose it is and the AI traffic is left alone.
  const toggleDrive=()=>{
-  if(!player||!playerCar)return;
+  if(!player)return;
+  // The car is built with the player, but only if the traffic simulation happened to be up
+  // by then. On a slow connection it is not, and without this retry the car is never created
+  // at all and the button does nothing for the rest of the session.
+  if(!playerCar){const sim=trafficEntry.hooks.current?.sim,ctx=lifeEntry.hooks.current?.network?.ctx;
+   if(!sim||!ctx)return;playerCar=createPlayerVehicle(sim,ctx);
+   if(!playerCar.spawn(player.state.x,player.state.z)){console.warn('[Player] no room to park the car');}
+   (window as any).__SHIBUYA_CAR__=playerCar;}
   if(driving){const spot=playerCar.doorstep();if(!spot)return;                 // no pavement beside it: stay in
    driving=false;playerCar.state.speed=0;playerCar.sync();player.place(spot[0],spot[1],playerCar.state.heading);setDriving(false);touchPad?.setDriving(false);return;}
   // Any parked car within reach, not just the one spawned for the player: whichever door is
   // nearest is the one that opens.
-  const other=playerCar.nearestTakeover(player.state.x,player.state.z);
-  if(other)playerCar.takeOver(other);
-  else if(playerCar.nearestDoor(player.state.x,player.state.z)===null)return;  // too far from any door
+  const entry=playerCar.nearestEntry(player.state.x,player.state.z);
+  if(!entry||!entry.inRange)return;                                           // too far from any door
+  if(entry.kind==='parked')playerCar.takeOver(entry.slot);
   driving=true;playerFigure?.hide();setDriving(true);touchPad?.setDriving(true);struckCountRef=0;setStruckCount(0);
  };
  const crowdSlot=()=>lifeEntry.hooks.current?.sim?.pool?.[0]??null;
@@ -240,13 +247,13 @@ export default function Home(){
      input:player?player.input():null,
      speed:c?.speed??0,stalled:!!c?.stalled,damage:c?.damage??0,type:c?.type??'—',
      x:c&&driving?c.x:(player?.state.x??0),z:c&&driving?c.z:(player?.state.z??0),
-     blockedBy:c?.stalled?blockedBy():null};},
+     blockedBy:c?.stalled?blockedBy():null,reach:playerReach,hasCar:!!playerCar};},
    onKey:(what:string)=>{if(what==='drive')toggleDrive();else exitPlayer();}});
   (window as any).__SHIBUYA_DIAG__=diag;
  }
  let qaButton:HTMLButtonElement|null=null;if(config.qa){qaButton=document.createElement('button');qaButton.className='qa-capture';qaButton.type='button';qaButton.disabled=true;qaButton.textContent='Preparing QA…';qaButton.addEventListener('click',async()=>{if(!qaButton)return;qaButton.disabled=true;qaButton.textContent='Generating QA Pack…';try{await capture();}catch(e){console.error('[Visual QA Capture]',e);setError(String(e));}finally{if(qaButton){qaButton.disabled=!qaReadyRef;qaButton.textContent=qaReadyRef?'Generate QA Pack':'Preparing QA…';}}});document.body.appendChild(qaButton);}
  const qaButtonTimer=config.qa?window.setInterval(()=>{if(!qaButton||qaBusyNow)return;qaButton.disabled=!qaReadyRef;qaButton.textContent=qaReadyRef?'Generate QA Pack':'Preparing QA…';},250):0;
- let carSpeedLast=0,damageLast=0,struckCountRef=0;
+ let carSpeedLast=0,damageLast=0,struckCountRef=0,playerReach:any=null;
  let qaReadyRef=false;const frame=(now:number)=>{if(disposed)return;const dt=frameGate.step(now);if(dt===null){raf=requestAnimationFrame(frame);return;}const frameStart=performance.now(),updateStart=frameStart;if(playerMode&&player){
   if(driving&&playerCar){const drive=player.input();playerCar.step(dt,drive);const c=playerCar.state;player.rideTo(c.x,c.z,c.heading);playerMarker?.update(c,dt,playerCar.def.height);
    const crowdSim=lifeEntry.hooks.current?.sim;playerCar.alertPedestrians(crowdSim);
@@ -258,7 +265,12 @@ export default function Home(){
    carSpeedLast=Math.abs(c.speed);
    playerAudio?.engine(c.speed,playerCar.def.speed,Math.max(0,drive.forward));
    if(playerCar.state.damage!==damageLast){damageLast=playerCar.state.damage;setCarDamage(damageLast);}}
-  else{player.step(dt);playerFigure?.update(player.state,dt);playerMarker?.update(player.state,dt,PLAYER_HEIGHT);}
+  else{player.step(dt);playerFigure?.update(player.state,dt);playerMarker?.update(player.state,dt,PLAYER_HEIGHT);
+   const entry=playerCar?.nearestEntry(player.state.x,player.state.z)??null;
+   touchPad?.setReach(entry);
+   // Only the numbers: the entry carries the whole vehicle slot, and the panel's Copy JSON
+   // would otherwise hand back a few hundred lines of lane bookkeeping.
+   playerReach=entry?{distance:entry.distance,range:entry.range,inRange:entry.inRange,kind:entry.kind}:null;}
   syncCrowdSlot(dt);}if(!qaBusyNow)system.update(dt);solar.update(dt);if(playerMode&&player){applyPlayerCamera();if(!driving)checkRunOver();}else clampView();const updateEnd=performance.now();renderScene();const renderEnd=performance.now();if(startupTrace&&!startupTrace.firstMeaningfulFrameMs&&renderer&&renderer.info.render.calls>0&&renderer.info.render.triangles>0){startupTrace.firstMeaningfulFrameMs=renderEnd;startupTrace.events.push({name:'first meaningful 3D frame',atMs:renderEnd,triangles:renderer.info.render.triangles,drawCalls:renderer.info.render.calls});}if(stationTimingTrace?.active)stationTimingTrace.frames.push({start:frameStart,updateMs:updateEnd-updateStart,renderMs:renderEnd-updateEnd,totalMs:renderEnd-frameStart,trafficActive:!!trafficEntry.hooks.current,lifeActive:!!lifeEntry.hooks.current});frames++;renderedFrames++;if(config.qa||startupTimingEnabled){if(prerequisitesReady())readyFrames++;else readyFrames=0;qaReadyRef=readyFrames>=3;if(startupTimingEnabled&&qaReadyRef)finalizeStartupTiming();}if(now-last>=500){const info=renderer?.info,fidelityStats=fidelity.snapshot();latestFps=renderer?Number((frames*1000/(now-last)).toFixed(1)):null;setNightglowReport(nightglowEntry.hooks.current?{...nightglowEntry.hooks.current.stats}:null);setEnvironmentReport(dayNight.snapshot());setStats({fps:latestFps,triangles:info?.render.triangles??null,drawCalls:info?.render.calls??null,geometries:info?.memory.geometries??null,textures:info?.memory.textures??null,...fidelityStats,tier:currentTier,dprCap:PROFILES[currentTier].dpr,currentDpr:renderer?.getPixelRatio()??null,frameCap:PROFILES[currentTier].fps,cranes:constructionEntry.hooks.current?.stats.cranes??0,constructionZones:constructionEntry.hooks.current?.stats.zones??0,bloom:currentTier==='high'?fidelityStats.bloom:nightglowEntry.hooks.current?.stats.bloomStrength??0,wetActive:nightglowEntry.hooks.current?.stats.active?nightglowEntry.hooks.current.stats.patches:0,reflectionsActive:nightglowEntry.hooks.current?.stats.active?nightglowEntry.hooks.current.stats.reflections:0,crowd:lifeEntry.hooks.current?.stats.total??0,trafficMoving:trafficEntry.hooks.current?.stats.moving??0,trafficParked:trafficEntry.hooks.current?.stats.parked??0,trains:trainsEntry.hooks.current?.stats.sets??0,signs:signsEntry.hooks.current?.stats.signCount??0,heapMB:(performance as any).memory?Number(((performance as any).memory.usedJSHeapSize/1048576).toFixed(1)):null,width:renderer?canvas.width:null,height:renderer?canvas.height:null});frames=0;last=now;}raf=requestAnimationFrame(frame);};raf=requestAnimationFrame(frame);
  const lost=(event:Event)=>{event.preventDefault();setError('WebGL context lost — reload to retry.');};canvas.addEventListener('webglcontextlost',lost);
  const decorationTier=deferredLatest((v:string)=>{if(streetTier!==v){streetTier=v;if(streetEntry.enabled){system.setEnabled('streetscape',false);system.setEnabled('streetscape',true);}}if(signTier!==v){signTier=v;if(signsEntry.enabled){system.setEnabled('signs',false);system.setEnabled('signs',true);}}if(detailTier!==v){detailTier=v;if(detailEntry.enabled){system.setEnabled('stationDetail',false);system.setEnabled('stationDetail',true);}}});
