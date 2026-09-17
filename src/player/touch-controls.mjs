@@ -103,8 +103,21 @@ export function createTouchControls({onAxes, onDrive, onExit} = {}) {
   setDriving(on) {
    driving = on;
    driveBtn.textContent = on ? '降りる' : '乗る';
+   driveBtn.classList.remove('far');
    runBtn.hidden = on;
    if (on) holdRun(false);
+  },
+
+  /**
+   * How far the nearest car is, from `nearestEntry`. A button that does nothing when pressed
+   * is indistinguishable from a broken one, so out of range it says the distance instead of
+   * saying 乗る -- the answer is on screen before it is pressed.
+   */
+  setReach(entry) {
+   if (driving) return;
+   if (!entry) {driveBtn.textContent = '車がない'; driveBtn.classList.add('far'); return;}
+   driveBtn.textContent = entry.inRange ? '乗る' : `車まで ${Math.round(entry.distance)}m`;
+   driveBtn.classList.toggle('far', !entry.inRange);
   },
   get driving() {return driving;},
   dispose() {onAxes?.({forward: 0, strafe: 0, running: false}); document.body.classList.remove('tc-on'); root.remove();}

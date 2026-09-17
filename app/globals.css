@@ -118,6 +118,8 @@ button[data-slot=switch]{padding:0;border-radius:999px;width:32px;height:19px;mi
 body.tc-on .player-hint{display:none}
 .tc-acts button{min-width:82px;min-height:52px;padding:0 14px;background:#152230e6;border:1px solid #f2a25c88;border-radius:14px;color:#f6e6d6;font-size:15px;touch-action:none;user-select:none;-webkit-user-select:none}
 .tc-acts button.on{background:#f2a25c;border-color:#f2a25c;color:#1a1005;font-weight:700}
+/* Out of reach: still pressable, but it says so rather than looking live and doing nothing. */
+.tc-acts button.far{border-color:#3a4a5a;color:#8fa0b0;font-size:13px}
 .tc-acts button[hidden]{display:none}
 /* With the diagnostics panel open the controls have to clear it. */
 .dg~.tc .tc-acts{bottom:calc(56vh + 14px)}

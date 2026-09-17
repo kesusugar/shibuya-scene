@@ -172,6 +172,26 @@ export function createPlayerVehicle(sim, ctx) {
    return true;
   },
 
+  /**
+   * The nearest car this person could get into, and whether they are close enough yet.
+   *
+   * Pressing the button out of range used to do nothing at all and say nothing about why,
+   * which on a phone is indistinguishable from a broken button. This is what the label reads
+   * from, so the answer is on screen before the button is pressed.
+   */
+  nearestEntry(x, z) {
+   let best = null;
+   const offer = (d, range, slot, kind) => {
+    if (!best || d < best.distance) best = {distance: d, range, slot, kind, inRange: d <= range};
+   };
+   if (state.active) offer(Math.hypot(state.x - x, state.z - z), CAR.enterRange, state.slot, 'own');
+   for (const v of sim.pool) {
+    if (!v.active || !v.parked || v === state.slot || v.controlled) continue;
+    offer(Math.hypot(v.x - x, v.z - z), CAR.takeOverRange, v, 'parked');
+   }
+   return best;
+  },
+
   /** Where a person standing here could get in from. */
   nearestDoor(x, z) {
    if (!state.active) return null;
