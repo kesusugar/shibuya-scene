@@ -354,7 +354,12 @@ export function createPlayerVehicle(sim, ctx) {
      if (along < -def.length / 2 || along > reach || Math.abs(across) > half) continue;
      // Out is sideways, towards the shoulder they are already closer to.
      const side = across >= 0 ? 1 : -1;
-     if (crowd.scatter(p, c * side, -s * side)) warned++;
+     // How alarming this is, which decides what they shout: a car at the far end of the
+     // corridor gets a 「あぶな！」, one about to arrive gets a scream. Lateral distance counts
+     // for half as much as closing distance -- a car passing wide is still a car.
+     const urgency = Math.max(0, 1 - along / Math.max(1, reach)) *
+      (1 - Math.min(1, Math.abs(across) / half) * .5);
+     if (crowd.scatter(p, c * side, -s * side, urgency)) warned++;
     }
    }
    return warned;

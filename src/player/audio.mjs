@@ -62,6 +62,8 @@ export function createPlayerAudio() {
 
  return {
   get available() {return !!ctx && !failed;},
+  /** The shared context, so the crowd's voices play through the graph this one unlocked. */
+  get context() {return ctx;},
   /** Called from the click that enters player mode, which is the gesture browsers want. */
   resume() {ensure(); ctx?.resume?.().catch(() => {}); return !!ctx;},
   /**
