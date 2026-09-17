@@ -35,6 +35,10 @@ export const RESPAWN_SECONDS=30;
 // walkable context and the neighbour avoidance all still have the final say -- a scattering
 // pedestrian never ends up somewhere they could not have walked.
 export const SCATTER_SECONDS=1.1,SCATTER_BIAS=.8,SCATTER_SPEED=3.4;
+// How long someone already on a crossing may fail to move before they are recycled. Waiting
+// at the curb does not count -- that path resets `stuck` -- so this only measures an actor
+// that was admitted and then could not take a single step.
+export const CROSSING_GIVE_UP=12;
 
 export class CrowdSimulation{
  constructor(network,{traffic=null,tier='medium',seed='shibuya-s10',choreography=false,heroStart=false}={}){
@@ -179,7 +183,14 @@ export class CrowdSimulation{
   }
   p.height=n.ctx.height(p.x,p.z);
   if(this.cell(p.x,p.z)!==oldCell){const b=this.grid.get(oldCell),i=b?.indexOf(p);if(i>=0)b.splice(i,1);this.insert(p);}
-  if(p.stuck>35&&!p.crossing)this.despawn(p,'stuck');else if(p.age>240&&!p.crossing)this.despawn(p,'ttl');
+  // A pedestrian who cannot move is recycled -- including one part-way across, which used to
+  // be exempt from both of these. Being admitted to a crossing and then wedged at its mouth
+  // by the queue behind is survivable for the actor and fatal for the city: they hold their
+  // signal group for as long as they live, and the controller stops the clock for the whole
+  // map while any group is held. Eight of them, stuck for 150 s, is what froze every signal
+  // and emptied the crossing. `leave` first, so the group is released before they go.
+  if(p.stuck>(p.crossing?CROSSING_GIVE_UP:35)){if(p.crossing)this.stats.abandonedCrossings=(this.stats.abandonedCrossings??0)+1;this.despawn(p,'stuck');}
+  else if(p.age>240&&!p.crossing)this.despawn(p,'ttl');
  }
  step(dt){this.time+=dt;this.lodClock+=dt;this.refillClock+=dt;this.rebuild();if(this.lodClock>=1){this.lodClock=0;for(const p of this.pool)if(p.active){const d=Math.hypot(p.x-this.camera.x,p.z-this.camera.z);p.lod=d<65?'near':d<140?'mid':'far';}}
   // Rotate priority each fixed tick; ordering does not permanently privilege low IDs.
