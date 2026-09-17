@@ -21,6 +21,11 @@ export const PLAYER = Object.freeze({
  eye: 1.55,            // height the camera frames the player from
  archetype: 'hoodie',  // fixed, so the player is the same person every session
  look: .0022,          // radians per pixel of mouse travel
+ // A pad stick is polled per frame rather than delivered as deltas, so it turns at its own
+ // rate and needs a deadzone, or a worn stick walks the player across the street on its own.
+ padLook: .045, padDeadzone: .18,
+ // A drag across glass covers far fewer pixels than a mouse sweep, so it turns further per px.
+ dragLook: 2.2,
  pitchLimit: 1.15,     // keeps the follow camera out of the ground and off the zenith
  followBack: 4.6, followUp: 2.1, followLerp: 9,
  // Where a session starts. Chosen by sampling the walkable surface: full kerb height, so
@@ -39,6 +44,10 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
  };
  const keys = new Set();
  let padPoll = null;
+ // On-screen controls, for a phone. Held as axes rather than as synthetic key events so a
+ // finger can be half-way down a throttle, and so releasing the screen cannot leave a key
+ // stuck the way a lost keyup does.
+ const touch = {forward: 0, strafe: 0, running: false};
  /** The first connected pad. Chrome hands back a fresh snapshot each call, never a live one. */
  const gamepad = () => {
   if (typeof navigator === 'undefined' || !navigator.getGamepads) return null;
@@ -82,13 +91,30 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
     keys.add(k === ' ' ? 'shift' : k); e.preventDefault();
    };
    const up = (e) => {const k = e.key.toLowerCase(); keys.delete(k === ' ' ? 'shift' : k);};
-   const blur = () => keys.clear();
+   const blur = () => {keys.clear(); touch.forward = 0; touch.strafe = 0; touch.running = false;};
    const move = (e) => {
     if (document.pointerLockElement !== element) return;
     state.heading -= e.movementX * PLAYER.look;
     state.pitch = Math.max(-PLAYER.pitchLimit, Math.min(PLAYER.pitchLimit, state.pitch - e.movementY * PLAYER.look));
    };
    const click = () => {if (document.pointerLockElement !== element) element.requestPointerLock?.();};
+   // Touch looks by dragging the scene itself. It belongs on the canvas rather than on a
+   // full-screen overlay: an overlay wide enough to catch every drag also swallows every
+   // button the page already has, and the canvas is exactly the region that should turn.
+   // Mouse drags are left alone -- they are handled above, under pointer lock.
+   let touchId = null, touchLast = null;
+   const touchStart = e => {
+    if (e.pointerType !== 'touch' || touchId !== null) return;
+    touchId = e.pointerId; touchLast = {x: e.clientX, y: e.clientY};
+    element.setPointerCapture?.(e.pointerId);
+   };
+   const touchMove = e => {
+    if (e.pointerId !== touchId || !touchLast) return;
+    e.preventDefault();
+    api.look((e.clientX - touchLast.x) * PLAYER.dragLook, (e.clientY - touchLast.y) * PLAYER.dragLook);
+    touchLast = {x: e.clientX, y: e.clientY};
+   };
+   const touchEnd = e => {if (e.pointerId === touchId) {touchId = null; touchLast = null;}};
    // Edge-detected, because a held button would otherwise fire get-in/get-out every frame.
    let padPrev = {drive: false, exit: false};
    padPoll = () => {
@@ -105,10 +131,14 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    window.addEventListener('keydown', down); window.addEventListener('keyup', up);
    window.addEventListener('blur', blur);
    element.addEventListener('mousemove', move); element.addEventListener('click', click);
+   element.addEventListener('pointerdown', touchStart); element.addEventListener('pointermove', touchMove);
+   for (const type of ['pointerup', 'pointercancel']) element.addEventListener(type, touchEnd);
    detach = () => {
     window.removeEventListener('keydown', down); window.removeEventListener('keyup', up);
     window.removeEventListener('blur', blur);
     element.removeEventListener('mousemove', move); element.removeEventListener('click', click);
+    element.removeEventListener('pointerdown', touchStart); element.removeEventListener('pointermove', touchMove);
+    for (const type of ['pointerup', 'pointercancel']) element.removeEventListener(type, touchEnd);
     if (document.pointerLockElement === element) document.exitPointerLock?.();
     keys.clear(); padPoll = null; detach = null;
    };
@@ -150,7 +180,9 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    let fx = 0, fz = 0;
    if (keys.has('w')) fz += 1; if (keys.has('s')) fz -= 1;
    if (keys.has('a')) fx -= 1; if (keys.has('d')) fx += 1;
-   let running = keys.has('shift');
+   let running = keys.has('shift') || touch.running;
+   if (Math.abs(touch.forward) > Math.abs(fz)) fz = touch.forward;
+   if (Math.abs(touch.strafe) > Math.abs(fx)) fx = touch.strafe;
    const pad = gamepad();
    if (pad) {
     const dead = v => Math.abs(v) < PLAYER.padDeadzone ? 0 : v;
@@ -165,6 +197,22 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    }
    return {forward: fz, strafe: fx, running};
   },
+  /**
+   * Set by the on-screen controls. Merged with the keys and the pad on the same rule the pad
+   * uses -- larger magnitude wins per axis -- so a phone, a keyboard and a controller can all
+   * be connected at once without any of them having to be selected.
+   */
+  setTouch(next = {}) {
+   touch.forward = Math.max(-1, Math.min(1, next.forward ?? 0));
+   touch.strafe = Math.max(-1, Math.min(1, next.strafe ?? 0));
+   touch.running = !!next.running;
+  },
+  /** Turn the screen by dragging, which is what the mouse does under pointer lock. */
+  look(dx, dy) {
+   state.heading -= dx * PLAYER.look;
+   state.pitch = Math.max(-PLAYER.pitchLimit, Math.min(PLAYER.pitchLimit, state.pitch - dy * PLAYER.look));
+  },
+
   /** While driving, the body rides in the car and is posed from it rather than walked. */
   rideTo(x, z, heading) {
    state.x = x; state.z = z; state.heading = heading; state.speed = 0; state.moving = false;

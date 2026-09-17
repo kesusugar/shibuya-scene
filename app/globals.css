@@ -58,16 +58,81 @@ button[data-slot=switch]{padding:0;border-radius:999px;width:32px;height:19px;mi
 .solar-controls button{font-size:24px;min-width:48px;min-height:44px;border-radius:10px;background:transparent;border:1px solid transparent;cursor:pointer}
 .solar-controls button[aria-pressed=true]{background:#426b84;border-color:#e2efff;box-shadow:0 0 0 2px #172333}
 .solar-controls button:focus-visible{outline:2px solid white;outline-offset:2px}
-.pad-probe{position:fixed;right:16px;top:96px;z-index:1200;width:min(420px,calc(100vw - 32px));max-height:76vh;overflow:auto;padding:14px;background:#07111af2;border:1px solid #f2a25c;color:#f6e6d6;box-shadow:0 8px 30px #000c;font-variant-numeric:tabular-nums;font-size:12px}
-.pad-probe h2{margin:0 0 10px;font-size:15px;color:#f2a25c}
-.pad-probe h3{margin:12px 0 6px;font-size:12px;color:#f6e6d6;word-break:break-all}
-.pad-probe p{margin:6px 0}
-.pad-probe .pad-ok{color:#8fe3a2}
-.pad-probe .pad-warn{color:#ffb4a2}
-.pad-grid{display:grid;grid-template-columns:minmax(0,1fr) 62px minmax(0,86px);gap:1px 8px;margin:6px 0}
-.pad-axes{grid-template-columns:minmax(0,1fr) 62px}
-.pad-grid span{color:#c2a893;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pad-grid b{text-align:right}
-.pad-grid em{color:#8a7a6c;font-style:normal;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pad-grid .pad-live{color:#ffce7a}
-.pad-probe button{width:100%;margin-top:10px;text-align:center;border-color:#f2a25c}
+
+/* Diagnostics panel. Laid out for a phone first: it sits along the bottom edge where a thumb
+   reaches, every control clears the 44px tap target, and it moves to a side column only when
+   there is width to spare. */
+.dg{position:fixed;left:0;right:0;bottom:0;z-index:1200;display:flex;flex-direction:column;max-height:56vh;background:#07111af7;border-top:2px solid #f2a25c;color:#f6e6d6;font-variant-numeric:tabular-nums;font-size:14px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.dg-head{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid #f2a25c55}
+.dg-head strong{color:#f2a25c;font-size:13px;letter-spacing:.08em}
+.dg-tabs{display:flex;gap:6px;flex:1;overflow:auto}
+.dg-tabs button{min-height:40px;padding:0 16px;background:#152230;border:1px solid #3a4a5a;border-radius:999px;color:#c2a893;font-size:14px}
+.dg-tabs button.on{background:#f2a25c;border-color:#f2a25c;color:#1a1005;font-weight:700}
+.dg-fold{min-width:44px;min-height:40px;background:#152230;border:1px solid #3a4a5a;border-radius:8px;color:#f6e6d6;font-size:15px}
+.dg-body{flex:1;min-height:0;max-height:30vh;overflow:auto;padding:10px 12px}
+.dg-body h3{margin:12px 0 6px;font-size:12px;color:#f6e6d6;word-break:break-all}
+.dg-body p{margin:6px 0;line-height:1.5}
+.dg-ok{color:#8fe3a2}.dg-warn{color:#ffb4a2}.dg-note{color:#b8c6d2}
+.dg-rows{display:grid;gap:2px 10px;margin:8px 0}
+.dg-rows2{grid-template-columns:minmax(0,1fr) minmax(88px,auto)}
+.dg-rows3{grid-template-columns:minmax(0,1fr) 68px minmax(0,96px)}
+.dg-rows span{color:#c2a893;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dg-rows b{text-align:right}
+.dg-rows em{color:#8a7a6c;font-style:normal;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dg-rows .dg-live{color:#ffce7a}
+/* The controls only belong on the drive tab; the others are read-only. */
+.dg-pad{display:none;gap:8px;padding:8px 10px 12px;border-top:1px solid #f2a25c33}
+.dg-driving .dg-pad{display:flex;flex-direction:column}
+.dg-acts{display:flex;gap:8px}
+.dg-acts button{flex:1;min-height:46px;background:#152230;border:1px solid #3a4a5a;border-radius:10px;color:#f6e6d6;font-size:14px}
+.dg-folded .dg-body,.dg-folded .dg-pad{display:none}
+@media(min-width:900px){
+ .dg{left:auto;right:16px;bottom:16px;top:96px;width:400px;max-height:none;border:1px solid #f2a25c;border-radius:12px;overflow:hidden}
+}
+
+/* A phone held upright gives this scene a letterbox and puts both thumbs in the same corner.
+   Nothing is blocked in portrait, so this is a suggestion rather than a gate. */
+.tc-rotate{position:absolute;left:50%;bottom:170px;transform:translateX(-50%);padding:10px 16px;background:#07111aee;border:1px solid #f2a25c;border-radius:999px;color:#f6e6d6;font-size:13px;white-space:nowrap;pointer-events:auto}
+@media(orientation:landscape){.tc-rotate{display:none}}
+
+/* Touch controls. On a phone these are the controls, so they sit where thumbs rest and stay
+   out of the middle of the screen, which is the part worth looking at. The overlay itself is
+   transparent to pointers; only the zones and buttons inside it take them. */
+.tc{position:fixed;inset:0;z-index:1150;pointer-events:none}
+.tc[hidden]{display:none}
+/* The stick's catch area is placed off the measured layout rather than guessed at, because
+   the furniture sits in different places in each orientation: upright, the time-of-day row,
+   the stats and the camera label pile up along the floor, so the area stops above them; on
+   its side the camera and quality row runs across the top, so the area starts below that.
+   Upright  390x844: nav ends y221, the bottom cluster starts y740.
+   Sideways 844x390: nav ends y186, the time-of-day row starts x582. */
+.tc-stick{position:absolute;left:0;pointer-events:auto;touch-action:none}
+@media(orientation:portrait){.tc-stick{bottom:112px;width:42%;height:36%;max-width:260px}}
+@media(orientation:landscape){.tc-stick{bottom:4px;width:36%;height:47%;max-width:320px}}
+.tc-base{position:absolute;pointer-events:none;width:132px;height:132px;margin:-66px 0 0 -66px;border:2px solid #f2a25c88;border-radius:50%;background:#07111a55;opacity:0;transition:opacity .12s}
+.tc-base.on{opacity:1}
+.tc-knob{position:absolute;pointer-events:none;left:50%;top:50%;width:58px;height:58px;transform:translate(-50%,-50%);border-radius:50%;background:#f2a25ccc;box-shadow:0 2px 10px #0008}
+/* Clear of the time-of-day row and the hint, both of which live along the bottom edge. */
+.tc-acts{position:absolute;right:14px;bottom:104px;display:flex;flex-direction:column;gap:10px;pointer-events:auto}
+/* The keyboard hint is noise on a device with no keyboard; the buttons say what they do. */
+body.tc-on .player-hint{display:none}
+.tc-acts button{min-width:82px;min-height:52px;padding:0 14px;background:#152230e6;border:1px solid #f2a25c88;border-radius:14px;color:#f6e6d6;font-size:15px;touch-action:none;user-select:none;-webkit-user-select:none}
+.tc-acts button.on{background:#f2a25c;border-color:#f2a25c;color:#1a1005;font-weight:700}
+.tc-acts button[hidden]{display:none}
+/* With the diagnostics panel open the controls have to clear it. */
+.dg~.tc .tc-acts{bottom:calc(56vh + 14px)}
+.dg~.tc .tc-stick{height:20%;bottom:calc(56vh + 14px)}
+@media(min-width:900px){.dg~.tc .tc-acts{bottom:104px}.dg~.tc .tc-stick{height:47%;bottom:4px}}
+
+
+/* On a phone held upright the stats block, the time-of-day row and the camera label all
+   land in the same corner and overlap each other. Measured at 390x844: stats y740..784,
+   time-of-day y752..826, label y791..826. Stacked here so each clears the next. */
+@media(max-width:700px) and (orientation:portrait){
+ /* The stats block goes under the camera row instead, where nothing else sits: moving it up
+    the right-hand edge only traded one collision for a clash with the action buttons. */
+ .presentation .stats{top:232px !important;bottom:auto !important;right:12px}
+ /* The label and the time-of-day row then share the floor, one at each end. */
+ .presentation .view-label{bottom:18px;max-width:108px;overflow:hidden}
+ .presentation .solar-controls{bottom:18px}
+}
