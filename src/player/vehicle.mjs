@@ -308,6 +308,7 @@ export function createPlayerVehicle(sim, ctx) {
   strikePedestrians(crowd) {
    if (!state.active || !crowd || Math.abs(state.speed) < DODGE_SPEED) return 0;
    const reach = Math.hypot(def.width, def.length) / 2 + 1;
+   const dir = Math.sign(state.speed) || 1;
    const x0 = Math.floor((state.x - reach) / 2), x1 = Math.floor((state.x + reach) / 2);
    const z0 = Math.floor((state.z - reach) / 2), z1 = Math.floor((state.z + reach) / 2);
    const body = {width: CAR.bodyWidth, length: CAR.bodyLength};
@@ -315,7 +316,9 @@ export function createPlayerVehicle(sim, ctx) {
    for (let i = x0; i <= x1; i++) for (let j = z0; j <= z1; j++) {
     for (const p of crowd.grid.get(i + ',' + j) ?? []) {
      if (!p.active || p.controlled || p.struck !== undefined) continue;
-     if (boxOverlap(state, def, p, body, 0) && crowd.strike(p)) hit++;
+     // Thrown along the car's course, at the speed that hit them.
+     if (boxOverlap(state, def, p, body, 0) &&
+         crowd.strike(p, Math.sin(state.course) * dir, Math.cos(state.course) * dir, Math.abs(state.speed))) hit++;
     }
    }
    return hit;
