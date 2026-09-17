@@ -56,11 +56,13 @@ export function buildCrowd(data,options={}){
  let debug=null;if(options.debug){const lines=[];for(const e of network.edges){if(e.id%2&&!e.crossingId)continue;const a=network.nodes[e.from],b=network.nodes[e.to];if(e.points){for(let i=1;i<e.points.length;i++)lines.push(e.points[i-1][0],.2,e.points[i-1][1],e.points[i][0],.2,e.points[i][1]);}else lines.push(a.x,.2,a.z,b.x,.2,b.z);}
   const g=new BufferGeometry();g.setAttribute('position',new Float32BufferAttribute(lines,3));debug=new LineSegments(g,new LineBasicMaterial({color:0xf8b5d1,depthTest:false}));debug.name='r1-walkable-path-grid';root.add(debug);stats.debugBatches=1;
  }
- // A knocked-down pedestrian falls about the feet. The limbs are merged into the body, so
- // there is nothing to fold; instead every part swings on the arc its own height describes
- // -- rising parts travel furthest forward -- which reads as the whole figure going over.
+ // A knocked-down pedestrian is thrown rather than folded. The limbs are merged into the
+ // body, so there is nothing to articulate; what carries the hit is the whole figure going
+ // over and tumbling. Every part swings on the arc its own height describes -- the higher a
+ // part sits, the further it travels -- which reads as the body pitching forward, and past
+ // the first quarter turn the tumble keeps going rather than stopping flat on the ground.
  function part(key,p,lx,y,lz,w,h,d,hex,tilt=0){
-  if(p.struck!==undefined){const a=Math.min(1,p.struck/FALL_TILT)*Math.PI/2;
+  if(p.struck!==undefined){const a=Math.min(1,p.struck/FALL_TILT)*Math.PI/2+(p.spin??0);
    lz+=y*Math.sin(a);y*=Math.cos(a);tilt+=a;}
   const c=Math.cos(p.heading),s=Math.sin(p.heading);obj.position.set(p.renderX+c*lx+s*lz,p.height+y,p.renderZ-s*lx+c*lz);obj.rotation.set(tilt,p.heading,0);obj.scale.set(w,h,d);obj.updateMatrix();const i=counts[key]++;meshes[key].setMatrixAt(i,obj.matrix);color.setHex(hex);meshes[key].setColorAt(i,color);}
  function hasAccessory(p,key){return rank(p.id,{phone:211,bag:433,cane:677,suitcase:929,umbrella:1217}[key])<ACCESSORY_TARGETS[key];}
