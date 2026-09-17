@@ -32,6 +32,7 @@ export function createTouchControls({onAxes, onDrive, onExit} = {}) {
  root.hidden = true;
  root.innerHTML =
   `<div class="tc-stick"><div class="tc-base"><div class="tc-knob"></div></div></div>
+   <button type="button" class="tc-rotate">横向きにすると遊びやすくなります（タップで閉じる）</button>
    <div class="tc-acts">
      <button type="button" class="tc-run">走る</button>
      <button type="button" class="tc-drive">乗る</button>
@@ -43,6 +44,8 @@ export function createTouchControls({onAxes, onDrive, onExit} = {}) {
  const base = root.querySelector('.tc-base');
  const knob = root.querySelector('.tc-knob');
  const runBtn = root.querySelector('.tc-run');
+ const rotate = root.querySelector('.tc-rotate');
+ rotate.addEventListener('click', () => rotate.remove());
  const driveBtn = root.querySelector('.tc-drive');
 
  let stickId = null, origin = null, running = false, driving = false;
