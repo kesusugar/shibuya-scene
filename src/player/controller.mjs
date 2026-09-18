@@ -9,7 +9,7 @@
 // existing instanced renderer draws and animates the player at no extra draw call, and the
 // crowd's own neighbour avoidance sees the player and parts around them.
 
-import {inPolygon} from '../geo/core.mjs';
+import {clipCameraArm} from './camera.mjs';
 
 // The camera arm. Solids are tested at the camera's own height rather than on the ground,
 // so it is a facade that pulls the camera in and not a bollard it is sailing well above.
@@ -23,7 +23,7 @@ export const PLAYER = Object.freeze({
  look: .0022,          // radians per pixel of mouse travel
  // A pad stick is polled per frame rather than delivered as deltas, so it turns at its own
  // rate and needs a deadzone, or a worn stick walks the player across the street on its own.
- padLook: .045, padDeadzone: .18,
+ padLook: 2.7, padDeadzone: .18,
  // A drag across glass covers far fewer pixels than a mouse sweep, so it turns further per px.
  dragLook: 2.2,
  pitchLimit: 1.15,     // keeps the follow camera out of the ground and off the zenith
@@ -40,7 +40,7 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
  const state = {
   x: start[0], z: start[1], y: 0, heading, pitch: -.12,
   speed: 0, running: false, moving: false, alive: true,
-  runOver: 0, hitBy: null
+  runOver: 0, hitBy: null, health: 100, attackTime: 0, hurtTime: 0, vehiclePhase: 0
  };
  const keys = new Set();
  let padPoll = null;
@@ -80,13 +80,16 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    * leaves no way out at all; `onExit` is called so Escape leaves play entirely. `onDrive`
    * is the get-in/get-out key.
    */
-  attach(element, {onExit, onDrive} = {}) {
+  attach(element, {onExit, onDrive, onAttack} = {}) {
    if (detach) return;
    const down = (e) => {
     if (e.repeat) return;
     const k = e.key.toLowerCase();
+    if (e.target?.closest?.('input,select,textarea')) return;
+    if(k==='tab'){e.preventDefault();if(document.pointerLockElement===element)document.exitPointerLock?.();else element.requestPointerLock?.()?.catch?.(()=>{});return;}
     if (k === 'escape') {keys.clear(); onExit?.(); return;}
     if (k === 'f') {onDrive?.(); e.preventDefault(); return;}
+    if (k === 'e') {onAttack?.(); e.preventDefault(); return;}
     if (!'wasd'.includes(k) && k !== 'shift' && k !== ' ') return;
     keys.add(k === ' ' ? 'shift' : k); e.preventDefault();
    };
@@ -97,7 +100,8 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
     state.heading -= e.movementX * PLAYER.look;
     state.pitch = Math.max(-PLAYER.pitchLimit, Math.min(PLAYER.pitchLimit, state.pitch - e.movementY * PLAYER.look));
    };
-   const click = () => {if (document.pointerLockElement !== element) element.requestPointerLock?.();};
+   const click = (e) => {if (e.pointerType === 'touch') return; if (document.pointerLockElement !== element) element.requestPointerLock?.()?.catch?.(()=>{});};
+   const punch = e => {if(e.button===0&&document.pointerLockElement===element){onAttack?.();e.preventDefault();}};
    // Touch looks by dragging the scene itself. It belongs on the canvas rather than on a
    // full-screen overlay: an overlay wide enough to catch every drag also swallows every
    // button the page already has, and the canvas is exactly the region that should turn.
@@ -116,31 +120,32 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    };
    const touchEnd = e => {if (e.pointerId === touchId) {touchId = null; touchLast = null;}};
    // Edge-detected, because a held button would otherwise fire get-in/get-out every frame.
-   let padPrev = {drive: false, exit: false};
-   padPoll = () => {
+   let padPrev = {drive: false, exit: false, attack: false};
+   padPoll = (dt) => {
     const pad = gamepad(); if (!pad) return;
-    const drive = pad.buttons[0]?.pressed ?? false, exit = pad.buttons[9]?.pressed ?? false;
+    const drive = pad.buttons[0]?.pressed ?? false, exit = pad.buttons[9]?.pressed ?? false, attack=pad.buttons[2]?.pressed??false;
     if (drive && !padPrev.drive) onDrive?.();
     if (exit && !padPrev.exit) {keys.clear(); onExit?.();}
-    padPrev = {drive, exit};
+    if(attack&&!padPrev.attack)onAttack?.();
+    padPrev = {drive, exit, attack};
     const look = pad.axes[2] ?? 0, pitch = pad.axes[3] ?? 0;
-    if (Math.abs(look) > PLAYER.padDeadzone) state.heading -= look * PLAYER.padLook;
+    if (Math.abs(look) > PLAYER.padDeadzone) state.heading -= look * PLAYER.padLook * dt;
     if (Math.abs(pitch) > PLAYER.padDeadzone)
-     state.pitch = Math.max(-PLAYER.pitchLimit, Math.min(PLAYER.pitchLimit, state.pitch - pitch * PLAYER.padLook));
+     state.pitch = Math.max(-PLAYER.pitchLimit, Math.min(PLAYER.pitchLimit, state.pitch - pitch * PLAYER.padLook * dt));
    };
    window.addEventListener('keydown', down); window.addEventListener('keyup', up);
    window.addEventListener('blur', blur);
-   element.addEventListener('mousemove', move); element.addEventListener('click', click);
+   element.addEventListener('mousemove', move); element.addEventListener('click', click);element.addEventListener('mousedown',punch);
    element.addEventListener('pointerdown', touchStart); element.addEventListener('pointermove', touchMove);
    for (const type of ['pointerup', 'pointercancel']) element.addEventListener(type, touchEnd);
    detach = () => {
     window.removeEventListener('keydown', down); window.removeEventListener('keyup', up);
     window.removeEventListener('blur', blur);
-    element.removeEventListener('mousemove', move); element.removeEventListener('click', click);
+    element.removeEventListener('mousemove', move); element.removeEventListener('click', click);element.removeEventListener('mousedown',punch);
     element.removeEventListener('pointerdown', touchStart); element.removeEventListener('pointermove', touchMove);
     for (const type of ['pointerup', 'pointercancel']) element.removeEventListener(type, touchEnd);
     if (document.pointerLockElement === element) document.exitPointerLock?.();
-    keys.clear(); padPoll = null; detach = null;
+    keys.clear(); touch.forward=0; touch.strafe=0; touch.running=false; padPoll = null; detach = null;
    };
   },
   detach() {detach?.();},
@@ -153,7 +158,7 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    */
   place(x = PLAYER.start[0], z = PLAYER.start[1], heading = PLAYER.startHeading) {
    const land = (px, pz) => {
-    Object.assign(state, {x: px, z: pz, heading, speed: 0, alive: true, runOver: 0, hitBy: null});
+    Object.assign(state, {x: px, z: pz, heading, bodyHeading: heading, speed: 0, alive: true, runOver: 0, hitBy: null, health:100, attackTime:0, hurtTime:0, vehiclePhase:0});
     state.y = ctx.height(px, pz); return true;
    };
    for (const test of [ctx.safe, standable]) {
@@ -173,10 +178,11 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    * wins per axis: resting a thumb on a drifting stick cannot then cancel a held key. The
    * deadzone is what keeps a worn stick from walking the player across the street on its own.
    */
+  updateInput(dt) {padPoll?.(Math.max(0, Math.min(.1, dt)));},
   input() {
    // Polled here rather than in step(): driving calls input() and never calls step(), so the
    // pad would go dead the moment the player got into a car.
-   padPoll?.();
+   // Input snapshots are pure; updateInput(dt) advances look/buttons exactly once per frame.
    let fx = 0, fz = 0;
    if (keys.has('w')) fz += 1; if (keys.has('s')) fz -= 1;
    if (keys.has('a')) fx -= 1; if (keys.has('d')) fx += 1;
@@ -217,6 +223,10 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
   rideTo(x, z, heading) {
    state.x = x; state.z = z; state.heading = heading; state.speed = 0; state.moving = false;
   },
+  transitionTo(x,z,heading,phase=0){
+   state.x=x;state.z=z;state.heading=heading;state.bodyHeading=heading;state.y=ctx.height(x,z);
+   state.speed=0;state.moving=false;state.vehiclePhase=phase;
+  },
 
   step(dt) {
    if (!state.alive) {state.runOver += dt; state.speed = 0; state.moving = false; return;}
@@ -225,12 +235,15 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    state.running = running;
    state.moving = len > 0;
    if (len > 0) {
-    const target = state.running ? PLAYER.run : PLAYER.walk;
+    const target = (state.running ? PLAYER.run : PLAYER.walk) * Math.min(1,len);
     state.speed += (target - state.speed) * Math.min(1, dt * 10);
     // Forward is where the player is looking; strafing is perpendicular to it.
     const s = Math.sin(state.heading), c = Math.cos(state.heading);
     const step = state.speed * dt / len;
+    const ox=state.x,oz=state.z;
     advance((fz * s + fx * c) * step, (fz * c - fx * s) * step);
+    state.speed=dt>0?Math.hypot(state.x-ox,state.z-oz)/dt:0;
+    if(state.speed>.02)state.bodyHeading=Math.atan2(state.x-ox,state.z-oz);
    } else state.speed += (0 - state.speed) * Math.min(1, dt * 12);
    state.y = ctx.height(state.x, state.z);
   },
@@ -243,25 +256,14 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    if (!state.alive) return false;
    state.alive = false; state.runOver = 0; state.hitBy = vehicle?.type ?? 'vehicle'; return true;
   },
+  startAttack(seconds=.42){if(!state.alive)return false;state.attackTime=Math.max(state.attackTime,seconds);return true;},
+  hurt(amount=0,source='fight'){
+   if(!state.alive||state.hurtTime>0)return false;state.health=Math.max(0,state.health-Math.max(0,amount));state.hurtTime=.34;
+   if(state.health<=0){state.alive=false;state.runOver=0;state.hitBy=source;}return true;
+  },
   revive() {return api.place();}
  };
  return api;
-}
-
-/** Is anything solid at this point, at this height? */
-function solidAt(ctx, x, z, y, r) {
- for (const {value: s} of ctx.solids.query({minX: x - r, maxX: x + r, minZ: z - r, maxZ: z + r})) {
-  if (s.bottom > y || s.top < y) continue;                 // the camera clears it
-  if (inPolygon([x, z], s.polygon)) return true;
-  const ring = s.polygon.outer;
-  for (let i = 0; i < ring.length; i++) {
-   const a = ring[i], b = ring[(i + 1) % ring.length];
-   const dx = b[0] - a[0], dz = b[1] - a[1];
-   const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz || 1)));
-   if (Math.hypot(x - a[0] - dx * t, z - a[1] - dz * t) < r) return true;
-  }
- }
- return false;
 }
 
 /**
@@ -280,17 +282,8 @@ export function playerCamera(state, out = {}, ctx = null) {
  const wantX = state.x - s * back, wantZ = state.z - c * back;
  const wantY = eye + PLAYER.followUp + PLAYER.followBack * Math.sin(state.pitch);
  out.x = wantX; out.y = wantY; out.z = wantZ;
- if (ctx) {
-  const floor = CAMERA.minBack / Math.max(.01, PLAYER.followBack);
-  for (let i = CAMERA.samples; i >= 1; i--) {
-   const t = i / CAMERA.samples;
-   const px = state.x + (wantX - state.x) * t, pz = state.z + (wantZ - state.z) * t;
-   const py = eye + (wantY - eye) * t;
-   if (!solidAt(ctx, px, pz, py, CAMERA.pad)) {out.x = px; out.y = py; out.z = pz; break;}
-   if (t <= floor) {out.x = state.x; out.y = eye; out.z = state.z; break;}
-  }
- }
- const ahead = 6;
+ clipCameraArm({x:state.x,y:eye,z:state.z},out,ctx,out);
+ const ahead = 1.8;
  out.tx = state.x + s * cp * ahead;
  out.ty = eye + Math.sin(state.pitch) * ahead;
  out.tz = state.z + c * cp * ahead;

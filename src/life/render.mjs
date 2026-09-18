@@ -1,3 +1,4 @@
+import {tagLimb,addGait,installGait} from './gait.mjs';
 import {Group,BoxGeometry,CapsuleGeometry,SphereGeometry,ConeGeometry,CylinderGeometry,TorusGeometry,InstancedMesh,MeshStandardMaterial,Object3D,Color,DynamicDrawUsage,BufferGeometry,Float32BufferAttribute,LineSegments,LineBasicMaterial} from 'three';
 import {triangleCount,merge} from '../geo/geometry.mjs';
 import {buildGroundModel} from '../ground/model.mjs';
@@ -21,8 +22,8 @@ const HAIR_COLORS=[0x25282a,0x4e3a30,0x706051,0xaeb0ac];
 // The played agent keeps its pool slot, because that slot is what the pedestrians' own
 // neighbour avoidance sees and it is why they part around the player. It is simply not drawn
 // here: arms and legs are merged into one body geometry -- what makes two thousand
-// pedestrians affordable -- and a merged limb cannot swing, so the player is drawn by
-// src/player/figure.mjs instead, with limbs of its own.
+// pedestrians affordable. Tagged vertices still swing in the shared crowd shader, while the
+// player is drawn by src/player/figure.mjs so nearby knees, elbows and interactions can bend.
 const rank=(id,salt=0)=>(id*37+salt)%POOL_SIZE;
 function pickVariant(id,profiles,salt=0){let r=rank(id,salt);for(const profile of profiles){if(r<profile.count)return profile.key;r-=profile.count;}return profiles.at(-1).key;}
 function transformed(g,scale,position){g.scale(...scale);g.translate(...position);return g;}
@@ -37,6 +38,7 @@ function bodyGeometry(index){
  // properly sized head floats ten centimetres clear of the shoulders; the old head was big
  // enough to bury its own chin in the chest, which is what made every figure a mushroom.
  parts.push(transformed(new CylinderGeometry(1,1,1,7),[.129,.1,.222],[0,.97,0]));
+ for(let i=0;i<parts.length;i++)tagLimb(parts[i],i===1||i===3?.40:i===2||i===4?.78:0,i===1?-1:i===3?1:i===2?.65:i===4?-.65:0);
  const result=merge(parts);parts.forEach(g=>g.dispose());result.computeVertexNormals();return result;
 }
 // Hair is a shell around the skull with the face left open, not a cap balanced on the crown.
@@ -69,10 +71,12 @@ export function buildCrowd(data,options={}){
  const detail=options.detail?.tier==='high'?options.detail:buildDetailModel(data,{tier:'high',ground,generic,core});
  const network=options.network??buildPedestrianNetwork(data,{ground,generic,core,street,detail}),sim=options.sim??new CrowdSimulation(network,options),root=new Group();root.name='r1-crowd';
  const material=new MeshStandardMaterial({color:0xffffff,roughness:.9}),headMaterial=new MeshStandardMaterial({color:0xffffff,roughness:.7}),hairMaterial=new MeshStandardMaterial({color:0xffffff,roughness:.8});
+ installGait(material);
+ let playerFocus=null;
  const geometry={};for(let i=0;i<BODY_VARIANTS.length;i++)geometry[BODY_VARIANTS[i].key]=bodyGeometry(i);geometry.head=new SphereGeometry(1,10,7);for(let i=0;i<HAIR_VARIANTS.length;i++)geometry[HAIR_VARIANTS[i].key]=hairGeometry(i);
  Object.assign(geometry,{phone:new BoxGeometry(1,1,1),bag:new BoxGeometry(1,1,1),cane:new CylinderGeometry(1,1,1,6),suitcase:suitcaseGeometry(),umbrella:new ConeGeometry(1,.35,8)});
  const capacities={...Object.fromEntries(BODY_VARIANTS.map(v=>[v.key,v.count])),head:POOL_SIZE,...Object.fromEntries(HAIR_VARIANTS.map(v=>[v.key,v.count])),...ACCESSORY_TARGETS};
- const meshes={};for(const [key,g] of Object.entries(geometry)){const m=new InstancedMesh(g,key==='head'?headMaterial:key.startsWith('hair')?hairMaterial:material,capacities[key]);m.instanceMatrix.setUsage(DynamicDrawUsage);m.frustumCulled=false;m.name='crowd-'+key;root.add(m);meshes[key]=m;}
+ const meshes={};for(const [key,g] of Object.entries(geometry)){addGait(g,capacities[key]);const m=new InstancedMesh(g,key==='head'?headMaterial:key.startsWith('hair')?hairMaterial:material,capacities[key]);m.instanceMatrix.setUsage(DynamicDrawUsage);m.frustumCulled=false;m.name='crowd-'+key;root.add(m);meshes[key]=m;}
  const obj=new Object3D(),color=new Color(),counts={},stats={geometries:Object.keys(geometry).length,materials:3,textures:0,batches:0,triangles:0,debugBatches:0,bodyCounts:{},hairCounts:{},accessories:{}};let disposed=false,reportClock=0;
  let debug=null;if(options.debug){const lines=[];for(const e of network.edges){if(e.id%2&&!e.crossingId)continue;const a=network.nodes[e.from],b=network.nodes[e.to];if(e.points){for(let i=1;i<e.points.length;i++)lines.push(e.points[i-1][0],.2,e.points[i-1][1],e.points[i][0],.2,e.points[i][1]);}else lines.push(a.x,.2,a.z,b.x,.2,b.z);}
   const g=new BufferGeometry();g.setAttribute('position',new Float32BufferAttribute(lines,3));debug=new LineSegments(g,new LineBasicMaterial({color:0xf8b5d1,depthTest:false}));debug.name='r1-walkable-path-grid';root.add(debug);stats.debugBatches=1;
@@ -85,7 +89,7 @@ export function buildCrowd(data,options={}){
  function part(key,p,lx,y,lz,w,h,d,hex,tilt=0){
   if(p.struck!==undefined){const a=Math.min(1,p.struck/FALL_TILT)*Math.PI/2+(p.spin??0);
    lz+=y*Math.sin(a);y*=Math.cos(a);tilt+=a;}
-  const c=Math.cos(p.heading),s=Math.sin(p.heading);obj.position.set(p.renderX+c*lx+s*lz,p.height+y,p.renderZ-s*lx+c*lz);obj.rotation.set(tilt,p.heading,0);obj.scale.set(w,h,d);obj.updateMatrix();const i=counts[key]++;meshes[key].setMatrixAt(i,obj.matrix);color.setHex(hex);meshes[key].setColorAt(i,color);}
+  const heading=p.heading+(playerFocus&&p.speed<.05&&p.struck===undefined?Math.sin(p.id*2.39+sim.time*.22)*.15:0);const c=Math.cos(heading),s=Math.sin(heading);obj.position.set(p.renderX+c*lx+s*lz,p.height+y,p.renderZ-s*lx+c*lz);obj.rotation.set(tilt,heading,0);obj.scale.set(w,h,d);obj.updateMatrix();const i=counts[key]++,near=playerFocus&&p.struck===undefined&&Math.hypot(p.x-playerFocus.x,p.z-playerFocus.z)<24;geometry[key].attributes.gait.setX(i,near?Math.sin(p.travelled*4.1+p.phase)*Math.min(.6,p.speed*.3)+(p.speed<.05?Math.sin(sim.time*1.4+p.phase)*.025:0):0);geometry[key].attributes.action.setX(i,near?(p.combatAction??0):0);meshes[key].setMatrixAt(i,obj.matrix);color.setHex(hex);meshes[key].setColorAt(i,color);}
  function hasAccessory(p,key){return rank(p.id,{phone:211,bag:433,cane:677,suitcase:929,umbrella:1217}[key])<ACCESSORY_TARGETS[key];}
  function sync(dt=0){for(const k of Object.keys(meshes))counts[k]=0;for(const p of sim.pool){if(!p.active||p.controlled)continue;const def=ARCHETYPES[p.archetype],h=def.height*(.96+(p.id%5)*.02),w=def.width*(1.06+(p.id%7)*.015),walk=p.speed>.05,phase=p.animationTime*(walk?7:1)+p.phase,fidelity=p.lod==='near'?1:p.lod==='mid'?.65:.15,sway=walk?Math.sin(phase)*.035*fidelity:Math.sin(phase)*.012,bob=walk?Math.abs(Math.cos(phase))*.024*fidelity:Math.sin(phase)*.008;
    const blend=dt?Math.min(1,dt*(p.lod==='far'?10:25)):1;p.renderX+=(p.x-p.renderX)*blend;p.renderZ+=(p.z-p.renderZ)*blend;
@@ -103,9 +107,9 @@ export function buildCrowd(data,options={}){
    if(hasAccessory(p,'suitcase'))part('suitcase',p,-w*.64,h*.02,.08,w*.5,h*.38,w*.52,p.id%2?0x596579:0x6e4d45);
    if(hasAccessory(p,'umbrella'))part('umbrella',p,.08,h*.99,0,.38,.62,.38,shirt);
   }
-  stats.triangles=0;stats.batches=0;for(const [k,m] of Object.entries(meshes)){m.count=counts[k];if(m.count)stats.batches++;stats.triangles+=m.count*triangleCount(geometry[k]);m.instanceMatrix.needsUpdate=true;if(m.instanceColor)m.instanceColor.needsUpdate=true;}
+  stats.triangles=0;stats.batches=0;for(const [k,m] of Object.entries(meshes)){m.count=counts[k];if(m.count)stats.batches++;stats.triangles+=m.count*triangleCount(geometry[k]);geometry[k].attributes.gait.needsUpdate=true;geometry[k].attributes.action.needsUpdate=true;m.instanceMatrix.needsUpdate=true;if(m.instanceColor)m.instanceColor.needsUpdate=true;}
   stats.bodyCounts=Object.fromEntries(BODY_VARIANTS.map(v=>[v.key,counts[v.key]]));stats.hairCounts=Object.fromEntries(HAIR_VARIANTS.map(v=>[v.key,counts[v.key]]));stats.accessories=Object.fromEntries(Object.keys(ACCESSORY_TARGETS).map(k=>[k,counts[k]]));stats.instanceCounts={...counts};
   reportClock+=dt;if(reportClock>=1||!dt){reportClock=0;Object.assign(stats,network.stats,sim.snapshot(options.debug));}
  }
- sync();return {root,network,sim,stats,meshes,update(dt,camera){if(disposed)return;if(camera)sim.setCamera(camera.x,camera.z);sim.update(dt);sync(dt);},setTier(t){sim.setTier(t);sync();},dispose(){if(disposed)return;disposed=true;sim.dispose();for(const m of Object.values(meshes))m.dispose();for(const g of Object.values(geometry))g.dispose();material.dispose();headMaterial.dispose();hairMaterial.dispose();debug?.geometry.dispose();debug?.material.dispose();root.removeFromParent();root.clear();}};
+ sync();return {root,network,sim,stats,meshes,setPlayerFocus(p){playerFocus=p;},update(dt,camera){if(disposed)return;if(camera)sim.setCamera(camera.x,camera.z);sim.update(dt);sync(dt);},setTier(t){sim.setTier(t);sync();},dispose(){if(disposed)return;disposed=true;sim.dispose();for(const m of Object.values(meshes))m.dispose();for(const g of Object.values(geometry))g.dispose();material.dispose();headMaterial.dispose();hairMaterial.dispose();debug?.geometry.dispose();debug?.material.dispose();root.removeFromParent();root.clear();}};
 }

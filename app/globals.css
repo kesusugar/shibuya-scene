@@ -138,3 +138,19 @@ body.tc-on .player-hint{display:none}
  .presentation .view-label{bottom:18px;max-width:108px;overflow:hidden}
  .presentation .solar-controls{bottom:18px}
 }
+
+/* Player mode owns a compact HUD; observation controls remain in observation mode. */
+.playing header,.playing .quick-views,.playing .solar-controls,.playing .stats,.playing .view-label,.playing .player-hint{display:none!important}
+.play-hud{position:fixed;inset:0;z-index:35;pointer-events:none;color:#eef5f6;font-variant-numeric:tabular-nums;font-family:Arial,sans-serif}
+.play-hud[hidden]{display:none}
+.play-hud button{pointer-events:auto;border-radius:8px;background:#16372f;color:#d9fff0;border:1px solid #8fddba55;font-size:12px;padding:8px 12px}
+.play-hud button:disabled{opacity:.55;cursor:default}
+.play-top{position:absolute;top:max(16px,env(safe-area-inset-top));left:20px;right:20px;display:flex;align-items:center;justify-content:space-between}
+.play-brand{font-weight:800;letter-spacing:.18em;text-shadow:0 2px 8px #000;font-size:16px}.play-brand span{font-weight:400;font-size:10px;color:#a8c4c9;margin-left:10px}
+.play-mission{position:absolute;left:20px;top:64px;width:min(320px,calc(100vw - 40px));padding:14px 16px;background:#0b1724dd;border:1px solid #ffffff22;border-left:3px solid #68e7b4;border-radius:10px;backdrop-filter:blur(8px)}
+.play-mission strong{font-size:14px;letter-spacing:.05em}.play-task{font-size:12px;line-height:1.6;color:#c4d4dc;margin:7px 0 10px}.play-task-row{display:flex;gap:10px;align-items:center}.play-timer{font-weight:700;color:#a8ffd5}.play-progress{width:100%;height:5px;accent-color:#68e7b4}
+.play-map{position:absolute;bottom:max(22px,env(safe-area-inset-bottom));left:20px;width:160px;border:1px solid #cadce044;border-radius:14px;overflow:hidden;background:#0c1821dc;box-shadow:0 6px 30px #0005}.play-map canvas{width:100%;display:block}.play-map span{display:block;font-size:9px;text-align:center;padding:5px;color:#bacbd1}
+.play-dashboard{position:absolute;bottom:24px;right:22px;display:flex;gap:14px;align-items:center;padding:12px 16px;background:#0b1724dd;border:1px solid #ffffff22;border-radius:12px}.play-speed{font-size:22px;display:block;font-weight:600}.play-health,.play-damage{display:block;font-size:11px;color:#cad8df}.play-health{color:#9ff0bd}
+@media(pointer:coarse){.play-dashboard{bottom:160px;right:16px}.play-map{bottom:auto;top:70px;left:auto;right:16px;width:115px}.play-mission{width:min(280px,calc(100vw - 155px))}.play-dashboard .play-drive{display:none}}
+@media(max-height:550px){.play-top{top:10px}.play-mission{top:48px;padding:10px 12px}.play-map{width:125px}.play-task{margin:5px 0;font-size:11px}.play-dashboard{bottom:14px}}
+@media(pointer:coarse) and (max-height:550px){.play-map{top:48px;width:100px}.play-dashboard{bottom:auto;top:170px;padding:7px 10px}.play-speed{font-size:17px}.play-mission{width:260px}}
