@@ -1,0 +1,42 @@
+import {createDelivery} from './objective.mjs';
+import {createPlayerMarker} from './marker.mjs';
+
+// Canvas minimap uses the existing road/walk network; no extra renderer or map download.
+export function createPlayUI(network,parent,{onExit,onDrive}={}){
+ const mission=createDelivery(network),marker=createPlayerMarker(0x68e7b4);parent.add(marker.mesh);
+ const root=document.createElement('section');root.className='play-hud';root.setAttribute('aria-label','プレイ情報');
+ root.innerHTML=`<div class="play-top"><div class="play-brand">SHIBUYA <span>FREE ROAM · Tab メニュー</span></div><button class="play-exit" type="button">観察に戻る</button></div>
+ <div class="play-mission"><strong>渋谷デリバリー</strong><p class="play-task">徒歩と車で3か所へ。降車して停止すると配達できます。</p><div class="play-task-row"><span class="play-timer"></span><button class="play-start" type="button">配送を始める</button><button class="play-cancel" type="button" hidden>中止</button></div><progress class="play-progress" max="1" value="0" aria-label="受け渡し進行" hidden></progress></div>
+ <div class="play-map"><canvas width="320" height="320" aria-label="周辺地図・北が上"></canvas><span>N · 北 / 緑：目的地 / 青：車</span></div>
+ <div class="play-dashboard"><div><b class="play-speed">徒歩</b><small class="play-damage"></small></div><button class="play-drive" type="button">車を探す</button></div>`;
+ document.body.appendChild(root);
+ const query=s=>root.querySelector(s),canvas=query('canvas'),c=canvas.getContext('2d'),task=query('.play-task'),timer=query('.play-timer'),start=query('.play-start'),cancel=query('.play-cancel'),progress=query('.play-progress'),speed=query('.play-speed'),damage=query('.play-damage'),drive=query('.play-drive');
+ let current=null,visible=false,clock=0,disposed=false;
+ query('.play-exit').onclick=()=>onExit?.();drive.onclick=()=>onDrive?.();
+ start.onclick=()=>{if(current&&current.alive!==false){mission.start(current);document.exitPointerLock?.();clock=1;}};
+ cancel.onclick=()=>{mission.cancel();clock=1;};
+ // Build once, draw at 5 Hz. The full network is not traversed each rendered frame.
+ const map=document.createElement('canvas');map.width=800;map.height=800;const m=map.getContext('2d'),scale=800/500;
+ if(m){m.fillStyle='#0c1821';m.fillRect(0,0,800,800);m.strokeStyle='#354d5b';m.lineWidth=2;
+  m.beginPath();for(const e of network.edges){const points=e.points??[[network.nodes[e.from].x,network.nodes[e.from].z],[network.nodes[e.to].x,network.nodes[e.to].z]];points.forEach((p,i)=>m[i?'lineTo':'moveTo']((p[0]+250)*scale,(p[1]+250)*scale));}m.stroke();}
+ function draw(position,car,target){if(!c)return;const extent=90,k=320/(extent*2);c.fillStyle='#0c1821';c.fillRect(0,0,320,320);c.drawImage(map,(position.x-extent+250)*scale,(position.z-extent+250)*scale,extent*2*scale,extent*2*scale,0,0,320,320);
+  const dot=(p,color,r)=>{if(!p)return;const x=Math.max(8,Math.min(312,160+(p.x-position.x)*k)),y=Math.max(8,Math.min(312,160+(p.z-position.z)*k));c.fillStyle=color;c.beginPath();c.arc(x,y,r,0,Math.PI*2);c.fill();};
+  if(car?.active)dot(car,'#70d7ff',6);if(target)dot(target,'#68e7b4',8);
+  c.save();c.translate(160,160);c.rotate(-position.heading);c.fillStyle='#fff';c.beginPath();c.moveTo(0,10);c.lineTo(-7,-7);c.lineTo(7,-7);c.closePath();c.fill();c.restore();
+ }
+ return {mission,show(){visible=true;root.hidden=false;clock=1;},hide(){visible=false;root.hidden=true;marker.hide();mission.cancel();},
+  update(dt,position,car,driving,entry,hits=0){if(disposed||!visible)return;current=position;mission.tick(dt,position,{driving,alive:position.alive,hits});const s=mission.snapshot();
+   if(s.target)marker.update({x:s.target.x,z:s.target.z,y:network.ctx.height(s.target.x,s.target.z)},dt,2.4);else marker.hide();
+   clock+=dt;if(clock<.2)return;clock=0;draw(position,car,s.target);
+   speed.textContent=driving?`${Math.round(Math.abs(car?.speed??0)*3.6)} km/h`:position.speed>2.5?'走行中':'徒歩';
+   damage.textContent=car?.active?`損傷 ${Math.round((car.damage??0)*100)}%`:'';
+   drive.textContent=driving?'降りる · F':entry?.inRange?'乗る · F':entry?`車まで ${Math.ceil(entry.distance)}m`:'車を探す';drive.disabled=position.alive===false||(!driving&&!entry?.inRange);
+   cancel.hidden=s.status!=='running';start.hidden=s.status==='running';start.disabled=position.alive===false;progress.hidden=s.status!=='running';progress.value=s.progress;
+   timer.textContent=s.status==='running'?`${Math.floor(Math.ceil(s.remaining)/60)}:${String(Math.ceil(s.remaining)%60).padStart(2,'0')} · ${s.index}/${s.total}`:'';
+   if(s.status==='running')task.textContent=`${s.target.label} · ${Math.round(Math.hypot(position.x-s.target.x,position.z-s.target.z))}m ｜ 降車して1秒ほど停止`;
+   else if(s.status==='complete'){task.textContent=`配達完了！ ${s.score}点 · ${s.elapsed.toFixed(1)}秒 · 接触 ${s.contacts}回`;start.textContent='もう一度配達';}
+   else if(s.status==='failed'){task.textContent=`${s.reason}。もう一度挑戦できます。`;start.textContent='再挑戦';}
+   else if(s.status==='unavailable')task.textContent='この場所から配達ルートを作れません。交差点付近で再度お試しください。';
+   else{task.textContent='徒歩と車で3か所へ。降車して停止すると配達できます。';start.textContent='配送を始める';}
+  },dispose(){if(disposed)return;disposed=true;marker.dispose();root.remove();canvas.width=0;map.width=0;}};
+}

@@ -70,13 +70,14 @@ export function createPlayerAudio() {
    * Track the car. `load` is throttle, so a car labouring up to speed sounds different from
    * one coasting at the same speed, which is most of what makes an engine readable.
    */
-  engine(speed, topSpeed, load = 0) {
+  engine(speed, topSpeed, load = 0, damage = 0) {
    if (!ctx || !engine) return;
    const t = Math.min(1, Math.abs(speed) / Math.max(1, topSpeed));
-   const hz = AUDIO.idleHz + (AUDIO.revHz - AUDIO.idleHz) * t;
+   const wear=Math.max(0,Math.min(1,damage));
+   const hz = (AUDIO.idleHz + (AUDIO.revHz - AUDIO.idleHz) * t)*(1-wear*.08);
    const when = ctx.currentTime, ramp = AUDIO.rampMs / 1000;
    engine.a.frequency.setTargetAtTime(hz, when, ramp);
-   engine.b.frequency.setTargetAtTime(hz, when, ramp);
+   engine.b.frequency.setTargetAtTime(hz*(1+wear*.025*Math.sin(ctx.currentTime*23)), when, ramp);
    engine.filter.frequency.setTargetAtTime(
     AUDIO.cutoffLow + (AUDIO.cutoffHigh - AUDIO.cutoffLow) * Math.min(1, t + load * .35), when, ramp);
    engine.gain.gain.setTargetAtTime(AUDIO.engineGain * (.45 + .55 * t), when, ramp);

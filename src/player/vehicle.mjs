@@ -8,6 +8,7 @@
 // Handling is arcade: the car goes where it is pointed, with no slide. Momentum can come
 // later; this stage is about the loop -- get in, drive, get out -- being right first.
 
+import {clipCameraArm} from './camera.mjs';
 import {VEHICLES} from '../traffic/config.mjs';
 import {DODGE_SPEED} from '../life/simulation.mjs';
 import {safePose} from '../traffic/graph.mjs';
@@ -45,7 +46,7 @@ export const CAR = Object.freeze({
  takeOverRange: 6,                       // how far you can reach another car to take it over
  // The camera rides further back and higher than the walking one: at 11 m/s the walking
  // arm puts the road under the bonnet and nothing else in frame.
- followBack: 8.2, followUp: 3.2, eye: 1.4
+ followBack: 9.8, followUp: 3.6, eye: 1.4
 });
 
 /** Do two segments cross? Used to catch a wall thinner than the car's corner spacing. */
@@ -95,6 +96,7 @@ export function createPlayerVehicle(sim, ctx) {
   * is excluded or the car would collide with itself.
   */
  const poseOk = (x, z, heading) => {
+  if(Math.abs(x)>242||Math.abs(z)>242)return false;
   if (!clearOfSolids(x, z, heading)) return false;
   probe.x = x; probe.z = z; probe.heading = heading;
   return !sim.blocked(probe, state.type, state.slot, CAR.carPad);
@@ -106,7 +108,7 @@ export function createPlayerVehicle(sim, ctx) {
  };
 
  const api = {
-  state, def,
+  state, get def(){return def;},
   /** Take a pool slot and stand the car on legal ground near `x,z`. */
   spawn(x, z, heading = 0) {
    const slot = state.slot ?? sim.pool.find(v => !v.active);
@@ -160,7 +162,7 @@ export function createPlayerVehicle(sim, ctx) {
    */
   takeOver(slot) {
    if (!slot || slot === state.slot) return false;
-   if (state.slot) {state.slot.controlled = false; state.slot.parked = true; state.slot.speed = 0;}
+   if (state.slot) {state.slot.playerVisual = false; state.slot.controlled = false; state.slot.parked = true; state.slot.speed = 0;}
    state.slot = slot; state.type = slot.type; def = VEHICLES[slot.type];
    state.x = slot.x; state.z = slot.z; state.heading = slot.heading; state.course = slot.heading;
    state.y = ctx.height(slot.x, slot.z); state.speed = 0; state.steering = 0; state.damage = 0; state.stalled = false;
@@ -217,6 +219,7 @@ export function createPlayerVehicle(sim, ctx) {
 
   step(dt, input) {
    if (!state.active) return;
+   if(dt>.02){const steps=Math.ceil(dt/.02);for(let i=0;i<steps;i++)api.step(dt/steps,input);return;}
    const throttle = (input.forward ?? 0), turn = (input.strafe ?? 0);
    const health = Math.max(CAR.wreckFloor, 1 - (1 - CAR.wreckFloor) * state.damage);
    // S brakes while moving forward, and becomes reverse once stopped.
@@ -367,7 +370,7 @@ export function createPlayerVehicle(sim, ctx) {
 
   release() {
    const slot = state.slot;
-   if (slot) {slot.controlled = false; slot.parked = true; slot.speed = 0;}
+   if (slot) {slot.playerVisual = false; slot.controlled = false; slot.parked = true; slot.speed = 0;}
    state.active = false; state.slot = null;
   }
  };
@@ -375,12 +378,13 @@ export function createPlayerVehicle(sim, ctx) {
 }
 
 /** Third-person camera for the car, framed further back than the walking one. */
-export function vehicleCamera(state, out = {}) {
+export function vehicleCamera(state, out = {}, ctx = null) {
  const s = Math.sin(state.heading), c = Math.cos(state.heading);
  const eye = state.y + CAR.eye;
  out.x = state.x - s * CAR.followBack; out.z = state.z - c * CAR.followBack;
  out.y = eye + CAR.followUp;
- const ahead = 14;
- out.tx = state.x + s * ahead; out.ty = eye + 0.4; out.tz = state.z + c * ahead;
+ const ahead = 2.8 + Math.min(2,Math.abs(state.speed)*.12);
+ out.tx = state.x + s * ahead; out.ty = eye - .1; out.tz = state.z + c * ahead;
+ clipCameraArm({x:state.x,y:eye,z:state.z},out,ctx,out);
  return out;
 }
