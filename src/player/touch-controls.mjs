@@ -22,9 +22,9 @@ export const wantsTouch = () =>
   (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches));
 
 /**
- * @param {{onAxes?:(axes:any)=>void, onDrive?:()=>void, onExit?:()=>void}} [options]
+ * @param {{onAxes?:(axes:any)=>void, onDrive?:()=>void, onAttack?:()=>void, onExit?:()=>void}} [options]
  */
-export function createTouchControls({onAxes, onDrive, onExit} = {}) {
+export function createTouchControls({onAxes, onDrive, onAttack, onExit} = {}) {
  if (typeof document === 'undefined') return {show() {}, hide() {}, setDriving() {}, dispose() {}};
 
  const root = document.createElement('div');
@@ -35,6 +35,7 @@ export function createTouchControls({onAxes, onDrive, onExit} = {}) {
    <button type="button" class="tc-rotate">横向きにすると遊びやすくなります（タップで閉じる）</button>
    <div class="tc-acts">
      <button type="button" class="tc-run">走る</button>
+     <button type="button" class="tc-attack">殴る</button>
      <button type="button" class="tc-drive">乗る</button>
      <button type="button" class="tc-exit">観察</button>
    </div>`;
@@ -94,6 +95,7 @@ export function createTouchControls({onAxes, onDrive, onExit} = {}) {
  runBtn.addEventListener('pointerdown', e => {e.preventDefault(); runBtn.setPointerCapture?.(e.pointerId); holdRun(true);});
  for (const type of ['pointerup', 'pointercancel', 'pointerleave']) runBtn.addEventListener(type, () => holdRun(false));
  driveBtn.addEventListener('click', e => {e.preventDefault(); onDrive?.();});
+ root.querySelector('.tc-attack').addEventListener('click',e=>{e.preventDefault();onAttack?.();});
  root.querySelector('.tc-exit').addEventListener('click', e => {e.preventDefault(); onExit?.();});
 
  return {
@@ -105,6 +107,7 @@ export function createTouchControls({onAxes, onDrive, onExit} = {}) {
    driveBtn.textContent = on ? '降りる' : '乗る';
    driveBtn.classList.remove('far');
    runBtn.hidden = on;
+   root.querySelector('.tc-attack').hidden=on;
    if (on) holdRun(false);
   },
 

@@ -8,9 +8,9 @@ export function createPlayUI(network,parent,{onExit,onDrive}={}){
  root.innerHTML=`<div class="play-top"><div class="play-brand">SHIBUYA <span>FREE ROAM · Tab メニュー</span></div><button class="play-exit" type="button">観察に戻る</button></div>
  <div class="play-mission"><strong>渋谷デリバリー</strong><p class="play-task">徒歩と車で3か所へ。降車して停止すると配達できます。</p><div class="play-task-row"><span class="play-timer"></span><button class="play-start" type="button">配送を始める</button><button class="play-cancel" type="button" hidden>中止</button></div><progress class="play-progress" max="1" value="0" aria-label="受け渡し進行" hidden></progress></div>
  <div class="play-map"><canvas width="320" height="320" aria-label="周辺地図・北が上"></canvas><span>N · 北 / 緑：目的地 / 青：車</span></div>
- <div class="play-dashboard"><div><b class="play-speed">徒歩</b><small class="play-damage"></small></div><button class="play-drive" type="button">車を探す</button></div>`;
+ <div class="play-dashboard"><div><b class="play-speed">徒歩</b><small class="play-health">体力 100</small><small class="play-damage"></small></div><button class="play-drive" type="button">車を探す</button></div>`;
  document.body.appendChild(root);
- const query=s=>root.querySelector(s),canvas=query('canvas'),c=canvas.getContext('2d'),task=query('.play-task'),timer=query('.play-timer'),start=query('.play-start'),cancel=query('.play-cancel'),progress=query('.play-progress'),speed=query('.play-speed'),damage=query('.play-damage'),drive=query('.play-drive');
+ const query=s=>root.querySelector(s),canvas=query('canvas'),c=canvas.getContext('2d'),task=query('.play-task'),timer=query('.play-timer'),start=query('.play-start'),cancel=query('.play-cancel'),progress=query('.play-progress'),speed=query('.play-speed'),health=query('.play-health'),damage=query('.play-damage'),drive=query('.play-drive');
  let current=null,visible=false,clock=0,disposed=false;
  query('.play-exit').onclick=()=>onExit?.();drive.onclick=()=>onDrive?.();
  start.onclick=()=>{if(current&&current.alive!==false){mission.start(current);document.exitPointerLock?.();clock=1;}};
@@ -29,8 +29,9 @@ export function createPlayUI(network,parent,{onExit,onDrive}={}){
    if(s.target)marker.update({x:s.target.x,z:s.target.z,y:network.ctx.height(s.target.x,s.target.z)},dt,2.4);else marker.hide();
    clock+=dt;if(clock<.2)return;clock=0;draw(position,car,s.target);
    speed.textContent=driving?`${Math.round(Math.abs(car?.speed??0)*3.6)} km/h`:position.speed>2.5?'走行中':'徒歩';
+   health.textContent=`体力 ${Math.max(0,Math.round(position.health??100))} · E/クリック 攻撃`;
    damage.textContent=car?.active?`損傷 ${Math.round((car.damage??0)*100)}%`:'';
-   drive.textContent=driving?'降りる · F':entry?.inRange?'乗る · F':entry?`車まで ${Math.ceil(entry.distance)}m`:'車を探す';drive.disabled=position.alive===false||(!driving&&!entry?.inRange);
+   drive.textContent=driving?'降りる · F':entry?.inRange?(entry.kind==='steal'?'奪う · F':'乗る · F'):entry?`車まで ${Math.ceil(entry.distance)}m`:'車を探す';drive.disabled=position.alive===false||(!driving&&!entry?.inRange);
    cancel.hidden=s.status!=='running';start.hidden=s.status==='running';start.disabled=position.alive===false;progress.hidden=s.status!=='running';progress.value=s.progress;
    timer.textContent=s.status==='running'?`${Math.floor(Math.ceil(s.remaining)/60)}:${String(Math.ceil(s.remaining)%60).padStart(2,'0')} · ${s.index}/${s.total}`:'';
    if(s.status==='running')task.textContent=`${s.target.label} · ${Math.round(Math.hypot(position.x-s.target.x,position.z-s.target.z))}m ｜ 降車して1秒ほど停止`;

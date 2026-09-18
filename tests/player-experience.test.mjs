@@ -14,6 +14,8 @@ import {restorePedestrianNetwork} from '../src/life/network.mjs';
 import {buildCrowd} from '../src/life/render.mjs';
 import {VEHICLES} from '../src/traffic/config.mjs';
 import {reactToRunner,settleNearbyWaiters} from '../src/player/crowd-interaction.mjs';
+import {createMeleeCombat,COMBAT} from '../src/player/combat.mjs';
+import {createVehicleTransition} from '../src/player/vehicle-transition.mjs';
 import {ShaderLib,Box3,Vector3} from 'three';
 
 const flat={solid:()=>false,safe:()=>true,height:()=>0,onRoad:()=>false};
@@ -48,6 +50,25 @@ test('vehicle dimensions follow takeover and play bounds stop driving into the v
  car.state.x=241.9;car.state.heading=Math.PI/2;car.state.course=Math.PI/2;car.state.speed=9;car.step(.1,{forward:1});assert.ok(car.state.x<=242);
  car.release();assert.equal(slot.controlled,false);assert.equal(slot.playerVisual,false);
 });
+test('stopped traffic can be stolen without retaining signal locks and enter/exit does not snap',()=>{
+ const slot={active:true,parked:false,controlled:false,service:false,type:'sedan',x:0,z:2,heading:0,speed:0,locks:new Set(),passed:new Set(),yellowStops:new Set()};
+ let released=false;const sim={pool:[slot],graph:{ctx:{solid:{query:()=>[]}}},blocked:()=>false,releasePermits(v){released=v===slot;v.locks.clear();}},car=createPlayerVehicle(sim,flat),entry=car.nearestEntry(0,0);
+ assert.equal(entry.kind,'steal');assert.equal(entry.inRange,true);assert.ok(car.doorPose(slot,0,0));
+ const other={type:'sedan',x:0,z:0,heading:0,locks:new Set(),passed:new Set(),yellowStops:new Set()};assert.equal(car.takeOver(other),true);assert.equal(car.takeOver(slot),true);assert.equal(released,true);
+ const motion=createVehicleTransition();assert.equal(motion.begin('enter',{x:0,z:0,heading:0},{x:1,z:1,heading:Math.PI/2},slot),true);
+ const mid=motion.update(.39);assert.ok(mid.x>0&&mid.x<1&&!mid.done);const end=motion.update(1);assert.equal(end.done,true);assert.equal(end.slot,slot);assert.equal(motion.active,false);
+});
+test('melee selects a facing adult, provokes counterattacks, and either side can die',()=>{
+ const p={id:7,active:true,controlled:false,choreographed:false,struck:undefined,combatDead:false,archetype:'casual',crossing:null,x:0,z:1,heading:Math.PI,state:'walking',speed:0};
+ const grid=new Map([['0,0',[p]]]),crowd={grid,time:0,network:{ctx:flat},cell:(x,z)=>Math.floor(x/2)+','+Math.floor(z/2),insert(q){const k=this.cell(q.x,q.z);if(!this.grid.has(k))this.grid.set(k,[]);this.grid.get(k).push(q);},leave(){},say(){},vehicleOverlap:()=>false,strike(q){q.struck=0;return true;}};
+ const player=createPlayer(flat,{start:[0,0],heading:0}),fight=createMeleeCombat();
+ fight.request();fight.update(.1,crowd,player);assert.equal(p.combatHealth,100-COMBAT.playerDamage);assert.equal(p.combatTarget,'player');
+ crowd.time=.7;fight.update(.4,crowd,player);assert.ok(player.state.health<100);
+ player.state.hurtTime=0;for(let i=0;i<2;i++){fight.request();fight.update(.5,crowd,player);}assert.equal(p.combatDead,true);assert.equal(p.fatal,true);assert.equal(fight.snapshot().npcDeaths,1);
+ const killer={...p,id:8,z:1,active:true,struck:undefined,combatDead:false,combatHealth:100,combatTarget:'player',combatUntil:99,combatNext:0};crowd.grid.set('0,0',[killer]);player.place(0,0,0);
+ for(let i=0;i<8&&player.state.alive;i++){player.state.hurtTime=0;crowd.time+=2;fight.update(.5,crowd,player);}assert.equal(player.state.alive,false);assert.equal(player.state.hitBy,'fight');
+ fight.dispose();
+});
 const simpleNetwork=()=>{const nodes=[[0,0],[-40,-35],[-75,-55],[15,25]].map(([x,z],id)=>({id,x,z,edges:[],component:0})),edges=[];for(const a of nodes)for(const b of nodes){if(a===b)continue;const e={id:edges.length,from:a.id,to:b.id,length:Math.hypot(a.x-b.x,a.z-b.z)};edges.push(e);a.edges.push(e.id);}return {nodes,edges,eligible:nodes,ctx:flat};};
 test('delivery requires dismount and dwell, counts contacts, completes and restarts',()=>{
  const mission=createDelivery(simpleNetwork());assert.ok(mission.start({x:0,z:0}));
@@ -66,7 +87,7 @@ test('the shipped HIGH network has a deterministic reachable delivery circuit',(
 test('hero, every car type and bounded particles have finite geometry and release their slot',()=>{
  const figure=createPlayerFigure();figure.update({x:0,y:0,z:0,heading:0,speed:0,alive:true},.1);const size=new Box3().setFromObject(figure.root).getSize(new Vector3());assert.ok(size.y>1.7&&size.y<1.9);
  const visual=createVehicleVisual(),fx=createVehicleEffects();
- for(const type of Object.keys(VEHICLES)){const slot={},state={active:true,x:0,y:0,z:0,heading:0,speed:4,steering:.4,damage:.8,type,slot};visual.update(state,.1);if(type!=='scooter')assert.equal(slot.playerVisual,true);fx.impact(state);for(let i=0;i<20;i++)fx.update(.1,state);assert.ok(fx.root.children[0].count<=72);visual.hide();assert.equal(slot.playerVisual,false);}
+ for(const type of Object.keys(VEHICLES)){const slot={},state={active:true,x:0,y:0,z:0,heading:0,speed:4,steering:.4,damage:.8,type,doorSide:-1,doorPhase:type==='taxi'?.8:0,slot};visual.update(state,.1);if(type!=='scooter')assert.equal(slot.playerVisual,true);if(type==='taxi')assert.ok(Math.abs(visual.root.getObjectByName('player-vehicle-door--1').rotation.y)>.5);fx.impact(state);for(let i=0;i<20;i++)fx.update(.1,state);assert.ok(fx.root.children[0].count<=72);visual.hide();assert.equal(slot.playerVisual,false);}
  figure.dispose();figure.dispose();visual.dispose();visual.dispose();fx.dispose();fx.dispose();assert.equal(figure.root.children.length,0);
 });
 test('crowd gait preserves the 13 geometry / 3 material budget and observer pose',()=>{
@@ -77,6 +98,7 @@ test('crowd gait preserves the 13 geometry / 3 material budget and observer pose
  const mesh=Object.values(crowd.meshes).find(m=>m.geometry.attributes.limbJoint.array.some(v=>v!==0)&&m.count);
  assert.equal(mesh.geometry.attributes.gait.getX(0),0);crowd.setPlayerFocus({x:0,z:0});crowd.update(.1);assert.notEqual(mesh.geometry.attributes.gait.getX(0),0);
  const shader={vertexShader:ShaderLib.standard.vertexShader};mesh.material.onBeforeCompile(shader);assert.ok(shader.vertexShader.includes('attribute vec2 limbJoint'));assert.ok(shader.vertexShader.includes('objectNormal.yz=gaitRotation'));
+ assert.ok(mesh.geometry.attributes.action);assert.ok(shader.vertexShader.includes('attribute float action'));
  crowd.setPlayerFocus(null);crowd.update(.1);assert.equal(mesh.geometry.attributes.gait.getX(0),0);crowd.dispose();
 });
 test('local reactions are bounded and never shuffle occupied crossings or unsafe ground',()=>{

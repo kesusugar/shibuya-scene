@@ -4,8 +4,8 @@ import {VEHICLES} from '../traffic/config.mjs';
 
 // Only the controlled vehicle uses this close-range model. Its simulation slot remains authoritative.
 export function createVehicleVisual(){
- const root=new Group();root.name='player-vehicle-detail';let type=null,geometries=[],materials=[],wheels=[],body=null,lastSpeed=0,pitch=0,roll=0,spin=0,disposed=false,slot=null;
- function clear(){geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());root.clear();geometries=[];materials=[];wheels=[];}
+ const root=new Group();root.name='player-vehicle-detail';let type=null,geometries=[],materials=[],wheels=[],doors=[],body=null,lastSpeed=0,pitch=0,roll=0,spin=0,disposed=false,slot=null;
+ function clear(){geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());root.clear();geometries=[];materials=[];wheels=[];doors=[];}
  function build(next){clear();type=next;const d=VEHICLES[type];body=new Group();root.add(body);
   const mat=(color,roughness=.4,metalness=.15)=>{const m=new MeshStandardMaterial({color,roughness,metalness});materials.push(m);return m;};
   const paint=mat(d.color,.28,.35),glass=mat(0x173543,.19,.42),rubber=mat(0x121820,.95,0),chrome=mat(0xabb6bc,.25,.8),lamp=mat(0xfff0cd),tail=mat(0xaa1818);
@@ -21,6 +21,8 @@ export function createVehicleVisual(){
    box(.055,Math.max(.25,d.height-1.02),.09,paint,side*d.width*.39,(1+d.height)/2-.05,cabZ);
    box(.10,.05,.23,chrome,side*d.width*.505,.79,-.18);
    box(.19,.13,.27,paint,side*d.width*.53,1.03,cabZ+cabL*.35);
+   const door=new Group();door.name=`player-vehicle-door-${side}`;door.position.set(side*d.width*.5,.92,cabZ+cabL*.08);body.add(door);
+   add(new RoundedBoxGeometry(.045,.52,Math.max(.48,cabL*.52),2,.025),paint,door,0,0,0);doors.push({pivot:door,side});
    box(d.width*.22,.12,.055,lamp,side*d.width*.32,.72,d.length/2+.02);
    box(d.width*.22,.12,.055,tail,side*d.width*.32,.72,-d.length/2-.02);
   }
@@ -43,6 +45,7 @@ export function createVehicleVisual(){
   const a=1-Math.exp(-10*dt);pitch+=(Math.max(-.055,Math.min(.055,accel*.005))-pitch)*a;
   roll+=(Math.max(-.055,Math.min(.055,state.steering*state.speed*.006))-roll)*a;
   body.rotation.set(pitch,0,roll);root.position.set(state.x,state.y+.025,state.z);root.rotation.y=state.heading;
+  const open=Math.max(0,Math.min(1,state.doorPhase??0));for(const door of doors)door.pivot.rotation.y=door.side*(state.doorSide===door.side?open:0)*1.05;
   spin+=state.speed*dt/.3;for(const w of wheels){w.pivot.rotation.set(spin,w.front?-state.steering*.35:0,0,'YXZ');}
  },hide(){root.visible=false;if(slot)slot.playerVisual=false;slot=null;},dispose(){if(disposed)return;disposed=true;if(slot)slot.playerVisual=false;clear();root.removeFromParent();}};
 }

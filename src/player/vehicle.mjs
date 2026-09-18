@@ -44,6 +44,7 @@ export const CAR = Object.freeze({
  // only `wreckFloor` of its performance -- it never becomes undriveable.
  damagePerSpeed: .025, wreckFloor: .45,
  takeOverRange: 6,                       // how far you can reach another car to take it over
+ stealRange: 3.8,                        // stopped traffic can be pulled from the driver's door
  // The camera rides further back and higher than the walking one: at 11 m/s the walking
  // arm puts the road under the bonnet and nothing else in frame.
  followBack: 9.8, followUp: 3.6, eye: 1.4
@@ -163,6 +164,7 @@ export function createPlayerVehicle(sim, ctx) {
   takeOver(slot) {
    if (!slot || slot === state.slot) return false;
    if (state.slot) {state.slot.playerVisual = false; state.slot.controlled = false; state.slot.parked = true; state.slot.speed = 0;}
+   sim.releasePermits?.(slot);
    state.slot = slot; state.type = slot.type; def = VEHICLES[slot.type];
    state.x = slot.x; state.z = slot.z; state.heading = slot.heading; state.course = slot.heading;
    state.y = ctx.height(slot.x, slot.z); state.speed = 0; state.steering = 0; state.damage = 0; state.stalled = false;
@@ -188,9 +190,20 @@ export function createPlayerVehicle(sim, ctx) {
    };
    if (state.active) offer(Math.hypot(state.x - x, state.z - z), CAR.enterRange, state.slot, 'own');
    for (const v of sim.pool) {
-    if (!v.active || !v.parked || v === state.slot || v.controlled) continue;
-    offer(Math.hypot(v.x - x, v.z - z), CAR.takeOverRange, v, 'parked');
+    if (!v.active || v === state.slot || v.controlled || v.service) continue;
+    const stopped=v.parked||Math.abs(v.speed??0)<.35;
+    if(!stopped)continue;
+    if(!v.parked&&sim.signals?.area?.contains?.(v.x,v.z,3))continue;
+    offer(Math.hypot(v.x - x, v.z - z), v.parked?CAR.takeOverRange:CAR.stealRange, v, v.parked?'parked':'steal');
    }
+   return best;
+  },
+
+  /** Nearest visible driver's-door pose. It is used before ownership changes. */
+  doorPose(slot=state.slot,fromX=state.x,fromZ=state.z){
+   if(!slot)return null;const d=VEHICLES[slot.type],s=Math.sin(slot.heading),c=Math.cos(slot.heading),back=-d.length*.12;
+   let best=null;for(const side of [-1,1]){const out=d.width/2+.38,x=slot.x+c*side*out+s*back,z=slot.z-s*side*out+c*back;
+    if(ctx.solid(x,z,.22))continue;const distance=Math.hypot(x-fromX,z-fromZ);if(!best||distance<best.distance)best={x,z,heading:slot.heading+side*Math.PI/2,distance,side};}
    return best;
   },
 

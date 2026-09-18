@@ -22,8 +22,8 @@ const HAIR_COLORS=[0x25282a,0x4e3a30,0x706051,0xaeb0ac];
 // The played agent keeps its pool slot, because that slot is what the pedestrians' own
 // neighbour avoidance sees and it is why they part around the player. It is simply not drawn
 // here: arms and legs are merged into one body geometry -- what makes two thousand
-// pedestrians affordable -- and a merged limb cannot swing, so the player is drawn by
-// src/player/figure.mjs instead, with limbs of its own.
+// pedestrians affordable. Tagged vertices still swing in the shared crowd shader, while the
+// player is drawn by src/player/figure.mjs so nearby knees, elbows and interactions can bend.
 const rank=(id,salt=0)=>(id*37+salt)%POOL_SIZE;
 function pickVariant(id,profiles,salt=0){let r=rank(id,salt);for(const profile of profiles){if(r<profile.count)return profile.key;r-=profile.count;}return profiles.at(-1).key;}
 function transformed(g,scale,position){g.scale(...scale);g.translate(...position);return g;}
@@ -89,7 +89,7 @@ export function buildCrowd(data,options={}){
  function part(key,p,lx,y,lz,w,h,d,hex,tilt=0){
   if(p.struck!==undefined){const a=Math.min(1,p.struck/FALL_TILT)*Math.PI/2+(p.spin??0);
    lz+=y*Math.sin(a);y*=Math.cos(a);tilt+=a;}
-  const heading=p.heading+(playerFocus&&p.speed<.05&&p.struck===undefined?Math.sin(p.id*2.39+sim.time*.22)*.15:0);const c=Math.cos(heading),s=Math.sin(heading);obj.position.set(p.renderX+c*lx+s*lz,p.height+y,p.renderZ-s*lx+c*lz);obj.rotation.set(tilt,heading,0);obj.scale.set(w,h,d);obj.updateMatrix();const i=counts[key]++;geometry[key].attributes.gait.setX(i,playerFocus&&p.struck===undefined&&Math.hypot(p.x-playerFocus.x,p.z-playerFocus.z)<24?Math.sin(p.travelled*4.1+p.phase)*Math.min(.6,p.speed*.3):0);meshes[key].setMatrixAt(i,obj.matrix);color.setHex(hex);meshes[key].setColorAt(i,color);}
+  const heading=p.heading+(playerFocus&&p.speed<.05&&p.struck===undefined?Math.sin(p.id*2.39+sim.time*.22)*.15:0);const c=Math.cos(heading),s=Math.sin(heading);obj.position.set(p.renderX+c*lx+s*lz,p.height+y,p.renderZ-s*lx+c*lz);obj.rotation.set(tilt,heading,0);obj.scale.set(w,h,d);obj.updateMatrix();const i=counts[key]++,near=playerFocus&&p.struck===undefined&&Math.hypot(p.x-playerFocus.x,p.z-playerFocus.z)<24;geometry[key].attributes.gait.setX(i,near?Math.sin(p.travelled*4.1+p.phase)*Math.min(.6,p.speed*.3)+(p.speed<.05?Math.sin(sim.time*1.4+p.phase)*.025:0):0);geometry[key].attributes.action.setX(i,near?(p.combatAction??0):0);meshes[key].setMatrixAt(i,obj.matrix);color.setHex(hex);meshes[key].setColorAt(i,color);}
  function hasAccessory(p,key){return rank(p.id,{phone:211,bag:433,cane:677,suitcase:929,umbrella:1217}[key])<ACCESSORY_TARGETS[key];}
  function sync(dt=0){for(const k of Object.keys(meshes))counts[k]=0;for(const p of sim.pool){if(!p.active||p.controlled)continue;const def=ARCHETYPES[p.archetype],h=def.height*(.96+(p.id%5)*.02),w=def.width*(1.06+(p.id%7)*.015),walk=p.speed>.05,phase=p.animationTime*(walk?7:1)+p.phase,fidelity=p.lod==='near'?1:p.lod==='mid'?.65:.15,sway=walk?Math.sin(phase)*.035*fidelity:Math.sin(phase)*.012,bob=walk?Math.abs(Math.cos(phase))*.024*fidelity:Math.sin(phase)*.008;
    const blend=dt?Math.min(1,dt*(p.lod==='far'?10:25)):1;p.renderX+=(p.x-p.renderX)*blend;p.renderZ+=(p.z-p.renderZ)*blend;
@@ -107,7 +107,7 @@ export function buildCrowd(data,options={}){
    if(hasAccessory(p,'suitcase'))part('suitcase',p,-w*.64,h*.02,.08,w*.5,h*.38,w*.52,p.id%2?0x596579:0x6e4d45);
    if(hasAccessory(p,'umbrella'))part('umbrella',p,.08,h*.99,0,.38,.62,.38,shirt);
   }
-  stats.triangles=0;stats.batches=0;for(const [k,m] of Object.entries(meshes)){m.count=counts[k];if(m.count)stats.batches++;stats.triangles+=m.count*triangleCount(geometry[k]);geometry[k].attributes.gait.needsUpdate=true;m.instanceMatrix.needsUpdate=true;if(m.instanceColor)m.instanceColor.needsUpdate=true;}
+  stats.triangles=0;stats.batches=0;for(const [k,m] of Object.entries(meshes)){m.count=counts[k];if(m.count)stats.batches++;stats.triangles+=m.count*triangleCount(geometry[k]);geometry[k].attributes.gait.needsUpdate=true;geometry[k].attributes.action.needsUpdate=true;m.instanceMatrix.needsUpdate=true;if(m.instanceColor)m.instanceColor.needsUpdate=true;}
   stats.bodyCounts=Object.fromEntries(BODY_VARIANTS.map(v=>[v.key,counts[v.key]]));stats.hairCounts=Object.fromEntries(HAIR_VARIANTS.map(v=>[v.key,counts[v.key]]));stats.accessories=Object.fromEntries(Object.keys(ACCESSORY_TARGETS).map(k=>[k,counts[k]]));stats.instanceCounts={...counts};
   reportClock+=dt;if(reportClock>=1||!dt){reportClock=0;Object.assign(stats,network.stats,sim.snapshot(options.debug));}
  }

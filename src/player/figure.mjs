@@ -28,12 +28,15 @@ export function createPlayerFigure(){
  }
  let phase=0,heading=null,disposed=false,time=0;
  return {root,update(state,dt=0){if(disposed)return;root.visible=true;time+=dt;
-  phase+=state.speed*dt*Math.PI*2/FIGURE.cycle;const amp=Math.min(.65,state.speed*.19);
-  for(let i=0;i<2;i++){const gait=Math.sin(phase+i*Math.PI);legs[i].rotation.x=gait*amp;knees[i].rotation.x=Math.max(0,-gait)*amp*.85;arms[i].rotation.x=-gait*amp*.7-.08;elbows[i].rotation.x=-.18-Math.min(.75,state.speed*.12);}
+ phase+=state.speed*dt*Math.PI*2/FIGURE.cycle;const amp=Math.min(.65,state.speed*.19);
+  for(let i=0;i<2;i++){const gait=Math.sin(phase+i*Math.PI);legs[i].rotation.x=gait*amp;knees[i].rotation.x=Math.max(0,-gait)*amp*.85;arms[i].rotation.set(-gait*amp*.7-.08,0,0);elbows[i].rotation.x=-.18-Math.min(.75,state.speed*.12);}
   const desired=state.bodyHeading??state.heading;
   heading=heading===null?desired:heading+Math.atan2(Math.sin(desired-heading),Math.cos(desired-heading))*(1-Math.exp(-14*dt));
   root.position.set(state.x,state.y+Math.abs(Math.cos(phase))*.018*amp,state.z);
   root.rotation.set(Math.min(.1,state.speed*.018),heading,0);
+  if(state.attackTime>0){const punch=Math.sin(Math.min(1,state.attackTime/.42)*Math.PI);arms[1].rotation.x=-1.55*punch;elbows[1].rotation.x=-.25;root.rotation.y=heading-.12*punch;}
+  if(state.hurtTime>0){const recoil=Math.sin(Math.min(1,state.hurtTime/.34)*Math.PI);root.rotation.x=-.22*recoil;arms[0].rotation.z=.5*recoil;arms[1].rotation.z=-.5*recoil;}
+  if(state.vehiclePhase>0){const enter=Math.sin(Math.min(1,state.vehiclePhase)*Math.PI);root.rotation.x=.42*enter;arms[0].rotation.x=-.8*enter;arms[1].rotation.x=-.55*enter;}
   torso.scale.y=1+Math.sin(time*2.4)*.003;
   if(state.alive===false){root.rotation.z=Math.min(1,state.runOver*3)*Math.PI/2;root.position.y=state.y+.14;}
  },hide(){root.visible=false;},dispose(){if(disposed)return;disposed=true;root.removeFromParent();owned.forEach(g=>g.dispose());Object.values(materials).forEach(m=>m.dispose());root.clear();}};

@@ -40,7 +40,7 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
  const state = {
   x: start[0], z: start[1], y: 0, heading, pitch: -.12,
   speed: 0, running: false, moving: false, alive: true,
-  runOver: 0, hitBy: null
+  runOver: 0, hitBy: null, health: 100, attackTime: 0, hurtTime: 0, vehiclePhase: 0
  };
  const keys = new Set();
  let padPoll = null;
@@ -80,7 +80,7 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    * leaves no way out at all; `onExit` is called so Escape leaves play entirely. `onDrive`
    * is the get-in/get-out key.
    */
-  attach(element, {onExit, onDrive} = {}) {
+  attach(element, {onExit, onDrive, onAttack} = {}) {
    if (detach) return;
    const down = (e) => {
     if (e.repeat) return;
@@ -89,6 +89,7 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
     if(k==='tab'){e.preventDefault();if(document.pointerLockElement===element)document.exitPointerLock?.();else element.requestPointerLock?.()?.catch?.(()=>{});return;}
     if (k === 'escape') {keys.clear(); onExit?.(); return;}
     if (k === 'f') {onDrive?.(); e.preventDefault(); return;}
+    if (k === 'e') {onAttack?.(); e.preventDefault(); return;}
     if (!'wasd'.includes(k) && k !== 'shift' && k !== ' ') return;
     keys.add(k === ' ' ? 'shift' : k); e.preventDefault();
    };
@@ -100,6 +101,7 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
     state.pitch = Math.max(-PLAYER.pitchLimit, Math.min(PLAYER.pitchLimit, state.pitch - e.movementY * PLAYER.look));
    };
    const click = (e) => {if (e.pointerType === 'touch') return; if (document.pointerLockElement !== element) element.requestPointerLock?.()?.catch?.(()=>{});};
+   const punch = e => {if(e.button===0&&document.pointerLockElement===element){onAttack?.();e.preventDefault();}};
    // Touch looks by dragging the scene itself. It belongs on the canvas rather than on a
    // full-screen overlay: an overlay wide enough to catch every drag also swallows every
    // button the page already has, and the canvas is exactly the region that should turn.
@@ -118,13 +120,14 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    };
    const touchEnd = e => {if (e.pointerId === touchId) {touchId = null; touchLast = null;}};
    // Edge-detected, because a held button would otherwise fire get-in/get-out every frame.
-   let padPrev = {drive: false, exit: false};
+   let padPrev = {drive: false, exit: false, attack: false};
    padPoll = (dt) => {
     const pad = gamepad(); if (!pad) return;
-    const drive = pad.buttons[0]?.pressed ?? false, exit = pad.buttons[9]?.pressed ?? false;
+    const drive = pad.buttons[0]?.pressed ?? false, exit = pad.buttons[9]?.pressed ?? false, attack=pad.buttons[2]?.pressed??false;
     if (drive && !padPrev.drive) onDrive?.();
     if (exit && !padPrev.exit) {keys.clear(); onExit?.();}
-    padPrev = {drive, exit};
+    if(attack&&!padPrev.attack)onAttack?.();
+    padPrev = {drive, exit, attack};
     const look = pad.axes[2] ?? 0, pitch = pad.axes[3] ?? 0;
     if (Math.abs(look) > PLAYER.padDeadzone) state.heading -= look * PLAYER.padLook * dt;
     if (Math.abs(pitch) > PLAYER.padDeadzone)
@@ -132,13 +135,13 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    };
    window.addEventListener('keydown', down); window.addEventListener('keyup', up);
    window.addEventListener('blur', blur);
-   element.addEventListener('mousemove', move); element.addEventListener('click', click);
+   element.addEventListener('mousemove', move); element.addEventListener('click', click);element.addEventListener('mousedown',punch);
    element.addEventListener('pointerdown', touchStart); element.addEventListener('pointermove', touchMove);
    for (const type of ['pointerup', 'pointercancel']) element.addEventListener(type, touchEnd);
    detach = () => {
     window.removeEventListener('keydown', down); window.removeEventListener('keyup', up);
     window.removeEventListener('blur', blur);
-    element.removeEventListener('mousemove', move); element.removeEventListener('click', click);
+    element.removeEventListener('mousemove', move); element.removeEventListener('click', click);element.removeEventListener('mousedown',punch);
     element.removeEventListener('pointerdown', touchStart); element.removeEventListener('pointermove', touchMove);
     for (const type of ['pointerup', 'pointercancel']) element.removeEventListener(type, touchEnd);
     if (document.pointerLockElement === element) document.exitPointerLock?.();
@@ -155,7 +158,7 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    */
   place(x = PLAYER.start[0], z = PLAYER.start[1], heading = PLAYER.startHeading) {
    const land = (px, pz) => {
-    Object.assign(state, {x: px, z: pz, heading, bodyHeading: heading, speed: 0, alive: true, runOver: 0, hitBy: null});
+    Object.assign(state, {x: px, z: pz, heading, bodyHeading: heading, speed: 0, alive: true, runOver: 0, hitBy: null, health:100, attackTime:0, hurtTime:0, vehiclePhase:0});
     state.y = ctx.height(px, pz); return true;
    };
    for (const test of [ctx.safe, standable]) {
@@ -220,6 +223,10 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
   rideTo(x, z, heading) {
    state.x = x; state.z = z; state.heading = heading; state.speed = 0; state.moving = false;
   },
+  transitionTo(x,z,heading,phase=0){
+   state.x=x;state.z=z;state.heading=heading;state.bodyHeading=heading;state.y=ctx.height(x,z);
+   state.speed=0;state.moving=false;state.vehiclePhase=phase;
+  },
 
   step(dt) {
    if (!state.alive) {state.runOver += dt; state.speed = 0; state.moving = false; return;}
@@ -248,6 +255,11 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
   knockDown(vehicle) {
    if (!state.alive) return false;
    state.alive = false; state.runOver = 0; state.hitBy = vehicle?.type ?? 'vehicle'; return true;
+  },
+  startAttack(seconds=.42){if(!state.alive)return false;state.attackTime=Math.max(state.attackTime,seconds);return true;},
+  hurt(amount=0,source='fight'){
+   if(!state.alive||state.hurtTime>0)return false;state.health=Math.max(0,state.health-Math.max(0,amount));state.hurtTime=.34;
+   if(state.health<=0){state.alive=false;state.runOver=0;state.hitBy=source;}return true;
   },
   revive() {return api.place();}
  };
