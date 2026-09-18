@@ -1,10 +1,14 @@
 # Implementation status and handoff
 
-Updated: 2026-09-14 (reference advertisement pass)
+Updated: 2026-09-18 (playable Shibuya refinement)
 
 ## Target
 
 The target is a dense, recognizable Shibuya night scene with believable building proportions, differentiated glass and displays, saturated signage, readable road surfaces, continuous legal vehicle flow, active pedestrian areas, and stable interactive performance. User-supplied images are visual direction; they are not proof of current billboard inventory or measured geometry.
+
+## Playable sandbox refinement (2026-09-18)
+
+Implemented camera/input corrections, an articulated player and detailed controlled vehicle, nearby crowd response, bounded impact/damage effects, a compact minimap HUD, and a repeatable three-stop delivery. See [the focused handoff](PLAYER-EXPERIENCE-2026-09-18.md) for files, controls, validation and limitations. Typecheck and all 156 current tests pass. Live GPU rendering and fixed HIGH day/night visual acceptance remain pending because the available browser lacks WebGL2. No FPS or GTA-equivalent visual-quality claim is made.
 
 ## Seven-stage status
 
