@@ -1,6 +1,6 @@
 # Playable Shibuya refinement — 2026-09-18
 
-Implementation commit: `1e28734`.
+Playable foundation commit: `1e28734`. Street-action self-improvement commit: `e26bf9b`.
 
 Branch: `codex/tokyo-playable-polish`. Base: `6c2dae9152828e628caca7673e0132aeb2d75d8a`.
 
@@ -15,6 +15,16 @@ This pass improves the existing small Shibuya sandbox toward a Tokyo open-world 
 - **HUD and objective:** compact play HUD, a north-up network minimap drawn at 5 Hz, speed/damage/entry information, and a repeatable three-stop delivery. Stops are reachable on the existing pedestrian network; dismount and stand still to deliver. The four-minute timer pauses in hidden tabs; contact penalties, completion, cancellation, timeout, and knockdown failure are handled.
 - **Lifecycle:** player mode exits before relevant module rebuilds; controlled crowd reservations are released; all new scene resources dispose explicitly.
 
+## Self-improvement loop: street actions
+
+- **Melee:** E, primary mouse, controller X, or the touch attack button starts a short forward strike. Only nearby adult ambient pedestrians on safe pavement can be engaged; children, crossing choreography, and occupied crossings are excluded. The NPC leaves any queue reservation, turns, closes distance, counterattacks with a cooldown, and either participant can reach zero health. A defeated NPC uses the existing bounded fall/despawn lifecycle; player defeat uses the existing revive flow.
+- **Carjacking:** parked vehicles and ordinary traffic stopped below 0.35 m/s can be selected. The selected traffic slot is frozen, reused as the controlled slot, and remains visible to traffic collision queries. Moving vehicles, service vehicles, and already controlled vehicles cannot be taken.
+- **Visible entry/exit:** the player eases to or from the nearest unblocked door over 0.78/0.9 seconds. The detailed controlled-car door swings during the transition and the player leans/reaches instead of disappearing instantly.
+- **More human crowd motion:** the existing instanced bodies retain 13 shared geometries and 3 materials, but their tagged arms/legs now receive walking cadence, subtle idle sway, facing variation, and a combat gesture in the shared vertex shader. This avoids one skeleton, animation mixer, or unique mesh per citizen.
+- **Asset/startup budget:** no downloaded model, texture, animation, or audio file was added. Combat and transitions reuse fixed actor/vehicle pools and synthesized audio. The static city, traffic graph, and HIGH pedestrian network remain in the pre-generated static pack; its key is unchanged.
+
+![Geometry-only attack pose and open-door preview, not a game screenshot](previews/street-actions-geometry.png)
+
 ## Main files
 
 Integration: `app/ShibuyaScene.tsx`, `app/globals.css`.
@@ -27,7 +37,7 @@ Regression coverage: `tests/player-experience.test.mjs`, registered in `scripts/
 
 ## Validation and remaining acceptance
 
-- TypeScript check passed; integration build and all 156 current tests passed (including 10 new player-experience tests).
+- TypeScript check passed; the integration build and all 158 current tests passed. The street-action loop adds focused coverage for melee, death, stopped-traffic theft, signal-permit release, door poses, and deterministic entry/exit.
 - Tests cover camera wall clipping and damping, gamepad reads, movement, vehicle type/bounds, delivery success/failure/retry and actual HIGH network routes, geometry/disposal, crowd rendering contracts, and local reactions.
 - Static model cache key remains `25ea9435dd5f8cd888702759468eea2f0a6505f27d3f0d598ee05ad615975260`; no static pack rebake or new production dependency is required.
 - The supplied gameplay video informed camera, crowd and HUD changes. The available remote browser reports WebGL2 unavailable. **The modified game has not passed live HIGH day/night visual acceptance, GPU shader compilation, touch/gamepad hardware acceptance, or measured FPS acceptance.** Automated tests are not substitutes for these checks.

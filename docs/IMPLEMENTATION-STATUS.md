@@ -8,7 +8,9 @@ The target is a dense, recognizable Shibuya night scene with believable building
 
 ## Playable sandbox refinement (2026-09-18)
 
-Implemented camera/input corrections, an articulated player and detailed controlled vehicle, nearby crowd response, bounded impact/damage effects, a compact minimap HUD, and a repeatable three-stop delivery. See [the focused handoff](PLAYER-EXPERIENCE-2026-09-18.md) for files, controls, validation and limitations. Typecheck and all 156 current tests pass. Live GPU rendering and fixed HIGH day/night visual acceptance remain pending because the available browser lacks WebGL2. No FPS or GTA-equivalent visual-quality claim is made.
+Implemented camera/input corrections, an articulated player and detailed controlled vehicle, nearby crowd response, bounded impact/damage effects, a compact minimap HUD, and a repeatable three-stop delivery. See [the focused handoff](PLAYER-EXPERIENCE-2026-09-18.md) for files, controls, validation and limitations. Typecheck and all 158 current tests pass. Live GPU rendering and fixed HIGH day/night visual acceptance remain pending because the available browser lacks WebGL2. No FPS or GTA-equivalent visual-quality claim is made.
+
+The follow-up street-action loop adds local melee with NPC retaliation and death, theft of parked or signal-stopped traffic, visible eased entry/exit with an opening controlled-car door, and instanced crowd idle/combat gestures. It adds no external assets or per-citizen skeletons and preserves the existing pre-generated static model key. Live GPU acceptance remains pending.
 
 ## Seven-stage status
 
