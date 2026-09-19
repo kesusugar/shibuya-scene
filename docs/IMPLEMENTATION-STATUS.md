@@ -104,3 +104,10 @@ with ten animation clips. Runtime state selects and crossfades the clips; existi
 instancing is unchanged. See `docs/CHARACTER-MOTION-2026-09-19.md` for review images,
 validation limitations and the five remaining planned stages. This is a stylized art
 foundation, not acceptance of Cabsolutely-equivalent realism or real-device performance.
+
+## Near-character pool — 2026-09-19
+
+Stage 3 now reuses the offline player rig for a bounded nearby NPC pool: HIGH 32,
+MEDIUM 12, LOW 4. Buffers/materials are shared; allocation is deferred to player mode
+and staggered. Base instanced bodies are restored on exit. See
+`docs/NEAR-CHARACTERS-2026-09-19.md` for costs, validation and four remaining stages.
