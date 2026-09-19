@@ -119,3 +119,12 @@ directions over existing crowd cells. Updates are bounded to 10 Hz / 64 candidat
 Startle/Guard clips are baked offline and shared; the character module remains about 35 KB
 gzip. Crossing movement ownership is preserved. See `docs/PEDESTRIAN-THREATS-2026-09-19.md`
 for behavior, scope, review results and three remaining planned stages.
+
+## Vehicle contact foundation — 2026-09-19
+
+Stage 5 replaces player collision full-stop with checked tangent sliding, small outward
+separation and bounded impact yaw. Damage is based on normal speed loss with cooldown.
+Offline assets are unchanged; no new startup generation. Traffic remains kinematic.
+See `docs/VEHICLE-CONTACT-2026-09-19.md` for tests, new model-render image and limitations.
+Two planned stages remain: loading/startup measurements and live visual/device tuning.
+Actual WebGL day/night inspection remains outstanding.
