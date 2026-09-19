@@ -6,6 +6,7 @@
     "node": ">=22.13.0"
   },
   "scripts": {
+    "bake:character": "node scripts/bake-character.mjs",
     "bake:playable": "node scripts/bake-playable.mjs",
     "bake:static": "node scripts/bake-static-models.mjs",
     "bake:polish": "node scripts/bake-central-detail.mjs",

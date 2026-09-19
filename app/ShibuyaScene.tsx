@@ -299,7 +299,7 @@ export default function Home(){
  const SHAKE_PER_HIT=.34,SHAKE_MAX=1,SHAKE_FALL=2.6,SHAKE_THROW=.42,IMPACT_BLEED=.06;
  let shake=0;
  let lastPlayTick=performance.now();let qaReadyRef=false;const frame=(now:number)=>{if(disposed)return;const dt=frameGate.step(now);if(dt===null){raf=requestAnimationFrame(frame);return;}const frameStart=performance.now(),updateStart=frameStart;const playElapsed=document.hidden?0:Math.max(0,(now-lastPlayTick)/1000);lastPlayTick=now;frameHits=0;if(playerMode&&player)player.updateInput(dt);if(playerMode&&player){
-  if(vehicleTransition.active){const pose=vehicleTransition.update(dt);if(pose){if(playerCar?.state)playerCar.state.doorPhase=Math.sin(pose.phase*Math.PI);player.transitionTo(pose.x,pose.z,pose.heading,pose.phase);playerFigure?.update(player.state,dt);
+  if(vehicleTransition.active){const pose=vehicleTransition.update(dt);if(pose){if(playerCar?.state)playerCar.state.doorPhase=Math.sin(pose.phase*Math.PI);player.state.vehicleKind=pose.kind;player.transitionTo(pose.x,pose.z,pose.heading,pose.phase);playerFigure?.update(player.state,dt);
     if(pose.done&&pose.kind==='enter'){driving=true;player.state.vehiclePhase=0;playerCar.state.doorPhase=0;playerFigure?.hide();carMarker?.hide();setDriving(true);touchPad?.setDriving(true);struckCountRef=0;setStruckCount(0);}
     else if(pose.done){player.state.vehiclePhase=0;if(playerCar?.state)playerCar.state.doorPhase=0;}}}
   else if(driving&&playerCar){const drive=player.input();playerCar.step(dt,drive);const c=playerCar.state;player.rideTo(c.x,c.z,c.heading);playerMarker?.update(c,dt,playerCar.def.height);

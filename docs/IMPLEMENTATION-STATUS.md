@@ -96,3 +96,11 @@ Vehicle momentum, four-point suspension and speed-aware camera are integrated on
 buffers; city prebuilt data is unchanged. See `docs/VEHICLE-MOTION-2026-09-19.md`.
 Character rig replacement and predictive NPC response remain pending. Live WebGL visual
 and startup/FPS acceptance remain unverified.
+
+## Character motion foundation — 2026-09-19
+
+Player now uses an original offline-baked skinned character (11 bones, six batches)
+with ten animation clips. Runtime state selects and crossfades the clips; existing crowd
+instancing is unchanged. See `docs/CHARACTER-MOTION-2026-09-19.md` for review images,
+validation limitations and the five remaining planned stages. This is a stylized art
+foundation, not acceptance of Cabsolutely-equivalent realism or real-device performance.
