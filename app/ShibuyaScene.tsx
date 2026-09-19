@@ -150,6 +150,7 @@ export default function Home(){
    // Two frequencies that do not divide into each other, so it reads as a knock rather than
    // a hum, and it only moves the eye -- the look-at point stays put or the view swims.
    c.x+=Math.sin(t*37)*shake*SHAKE_THROW;c.y+=Math.sin(t*53)*shake*SHAKE_THROW*.6;c.z+=Math.cos(t*43)*shake*SHAKE_THROW;}
+  const targetFov=driving?61+Math.min(10,Math.abs(state.speed)*.7):50;const nextFov=view.fov+(targetFov-view.fov)*(1-Math.exp(-3*dt));if(Math.abs(nextFov-view.fov)>.01){view.fov=nextFov;view.updateProjectionMatrix();}
   view.position.set(c.x,c.y,c.z);view.lookAt(c.tx,c.ty,c.tz);
   controls.target.set(c.tx,c.ty,c.tz);};
  // A vehicle box over the player is a knock-down. The traffic simulation's own overlap test
@@ -254,7 +255,7 @@ export default function Home(){
   (window as any).__SHIBUYA_PLAYER__=player;(window as any).__SHIBUYA_CAR__=playerCar;
   return true;};
  const exitPlayer=()=>{if(!playerMode)return;playUI?.hide();vehicleVisual?.hide();vehicleEffects?.hide();lifeEntry.hooks.current?.setPlayerFocus(null);followCamera.reset();melee.reset();vehicleTransition.cancel();playerMode=false;driving=false;setDriving(false);playerCar?.release();playerCar=null;carMarker?.hide();playerAudio?.silence();touchPad?.hide();player?.detach();playerMarker?.hide();playerFigure?.hide();releaseCrowdSlot();delete (window as any).__SHIBUYA_PLAYER__;delete (window as any).__SHIBUYA_CAR__;
-  controls.enabled=!config.qa;setPlayerHit(null);setMode('observe');preset(currentCamera,false);};
+  view.fov=50;view.updateProjectionMatrix();controls.enabled=!config.qa;setPlayerHit(null);setMode('observe');preset(currentCamera,false);};
  resize();setTier(currentTier);setTime(clock.value);setModules(system.snapshot());
  const observer=new ResizeObserver(resize);observer.observe(mount.current);
  const frameGate=new FrameGate(config.tier),drawingSize=new THREE.Vector2();let frames=0,last=performance.now(),raf=0,renderedFrames=0,readyFrames=0,latestFps:number|null=null,qaBusyNow=false;

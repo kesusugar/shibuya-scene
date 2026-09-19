@@ -1,3 +1,4 @@
+import {handling,suspension,resetDynamics} from './vehicle-dynamics.mjs';
 // The car the player drives.
 //
 // It is a reserved slot in the traffic pool, not a new object. That slot still enters the
@@ -5,8 +6,7 @@
 // and the existing renderer draws it because it draws whatever is in the pool. What the
 // simulation no longer does is steer it, audit it, or hold the pedestrian phase red for it.
 //
-// Handling is arcade: the car goes where it is pointed, with no slide. Momentum can come
-// later; this stage is about the loop -- get in, drive, get out -- being right first.
+// Handling uses planar momentum with four-point suspension; the traffic slot remains authoritative.
 
 import {clipCameraArm} from './camera.mjs';
 import {VEHICLES} from '../traffic/config.mjs';
@@ -65,6 +65,7 @@ export function createPlayerVehicle(sim, ctx) {
  let def = VEHICLES[CAR.type];
  const state = {x: 0, z: 0, y: 0, heading: 0, course: 0, speed: 0, steering: 0,
                 type: CAR.type, damage: 0, stalled: false, active: false, slot: null};
+ resetDynamics(state);
  const probe = {x: 0, z: 0, heading: 0};
 
  /**
@@ -125,7 +126,7 @@ export function createPlayerVehicle(sim, ctx) {
      if (!onRoadPose(px, pz, ph)) continue;
      if (!onRoadPose(px + Math.sin(ph) * 6, pz + Math.cos(ph) * 6, ph)) continue;   // road ahead
      state.slot = slot; state.x = px; state.z = pz; state.heading = ph; state.course = ph;
-     state.speed = 0; state.steering = 0; state.type = CAR.type; state.damage = 0; state.stalled = false;
+     resetDynamics(state); state.speed = 0; state.steering = 0; state.type = CAR.type; state.damage = 0; state.stalled = false;
      def = VEHICLES[CAR.type];
      Object.assign(slot, {
       active: true, controlled: true, parked: true, service: false, platoon: undefined,
@@ -165,7 +166,7 @@ export function createPlayerVehicle(sim, ctx) {
    if (!slot || slot === state.slot) return false;
    if (state.slot) {state.slot.playerVisual = false; state.slot.controlled = false; state.slot.parked = true; state.slot.speed = 0;}
    sim.releasePermits?.(slot);
-   state.slot = slot; state.type = slot.type; def = VEHICLES[slot.type];
+   state.slot = slot; state.type = slot.type; def = VEHICLES[slot.type]; resetDynamics(state);
    state.x = slot.x; state.z = slot.z; state.heading = slot.heading; state.course = slot.heading;
    state.y = ctx.height(slot.x, slot.z); state.speed = 0; state.steering = 0; state.damage = 0; state.stalled = false;
    Object.assign(slot, {controlled: true, parked: true, service: false, platoon: undefined,
@@ -232,37 +233,10 @@ export function createPlayerVehicle(sim, ctx) {
 
   step(dt, input) {
    if (!state.active) return;
-   if(dt>.02){const steps=Math.ceil(dt/.02);for(let i=0;i<steps;i++)api.step(dt/steps,input);return;}
-   const throttle = (input.forward ?? 0), turn = (input.strafe ?? 0);
-   const health = Math.max(CAR.wreckFloor, 1 - (1 - CAR.wreckFloor) * state.damage);
-   // S brakes while moving forward, and becomes reverse once stopped.
-   if (throttle > 0) state.speed += CAR.accel * health * dt;
-   else if (throttle < 0) {
-    if (state.speed > .2) state.speed -= CAR.brake * dt;
-    else state.speed = Math.max(-CAR.reverseMax, state.speed - CAR.accel * .7 * dt);
-   } else state.speed -= Math.sign(state.speed) * Math.min(Math.abs(state.speed), CAR.drag * dt);
-   state.speed = Math.max(-CAR.reverseMax * health, Math.min(def.speed * health, state.speed));
-
-   // Ease the wheel rather than snapping it, and give a crawling car little authority.
-   state.steering += (turn - state.steering) * Math.min(1, dt * CAR.steerEase);
-   const bite = Math.min(1, Math.max(0, (Math.abs(state.speed) - CAR.steerLow) / (CAR.steerFull - CAR.steerLow)));
-   const heading = state.heading - state.steering * CAR.steer * dt * bite * Math.sign(state.speed || 1);
-
-   // Give way progressively rather than refusing the whole step. A turn that would put a
-   // wheel over the kerb is first tried at half lock, then straight, then at half the
-   // travel, so the car scrubs along the edge of the carriageway instead of stalling every
-   // other frame -- which is what killing the speed on a rejected pose used to feel like.
-   // The course chases the nose instead of matching it, and is not allowed to fall more than
-   // slipMax behind, so the car slides through a hard turn without ever ending up sideways.
-   const lag = 1 - Math.exp(-CAR.grip * dt);
-   let course = state.course + wrapAngle(heading - state.course) * lag;
-   course = heading - Math.max(-CAR.slipMax, Math.min(CAR.slipMax, wrapAngle(heading - course)));
-
-   // Give way progressively rather than refusing the whole step. A turn that would put a
-   // wheel over the kerb is first tried at half lock, then straight, then at half the
-   // travel, so the car scrubs along the edge of the carriageway instead of stalling every
-   // other frame -- which is what killing the speed on a rejected pose used to feel like.
-   const travel = state.speed * dt;
+   if(!Number.isFinite(dt)||dt<=0)return;
+   dt=Math.min(dt,.1);
+   if(dt>1/120){const steps=Math.ceil(dt*120);for(let i=0;i<steps;i++)api.step(dt/steps,input);return;}
+   const {heading,course,travel}=handling(state,def,input,dt);
    const attempts = [[heading, course, travel], [heading, state.course + wrapAngle(course - state.course) / 2, travel],
                      [state.heading, state.course, travel], [state.heading, state.course, travel * .5]];
    let moved = false;
@@ -279,7 +253,7 @@ export function createPlayerVehicle(sim, ctx) {
     if (!state.stalled) state.damage = Math.min(1, state.damage + Math.abs(state.speed) * CAR.damagePerSpeed);
     state.stalled = true;
     state.speed = 0;                          // nose against something: stop, do not bounce
-    state.course = state.heading;             // and no momentum survives the impact
+    state.course = state.heading; state.lateral=0; state.yawRate=0;
     // Stopping is not enough on its own. Steering authority is a function of speed, so a
     // car held at zero against a wall can never turn away from it: full throttle just
     // re-zeroes itself every frame and the only way out is reverse. Let the wheel swing the
@@ -297,8 +271,7 @@ export function createPlayerVehicle(sim, ctx) {
    }
    // The pedestrian context is the only one that knows ground height, and a kerb is 15 cm:
    // without this the car sinks into the pavement the moment it leaves the road.
-   const ground = ctx.height(state.x, state.z);
-   state.y += Math.sign(ground - state.y) * Math.min(Math.abs(ground - state.y), CAR.kerbLift * dt);
+   suspension(state,def,(x,z)=>ctx.height(x,z),dt);
    api.sync();
   },
 
@@ -392,9 +365,10 @@ export function createPlayerVehicle(sim, ctx) {
 
 /** Third-person camera for the car, framed further back than the walking one. */
 export function vehicleCamera(state, out = {}, ctx = null) {
- const s = Math.sin(state.heading), c = Math.cos(state.heading);
+ const facing=state.heading+wrapAngle((state.course??state.heading)-state.heading)*.45;
+ const s = Math.sin(facing), c = Math.cos(facing);
  const eye = state.y + CAR.eye;
- out.x = state.x - s * CAR.followBack; out.z = state.z - c * CAR.followBack;
+ out.x = state.x - s * (CAR.followBack+Math.abs(state.speed)*.06); out.z = state.z - c * (CAR.followBack+Math.abs(state.speed)*.06);
  out.y = eye + CAR.followUp;
  const ahead = 2.8 + Math.min(2,Math.abs(state.speed)*.12);
  out.tx = state.x + s * ahead; out.ty = eye - .1; out.tz = state.z + c * ahead;

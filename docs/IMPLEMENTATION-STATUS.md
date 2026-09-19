@@ -88,3 +88,11 @@ Estimated visual progress toward the supplied target: 45–55%. This is a planni
 - Inspect HIGH day and night after HMR has settled.
 - Record what was actually verified and what remains inferred.
 - Update this file only when stage status or priority materially changes.
+
+## Playable motion increment — 2026-09-19
+
+Vehicle momentum, four-point suspension and speed-aware camera are integrated on
+`codex/prebaked-motion`. Six controlled-car meshes now use indexed offline-generated
+buffers; city prebuilt data is unchanged. See `docs/VEHICLE-MOTION-2026-09-19.md`.
+Character rig replacement and predictive NPC response remain pending. Live WebGL visual
+and startup/FPS acceptance remain unverified.

@@ -4,6 +4,7 @@ import {spawn} from 'node:child_process';
 // stage-lock tests remain available through `npm run test:legacy`.
 const files=[
  'tests/player-experience.test.mjs',
+ 'tests/vehicle-dynamics.test.mjs',
  'tests/launch-config.test.mjs',
  'tests/asphalt-material.test.mjs',
  'tests/build-runner.test.mjs',
