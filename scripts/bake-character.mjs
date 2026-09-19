@@ -32,7 +32,7 @@ for(const {side,hip,knee,shoulder,elbow} of limbs){
 }
 const skeleton=new T.Skeleton(bones);
 for(const [mat,list] of parts){const merged=mergeGeometries(list,false),g=mergeVertices(merged,1e-5);merged.dispose();list.forEach(g=>g.dispose());const mesh=new T.SkinnedMesh(g,materials[mat]);mesh.name='HeroMaterial'+mat;mesh.frustumCulled=false;root.add(mesh);mesh.bind(skeleton);}
-const specs={Idle:[2,0],Walk:[1,1.55],Run:[.72,3.1],Sprint:[.6,4.2],Punch:[.42,0],Hit:[.34,0],Enter:[.78,0],Exit:[.9,0],Fall:[.6,0],Death:[1,0]};
+const specs={Idle:[2,0],Walk:[1,1.55],Run:[.72,3.1],Sprint:[.6,4.2],Punch:[.42,0],Hit:[.34,0],Startle:[.4,0],Guard:[1,0],Enter:[.78,0],Exit:[.9,0],Fall:[.6,0],Death:[1,0]};
 const clips=[];
 for(const [name,[duration,speed]] of Object.entries(specs)){
  const times=[];
@@ -44,6 +44,7 @@ for(const [name,[duration,speed]] of Object.entries(specs)){
   let y=move?Math.abs(Math.cos(p))*(run?.026:.012):Math.sin(p)*.002;
   if(name==='Punch'){const k=Math.sin(Math.PI*f);pose.ArmR=[-1.65*k,0,-.12*k];pose.ElbowR=[-.8*(1-k)-.1,0,0];pose.Spine=[.07*k,-.25*k,0];}
   if(name==='Hit'){const k=Math.sin(Math.PI*f);pose.Spine=[-.28*k,0,0];pose.ArmL=[-.25*k,0,.3*k];pose.ArmR=[-.25*k,0,-.3*k];}
+  if(name==='Guard'||name==='Startle'){const k=name==='Guard'?1:Math.sin(Math.PI*f);pose.Spine=[-.12*k,0,0];pose.ArmL=[-1.1*k,0,(name==='Guard'?.35:-.15)*k];pose.ArmR=[-1.1*k,0,(name==='Guard'?-.35:.15)*k];pose.ElbowL=[-1.15*k,0,0];pose.ElbowR=[-1.15*k,0,0];}
   if(name==='Enter'||name==='Exit'){const q=name==='Enter'?f:1-f,k=Math.sin(q*Math.PI);pose.Spine=[.5*k,0,0];pose.ArmL=[-.9*k,0,-.2*k];pose.ArmR=[-.7*k,0,0];pose.HipR=[-.8*k,0,0];pose.KneeR=[1.1*k,0,0];y=-.12*k;}
   if(name==='Fall'||name==='Death'){const k=name==='Death'?1:f*f*(3-2*f);pose.Body=[0,0,k*Math.PI/2];pose.ArmL=[0,0,.25*k];pose.KneeR=[.35*k,0,0];y=.23*k;}
   positions.push(0,y,0);

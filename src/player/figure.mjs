@@ -2,11 +2,13 @@ import {ObjectLoader,AnimationMixer,LoopOnce,LoopRepeat} from 'three';
 import {clone} from 'three/addons/utils/SkeletonUtils.js';
 import pack from './generated/character.mjs';
 export const FIGURE=Object.freeze({height:1.76,shirt:0xc94d38,trousers:0x263443,skin:0xdfb994,hair:0x25282a,cycle:1.55});
-const looping=new Set(['Idle','Walk','Run','Sprint','Death']);
+const looping=new Set(['Idle','Walk','Run','Sprint','Death','Guard']);
 export function characterAction(state){
  if(state.alive===false)return (state.runOver??0)<.6?'Fall':'Death';
  if(state.vehiclePhase>0)return state.vehicleKind==='exit'?'Exit':'Enter';
  if(state.hurtTime>0)return 'Hit';
+ if(state.trafficReaction==='guard')return 'Guard';
+ if(state.trafficReaction==='startle')return 'Startle';
  if(state.attackTime>0)return 'Punch';
  const speed=Math.abs(state.speed??0);return speed<.12?'Idle':speed<2.1?'Walk':speed<3.7?'Run':'Sprint';
 }
@@ -20,10 +22,11 @@ export function createPlayerFigure(template=null){
   if(next!==current||restart){const old=actions[current],action=actions[next];action.reset().play();if(pack.gait[next])action.time=(state.animationPhase??0)%action.getClip().duration;if(next!==current)old.crossFadeTo(action,next==='Fall'?.06:.16,false);current=next;}
   const action=actions[current];action.timeScale=pack.gait[current]?Math.max(.15,Math.min(2,Math.abs(state.speed)/pack.gait[current])):1;
   mixer.update(dt);
-  let time=null;if(current==='Punch')time=.42-state.attackTime;if(current==='Hit')time=.34-state.hurtTime;if(current==='Enter'||current==='Exit')time=state.vehiclePhase*action.getClip().duration;if(current==='Fall')time=state.runOver??0;
+  let time=null;if(current==='Punch')time=.42-state.attackTime;if(current==='Hit')time=state.hurtTime>0?.34-state.hurtTime:.17;if(current==='Enter'||current==='Exit')time=state.vehiclePhase*action.getClip().duration;if(current==='Fall')time=state.runOver??0;
   if(time!==null){action.time=Math.max(0,Math.min(action.getClip().duration,time));mixer.update(0);}
   previousAttack=state.attackTime??0;
   const desired=state.bodyHeading??state.heading??0;heading=heading===null?desired:heading+Math.atan2(Math.sin(desired-heading),Math.cos(desired-heading))*(1-Math.exp(-14*dt));
-  root.position.set(state.x,state.y,state.z);root.rotation.set(0,heading,0);root.updateMatrixWorld(true);
+  root.position.set(state.x,state.y,state.z);root.rotation.set(0,heading,0);if(state.trafficReaction==='look'&&Number.isFinite(state.threatHeading)){const head=root.getObjectByName('Head');head.rotation.y=Math.max(-.8,Math.min(.8,Math.atan2(Math.sin(state.threatHeading-heading),Math.cos(state.threatHeading-heading))));}
+  root.updateMatrixWorld(true);
  },reset(){mixer.stopAllAction();for(const action of Object.values(actions))action.reset();current='Idle';heading=null;previousAttack=0;actions.Idle.play();mixer.update(0);},get action(){return current;},hide(){root.visible=false;},dispose(){if(disposed)return;disposed=true;mixer.stopAllAction();mixer.uncacheRoot(root);const geometries=new Set(),materials=new Set(),skeletons=new Set();root.traverse(o=>{if(o.isMesh){geometries.add(o.geometry);for(const m of Array.isArray(o.material)?o.material:[o.material])materials.add(m);}if(o.isSkinnedMesh)skeletons.add(o.skeleton);});if(!template){geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());}skeletons.forEach(s=>s.dispose());root.removeFromParent();root.clear();}};
 }

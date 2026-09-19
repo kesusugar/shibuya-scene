@@ -111,3 +111,11 @@ Stage 3 now reuses the offline player rig for a bounded nearby NPC pool: HIGH 32
 MEDIUM 12, LOW 4. Buffers/materials are shared; allocation is deferred to player mode
 and staggered. Base instanced bodies are restored on exit. See
 `docs/NEAR-CHARACTERS-2026-09-19.md` for costs, validation and four remaining stages.
+
+## Predictive NPC reactions — 2026-09-19
+
+Controlled-car warnings now predict turning/reversing contact and select checked escape
+directions over existing crowd cells. Updates are bounded to 10 Hz / 64 candidates.
+Startle/Guard clips are baked offline and shared; the character module remains about 35 KB
+gzip. Crossing movement ownership is preserved. See `docs/PEDESTRIAN-THREATS-2026-09-19.md`
+for behavior, scope, review results and three remaining planned stages.

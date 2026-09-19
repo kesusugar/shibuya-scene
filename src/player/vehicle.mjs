@@ -1,3 +1,4 @@
+import {createPedestrianWarnings} from './pedestrian-threat.mjs';
 import {handling,suspension,resetDynamics} from './vehicle-dynamics.mjs';
 // The car the player drives.
 //
@@ -66,6 +67,7 @@ export function createPlayerVehicle(sim, ctx) {
  const state = {x: 0, z: 0, y: 0, heading: 0, course: 0, speed: 0, steering: 0,
                 type: CAR.type, damage: 0, stalled: false, active: false, slot: null};
  resetDynamics(state);
+ const warnPedestrians=createPedestrianWarnings();
  const probe = {x: 0, z: 0, heading: 0};
 
  /**
@@ -324,35 +326,7 @@ export function createPlayerVehicle(sim, ctx) {
    * the car's course, towards whichever side they are already nearer -- and the crowd does
    * the actual moving, so nobody is pushed anywhere the walkable context forbids.
    */
-  alertPedestrians(crowd) {
-   if (!state.active || !crowd || Math.abs(state.speed) < CAR.alertSpeed) return 0;
-   const dir = Math.sign(state.speed);
-   const s = Math.sin(state.course) * dir, c = Math.cos(state.course) * dir;
-   const reach = Math.min(CAR.alertReach, Math.abs(state.speed) * CAR.alertLead) + def.length / 2;
-   const half = def.width / 2 + CAR.alertWidth;
-   // Cells covering the swept corridor, which is the body plus everything ahead of it.
-   const ex = state.x + s * reach, ez = state.z + c * reach;
-   const x0 = Math.floor((Math.min(state.x, ex) - half) / 2), x1 = Math.floor((Math.max(state.x, ex) + half) / 2);
-   const z0 = Math.floor((Math.min(state.z, ez) - half) / 2), z1 = Math.floor((Math.max(state.z, ez) + half) / 2);
-   let warned = 0;
-   for (let i = x0; i <= x1; i++) for (let j = z0; j <= z1; j++) {
-    for (const p of crowd.grid.get(i + ',' + j) ?? []) {
-     if (!p.active || p.controlled || p.struck !== undefined) continue;
-     const dx = p.x - state.x, dz = p.z - state.z;
-     const along = dx * s + dz * c, across = dx * c - dz * s;   // car-relative coordinates
-     if (along < -def.length / 2 || along > reach || Math.abs(across) > half) continue;
-     // Out is sideways, towards the shoulder they are already closer to.
-     const side = across >= 0 ? 1 : -1;
-     // How alarming this is, which decides what they shout: a car at the far end of the
-     // corridor gets a 「あぶな！」, one about to arrive gets a scream. Lateral distance counts
-     // for half as much as closing distance -- a car passing wide is still a car.
-     const urgency = Math.max(0, 1 - along / Math.max(1, reach)) *
-      (1 - Math.min(1, Math.abs(across) / half) * .5);
-     if (crowd.scatter(p, c * side, -s * side, urgency)) warned++;
-    }
-   }
-   return warned;
-  },
+  alertPedestrians(crowd) {return warnPedestrians(crowd,state,def);},
 
   release() {
    const slot = state.slot;
