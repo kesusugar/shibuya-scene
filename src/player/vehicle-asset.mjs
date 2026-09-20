@@ -78,9 +78,14 @@ function wrap(type,root,materials,{owned,dimensions,anchors}){
   },
   dispose(){
    if(disposed)return;disposed=true;
+   // Leave the scene graph first. day-night and the fidelity system unregister on `removed`,
+   // and unregistering restores emissive intensity and shader hooks on the materials -- which
+   // has to happen while they still exist. Disposing first leaves them holding freed materials
+   // and can pull a program out from under a shader warm-up that is still polling for it.
+   root.removeFromParent();
    Object.values(materials).forEach(m=>m.dispose());
    if(owned)geometries.forEach(g=>g.dispose());
-   root.removeFromParent();root.clear();
+   root.clear();
   }
  };
 }

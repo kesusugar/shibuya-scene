@@ -16,7 +16,15 @@ import vehiclePack from './generated/vehicles.mjs';
 // mapping is a lookup rather than a comment about build order.
 const CONTACTS=['rearLeftWheel','rearRightWheel','frontLeftWheel','frontRightWheel'];
 
-export function createVehicleVisual(){
+/**
+ * `onAssetReady` is called with each newly built asset's root.
+ *
+ * The systems that ramp emissives at dusk and record shadow casting walk a root once, when they
+ * are handed it, and they unregister when it leaves the graph. Handing them the asset's own root
+ * rather than this wrapper's means a vehicle that changes type is re-registered rather than
+ * silently losing its headlights.
+ */
+export function createVehicleVisual({onAssetReady=null}={}){
  const root=new Group();root.name='player-vehicle-detail';
  // One vehicle, five shadow instances: the floorpan and four tyres.
  const shadows=createVehicleShadows(5);root.add(shadows.mesh);
@@ -30,6 +38,7 @@ export function createVehicleVisual(){
   asset=adoptVehicleAsset(type,parsed,{dimensions:vehiclePack.dimensions?.[type],
    anchors:vehiclePack.anchors?.[type]});
   root.add(asset.root);
+  onAssetReady?.(asset.root,asset);
  }
 
  return {

@@ -248,8 +248,9 @@ export default function Home(){
   if(!vehicleVisual){vehicleVisual=createVehicleVisual();groups.dynamic.add(vehicleVisual.root);
    // The player's car was never registered, which is why it alone had no headlights at dusk and
    // cast nothing: day-night ramps emissives by mesh name and look.mjs records shadow casting,
-   // and both only see roots they were handed.
-   registerSceneRoot(vehicleVisual.root);}
+   // and both walk a root once, when they are handed it. This root is empty until the deferred
+   // pack lands, so registration waits for it.
+   vehicleVisual.onReady((root:any)=>registerSceneRoot(root));}
   if(!vehicleEffects){vehicleEffects=createVehicleEffects();groups.dynamic.add(vehicleEffects.root);}
   if(!playUI)playUI=createPlayUI(lifeEntry.hooks.current.network,groups.dynamic,{onExit:()=>exitPlayer(),onDrive:()=>toggleDrive()});
   playUI.show();followCamera.reset();setPresentation(true);

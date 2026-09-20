@@ -159,3 +159,25 @@ test('an adopted baked graph and a freshly built one agree about the car',()=>{
  assert.equal(adopted.root.getObjectByName('traffic-player-rear').material.color.getHex(),LAMP.brake);
  adopted.dispose();
 });
+
+test('the deferred wrapper announces its root once the pack lands',async()=>{
+ // Whoever registers the vehicle for day-night and shadows has to wait: the root is empty
+ // until the pack arrives, and both systems walk a root exactly once.
+ const {createDeferredVehicleVisual}=await import('../src/player/deferred-vehicle-visual.mjs');
+ const {Group}=await import('three');
+ let resolve;const deferred=createDeferredVehicleVisual(()=>new Promise(r=>{resolve=r;}));
+ const seen=[];
+ deferred.onReady(root=>seen.push(root));
+ deferred.update({active:true,type:'sedan',slot:{}});
+ await Promise.resolve();
+ assert.equal(seen.length,0,'announced before the pack landed');
+ const built=new Group();
+ resolve({createVehicleVisual({onAssetReady}={}){const root=new Group();
+  onAssetReady?.(built);return {root,update(){},hide(){},dispose(){}};}});
+ await deferred.whenSettled();
+ assert.equal(seen.length,1);
+ // The asset's own root, not the wrapper's: the wrapper outlives a change of vehicle type and
+ // the systems that register a root unregister it when it leaves the graph.
+ assert.equal(seen[0],built);
+ deferred.dispose();
+});
