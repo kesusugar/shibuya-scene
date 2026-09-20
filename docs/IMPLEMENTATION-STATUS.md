@@ -128,3 +128,14 @@ Offline assets are unchanged; no new startup generation. Traffic remains kinemat
 See `docs/VEHICLE-CONTACT-2026-09-19.md` for tests, new model-render image and limitations.
 Two planned stages remain: loading/startup measurements and live visual/device tuning.
 Actual WebGL day/night inspection remains outstanding.
+
+## Playable loading — 2026-09-20
+
+Stage 6 separates the baked controlled-car pack from the initial scene dependency graph.
+The existing traffic model remains visible during deferred loading; cancellation and
+failure paths preserve it. Offline character clips discard redundant keyframes without
+sampled pose changes. Initial scene chunk is approximately 2.89 MB -> 1.15 MB raw,
+546 KB -> 393 KB gzip (shared libraries excluded, car payload deferred rather than removed).
+See `docs/PLAYABLE-LOADING-2026-09-20.md` and `npm run measure:playable`.
+One planned stage remains: live day/night, target-device startup/first-drive/FPS acceptance.
+Browser startup seconds and visual acceptance are still unverified.

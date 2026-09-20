@@ -53,6 +53,8 @@ for(const [name,[duration,speed]] of Object.entries(specs)){
  for(const b of bones)tracks.push(new T.QuaternionKeyframeTrack(b.name+'.quaternion',times,angles.get(b.name)));
  tracks.push(new T.VectorKeyframeTrack('Body.position',times,positions));clips.push(new T.AnimationClip(name,duration,tracks));
 }
+// Remove exactly redundant samples offline; interpolation and clip duration stay intact.
+for(const clip of clips)clip.optimize();
 root.animations=clips;
 const sourceKey=createHash('sha256').update(readFileSync(new URL(import.meta.url))).digest('hex');
 let text=JSON.stringify({version:1,sourceKey,gait:Object.fromEntries(Object.entries(specs).filter(([,s])=>s[1]>0).map(([n,s])=>[n,s[1]])),scene:root.toJSON()},(key,value)=>typeof value==='number'?Math.round(value*100000)/100000:value);
