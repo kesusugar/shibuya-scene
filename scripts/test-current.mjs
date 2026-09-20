@@ -8,6 +8,7 @@ const files=[
  'tests/vehicle-contact.test.mjs',
  'tests/deferred-vehicle-visual.test.mjs',
  'tests/character-animation.test.mjs',
+ 'tests/character-asset.test.mjs',
  'tests/near-characters.test.mjs',
  'tests/pedestrian-threat.test.mjs',
  'tests/launch-config.test.mjs',
