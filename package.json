@@ -23,7 +23,8 @@
     "test": "npm run build && npm run test:ci",
     "lint": "bash scripts/sites-env.sh -- eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "bash scripts/sites-env.sh -- drizzle-kit generate",
-    "measure:playable": "node scripts/measure-playable-loading.mjs"
+    "measure:playable": "node scripts/measure-playable-loading.mjs",
+    "qa:capture": "node scripts/run-visual-qa.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

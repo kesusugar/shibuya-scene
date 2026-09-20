@@ -22,6 +22,7 @@ const files=[
  'tests/network-startup.test.mjs',
  'tests/performance-da.test.mjs',
  'tests/qa-capture.test.mjs',
+ 'tests/frame-samples.test.mjs',
  'tests/qfront-glass.test.mjs',
  'tests/qfront-interior.test.mjs',
  'tests/r1-crowd-density.test.mjs',

@@ -139,3 +139,13 @@ sampled pose changes. Initial scene chunk is approximately 2.89 MB -> 1.15 MB ra
 See `docs/PLAYABLE-LOADING-2026-09-20.md` and `npm run measure:playable`.
 One planned stage remains: live day/night, target-device startup/first-drive/FPS acceptance.
 Browser startup seconds and visual acceptance are still unverified.
+
+## Stage 7 QA instrumentation and Claude handoff — 2026-09-20
+
+QA capture now records bounded 120-frame pacing/CPU samples per view, times out stalled
+render waits, and restores the current camera/solar phase. The local CDP runner has a
+five-minute hard limit and writes startup/renderer/build/stage/loading/run diagnostics.
+Chrome is absent here: real WebGL day/night, startup, first-drive and device FPS acceptance
+remain OPEN. This is tooling completion, not stage 7 visual acceptance.
+See `docs/CLAUDE-CODE-HANDOFF-2026-09-20.md` for all commits, transfer instructions,
+validation commands, limitations and next implementation priorities.
