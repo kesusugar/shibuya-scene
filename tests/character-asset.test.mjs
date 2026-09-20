@@ -134,16 +134,15 @@ test('a figure falls back to Idle rather than throwing on a clip the asset lacks
  figure.dispose();
 });
 
-test('characterAction reads the same state the same way for any asset',()=>{
+test('characterAction answers only for what covers the legs',()=>{
  assert.equal(characterAction({alive:false,runOver:0}),'Fall');
  assert.equal(characterAction({alive:false,runOver:2}),'Death');
  assert.equal(characterAction({vehiclePhase:.5,vehicleKind:'exit'}),'Exit');
  assert.equal(characterAction({hurtTime:.2}),'Hit');
  assert.equal(characterAction({attackTime:.2}),'Punch');
- assert.equal(characterAction({speed:0}),'Idle');
- assert.equal(characterAction({speed:1.4}),'Walk');
- assert.equal(characterAction({speed:3}),'Run');
- assert.equal(characterAction({speed:5}),'Sprint');
+ // Walking is not an action any more. It is a blend, and nothing overrides it, so the state
+ // machine hands the body back rather than naming a clip.
+ for(const speed of [0,1.4,3,5])assert.equal(characterAction({speed}),null,`speed ${speed}`);
 });
 
 test('the deferred character never blocks and never retries in a tight loop',async()=>{

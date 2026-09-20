@@ -94,10 +94,10 @@ export function dressCitizen(root,palette={}){
 }
 
 /** Shared plumbing: the providers differ only in where their scene, clips and clothes come from. */
-function asset({id,template,clips,gait,height,scale,dress,bones}){
+function asset({id,template,clips,gait,gaitDetail,height,scale,dress,bones}){
  let disposed=false;
  return {
-  id,height,scale,gait:Object.freeze({...gait}),bones,
+  id,height,scale,gait:Object.freeze({...gait}),gaitDetail:gaitDetail??null,bones,
   get template(){return template;},
   instance(palette){
    if(disposed)throw new Error(`character asset ${id} is disposed`);
@@ -161,6 +161,10 @@ export function humanoidCitizen(gltf,report,base=WARDROBE){
   return {recolour:worn.recolour,dispose(){worn.materials.forEach(m=>m.dispose());}};
  };
  return asset({id:'humanoid',template,clips:gltf.animations,gait:report.gait,
+  // Measured stride and foot-contact timing, from scripts/analyse-gait.mjs. The blend needs
+  // both: stride sets how long a cycle takes, contact keeps two clips from disagreeing about
+  // which foot is down.
+  gaitDetail:report.gaitDetail??null,
   height:report.body.height*report.body.scaleToGame,scale:report.body.scaleToGame,
   dress,bones:{head:'Head'}});
 }

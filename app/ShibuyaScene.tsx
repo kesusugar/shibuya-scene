@@ -39,6 +39,7 @@ import {PLAYER,createPlayer,playerCamera} from '../src/player/controller.mjs';
 import {createPlayerMarker,MARKER} from '../src/player/marker.mjs';
 import {createPlayerFigure} from '../src/player/figure.mjs';
 import {createDeferredCharacter} from '../src/player/deferred-character.mjs';
+import {createContactShadows} from '../src/life/shadows.mjs';
 import {CAR,createPlayerVehicle,vehicleCamera} from '../src/player/vehicle.mjs';
 import {createPlayerAudio} from '../src/player/audio.mjs';
 import {createDiagnostics} from '../src/player/diagnostics.mjs';
@@ -99,7 +100,7 @@ export default function Home(){
  // both by the same amount instead, which stops the pan without turning the view.
  const VIEW_LIMIT=180,VIEW_CEILING=60,EYE_FLOOR=1.6;
  // The player is created once the crowd network is up, since it walks on that context.
- let player:any=null,playerMarker:any=null,carMarker:any=null,playerFigure:any=null,deferredCharacter:any=null,playerCar:any=null,playerAudio:any=null,crowdVoices:any=null,touchPad:any=null,blood:any=null,driving=false,playerMode=false;const followPose:any={x:0,y:0,z:0,tx:0,ty:0,tz:0};const playerBox={x:0,z:0,heading:0};
+ let player:any=null,playerMarker:any=null,carMarker:any=null,playerFigure:any=null,playerShadow:any=null,deferredCharacter:any=null,playerCar:any=null,playerAudio:any=null,crowdVoices:any=null,touchPad:any=null,blood:any=null,driving=false,playerMode=false;const followPose:any={x:0,y:0,z:0,tx:0,ty:0,tz:0};const playerBox={x:0,z:0,heading:0};
  let vehicleVisual:any=null,vehicleEffects:any=null,playUI:any=null,localCrowdClock=0,frameHits=0,combatDeathReported=false;const followCamera=createFollowCamera(),melee=createMeleeCombat(),vehicleTransition=createVehicleTransition();
  const playerSize={width:PLAYER.radius*2,length:PLAYER.radius*2};const PLAYER_HEIGHT=1.76;
  // Getting in and out begins with the player's parked car, but a stopped traffic slot can
@@ -126,7 +127,7 @@ export default function Home(){
   if(driving){const spot=playerCar.doorstep();if(!spot)return;                 // no pavement beside it: stay in
    const door=playerCar.doorPose(playerCar.state.slot,spot[0],spot[1]);if(!door)return;
    driving=false;playerAudio?.silence();playerCar.state.speed=0;playerCar.state.doorSide=door.side;playerCar.state.doorPhase=0;playerCar.sync();player.transitionTo(door.x,door.z,door.heading,0);
-   playerFigure?.update(player.state,0);vehicleTransition.begin('exit',{x:door.x,z:door.z,heading:door.heading},{x:spot[0],z:spot[1],heading:playerCar.state.heading});
+   playerFigure?.update(player.state,0);groundPlayerShadow();vehicleTransition.begin('exit',{x:door.x,z:door.z,heading:door.heading},{x:spot[0],z:spot[1],heading:playerCar.state.heading});
    setDriving(false);touchPad?.setDriving(false);return;}
   // Parked cars and traffic stopped at a light can be taken. The selected slot is frozen
   // before the approach so traffic cannot pull away halfway through the visible carjacking.
@@ -162,6 +163,15 @@ export default function Home(){
   for(const v of sim.pool){if(!v.active||v.parked)continue;
    if(boxOverlap(playerBox,playerSize,v,(VEHICLES as any)[v.type],0)){if(player.knockDown(v))setPlayerHit(v.type);break;}}
   };
+ /** One soft patch under the player, sized from the body like every other pedestrian's. */
+ const groundPlayerShadow=()=>{
+  if(!playerShadow)return;
+  playerShadow.begin();
+  if(playerMode&&!driving&&player?.state)
+   playerShadow.add(player.state.x,player.state.y,player.state.z,PLAYER.radius*1.35,
+    player.state.alive?0:Math.max(0,1-(player.state.runOver??0)));
+  playerShadow.end();
+ };
  const clampView=()=>{const t=controls.target;
   const x=Math.min(VIEW_LIMIT,Math.max(-VIEW_LIMIT,t.x)),z=Math.min(VIEW_LIMIT,Math.max(-VIEW_LIMIT,t.z)),y=Math.min(VIEW_CEILING,Math.max(0,t.y));
   view.position.x+=x-t.x;view.position.y+=y-t.y;view.position.z+=z-t.z;t.set(x,y,z);
@@ -233,6 +243,9 @@ export default function Home(){
   if(!playerMarker){playerMarker=createPlayerMarker();groups.dynamic.add(playerMarker.mesh);}
   if(!carMarker){carMarker=createPlayerMarker(MARKER.car);groups.dynamic.add(carMarker.mesh);}
   if(!playerFigure){playerFigure=createPlayerFigure();groups.dynamic.add(playerFigure.root);}
+  // The crowd's own contact shadows skip the controlled slot, so the player was the one person
+  // in the city standing on nothing. Same module, same single draw call, one instance.
+  if(!playerShadow){playerShadow=createContactShadows(1);groups.dynamic.add(playerShadow.mesh);}
   // The baked figure is already on screen; the humanoid is asked for now and swapped in if and
   // when it lands. Asking here rather than at startup keeps it out of the first paint entirely
   // -- somebody who only ever looks at the city never pays for a body.
@@ -273,7 +286,7 @@ export default function Home(){
   playerMode=true;combatDeathReported=false;controls.enabled=false;player.attach(canvas,{onExit:()=>exitPlayer(),onDrive:()=>toggleDrive(),onAttack:()=>attack()});setPlayerHit(null);setMode('player');
   (window as any).__SHIBUYA_PLAYER__=player;(window as any).__SHIBUYA_CAR__=playerCar;
   return true;};
- const exitPlayer=()=>{if(!playerMode)return;playUI?.hide();vehicleVisual?.hide();vehicleEffects?.hide();lifeEntry.hooks.current?.setPlayerFocus(null);followCamera.reset();melee.reset();vehicleTransition.cancel();playerMode=false;driving=false;setDriving(false);playerCar?.release();playerCar=null;carMarker?.hide();playerAudio?.silence();touchPad?.hide();player?.detach();playerMarker?.hide();playerFigure?.hide();releaseCrowdSlot();delete (window as any).__SHIBUYA_PLAYER__;delete (window as any).__SHIBUYA_CAR__;
+ const exitPlayer=()=>{if(!playerMode)return;playUI?.hide();vehicleVisual?.hide();vehicleEffects?.hide();lifeEntry.hooks.current?.setPlayerFocus(null);followCamera.reset();melee.reset();vehicleTransition.cancel();playerMode=false;driving=false;setDriving(false);playerCar?.release();playerCar=null;carMarker?.hide();playerAudio?.silence();touchPad?.hide();player?.detach();playerMarker?.hide();playerFigure?.hide();playerShadow?.begin();playerShadow?.end();releaseCrowdSlot();delete (window as any).__SHIBUYA_PLAYER__;delete (window as any).__SHIBUYA_CAR__;
   view.fov=50;view.updateProjectionMatrix();controls.enabled=!config.qa;setPlayerHit(null);setMode('observe');preset(currentCamera,false);};
  resize();setTier(currentTier);setTime(clock.value);setModules(system.snapshot());
  const observer=new ResizeObserver(resize);observer.observe(mount.current);
@@ -320,8 +333,8 @@ export default function Home(){
  const SHAKE_PER_HIT=.34,SHAKE_MAX=1,SHAKE_FALL=2.6,SHAKE_THROW=.42,IMPACT_BLEED=.06;
  let shake=0;
  let lastPlayTick=performance.now();let qaReadyRef=false;const frame=(now:number)=>{if(disposed)return;const dt=frameGate.step(now);if(dt===null){raf=requestAnimationFrame(frame);return;}const frameStart=performance.now(),updateStart=frameStart;const playElapsed=document.hidden?0:Math.max(0,(now-lastPlayTick)/1000);lastPlayTick=now;frameHits=0;if(playerMode&&player)player.updateInput(dt);if(playerMode&&player){
-  if(vehicleTransition.active){const pose=vehicleTransition.update(dt);if(pose){if(playerCar?.state)playerCar.state.doorPhase=Math.sin(pose.phase*Math.PI);player.state.vehicleKind=pose.kind;player.transitionTo(pose.x,pose.z,pose.heading,pose.phase);playerFigure?.update(player.state,dt);
-    if(pose.done&&pose.kind==='enter'){driving=true;player.state.vehiclePhase=0;playerCar.state.doorPhase=0;playerFigure?.hide();carMarker?.hide();setDriving(true);touchPad?.setDriving(true);struckCountRef=0;setStruckCount(0);}
+  if(vehicleTransition.active){const pose=vehicleTransition.update(dt);if(pose){if(playerCar?.state)playerCar.state.doorPhase=Math.sin(pose.phase*Math.PI);player.state.vehicleKind=pose.kind;player.transitionTo(pose.x,pose.z,pose.heading,pose.phase);playerFigure?.update(player.state,dt);groundPlayerShadow();
+    if(pose.done&&pose.kind==='enter'){driving=true;player.state.vehiclePhase=0;playerCar.state.doorPhase=0;playerFigure?.hide();playerShadow?.begin();playerShadow?.end();carMarker?.hide();setDriving(true);touchPad?.setDriving(true);struckCountRef=0;setStruckCount(0);}
     else if(pose.done){player.state.vehiclePhase=0;if(playerCar?.state)playerCar.state.doorPhase=0;}}}
   else if(driving&&playerCar){const drive=player.input();playerCar.step(dt,drive);const c=playerCar.state;player.rideTo(c.x,c.z,c.heading);playerMarker?.update(c,dt,playerCar.def.height);
    const crowdSim=lifeEntry.hooks.current?.sim;playerCar.alertPedestrians(crowdSim);
@@ -341,7 +354,7 @@ export default function Home(){
    carSpeedLast=Math.abs(c.speed);
    playerAudio?.engine(c.speed,playerCar.def.speed,Math.max(0,drive.forward),c.damage);
    if(playerCar.state.damage!==damageLast){damageLast=playerCar.state.damage;setCarDamage(damageLast);}}
-  else{player.step(dt);if(player.state.alive)combatDeathReported=false;reactToRunner(lifeEntry.hooks.current?.sim,player.state);const combat=melee.update(dt,lifeEntry.hooks.current?.sim,player);if(combat.hits>meleeHitsLast){meleeHitsLast=combat.hits;playerAudio?.strike();}playerFigure?.update(player.state,dt);
+  else{player.step(dt);if(player.state.alive)combatDeathReported=false;reactToRunner(lifeEntry.hooks.current?.sim,player.state);const combat=melee.update(dt,lifeEntry.hooks.current?.sim,player);if(combat.hits>meleeHitsLast){meleeHitsLast=combat.hits;playerAudio?.strike();}playerFigure?.update(player.state,dt);groundPlayerShadow();
    if(!player.state.alive&&!combatDeathReported){combatDeathReported=true;setPlayerHit(player.state.hitBy??'fight');}
    playerMarker?.update(player.state,dt,PLAYER_HEIGHT);
    // Nothing on screen said where the car was: the orange cone is over the player, so a
@@ -366,7 +379,7 @@ export default function Home(){
  const lost=(event:Event)=>{event.preventDefault();setError('WebGL context lost — reload to retry.');};canvas.addEventListener('webglcontextlost',lost);
  const decorationTier=deferredLatest((v:string)=>{if(streetTier!==v){streetTier=v;if(streetEntry.enabled){system.setEnabled('streetscape',false);system.setEnabled('streetscape',true);}}if(signTier!==v){signTier=v;if(signsEntry.enabled){system.setEnabled('signs',false);system.setEnabled('signs',true);}}if(detailTier!==v){detailTier=v;if(detailEntry.enabled){system.setEnabled('stationDetail',false);system.setEnabled('stationDetail',true);}}});
  engine.current={preset,drive:()=>toggleDrive(),player:()=>{if(playerMode)exitPlayer();else enterPlayer();},respawn:()=>{player?.revive();setPlayerHit(null);},tier:(v:string)=>{const previousTier=currentTier;startup?.tierChange(previousTier,v,'tier-control');for(const id of ['fidelity','streetscape','signs','stationDetail'])startup?.setReason(id,'tier-change');currentTier=v;currentTrafficTier=v;buildingsTier=v;timingTier=v;frameGate.setTier(v);fidelity.setTier(v);buildQueue.enqueue(()=>measureStage('fidelity','Render Fidelity Prepare',()=>fidelity.prepare()),{key:'fidelity',name:'Render Fidelity Prepare'}).catch(e=>{console.error('[S16.3 Fidelity]',e);setError('HIGH描画の準備に失敗しました。MEDIUMを選択してください。');});buildingsEntry.hooks.current?.setTier(v);setBuildingsReport(buildingsEntry.hooks.current?{...buildingsEntry.hooks.current.stats}:null);trafficEntry.hooks.current?.setTier(v);lifeEntry.hooks.current?.setTier(v);trainsEntry.hooks.current?.setTier(v);nightglowEntry.hooks.current?.setTier(v);constructionEntry.hooks.current?.setTier(v);setConstructionReport(constructionEntry.hooks.current?{...constructionEntry.hooks.current.stats}:null);resize();setTier(v);decorationTier.set(v);},time:(v:string)=>{solar.select(v);setTime(v);},toggle:(id:string,v:boolean)=>{if(playerMode&&['traffic','life','ground'].includes(id))exitPlayer();startup?.setReason(id,'manual-rebuild');const rebuildLife=id==='traffic'&&lifeEntry.enabled;if(rebuildLife){startup?.setReason('life','dependency-rebuild');system.setEnabled('life',false);}system.setEnabled(id,v);if(id==='environment'){nightglowEntry.hooks.current?.refresh();fidelity.refresh();}if(rebuildLife)system.setEnabled('life',true);setModules(system.snapshot());},capture};
- cleanup=()=>{document.removeEventListener('visibilitychange',visibility);playUI?.dispose();vehicleVisual?.dispose();vehicleEffects?.dispose();player?.detach();carMarker?.dispose();playerAudio?.dispose();crowdVoices?.dispose();if((window as any).__SHIBUYA_VOICES__===crowdVoices)delete (window as any).__SHIBUYA_VOICES__;touchPad?.dispose();blood?.dispose();if((window as any).__SHIBUYA_BLOOD__===blood)delete (window as any).__SHIBUYA_BLOOD__;diag?.dispose();if((window as any).__SHIBUYA_DIAG__===diag)delete (window as any).__SHIBUYA_DIAG__;playerMarker?.dispose();playerFigure?.dispose();deferredCharacter?.dispose();if((window as any).__SHIBUYA_CHARACTER__===deferredCharacter)delete (window as any).__SHIBUYA_CHARACTER__;cancelAnimationFrame(raf);stopShaderErrors();timingObserver?.disconnect();startupTrace?._removeLifecycle?.();if(qaButtonTimer)window.clearInterval(qaButtonTimer);decorationTier.dispose();buildQueue.dispose();observer.disconnect();unsub();dataAbort.abort();solar.dispose();fidelity.dispose();dayNight.dispose();system.dispose();controls.dispose();canvas.removeEventListener('webglcontextlost',lost);renderer?.dispose();canvas.remove();qaButton?.remove();startupPanel?.remove();if((window as any).__SHIBUYA_QA__===qaApi)delete (window as any).__SHIBUYA_QA__;if((window as any).__SHIBUYA_STARTUP_TIMING__===startupTrace)delete (window as any).__SHIBUYA_STARTUP_TIMING__;engine.current=null;};
+ cleanup=()=>{document.removeEventListener('visibilitychange',visibility);playUI?.dispose();vehicleVisual?.dispose();vehicleEffects?.dispose();player?.detach();carMarker?.dispose();playerAudio?.dispose();crowdVoices?.dispose();if((window as any).__SHIBUYA_VOICES__===crowdVoices)delete (window as any).__SHIBUYA_VOICES__;touchPad?.dispose();blood?.dispose();if((window as any).__SHIBUYA_BLOOD__===blood)delete (window as any).__SHIBUYA_BLOOD__;diag?.dispose();if((window as any).__SHIBUYA_DIAG__===diag)delete (window as any).__SHIBUYA_DIAG__;playerMarker?.dispose();playerFigure?.dispose();playerShadow?.dispose();deferredCharacter?.dispose();if((window as any).__SHIBUYA_CHARACTER__===deferredCharacter)delete (window as any).__SHIBUYA_CHARACTER__;cancelAnimationFrame(raf);stopShaderErrors();timingObserver?.disconnect();startupTrace?._removeLifecycle?.();if(qaButtonTimer)window.clearInterval(qaButtonTimer);decorationTier.dispose();buildQueue.dispose();observer.disconnect();unsub();dataAbort.abort();solar.dispose();fidelity.dispose();dayNight.dispose();system.dispose();controls.dispose();canvas.removeEventListener('webglcontextlost',lost);renderer?.dispose();canvas.remove();qaButton?.remove();startupPanel?.remove();if((window as any).__SHIBUYA_QA__===qaApi)delete (window as any).__SHIBUYA_QA__;if((window as any).__SHIBUYA_STARTUP_TIMING__===startupTrace)delete (window as any).__SHIBUYA_STARTUP_TIMING__;engine.current=null;};
  })().catch(e=>{if(!disposed)setError(String(e));});return()=>{disposed=true;cleanup();};},[]);
  const timingMs=(value:number)=>`${(value/1000).toFixed(3)} s`;
  const copyS5Timing=async()=>{if(!s5TimingResult)return;await navigator.clipboard.writeText(JSON.stringify(s5TimingResult,null,2));setS5TimingCopied(true);window.setTimeout(()=>setS5TimingCopied(false),1500);};
