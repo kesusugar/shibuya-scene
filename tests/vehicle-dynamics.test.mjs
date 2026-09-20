@@ -20,6 +20,18 @@ test('four wheel samples react to a sloped road without nonfinite transforms',()
 });
 test('prebuilt vehicle pack matches source and contains only baked buffers',()=>{
 
- const key=createHash('sha256').update(readFileSync('scripts/vehicle-visual-source.mjs')).update(readFileSync('src/traffic/config.mjs')).digest('hex');assert.equal(pack.sourceKey,key);
+ // The generator moved into src/ when the runtime and the bake script stopped carrying two
+ // copies of the same update; the key hashes whatever the shape actually comes from.
+ const key=createHash('sha256').update(readFileSync('src/traffic/vehicle-shape.mjs'))
+  .update(readFileSync('src/player/vehicle-asset.mjs'))
+  .update(readFileSync('src/traffic/config.mjs')).digest('hex');
+ assert.equal(pack.sourceKey,key);
  for(const model of Object.values(pack.models))for(const geometry of model.geometries){assert.equal(geometry.type,'BufferGeometry');assert.ok(geometry.data.attributes.position.array.length>0);}
+ // Dimensions and anchors do not survive the graph round trip in a usable form, so the pack
+ // has to carry them: the wheel anchors become node positions the game then moves.
+ for(const type of Object.keys(pack.models)){
+  assert.ok(pack.dimensions[type]?.wheelbase>1,`${type} has no wheelbase`);
+  for(const anchor of ['frontLeftWheel','rearRightWheel','driverSeat','driverDoor','driverEntry','driverExit'])
+   assert.equal(pack.anchors[type]?.[anchor]?.length,3,`${type} is missing the ${anchor} anchor`);
+ }
 });

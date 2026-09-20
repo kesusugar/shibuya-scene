@@ -1,26 +1,97 @@
+// Drive a VehicleAsset from the physics state.
+//
+// The simulation slot stays authoritative: position, heading, speed, steer angle, pitch, roll
+// and a four-point suspension are all computed in vehicle-dynamics.mjs and only read here.
+// Nothing in this file integrates anything.
+//
+// There used to be two copies of this update -- one in the generator the bake script ran, one
+// in the runtime that loaded the baked result -- and they had drifted over whether body roll
+// feeds wheel height. There is one now, and the generator is a generator.
 import {Group,ObjectLoader} from 'three';
+import {adoptVehicleAsset} from './vehicle-asset.mjs';
+import {createVehicleShadows} from '../traffic/vehicle-shadow.mjs';
 import vehiclePack from './generated/vehicles.mjs';
 
-// Only the controlled vehicle uses this close-range model. Its simulation slot remains authoritative.
+// Suspension reports its four contact points in this order; the anchors are named so the
+// mapping is a lookup rather than a comment about build order.
+const CONTACTS=['rearLeftWheel','rearRightWheel','frontLeftWheel','frontRightWheel'];
+
 export function createVehicleVisual(){
- const root=new Group();root.name='player-vehicle-detail';let type=null,geometries=[],materials=[],wheels=[],doors=[],body=null,lastSpeed=0,pitch=0,roll=0,spin=0,disposed=false,slot=null;
- function clear(){geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());root.clear();geometries=[];materials=[];wheels=[];doors=[];}
- function build(next){clear();type=next;
-  const loaded=new ObjectLoader().parse(vehiclePack.models[type]);
-  for(const child of [...loaded.children])root.add(child);
-  body=root.getObjectByName('vehicle-body');
-  root.traverse(o=>{if(o.isMesh){geometries.push(o.geometry);materials.push(o.material);}if(o.name.startsWith('vehicle-wheel-'))wheels.push({pivot:o,front:o.position.z>0});if(o.name.startsWith('player-vehicle-door-'))doors.push({pivot:o,side:Number(o.name.split('door-')[1])});});
+ const root=new Group();root.name='player-vehicle-detail';
+ // One vehicle, five shadow instances: the floorpan and four tyres.
+ const shadows=createVehicleShadows(5);root.add(shadows.mesh);
+ let asset=null,type=null,slot=null,disposed=false;
+ let lastSpeed=0,pitch=0,roll=0,spin=0;
+
+ function build(next){
+  asset?.dispose();asset=null;
+  type=next;
+  const parsed=new ObjectLoader().parse(vehiclePack.models[type]);
+  asset=adoptVehicleAsset(type,parsed,{dimensions:vehiclePack.dimensions?.[type],
+   anchors:vehiclePack.anchors?.[type]});
+  root.add(asset.root);
  }
- return {root,update(state,dt=0){if(disposed)return;
-  if(slot&&slot!==state?.slot)slot.playerVisual=false;slot=state?.slot;
-  // Scooters keep their existing two-wheel model.
-  if(!state?.active||state.type==='scooter'){root.visible=false;if(slot)slot.playerVisual=false;return;}
-  if(type!==state.type){build(state.type);lastSpeed=state.speed;pitch=0;roll=0;spin=0;}root.visible=true;if(slot)slot.playerVisual=true;
-  const accel=dt>0?(state.speed-lastSpeed)/dt:0;lastSpeed=state.speed;
-  const a=1-Math.exp(-10*dt);pitch+=(Math.max(-.055,Math.min(.055,accel*.005))-pitch)*a;
-  roll+=(Math.max(-.055,Math.min(.055,state.steering*state.speed*.006))-roll)*a;
-  body.rotation.set(state.pitch??pitch,0,state.roll??roll);root.position.set(state.x,state.y+.025,state.z);root.rotation.y=state.heading;
-  const open=Math.max(0,Math.min(1,state.doorPhase??0));for(const door of doors)door.pivot.rotation.y=door.side*(state.doorSide===door.side?open:0)*1.05;
-  spin+=state.speed*dt/.3;for(const [i,w] of wheels.entries()){w.pivot.position.y=(type==='bus'?.42:.30)+(state.wheelCompression?.[i]??0)+w.pivot.position.x*Math.sin(state.roll??0)-w.pivot.position.z*Math.sin(state.pitch??0);const steer=state.steerAngle??state.steering*.35;w.pivot.rotation.set(spin,w.front?-steer*(1+(i%2?1:-1)*steer*.17):0,0,'YXZ');}
- },hide(){root.visible=false;if(slot)slot.playerVisual=false;slot=null;},dispose(){if(disposed)return;disposed=true;if(slot)slot.playerVisual=false;clear();root.removeFromParent();}};
+
+ return {
+  root,
+  get asset(){return asset;},
+  update(state,dt=0){
+   if(disposed)return;
+   if(slot&&slot!==state?.slot)slot.playerVisual=false;
+   slot=state?.slot;
+   // Scooters keep their existing two-wheel model in the instanced traffic renderer.
+   if(!state?.active||state.type==='scooter'){root.visible=false;if(slot)slot.playerVisual=false;return;}
+   if(type!==state.type){build(state.type);lastSpeed=state.speed;pitch=0;roll=0;spin=0;}
+   root.visible=true;if(slot)slot.playerVisual=true;
+
+   // Body lean. The suspension supplies real pitch and roll when it has ground under it; the
+   // damped fallback covers the frame or two before it does.
+   const accel=dt>0?(state.speed-lastSpeed)/dt:0;lastSpeed=state.speed;
+   const a=1-Math.exp(-10*dt);
+   pitch+=(Math.max(-.055,Math.min(.055,accel*.005))-pitch)*a;
+   roll+=(Math.max(-.055,Math.min(.055,state.steering*state.speed*.006))-roll)*a;
+   const bodyPitch=state.pitch??pitch,bodyRoll=state.roll??roll;
+   asset.body.rotation.set(bodyPitch,0,bodyRoll);
+   root.position.set(state.x,state.y,state.z);
+   root.rotation.y=state.heading;
+
+   // Wheels. Lean tilts the shell, not the wheels: they stay on the road because the
+   // suspension already measured where the road is, so each one is lifted back by however
+   // much the body above it rolled or pitched away.
+   spin+=state.speed*dt/asset.dimensions.radius;
+   const steer=state.steerAngle??state.steering*.35;
+   for(const [i,name] of CONTACTS.entries()){
+    const wheel=asset.wheels[name],rest=asset.anchorPoints?.[name];
+    const x=rest?rest[0]:wheel.position.x,z=rest?rest[2]:wheel.position.z;
+    wheel.position.y=asset.dimensions.radius+(state.wheelCompression?.[i]??0)
+     +x*Math.sin(bodyRoll)-z*Math.sin(bodyPitch);
+    // Ackermann, roughly: the inner wheel turns further than the outer one.
+    const inner=Math.sign(steer)===Math.sign(x);
+    wheel.rotation.set(spin,name.startsWith('front')?-steer*(inner?1.15:.85):0,0,'YXZ');
+   }
+
+   // Brake and indicator come from the simulation slot, which vehicle.mjs already writes for
+   // the player exactly as the traffic simulation writes them for everyone else. Reading them
+   // here rather than re-deriving them is what stops the player's car being the one vehicle in
+   // the city whose lights disagree with its own AI record.
+   asset.setRear(!!state.slot?.brake,state.slot?.blinker??0);
+   asset.setDoor(state.doorSide,state.doorPhase);
+
+   // Grounding. The shadow mesh is a child of this root, which is already at the vehicle and
+   // turned to its heading, so local y of zero is the road and the contacts are body-frame.
+   shadows.begin();
+   shadows.add({x:0,y:0,z:0,heading:0},asset.dimensions,
+    CONTACTS.map(name=>asset.anchorPoints?.[name]
+     ??[asset.wheels[name].position.x,0,asset.wheels[name].position.z]));
+   shadows.end();
+  },
+  hide(){root.visible=false;if(slot)slot.playerVisual=false;slot=null;},
+  inspect(){return asset?{type,triangles:asset.triangles,materials:asset.materials.length,
+   meshes:root.children.length}:{type:null,triangles:0,materials:0,meshes:0};},
+  dispose(){
+   if(disposed)return;disposed=true;
+   if(slot)slot.playerVisual=false;slot=null;
+   asset?.dispose();asset=null;shadows.dispose();root.removeFromParent();root.clear();
+  }
+ };
 }

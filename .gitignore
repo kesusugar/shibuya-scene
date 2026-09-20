@@ -43,10 +43,11 @@ next-env.d.ts
 /outputs/
 /work/
 /qa/*
-# ...except the cost bench, which is the harness the RUN 2 draw-call numbers came from.
+# ...except the cost benches, which are where the RUN 2 and RUN 3 measurements come from.
 !/qa/gta-upgrade/
 /qa/gta-upgrade/*
 !/qa/gta-upgrade/charbench.html
+!/qa/gta-upgrade/vehiclebench.html
 
 # character pipeline: upstream downloads are verified, never committed
 /assets/character/upstream/
