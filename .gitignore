@@ -42,7 +42,11 @@ next-env.d.ts
 /.sites-runtime/
 /outputs/
 /work/
-/qa/
+/qa/*
+# ...except the cost bench, which is the harness the RUN 2 draw-call numbers came from.
+!/qa/gta-upgrade/
+/qa/gta-upgrade/*
+!/qa/gta-upgrade/charbench.html
 
 # character pipeline: upstream downloads are verified, never committed
 /assets/character/upstream/

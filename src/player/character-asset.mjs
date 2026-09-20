@@ -104,11 +104,17 @@ function asset({id,template,clips,gait,height,scale,dress,bones}){
    const root=clone(template);
    root.scale.setScalar(scale);
    const worn=dress(root,palette);
+   // SkeletonUtils.clone rebinds onto a fresh Skeleton, and a Skeleton owns a data texture of
+   // bone matrices. Geometry and the template's own skeleton belong to the asset and outlive
+   // this instance; the clone's skeleton does not, and releasing a pooled citizen without
+   // releasing it leaks one texture per body per swap.
+   const skeletons=new Set();
+   root.traverse(o=>{if(o.isSkinnedMesh)skeletons.add(o.skeleton);});
    return {root,clips,
     recolour:worn.recolour,
     /** Wear a different height without losing the asset's own units-to-metres factor. */
     setHeight(metres){root.scale.setScalar(scale*metres/height);},
-    dispose(){worn.dispose();root.removeFromParent();root.clear();}};
+    dispose(){worn.dispose();skeletons.forEach(s=>s.dispose());root.removeFromParent();root.clear();}};
   },
   dispose(){
    if(disposed)return;disposed=true;

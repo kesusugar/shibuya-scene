@@ -111,6 +111,20 @@ test('dressing only touches meshes that carry a mask',async()=>{
  instance.dispose();
 });
 
+test('releasing a citizen releases its skeleton, not the asset it was cloned from',async()=>{
+ for(const asset of [bakedCitizen(pack),await humanoid()]){
+  const skeletons=o=>{const set=new Set();o.traverse(x=>{if(x.isSkinnedMesh)set.add(x.skeleton);});return set;};
+  const template=skeletons(asset.template);
+  const instance=asset.instance();
+  const mine=skeletons(instance.root);
+  assert.ok(mine.size>0,`${asset.id} instance has no skeleton`);
+  for(const s of mine)assert.ok(!template.has(s),`${asset.id} shares the template skeleton`);
+  // A Skeleton owns a bone texture; a pool that swaps citizens must not accumulate one each.
+  instance.dispose();
+  for(const s of mine)assert.equal(s.boneTexture,null,`${asset.id} kept a bone texture`);
+ }
+});
+
 test('a figure falls back to Idle rather than throwing on a clip the asset lacks',()=>{
  const asset=bakedCitizen(pack);
  const figure=createPlayerFigure(asset);
