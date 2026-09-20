@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import {mkdirSync,writeFileSync} from 'node:fs';
 
 const EXPECTED_PNGS = [
   'overview-day.png',
@@ -27,6 +28,7 @@ function parseArgs(argv) {
     url: values.get('url'),
     output: resolve(values.get('output') ?? 'qa/latest'),
     cdpPort: Number(values.get('cdp-port') ?? 9222),
+    timeoutMs: Number(values.get('timeout-ms') ?? 300000),
   };
 }
 
@@ -168,8 +170,12 @@ const args = parseArgs(process.argv.slice(2));
 if (!args.url) throw new Error('--url is required');
 if (!Number.isInteger(args.cdpPort) || args.cdpPort < 1 || args.cdpPort > 65535) throw new Error('--cdp-port must be a valid port');
 
+if(!Number.isFinite(args.timeoutMs)||args.timeoutMs<1000||args.timeoutMs>1800000)throw new Error('--timeout-ms must be 1000..1800000');
 const overallStartedAt = Date.now();
-let client;
+let client,completed=false;
+mkdirSync(args.output,{recursive:true});
+const summary=(status)=>writeFileSync(resolve(args.output,'run.json'),JSON.stringify({status,elapsedMs:Date.now()-overallStartedAt,timeoutMs:args.timeoutMs,cdpCommands:client?client.nextId-1:0,paidCloudCalls:0},null,2));
+const deadline=setTimeout(()=>{summary('timeout');console.error('[Visual QA] Overall time limit reached');client?.close();process.exit(1);},args.timeoutMs);
 try {
   console.log(`[Visual QA] Target URL: ${args.url}`);
   console.log(`[Visual QA] Output directory: ${args.output}`);
@@ -251,11 +257,16 @@ try {
     console.log(`[Visual QA] PNG: ${encoded.file} (${png.length} bytes)`);
   }
 
+  const startup=await client.evaluate('window.__SHIBUYA_STARTUP_TIMING__ ?? null');
+  const loading=await client.evaluate('window.__SHIBUYA_QA__.playableLoading ?? null');
+  for(const [name,value] of Object.entries({renderer,gl:{webglVersion:renderer.webglVersion},startup,build:startup?.buildIdentity??{unavailable:true},stage:startup?.stages??[],playableLoading:loading})){
+    await writeFile(resolve(args.output,name+'.json'),JSON.stringify(value,null,2)+'\n');
+  }
   const metricsPath = resolve(args.output, 'metrics.json');
   await writeFile(metricsPath, `${JSON.stringify(captureSummary.metrics, null, 2)}\n`, 'utf8');
   console.log(`[Visual QA] metrics.json:\n${JSON.stringify(captureSummary.metrics, null, 2)}`);
   await client.evaluate('delete window.__SHIBUYA_QA_AUTOMATION_RESULT__');
-  console.log('[Visual QA] SUCCESS');
+  completed=true;console.log('[Visual QA] SUCCESS');
 } catch (error) {
   console.error(`[Visual QA] FAILURE: ${error.stack ?? error}`);
   if (client?.diagnostics.length) {
@@ -264,5 +275,7 @@ try {
   }
   process.exitCode = 1;
 } finally {
+  clearTimeout(deadline);summary(completed?'success':'failure');
+  writeFileSync(resolve(args.output,'console.json'),JSON.stringify(client?.diagnostics??[],null,2));
   client?.close();
 }

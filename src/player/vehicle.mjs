@@ -1,3 +1,6 @@
+import {edgeContact,respondToContact} from './vehicle-contact.mjs';
+import {createPedestrianWarnings} from './pedestrian-threat.mjs';
+import {handling,suspension,resetDynamics} from './vehicle-dynamics.mjs';
 // The car the player drives.
 //
 // It is a reserved slot in the traffic pool, not a new object. That slot still enters the
@@ -5,8 +8,7 @@
 // and the existing renderer draws it because it draws whatever is in the pool. What the
 // simulation no longer does is steer it, audit it, or hold the pedestrian phase red for it.
 //
-// Handling is arcade: the car goes where it is pointed, with no slide. Momentum can come
-// later; this stage is about the loop -- get in, drive, get out -- being right first.
+// Handling uses planar momentum with four-point suspension; the traffic slot remains authoritative.
 
 import {clipCameraArm} from './camera.mjs';
 import {VEHICLES} from '../traffic/config.mjs';
@@ -65,7 +67,10 @@ export function createPlayerVehicle(sim, ctx) {
  let def = VEHICLES[CAR.type];
  const state = {x: 0, z: 0, y: 0, heading: 0, course: 0, speed: 0, steering: 0,
                 type: CAR.type, damage: 0, stalled: false, active: false, slot: null};
+ resetDynamics(state);
+ const warnPedestrians=createPedestrianWarnings();
  const probe = {x: 0, z: 0, heading: 0};
+ let contact=null, impactCooldown=0;
 
  /**
   * Is this pose legal for the car?
@@ -81,11 +86,12 @@ export function createPlayerVehicle(sim, ctx) {
   const ring = corners(probe, def.width, def.length, .05);
   for (const {value: s} of sim.graph.ctx.solid.query(bounds(ring))) {
    const outer = s.outer ?? s.polygon?.outer; if (!outer) continue;
-   if (ring.some(p => inPolygon(p, {outer, holes: []}))) return false;
-   if (outer.some(p => inPolygon(p, {outer: ring, holes: []}))) return false;
+   const reject=()=>{contact=edgeContact(outer,state);return false;};
+   if (ring.some(p => inPolygon(p, {outer, holes: []}))) return reject();
+   if (outer.some(p => inPolygon(p, {outer: ring, holes: []}))) return reject();
    // Corner-to-corner crossing, for a wall thinner than the gap between sampled points.
    for (let i = 0; i < 4; i++) for (let j = 0; j < outer.length; j++)
-    if (segmentsCross(ring[i], ring[(i + 1) % 4], outer[j], outer[(j + 1) % outer.length])) return false;
+    if (segmentsCross(ring[i], ring[(i + 1) % 4], outer[j], outer[(j + 1) % outer.length])) return reject();
   }
   return true;
  };
@@ -97,10 +103,22 @@ export function createPlayerVehicle(sim, ctx) {
   * is excluded or the car would collide with itself.
   */
  const poseOk = (x, z, heading) => {
-  if(Math.abs(x)>242||Math.abs(z)>242)return false;
+  contact=null;
+  if(Math.abs(x)>242||Math.abs(z)>242){
+   const onX=Math.abs(x)>242;
+   contact={nx:onX?-Math.sign(x):0,nz:onX?0:-Math.sign(z),x:onX?Math.sign(x)*242:state.x,z:onX?state.z:Math.sign(z)*242};return false;
+  }
   if (!clearOfSolids(x, z, heading)) return false;
   probe.x = x; probe.z = z; probe.heading = heading;
-  return !sim.blocked(probe, state.type, state.slot, CAR.carPad);
+  if(!sim.blocked(probe, state.type, state.slot, CAR.carPad))return true;
+  // Only scan the bounded traffic pool after the broad-phase rejects a pose.
+  for(const v of sim.pool){
+   if(!v.active||v===state.slot)continue;
+   const d=VEHICLES[v.type];if(d&&boxOverlap(probe,def,v,d,CAR.carPad)){
+    contact=edgeContact(corners(v,d.width,d.length,CAR.carPad),state);break;
+   }
+  }
+  return false;
  };
  /** Road-only test, still used when parking the car so it starts on the carriageway. */
  const onRoadPose = (x, z, heading) => {
@@ -125,7 +143,7 @@ export function createPlayerVehicle(sim, ctx) {
      if (!onRoadPose(px, pz, ph)) continue;
      if (!onRoadPose(px + Math.sin(ph) * 6, pz + Math.cos(ph) * 6, ph)) continue;   // road ahead
      state.slot = slot; state.x = px; state.z = pz; state.heading = ph; state.course = ph;
-     state.speed = 0; state.steering = 0; state.type = CAR.type; state.damage = 0; state.stalled = false;
+     impactCooldown=0; resetDynamics(state); state.speed = 0; state.steering = 0; state.type = CAR.type; state.damage = 0; state.stalled = false;
      def = VEHICLES[CAR.type];
      Object.assign(slot, {
       active: true, controlled: true, parked: true, service: false, platoon: undefined,
@@ -165,7 +183,7 @@ export function createPlayerVehicle(sim, ctx) {
    if (!slot || slot === state.slot) return false;
    if (state.slot) {state.slot.playerVisual = false; state.slot.controlled = false; state.slot.parked = true; state.slot.speed = 0;}
    sim.releasePermits?.(slot);
-   state.slot = slot; state.type = slot.type; def = VEHICLES[slot.type];
+   impactCooldown=0; state.slot = slot; state.type = slot.type; def = VEHICLES[slot.type]; resetDynamics(state);
    state.x = slot.x; state.z = slot.z; state.heading = slot.heading; state.course = slot.heading;
    state.y = ctx.height(slot.x, slot.z); state.speed = 0; state.steering = 0; state.damage = 0; state.stalled = false;
    Object.assign(slot, {controlled: true, parked: true, service: false, platoon: undefined,
@@ -232,73 +250,33 @@ export function createPlayerVehicle(sim, ctx) {
 
   step(dt, input) {
    if (!state.active) return;
-   if(dt>.02){const steps=Math.ceil(dt/.02);for(let i=0;i<steps;i++)api.step(dt/steps,input);return;}
-   const throttle = (input.forward ?? 0), turn = (input.strafe ?? 0);
-   const health = Math.max(CAR.wreckFloor, 1 - (1 - CAR.wreckFloor) * state.damage);
-   // S brakes while moving forward, and becomes reverse once stopped.
-   if (throttle > 0) state.speed += CAR.accel * health * dt;
-   else if (throttle < 0) {
-    if (state.speed > .2) state.speed -= CAR.brake * dt;
-    else state.speed = Math.max(-CAR.reverseMax, state.speed - CAR.accel * .7 * dt);
-   } else state.speed -= Math.sign(state.speed) * Math.min(Math.abs(state.speed), CAR.drag * dt);
-   state.speed = Math.max(-CAR.reverseMax * health, Math.min(def.speed * health, state.speed));
-
-   // Ease the wheel rather than snapping it, and give a crawling car little authority.
-   state.steering += (turn - state.steering) * Math.min(1, dt * CAR.steerEase);
-   const bite = Math.min(1, Math.max(0, (Math.abs(state.speed) - CAR.steerLow) / (CAR.steerFull - CAR.steerLow)));
-   const heading = state.heading - state.steering * CAR.steer * dt * bite * Math.sign(state.speed || 1);
-
-   // Give way progressively rather than refusing the whole step. A turn that would put a
-   // wheel over the kerb is first tried at half lock, then straight, then at half the
-   // travel, so the car scrubs along the edge of the carriageway instead of stalling every
-   // other frame -- which is what killing the speed on a rejected pose used to feel like.
-   // The course chases the nose instead of matching it, and is not allowed to fall more than
-   // slipMax behind, so the car slides through a hard turn without ever ending up sideways.
-   const lag = 1 - Math.exp(-CAR.grip * dt);
-   let course = state.course + wrapAngle(heading - state.course) * lag;
-   course = heading - Math.max(-CAR.slipMax, Math.min(CAR.slipMax, wrapAngle(heading - course)));
-
-   // Give way progressively rather than refusing the whole step. A turn that would put a
-   // wheel over the kerb is first tried at half lock, then straight, then at half the
-   // travel, so the car scrubs along the edge of the carriageway instead of stalling every
-   // other frame -- which is what killing the speed on a rejected pose used to feel like.
-   const travel = state.speed * dt;
-   const attempts = [[heading, course, travel], [heading, state.course + wrapAngle(course - state.course) / 2, travel],
-                     [state.heading, state.course, travel], [state.heading, state.course, travel * .5]];
-   let moved = false;
-   for (const [h, c, d] of attempts) {
-    const nx = state.x + Math.sin(c) * d, nz = state.z + Math.cos(c) * d;
-    if (!poseOk(nx, nz, h)) continue;
-    state.x = nx; state.z = nz; state.heading = h; state.course = c; moved = true; state.stalled = false; break;
-   }
-   if (!moved) {
-    // Wear is charged per impact, not per frame in contact. Holding the throttle against a
-    // wall is one crash however long you lean on it: charging it every frame wrote the car
-    // off in a couple of seconds of leaning. Hitting something at 11 m/s costs more than
-    // nosing into it at walking pace, so the charge is the speed that was just lost.
-    if (!state.stalled) state.damage = Math.min(1, state.damage + Math.abs(state.speed) * CAR.damagePerSpeed);
-    state.stalled = true;
-    state.speed = 0;                          // nose against something: stop, do not bounce
-    state.course = state.heading;             // and no momentum survives the impact
-    // Stopping is not enough on its own. Steering authority is a function of speed, so a
-    // car held at zero against a wall can never turn away from it: full throttle just
-    // re-zeroes itself every frame and the only way out is reverse. Let the wheel swing the
-    // body instead -- but about an axle, not about the centre. Turning about the centre
-    // drives a front corner straight into the wall the car is already touching and is
-    // always rejected; swinging about the rear axle takes the nose away from it, and about
-    // the front axle takes the tail away, which between them cover nosing in and backing in.
-    const swing = state.heading - state.steering * CAR.pivot * dt;
-    if (state.steering) for (const arm of [-def.length * .35, def.length * .35]) {
-     const px = state.x + Math.sin(state.heading) * arm, pz = state.z + Math.cos(state.heading) * arm;
-     const nx = px - Math.sin(swing) * arm, nz = pz - Math.cos(swing) * arm;
-     if (!poseOk(nx, nz, swing)) continue;
-     state.x = nx; state.z = nz; state.heading = swing; break;
+   if(!Number.isFinite(dt)||dt<=0)return;
+   dt=Math.min(dt,.1);
+   if(dt>1/120){const steps=Math.ceil(dt*120);for(let i=0;i<steps;i++)api.step(dt/steps,input);return;}
+   const {heading,course,travel}=handling(state,def,input,dt);
+   impactCooldown=Math.max(0,impactCooldown-dt);
+   const nx=state.x+Math.sin(course)*travel,nz=state.z+Math.cos(course)*travel;
+   if(poseOk(nx,nz,heading)){
+    state.x=nx;state.z=nz;state.heading=heading;state.course=course;state.stalled=false;
+   }else{
+    const hit=contact;
+    const lost=hit?respondToContact(state,def,hit):Math.abs(state.speed);
+    if(!hit){state.speed=0;state.lateral=0;state.yawRate=0;}
+    if(lost>1&&impactCooldown===0){state.damage=Math.min(1,state.damage+lost*CAR.damagePerSpeed);impactCooldown=.25;}
+    state.stalled=true;
+    // Keep the last safe pose, then try tangent motion and a tiny outward separation.
+    // Each proposal still passes the complete geometry/traffic gate.
+    const s=Math.sin(state.heading),c=Math.cos(state.heading);
+    const vx=s*state.speed+c*state.lateral,vz=c*state.speed-s*state.lateral;
+    if(hit){
+     const sx=state.x+vx*dt+hit.nx*.002,sz=state.z+vz*dt+hit.nz*.002;
+     if(poseOk(sx,sz,state.heading)){state.x=sx;state.z=sz;}
     }
+    state.course=state.heading+Math.atan2(state.lateral,Math.max(.01,Math.abs(state.speed)))*Math.sign(state.speed||1);
    }
    // The pedestrian context is the only one that knows ground height, and a kerb is 15 cm:
    // without this the car sinks into the pavement the moment it leaves the road.
-   const ground = ctx.height(state.x, state.z);
-   state.y += Math.sign(ground - state.y) * Math.min(Math.abs(ground - state.y), CAR.kerbLift * dt);
+   suspension(state,def,(x,z)=>ctx.height(x,z),dt);
    api.sync();
   },
 
@@ -351,35 +329,7 @@ export function createPlayerVehicle(sim, ctx) {
    * the car's course, towards whichever side they are already nearer -- and the crowd does
    * the actual moving, so nobody is pushed anywhere the walkable context forbids.
    */
-  alertPedestrians(crowd) {
-   if (!state.active || !crowd || Math.abs(state.speed) < CAR.alertSpeed) return 0;
-   const dir = Math.sign(state.speed);
-   const s = Math.sin(state.course) * dir, c = Math.cos(state.course) * dir;
-   const reach = Math.min(CAR.alertReach, Math.abs(state.speed) * CAR.alertLead) + def.length / 2;
-   const half = def.width / 2 + CAR.alertWidth;
-   // Cells covering the swept corridor, which is the body plus everything ahead of it.
-   const ex = state.x + s * reach, ez = state.z + c * reach;
-   const x0 = Math.floor((Math.min(state.x, ex) - half) / 2), x1 = Math.floor((Math.max(state.x, ex) + half) / 2);
-   const z0 = Math.floor((Math.min(state.z, ez) - half) / 2), z1 = Math.floor((Math.max(state.z, ez) + half) / 2);
-   let warned = 0;
-   for (let i = x0; i <= x1; i++) for (let j = z0; j <= z1; j++) {
-    for (const p of crowd.grid.get(i + ',' + j) ?? []) {
-     if (!p.active || p.controlled || p.struck !== undefined) continue;
-     const dx = p.x - state.x, dz = p.z - state.z;
-     const along = dx * s + dz * c, across = dx * c - dz * s;   // car-relative coordinates
-     if (along < -def.length / 2 || along > reach || Math.abs(across) > half) continue;
-     // Out is sideways, towards the shoulder they are already closer to.
-     const side = across >= 0 ? 1 : -1;
-     // How alarming this is, which decides what they shout: a car at the far end of the
-     // corridor gets a 「あぶな！」, one about to arrive gets a scream. Lateral distance counts
-     // for half as much as closing distance -- a car passing wide is still a car.
-     const urgency = Math.max(0, 1 - along / Math.max(1, reach)) *
-      (1 - Math.min(1, Math.abs(across) / half) * .5);
-     if (crowd.scatter(p, c * side, -s * side, urgency)) warned++;
-    }
-   }
-   return warned;
-  },
+  alertPedestrians(crowd) {return warnPedestrians(crowd,state,def);},
 
   release() {
    const slot = state.slot;
@@ -392,9 +342,10 @@ export function createPlayerVehicle(sim, ctx) {
 
 /** Third-person camera for the car, framed further back than the walking one. */
 export function vehicleCamera(state, out = {}, ctx = null) {
- const s = Math.sin(state.heading), c = Math.cos(state.heading);
+ const facing=state.heading+wrapAngle((state.course??state.heading)-state.heading)*.45;
+ const s = Math.sin(facing), c = Math.cos(facing);
  const eye = state.y + CAR.eye;
- out.x = state.x - s * CAR.followBack; out.z = state.z - c * CAR.followBack;
+ out.x = state.x - s * (CAR.followBack+Math.abs(state.speed)*.06); out.z = state.z - c * (CAR.followBack+Math.abs(state.speed)*.06);
  out.y = eye + CAR.followUp;
  const ahead = 2.8 + Math.min(2,Math.abs(state.speed)*.12);
  out.tx = state.x + s * ahead; out.ty = eye - .1; out.tz = state.z + c * ahead;

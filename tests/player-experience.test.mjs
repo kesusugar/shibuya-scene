@@ -19,6 +19,14 @@ import {createVehicleTransition} from '../src/player/vehicle-transition.mjs';
 import {ShaderLib,Box3,Vector3} from 'three';
 
 const flat={solid:()=>false,safe:()=>true,height:()=>0,onRoad:()=>false};
+test('near character replaces instanced body once and observer mode restores it',()=>{
+ const person={id:1,active:true,archetype:'casual',heading:0,height:0,x:0,z:2,renderX:0,renderZ:2,speed:1,travelled:1,animationTime:1,phase:0,lod:'near'};
+ const sim={pool:[person],time:0,snapshot:()=>({total:1}),update(){},setCamera(){},setTier(){},dispose(){}};
+ const crowd=buildCrowd({}, {ground:{},generic:{},core:{},street:{tier:'high'},detail:{tier:'high'},network:{stats:{},edges:[]},sim});
+ assert.equal(crowd.meshes.head.count,1);crowd.setPlayerFocus({x:0,z:0});crowd.update(.016);
+ assert.equal(crowd.stats.nearCharacters.active,1);assert.equal(crowd.meshes.head.count,0);
+ crowd.setPlayerFocus(null);crowd.update(.016);assert.equal(crowd.meshes.head.count,1);assert.equal(crowd.stats.nearCharacters.active,0);crowd.dispose();
+});
 test('camera arm stops before a thin wall even if the endpoint is clear',()=>{
  const solids=new SpatialIndex(2),polygon={outer:[[-2,2], [2,2], [2,2.1], [-2,2.1]],holes:[]};
  solids.insert('wall',{minX:-2,maxX:2,minZ:2,maxZ:2.1},{polygon,bottom:0,top:8});
@@ -93,7 +101,7 @@ test('hero, every car type and bounded particles have finite geometry and releas
 test('crowd gait preserves the 13 geometry / 3 material budget and observer pose',()=>{
  const p={id:0,active:true,archetype:'casual',heading:0,height:0,x:0,z:0,renderX:0,renderZ:0,speed:1,travelled:1,animationTime:1,phase:0,lod:'near'};
  const sim={pool:[p],time:0,snapshot:()=>({total:1}),update(){},setCamera(){},dispose(){}};
- const crowd=buildCrowd({}, {ground:{},generic:{},core:{},street:{tier:'high'},detail:{tier:'high'},network:{stats:{},edges:[]},sim});
+ const crowd=buildCrowd({}, {nearRigs:false,ground:{},generic:{},core:{},street:{tier:'high'},detail:{tier:'high'},network:{stats:{},edges:[]},sim});
  assert.equal(crowd.stats.geometries,13);assert.equal(crowd.stats.materials,3);
  const mesh=Object.values(crowd.meshes).find(m=>m.geometry.attributes.limbJoint.array.some(v=>v!==0)&&m.count);
  assert.equal(mesh.geometry.attributes.gait.getX(0),0);crowd.setPlayerFocus({x:0,z:0});crowd.update(.1);assert.notEqual(mesh.geometry.attributes.gait.getX(0),0);

@@ -201,7 +201,7 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
     if (Math.abs(px) > Math.abs(fx)) fx = px;
     running = running || (pad.buttons[10]?.pressed ?? false) || (pad.buttons[1]?.pressed ?? false);
    }
-   return {forward: fz, strafe: fx, running};
+   return {forward: fz, strafe: fx, running, handbrake: keys.has(' ') || running};
   },
   /**
    * Set by the on-screen controls. Merged with the keys and the pad on the same rule the pad

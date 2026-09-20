@@ -1,43 +1,32 @@
-import {BoxGeometry,CapsuleGeometry,SphereGeometry,CylinderGeometry,Group,Mesh,MeshStandardMaterial} from 'three';
+import {ObjectLoader,AnimationMixer,LoopOnce,LoopRepeat} from 'three';
+import {clone} from 'three/addons/utils/SkeletonUtils.js';
+import pack from './generated/character.mjs';
 export const FIGURE=Object.freeze({height:1.76,shirt:0xc94d38,trousers:0x263443,skin:0xdfb994,hair:0x25282a,cycle:1.55});
-
-// One nearby hero, articulated with rigid joints; the crowd retains its instancing budget.
-export function createPlayerFigure(){
- const root=new Group();root.name='player-figure';const owned=[],materials={};
- for(const [name,color] of Object.entries({...FIGURE,shoes:0x171d25,bag:0xcdb58d}))if(!['height','cycle'].includes(name))materials[name]=new MeshStandardMaterial({color,roughness:.85});
- const mesh=(g,mat,parent,x=0,y=0,z=0)=>{owned.push(g);const m=new Mesh(g,materials[mat]);m.position.set(x,y,z);parent.add(m);return m;};
- const torso=mesh(new CapsuleGeometry(.23,.31,4,10),'shirt',root,0,1.19);torso.scale.z=.64;
- mesh(new BoxGeometry(.32,.18,.23),'trousers',root,0,.9);
- mesh(new CylinderGeometry(.065,.075,.13,10),'skin',root,0,1.48);
- const head=mesh(new SphereGeometry(1,14,10),'skin',root,0,1.62);head.scale.set(.115,.145,.12);
- const hair=mesh(new SphereGeometry(1,14,8,Math.PI/2+.55,Math.PI*2-1.1,0,Math.PI*.72),'hair',root,0,1.63);hair.scale.set(.12,.145,.125);
- mesh(new BoxGeometry(.18,.24,.10),'bag',root,.22,1.03,-.05);
- const strap=mesh(new BoxGeometry(.035,.53,.025),'bag',root,.025,1.22,.153);strap.rotation.z=-.35;
- const joint=(x,y,parent)=>{const p=new Group();p.position.set(x,y,0);parent.add(p);return p;};
- const legs=[],knees=[],arms=[],elbows=[];
- for(const side of [-1,1]){
-  const hip=joint(side*.105,.88,root),knee=joint(0,-.38,hip);
-  mesh(new CapsuleGeometry(.073,.235,3,8),'trousers',hip,0,-.19);
-  mesh(new CapsuleGeometry(.062,.24,3,8),'trousers',knee,0,-.18);
-  mesh(new BoxGeometry(.14,.11,.26),'shoes',knee,0,-.435,.055);
-  const shoulder=joint(side*.25,1.38,root),elbow=joint(0,-.26,shoulder);
-  mesh(new CapsuleGeometry(.064,.14,3,8),'shirt',shoulder,0,-.13);
-  mesh(new CapsuleGeometry(.052,.14,3,8),'shirt',elbow,0,-.12);
-  mesh(new SphereGeometry(.058,8,6),'skin',elbow,0,-.265);
-  legs.push(hip);knees.push(knee);arms.push(shoulder);elbows.push(elbow);
- }
- let phase=0,heading=null,disposed=false,time=0;
- return {root,update(state,dt=0){if(disposed)return;root.visible=true;time+=dt;
- phase+=state.speed*dt*Math.PI*2/FIGURE.cycle;const amp=Math.min(.65,state.speed*.19);
-  for(let i=0;i<2;i++){const gait=Math.sin(phase+i*Math.PI);legs[i].rotation.x=gait*amp;knees[i].rotation.x=Math.max(0,-gait)*amp*.85;arms[i].rotation.set(-gait*amp*.7-.08,0,0);elbows[i].rotation.x=-.18-Math.min(.75,state.speed*.12);}
-  const desired=state.bodyHeading??state.heading;
-  heading=heading===null?desired:heading+Math.atan2(Math.sin(desired-heading),Math.cos(desired-heading))*(1-Math.exp(-14*dt));
-  root.position.set(state.x,state.y+Math.abs(Math.cos(phase))*.018*amp,state.z);
-  root.rotation.set(Math.min(.1,state.speed*.018),heading,0);
-  if(state.attackTime>0){const punch=Math.sin(Math.min(1,state.attackTime/.42)*Math.PI);arms[1].rotation.x=-1.55*punch;elbows[1].rotation.x=-.25;root.rotation.y=heading-.12*punch;}
-  if(state.hurtTime>0){const recoil=Math.sin(Math.min(1,state.hurtTime/.34)*Math.PI);root.rotation.x=-.22*recoil;arms[0].rotation.z=.5*recoil;arms[1].rotation.z=-.5*recoil;}
-  if(state.vehiclePhase>0){const enter=Math.sin(Math.min(1,state.vehiclePhase)*Math.PI);root.rotation.x=.42*enter;arms[0].rotation.x=-.8*enter;arms[1].rotation.x=-.55*enter;}
-  torso.scale.y=1+Math.sin(time*2.4)*.003;
-  if(state.alive===false){root.rotation.z=Math.min(1,state.runOver*3)*Math.PI/2;root.position.y=state.y+.14;}
- },hide(){root.visible=false;},dispose(){if(disposed)return;disposed=true;root.removeFromParent();owned.forEach(g=>g.dispose());Object.values(materials).forEach(m=>m.dispose());root.clear();}};
+const looping=new Set(['Idle','Walk','Run','Sprint','Death','Guard']);
+export function characterAction(state){
+ if(state.alive===false)return (state.runOver??0)<.6?'Fall':'Death';
+ if(state.vehiclePhase>0)return state.vehicleKind==='exit'?'Exit':'Enter';
+ if(state.hurtTime>0)return 'Hit';
+ if(state.trafficReaction==='guard')return 'Guard';
+ if(state.trafficReaction==='startle')return 'Startle';
+ if(state.attackTime>0)return 'Punch';
+ const speed=Math.abs(state.speed??0);return speed<.12?'Idle':speed<2.1?'Walk':speed<3.7?'Run':'Sprint';
+}
+// Buffers, skin weights, skeleton and clips are authored offline, loaded without geometry generation.
+export function createPlayerFigure(template=null){
+ const root=template?clone(template):new ObjectLoader().parse(pack.scene),mixer=new AnimationMixer(root),actions={};
+ for(const clip of root.animations){const action=mixer.clipAction(clip);action.setLoop(looping.has(clip.name)?LoopRepeat:LoopOnce,looping.has(clip.name)?Infinity:1);action.clampWhenFinished=!looping.has(clip.name);actions[clip.name]=action;}
+ let current='Idle',heading=null,disposed=false,previousAttack=0;actions.Idle.play();mixer.update(0);
+ return {root,update(state,dt=0){if(disposed)return;dt=Math.max(0,Math.min(.1,Number(dt)||0));root.visible=true;
+  const next=characterAction(state),restart=next==='Punch'&&(state.attackTime??0)>previousAttack+.01;
+  if(next!==current||restart){const old=actions[current],action=actions[next];action.reset().play();if(pack.gait[next])action.time=(state.animationPhase??0)%action.getClip().duration;if(next!==current)old.crossFadeTo(action,next==='Fall'?.06:.16,false);current=next;}
+  const action=actions[current];action.timeScale=pack.gait[current]?Math.max(.15,Math.min(2,Math.abs(state.speed)/pack.gait[current])):1;
+  mixer.update(dt);
+  let time=null;if(current==='Punch')time=.42-state.attackTime;if(current==='Hit')time=state.hurtTime>0?.34-state.hurtTime:.17;if(current==='Enter'||current==='Exit')time=state.vehiclePhase*action.getClip().duration;if(current==='Fall')time=state.runOver??0;
+  if(time!==null){action.time=Math.max(0,Math.min(action.getClip().duration,time));mixer.update(0);}
+  previousAttack=state.attackTime??0;
+  const desired=state.bodyHeading??state.heading??0;heading=heading===null?desired:heading+Math.atan2(Math.sin(desired-heading),Math.cos(desired-heading))*(1-Math.exp(-14*dt));
+  root.position.set(state.x,state.y,state.z);root.rotation.set(0,heading,0);if(state.trafficReaction==='look'&&Number.isFinite(state.threatHeading)){const head=root.getObjectByName('Head');head.rotation.y=Math.max(-.8,Math.min(.8,Math.atan2(Math.sin(state.threatHeading-heading),Math.cos(state.threatHeading-heading))));}
+  root.updateMatrixWorld(true);
+ },reset(){mixer.stopAllAction();for(const action of Object.values(actions))action.reset();current='Idle';heading=null;previousAttack=0;actions.Idle.play();mixer.update(0);},get action(){return current;},hide(){root.visible=false;},dispose(){if(disposed)return;disposed=true;mixer.stopAllAction();mixer.uncacheRoot(root);const geometries=new Set(),materials=new Set(),skeletons=new Set();root.traverse(o=>{if(o.isMesh){geometries.add(o.geometry);for(const m of Array.isArray(o.material)?o.material:[o.material])materials.add(m);}if(o.isSkinnedMesh)skeletons.add(o.skeleton);});if(!template){geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());}skeletons.forEach(s=>s.dispose());root.removeFromParent();root.clear();}};
 }

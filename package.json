@@ -6,6 +6,8 @@
     "node": ">=22.13.0"
   },
   "scripts": {
+    "bake:character": "node scripts/bake-character.mjs",
+    "bake:playable": "node scripts/bake-playable.mjs",
     "bake:static": "node scripts/bake-static-models.mjs",
     "bake:polish": "node scripts/bake-central-detail.mjs",
     "test:polish": "node --test tests/ui-commercial-mobility.test.mjs",
@@ -20,7 +22,9 @@
     "test:legacy": "node --test tests/*.test.mjs",
     "test": "npm run build && npm run test:ci",
     "lint": "bash scripts/sites-env.sh -- eslint . --ignore-pattern dist --ignore-pattern .next",
-    "db:generate": "bash scripts/sites-env.sh -- drizzle-kit generate"
+    "db:generate": "bash scripts/sites-env.sh -- drizzle-kit generate",
+    "measure:playable": "node scripts/measure-playable-loading.mjs",
+    "qa:capture": "node scripts/run-visual-qa.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
