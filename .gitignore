@@ -48,6 +48,7 @@ next-env.d.ts
 /qa/gta-upgrade/*
 !/qa/gta-upgrade/charbench.html
 !/qa/gta-upgrade/vehiclebench.html
+!/qa/gta-upgrade/locomotionbench.html
 
 # character pipeline: upstream downloads are verified, never committed
 /assets/character/upstream/

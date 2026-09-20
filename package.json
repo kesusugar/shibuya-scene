@@ -26,7 +26,8 @@
     "measure:playable": "node scripts/measure-playable-loading.mjs",
     "qa:capture": "node scripts/run-visual-qa.mjs",
     "fetch:character": "node scripts/fetch-character-upstream.mjs",
-    "convert:character": "node scripts/convert-character.mjs"
+    "convert:character": "node scripts/convert-character.mjs",
+    "analyse:gait": "node scripts/analyse-gait.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
