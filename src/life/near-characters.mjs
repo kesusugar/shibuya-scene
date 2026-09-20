@@ -15,7 +15,7 @@ export function createNearCharacters(tier='high'){
    const candidates=people.filter(p=>p.active&&!p.controlled&&p.archetype!=='kid'&&p.struck===undefined&&Math.hypot(p.x-focus.x,p.z-focus.z)<(selected.has(p.id)?30:25))
     .map(p=>({p,score:Math.hypot(p.x-focus.x,p.z-focus.z)-(selected.has(p.id)?3:0)-(p.combatTarget?40:0)-(p.reactionUntil>clock?20:0)})).sort((a,b)=>a.score-b.score||a.p.id-b.p.id).slice(0,limit);
    // Grow by one per frame, only while player mode needs a visible rig. No scene-startup work.
-   if(slots.length<candidates.length){if(!seed){seed=createPlayerFigure();seed.hide();seed.root.traverse(o=>{if(o.isMesh)trianglesPerRig+=(o.geometry.index?.count??o.geometry.attributes.position.count)/3;});for(const color of [0x343f51,0x738d88,0xb98193,0xc38966]){const material=seed.root.getObjectByName('HeroMaterial0').material.clone();material.color.setHex(color);palette.push(material);}}const figure=createPlayerFigure(seed.root);root.add(figure.root);slots.push({figure,id:null,elapsed:0});}
+   if(slots.length<candidates.length){if(!seed){seed=createPlayerFigure();seed.hide();seed.root.traverse(o=>{if(o.isMesh)trianglesPerRig+=(o.geometry.index?.count??o.geometry.attributes.position.count)/3;});for(const color of [...new Set(Object.values(ARCHETYPES).flatMap(a=>a.colors))]){const material=seed.root.getObjectByName('HeroMaterial0').material.clone();material.color.setHex(color);palette.push(material);}}const figure=createPlayerFigure(seed.root);root.add(figure.root);slots.push({figure,id:null,elapsed:0});}
    const wanted=new Set(candidates.map(c=>c.p.id));
    for(const s of slots)if(!wanted.has(s.id)){s.id=null;s.figure.hide();}
    selected.clear();

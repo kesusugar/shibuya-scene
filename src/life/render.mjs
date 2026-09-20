@@ -1,4 +1,5 @@
 import {createNearCharacters} from './near-characters.mjs';
+import {createContactShadows} from './shadows.mjs';
 import {tagLimb,addGait,installGait} from './gait.mjs';
 import {Group,BoxGeometry,CapsuleGeometry,SphereGeometry,ConeGeometry,CylinderGeometry,TorusGeometry,InstancedMesh,MeshStandardMaterial,Object3D,Color,DynamicDrawUsage,BufferGeometry,Float32BufferAttribute,LineSegments,LineBasicMaterial} from 'three';
 import {triangleCount,merge} from '../geo/geometry.mjs';
@@ -79,6 +80,10 @@ export function buildCrowd(data,options={}){
  const capacities={...Object.fromEntries(BODY_VARIANTS.map(v=>[v.key,v.count])),head:POOL_SIZE,...Object.fromEntries(HAIR_VARIANTS.map(v=>[v.key,v.count])),...ACCESSORY_TARGETS};
  const meshes={};for(const [key,g] of Object.entries(geometry)){addGait(g,capacities[key]);const m=new InstancedMesh(g,key==='head'?headMaterial:key.startsWith('hair')?hairMaterial:material,capacities[key]);m.instanceMatrix.setUsage(DynamicDrawUsage);m.frustumCulled=false;m.name='crowd-'+key;root.add(m);meshes[key]=m;}
  const obj=new Object3D(),color=new Color(),counts={},stats={geometries:Object.keys(geometry).length,materials:3,textures:0,batches:0,triangles:0,debugBatches:0,bodyCounts:{},hairCounts:{},accessories:{}};let disposed=false,reportClock=0;
+ // Outside the thirteen geometries and three materials the crowd is measured by: a contact
+ // shadow is not a character part, and `stats.geometries` counts the character geometry map,
+ // which this deliberately stays out of.
+ const shadows=createContactShadows(POOL_SIZE);root.add(shadows.mesh);
  let debug=null;if(options.debug){const lines=[];for(const e of network.edges){if(e.id%2&&!e.crossingId)continue;const a=network.nodes[e.from],b=network.nodes[e.to];if(e.points){for(let i=1;i<e.points.length;i++)lines.push(e.points[i-1][0],.2,e.points[i-1][1],e.points[i][0],.2,e.points[i][1]);}else lines.push(a.x,.2,a.z,b.x,.2,b.z);}
   const g=new BufferGeometry();g.setAttribute('position',new Float32BufferAttribute(lines,3));debug=new LineSegments(g,new LineBasicMaterial({color:0xf8b5d1,depthTest:false}));debug.name='r1-walkable-path-grid';root.add(debug);stats.debugBatches=1;
  }
@@ -92,8 +97,12 @@ export function buildCrowd(data,options={}){
    lz+=y*Math.sin(a);y*=Math.cos(a);tilt+=a;}
   const heading=p.heading+(playerFocus&&p.speed<.05&&p.struck===undefined?Math.sin(p.id*2.39+sim.time*.22)*.15:0);const c=Math.cos(heading),s=Math.sin(heading);obj.position.set(p.renderX+c*lx+s*lz,p.height+y,p.renderZ-s*lx+c*lz);obj.rotation.set(tilt,heading,0);obj.scale.set(w,h,d);obj.updateMatrix();const i=counts[key]++,near=playerFocus&&p.struck===undefined&&Math.hypot(p.x-playerFocus.x,p.z-playerFocus.z)<24;geometry[key].attributes.gait.setX(i,near?Math.sin(p.travelled*4.1+p.phase)*Math.min(.6,p.speed*.3)+(p.speed<.05?Math.sin(sim.time*1.4+p.phase)*.025:0):0);geometry[key].attributes.action.setX(i,near?Math.max(p.combatAction??0,p.reactionUntil>sim.time&&['guard','startle'].includes(p.trafficReaction)?.5:0):0);meshes[key].setMatrixAt(i,obj.matrix);color.setHex(hex);meshes[key].setColorAt(i,color);}
  function hasAccessory(p,key){return rank(p.id,{phone:211,bag:433,cane:677,suitcase:929,umbrella:1217}[key])<ACCESSORY_TARGETS[key];}
- function sync(dt=0){const detailed=nearCharacters?.update(sim.pool,playerFocus,dt,sim.time)??new Set();for(const k of Object.keys(meshes))counts[k]=0;for(const p of sim.pool){if(!p.active||p.controlled)continue;const def=ARCHETYPES[p.archetype],h=def.height*(.96+(p.id%5)*.02),w=def.width*(1.06+(p.id%7)*.015),walk=p.speed>.05,phase=p.animationTime*(walk?7:1)+p.phase,fidelity=p.lod==='near'?1:p.lod==='mid'?.65:.15,sway=walk?Math.sin(phase)*.035*fidelity:Math.sin(phase)*.012,bob=walk?Math.abs(Math.cos(phase))*.024*fidelity:Math.sin(phase)*.008;
+ function sync(dt=0){const detailed=nearCharacters?.update(sim.pool,playerFocus,dt,sim.time)??new Set();for(const k of Object.keys(meshes))counts[k]=0;shadows.begin();for(const p of sim.pool){if(!p.active||p.controlled)continue;const def=ARCHETYPES[p.archetype],h=def.height*(.96+(p.id%5)*.02),w=def.width*(1.06+(p.id%7)*.015),walk=p.speed>.05,phase=p.animationTime*(walk?7:1)+p.phase,fidelity=p.lod==='near'?1:p.lod==='mid'?.65:.15,sway=walk?Math.sin(phase)*.035*fidelity:Math.sin(phase)*.012,bob=walk?Math.abs(Math.cos(phase))*.024*fidelity:Math.sin(phase)*.008;
    const blend=dt?Math.min(1,dt*(p.lod==='far'?10:25)):1;p.renderX+=(p.x-p.renderX)*blend;p.renderZ+=(p.z-p.renderZ)*blend;
+   // A thrown body's shadow belongs to the road it is over, not to the body: `p.height`
+   // follows the arc, so using it would send the shadow into the air with the person.
+   const struck=p.struck!==undefined;
+   shadows.add(p.renderX,struck?p.flyGround:p.height,p.renderZ,def.width,struck?p.flyHeight:0);
    const body=pickVariant(p.id,BODY_VARIANTS),hair=pickVariant(p.id,HAIR_VARIANTS,307),shirt=BODY_COLORS[p.id%BODY_COLORS.length],skin=SKIN_COLORS[p.id%SKIN_COLORS.length],hairColor=def.gray?HAIR_COLORS[3]:HAIR_COLORS[p.id%3];
    if(!detailed.has(p.id))part(body,p,0,h*.02+bob,0,w,h*.78,w*.58,shirt,sway);
    // About 26 cm across on a 1.7 m figure: roughly half the old 51 cm, and a little over
@@ -108,10 +117,15 @@ export function buildCrowd(data,options={}){
    if(hasAccessory(p,'suitcase'))part('suitcase',p,-w*.64,h*.02,.08,w*.5,h*.38,w*.52,p.id%2?0x596579:0x6e4d45);
    if(hasAccessory(p,'umbrella'))part('umbrella',p,.08,h*.99,0,.38,.62,.38,shirt);
   }
+  shadows.end();
   stats.triangles=0;stats.batches=0;for(const [k,m] of Object.entries(meshes)){m.count=counts[k];if(m.count)stats.batches++;stats.triangles+=m.count*triangleCount(geometry[k]);geometry[k].attributes.gait.needsUpdate=true;geometry[k].attributes.action.needsUpdate=true;m.instanceMatrix.needsUpdate=true;if(m.instanceColor)m.instanceColor.needsUpdate=true;}
+  // Reported apart from `batches` and `materials` on purpose. Those two numbers are the
+  // character instancing contract that r1-crowd-density asserts; folding a decoration into
+  // them would make the contract mean something else.
+  stats.contactShadows={drawn:shadows.drawn,batches:shadows.drawn?1:0,geometries:1,materials:1};
   stats.nearCharacters=nearCharacters?.inspect()??null;
   stats.bodyCounts=Object.fromEntries(BODY_VARIANTS.map(v=>[v.key,counts[v.key]]));stats.hairCounts=Object.fromEntries(HAIR_VARIANTS.map(v=>[v.key,counts[v.key]]));stats.accessories=Object.fromEntries(Object.keys(ACCESSORY_TARGETS).map(k=>[k,counts[k]]));stats.instanceCounts={...counts};
   reportClock+=dt;if(reportClock>=1||!dt){reportClock=0;Object.assign(stats,network.stats,sim.snapshot(options.debug));}
  }
- sync();return {root,network,sim,stats,meshes,setPlayerFocus(p){playerFocus=p;},update(dt,camera){if(disposed)return;if(camera)sim.setCamera(camera.x,camera.z);sim.update(dt);sync(dt);},setTier(t){sim.setTier(t);nearCharacters?.setTier(t);sync();},dispose(){if(disposed)return;disposed=true;nearCharacters?.dispose();sim.dispose();for(const m of Object.values(meshes))m.dispose();for(const g of Object.values(geometry))g.dispose();material.dispose();headMaterial.dispose();hairMaterial.dispose();debug?.geometry.dispose();debug?.material.dispose();root.removeFromParent();root.clear();}};
+ sync();return {root,network,sim,stats,meshes,setPlayerFocus(p){playerFocus=p;},update(dt,camera){if(disposed)return;if(camera)sim.setCamera(camera.x,camera.z);sim.update(dt);sync(dt);},setTier(t){sim.setTier(t);nearCharacters?.setTier(t);sync();},dispose(){if(disposed)return;disposed=true;nearCharacters?.dispose();shadows.dispose();sim.dispose();for(const m of Object.values(meshes))m.dispose();for(const g of Object.values(geometry))g.dispose();material.dispose();headMaterial.dispose();hairMaterial.dispose();debug?.geometry.dispose();debug?.material.dispose();root.removeFromParent();root.clear();}};
 }

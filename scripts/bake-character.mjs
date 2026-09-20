@@ -45,7 +45,27 @@ for(const [name,[duration,speed]] of Object.entries(specs)){
   if(name==='Punch'){const k=Math.sin(Math.PI*f);pose.ArmR=[-1.65*k,0,-.12*k];pose.ElbowR=[-.8*(1-k)-.1,0,0];pose.Spine=[.07*k,-.25*k,0];}
   if(name==='Hit'){const k=Math.sin(Math.PI*f);pose.Spine=[-.28*k,0,0];pose.ArmL=[-.25*k,0,.3*k];pose.ArmR=[-.25*k,0,-.3*k];}
   if(name==='Guard'||name==='Startle'){const k=name==='Guard'?1:Math.sin(Math.PI*f);pose.Spine=[-.12*k,0,0];pose.ArmL=[-1.1*k,0,(name==='Guard'?.35:-.15)*k];pose.ArmR=[-1.1*k,0,(name==='Guard'?-.35:.15)*k];pose.ElbowL=[-1.15*k,0,0];pose.ElbowR=[-1.15*k,0,0];}
-  if(name==='Enter'||name==='Exit'){const q=name==='Enter'?f:1-f,k=Math.sin(q*Math.PI);pose.Spine=[.5*k,0,0];pose.ArmL=[-.9*k,0,-.2*k];pose.ArmR=[-.7*k,0,0];pose.HipR=[-.8*k,0,0];pose.KneeR=[1.1*k,0,0];y=-.12*k;}
+  if(name==='Enter'||name==='Exit'){const q=name==='Enter'?f:1-f;
+   // Three separate curves, because getting into a car is three things at once and a single
+   // arch made it one. `settle` is monotonic -- the body goes down into the seat and stays
+   // there; with an arch it stood back up again just as it arrived, which reads as a bob
+   // rather than as sitting. `duck` is the arch that clears the door frame. `reach` is the
+   // hand going out to the door and coming back, and it happens early, not throughout.
+   const settle=q*q*(3-2*q),duck=Math.sin(q*Math.PI);
+   const reach=Math.sin(Math.min(1,q/.45)*Math.PI);
+   // The trailing leg follows the leading one in rather than swinging with it.
+   const l=Math.max(0,Math.min(1,(q-.25)/.75)),settleL=l*l*(3-2*l);
+   pose.Spine=[.3*duck+.34*settle,-.12*reach,0];
+   pose.Head=[.16*duck,-.2*reach,0];
+   // Door-side arm reaches, and the elbow bends to do it. Previously both elbows were left
+   // at the standing default, so the hand went to the door on a straight arm.
+   pose.ArmL=[-1.15*reach-.25*settle,0,-.3*reach];pose.ElbowL=[-1.25*reach-.3*settle,0,0];
+   pose.ArmR=[-.4*settle,0,.05];pose.ElbowR=[-.62*settle,0,0];
+   // Both legs fold. HipL and KneeL were never written at all, so the left leg stayed
+   // rigidly straight through the whole motion.
+   pose.HipR=[-1.18*settle,0,0];pose.KneeR=[1.28*settle,0,0];
+   pose.HipL=[-1.02*settleL,0,0];pose.KneeL=[1.16*settleL,0,0];
+   y=-.17*settle-.04*duck;}
   if(name==='Fall'||name==='Death'){const k=name==='Death'?1:f*f*(3-2*f);pose.Body=[0,0,k*Math.PI/2];pose.ArmL=[0,0,.25*k];pose.KneeR=[.35*k,0,0];y=.23*k;}
   positions.push(0,y,0);
   for(const b of bones){const q=new T.Quaternion().setFromEuler(new T.Euler(...pose[b.name]));angles.get(b.name).push(q.x,q.y,q.z,q.w);}
