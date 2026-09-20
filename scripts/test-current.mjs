@@ -27,6 +27,7 @@ const files=[
  'tests/qfront-interior.test.mjs',
  'tests/r1-crowd-density.test.mjs',
  'tests/crowd-voices.test.mjs',
+ 'tests/crowd-shadows.test.mjs',
  'tests/real-brands.test.mjs',
  'tests/reference-ads.test.mjs',
  'tests/static-key.test.mjs',
