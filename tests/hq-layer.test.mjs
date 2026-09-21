@@ -178,3 +178,39 @@ test('the level of detail follows distance, with hysteresis',()=>{
  assert.ok(got.byLod.L0>0,'nobody near the camera got the best body');
  layer.dispose();
 });
+
+test('changing level of detail changes nothing but the level of detail',()=>{
+ // A camera sweeping in and out crosses every band repeatedly. What must NOT move with it:
+ // the body, the hairstyle, the height, the build, the walk phase. qa/gta-upgrade/lodpop.mjs
+ // is the same check at four hundred frames; this is the gate.
+ const people=pool(600,1.3);
+ let cx=0,cz=0;for(const p of people){cx+=p.x;cz+=p.z;}
+ cx/=people.length;cz/=people.length;
+ const layer=createHQLayer(manifest,bin,{budget:600});
+ const seen=new Map();
+ let moves=0,identityBreaks=0,phaseBreaks=0;
+ const lods=new Set();
+ for(let f=0;f<120;f++){
+  const camera={x:cx,z:cz+Math.sin(f*.12)*30};
+  layer.sync(people,camera,HQ_LOD.reviewInterval,{time:f*HQ_LOD.reviewInterval});
+  const c=layer.crowd;
+  for(let i=0;i<c.population;i++){
+   const lane=c.lanes[c.state.lane[i]];
+   const now={arch:lane.archetype.id,lod:lane.lod,phase:c.state.phase[i],
+    height:c.state.height[i],width:c.state.width[i]};
+   lods.add(now.lod);
+   const was=seen.get(c.state.id[i]);
+   if(was){
+    if(was.lod!==now.lod)moves++;
+    if(was.arch!==now.arch||was.height!==now.height||was.width!==now.width)identityBreaks++;
+    if(was.phase!==now.phase)phaseBreaks++;
+   }
+   seen.set(c.state.id[i],now);
+  }
+ }
+ assert.ok(moves>50,`only ${moves} level-of-detail changes -- the test never exercised one`);
+ assert.ok(lods.size>=2,`only ${[...lods].join(',')} was ever used`);
+ assert.equal(identityBreaks,0,`${identityBreaks} citizens changed body, height or build with distance`);
+ assert.equal(phaseBreaks,0,`${phaseBreaks} citizens had their walk cycle reset by an LOD change`);
+ layer.dispose();
+});

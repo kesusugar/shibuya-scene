@@ -131,11 +131,16 @@ vec3 unpackRGB(float v){
  return vec3(r,g,b)/255.0;
 }`);
   shader.fragmentShader=shader.fragmentShader.replace('#include <color_fragment>',`
- {
-  float wShoe=max(0.0,1.0-vColor.r-vColor.g-vColor.b-vColor.a);
-  diffuseColor.rgb=vColor.r*unpackRGB(vPal.x)+vColor.g*unpackRGB(vPal.y)
-   +vColor.b*unpackRGB(vPal.z)+vColor.a*unpackRGB(vPal.w)+wShoe*unpackRGB(vShoe);
- }`);
+ float wShoe=max(0.0,1.0-vColor.r-vColor.g-vColor.b-vColor.a);
+ diffuseColor.rgb=vColor.r*unpackRGB(vPal.x)+vColor.g*unpackRGB(vPal.y)
+  +vColor.b*unpackRGB(vPal.z)+vColor.a*unpackRGB(vPal.w)+wShoe*unpackRGB(vShoe);`);
+  // The same per-garment roughness the near characters use (RUN 6.8). Without it every
+  // surface is one number and skin, cotton, denim, hair and a shoe all read as the same
+  // plastic -- which under the scene's tone mapping came out as a washed-out white crowd,
+  // visibly different from the RUN 6.8 bodies standing next to them.
+  shader.fragmentShader=shader.fragmentShader.replace('#include <roughnessmap_fragment>',
+`#include <roughnessmap_fragment>
+ roughnessFactor=vColor.r*0.62+vColor.g*0.86+vColor.b*0.80+vColor.a*0.52+wShoe*0.44;`);
  };
  material.customProgramCacheKey=()=>'hq-crowd-'+(interpolate?'lerp':'snap');
 }
