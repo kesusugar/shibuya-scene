@@ -110,7 +110,7 @@ export function createNearCharacters(tier='high',{ctx=null}={}){
    // What each candidate looks like. Pure function of their id, so this is the same answer
    // every frame and across pool reuse -- see src/life/appearance.mjs.
    const looks=new Map();
-   for(const {p} of candidates)looks.set(p.id,appearanceOf(p.id,ARCHETYPES[p.archetype]?.height??1.76));
+   for(const {p} of candidates)looks.set(p.id,appearanceOf(p.appearanceId??p.id,ARCHETYPES[p.archetype]?.height??1.76));
    // Shirt colours only, and only among the few on screen. Never the body or the hair.
    const dressed=deduplicate([...looks.values()]);
 

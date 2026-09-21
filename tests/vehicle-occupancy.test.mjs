@@ -8,8 +8,12 @@ import {buildStreetscapeModel} from '../src/streetscape/model.mjs';
 import {buildTrafficGraph} from '../src/traffic/graph.mjs';
 import {TrafficSimulation} from '../src/traffic/simulation.mjs';
 import {createOccupancy,OCCUPANT,DRIVER} from '../src/traffic/occupancy.mjs';
+import {buildPedestrianNetwork} from '../src/life/network.mjs';
+import {CrowdSimulation} from '../src/life/simulation.mjs';
+import {appearanceOf} from '../src/life/appearance.mjs';
 import {createSeatedDrivers} from '../src/traffic/drivers.mjs';
-import {createVehicleTransition,ENTER_STAGES,EXIT_STAGES,DOOR} from '../src/player/vehicle-transition.mjs';
+import {createVehicleTransition,ENTER_STAGES,EXIT_STAGES,CARJACK_STAGES,DOOR} from '../src/player/vehicle-transition.mjs';
+import {isOccupied,canCarjack,alertDriver,beginExtraction,throwDriverOut,abortCarjack,CARJACK} from '../src/player/carjack.mjs';
 
 const data=JSON.parse(readFileSync('public/data/shibuya-scene-data.json'));
 const ground=buildGroundModel(data),generic=buildBuildingModel(data);
@@ -312,4 +316,157 @@ test('only one transition runs at a time',()=>{
  assert.equal(was.kind,'enter');
  assert.equal(m.active,false);
  assert.equal(m.begin('enter',points),true,'cancelling did not free the transition');
+});
+
+// ---------------------------------------------------------------- the carjack
+
+test('the carjack sequence puts the extraction between the door and the seat',()=>{
+ const m=createVehicleTransition();
+ m.begin('carjack',{start:{x:0,z:0,heading:0},entry:{x:2,z:0,heading:0},seat:{x:2.4,z:.4,heading:0}});
+ const seen=[];
+ for(let i=0;i<900&&m.active;i++){const p=m.update(1/60);if(p&&seen.at(-1)!==p.stage)seen.push(p.stage);}
+ assert.deepEqual(seen,CARJACK_STAGES.map(s=>s.name));
+ // The three that matter are between the door opening and the body moving to the seat.
+ const at=n=>seen.indexOf(n);
+ assert.ok(at('DOOR_OPEN')<at('GRAB'),'the driver was grabbed through a shut door');
+ assert.ok(at('THROW')<at('ENTRY'),'the player got in before the driver was out');
+});
+
+test('an empty parked car is not routed through an extraction',()=>{
+ const sim=new TrafficSimulation(graph,{tier:'high',street});
+ sim.update(1/30);
+ const parked=sim.pool.find(v=>v.active&&v.parked);
+ assert.ok(parked);
+ assert.equal(isOccupied(sim,parked),false);
+ assert.equal(canCarjack(sim,parked),false,'an empty car offered a carjack');
+ sim.dispose();
+});
+
+test('a moving car refuses the carjack, and the same car stopped accepts it',()=>{
+ const sim=new TrafficSimulation(graph,{tier:'high',street});
+ sim.update(1/30);
+ const v=sim.pool.find(x=>x.active&&!x.parked&&sim.occupancy.hasDriver(x.id));
+ assert.ok(v);
+ v.speed=6;
+ assert.equal(isOccupied(sim,v),true,'the driver vanished when the car moved');
+ assert.equal(canCarjack(sim,v),false,'a car doing 6 m/s was jackable');
+ v.speed=0;
+ assert.equal(canCarjack(sim,v),true,'a stopped car with a driver was not jackable');
+ sim.dispose();
+});
+
+test('the driver leaves the seat only at the throw, and the player cannot take it before',()=>{
+ const sim=new TrafficSimulation(graph,{tier:'high',street});
+ sim.update(1/30);
+ const v=sim.pool.find(x=>x.active&&!x.parked&&sim.occupancy.hasDriver(x.id));
+ v.speed=0;
+
+ // Through the sequence, one stage at a time, checking the seat after each.
+ assert.equal(sim.occupancy.takeSeat(v.id),false,'the player took an occupied seat');
+ assert.equal(alertDriver(sim,v),true);
+ assert.equal(sim.occupancy.read(v.id).stateName,'ALERT');
+ assert.equal(sim.occupancy.takeSeat(v.id),false,'the player took the seat from an alerted driver');
+ assert.equal(beginExtraction(sim,v),true);
+ assert.equal(sim.occupancy.read(v.id).stateName,'BEING_EXTRACTED');
+ assert.equal(sim.occupancy.takeSeat(v.id),false,'the player took the seat mid-extraction');
+ assert.equal(sim.occupancy.hasDriver(v.id),true,'the seat emptied before the throw');
+ sim.dispose();
+});
+
+test('an aborted carjack leaves the driver in the car and nobody on the road',()=>{
+ const sim=new TrafficSimulation(graph,{tier:'high',street});
+ sim.update(1/30);
+ const v=sim.pool.find(x=>x.active&&!x.parked&&sim.occupancy.hasDriver(x.id));
+ const before=sim.occupancy.read(v.id);
+ alertDriver(sim,v);beginExtraction(sim,v);
+ assert.equal(abortCarjack(sim,v),true);
+ const after=sim.occupancy.read(v.id);
+ assert.equal(after.stateName,'SEATED','the driver was left hanging out of the door');
+ assert.equal(after.driverId,before.driverId,'aborting swapped the driver');
+ assert.equal(sim.occupancy.drivers>0,true);
+ // And the sequence cannot then be finished without starting again.
+ assert.equal(sim.occupancy.extract(v.id),null,'an aborted extraction still completed');
+ sim.dispose();
+});
+
+test('no duplicate driver: one carjack produces one person, and the seat stays empty',()=>{
+ const sim=new TrafficSimulation(graph,{tier:'high',street});
+ sim.update(1/30);
+ const v=sim.pool.find(x=>x.active&&!x.parked&&sim.occupancy.hasDriver(x.id));
+ alertDriver(sim,v);beginExtraction(sim,v);
+ const first=sim.occupancy.extract(v.id);
+ assert.ok(first);
+ v.driverless=true;
+ // A second throw must find nobody, or a carjack could mint people.
+ assert.equal(sim.occupancy.extract(v.id),null,'the same driver was extracted twice');
+ for(let i=0;i<120;i++)sim.update(1/30);
+ assert.equal(sim.occupancy.hasDriver(v.id),false,'the seat refilled behind the player');
+ sim.dispose();
+});
+
+test('the person thrown out of the car is the person who was sitting in it',()=>{
+ const sim=new TrafficSimulation(graph,{tier:'high',street});
+ const network=buildPedestrianNetwork(data,{ground,generic,street,core});
+ const crowd=new CrowdSimulation(network,{traffic:sim,tier:'medium'});
+ sim.update(1/30);crowd.update(1/30);
+
+ const v=sim.pool.find(x=>x.active&&!x.parked&&sim.occupancy.hasDriver(x.id));
+ v.speed=0;
+ const seated=sim.occupancy.read(v.id);
+ const peopleBefore=crowd.pool.filter(p=>p.active).length;
+
+ alertDriver(sim,v);beginExtraction(sim,v);
+ const out=throwDriverOut(sim,crowd,v,-1);
+
+ assert.ok(out,'nobody came out of the car');
+ assert.equal(out.driverId,seated.driverId,'a different person got out than was driving');
+ assert.ok(out.pedestrian,`no pedestrian was created: ${out.reason}`);
+ // IDENTITY. The crowd renderers dress a pedestrian from `appearanceId` when it exists, so
+ // the driver keeps their face on the way out rather than becoming whoever owns that slot.
+ assert.equal(out.pedestrian.appearanceId,seated.seed,'the driver changed appearance getting out');
+ assert.equal(appearanceOf(out.pedestrian.appearanceId).archetype.id,
+              appearanceOf(seated.seed).archetype.id);
+
+ // They are a real body in the world, off their feet, near the car they came out of.
+ assert.equal(out.pedestrian.active,true);
+ assert.equal(out.thrown,true,'the driver was placed but never knocked down');
+ assert.notEqual(out.pedestrian.struck,undefined,'the driver is not in the knockdown chain');
+ assert.ok(Math.hypot(out.pedestrian.x-v.x,out.pedestrian.z-v.z)<4,
+  'the driver landed nowhere near the car');
+ assert.ok(crowd.pool.filter(p=>p.active).length>peopleBefore-1);
+
+ // The seat is empty, and stays empty.
+ assert.equal(sim.occupancy.hasDriver(v.id),false);
+ assert.equal(v.driverless,true);
+ // ...and only now may the player have it.
+ assert.equal(sim.occupancy.takeSeat(v.id),true);
+
+ // Everything about the body is finite -- a NaN here is invisible until the renderer folds.
+ for(const k of ['x','z','height','heading','struck'])
+  assert.ok(Number.isFinite(out.pedestrian[k]),`${k} is not finite`);
+ crowd.dispose?.();sim.dispose();
+});
+
+test('the extracted driver is findable in the crowd grid, not lost between cells',()=>{
+ const sim=new TrafficSimulation(graph,{tier:'high',street});
+ const network=buildPedestrianNetwork(data,{ground,generic,street,core});
+ const crowd=new CrowdSimulation(network,{traffic:sim,tier:'medium'});
+ sim.update(1/30);crowd.update(1/30);
+ const v=sim.pool.find(x=>x.active&&!x.parked&&sim.occupancy.hasDriver(x.id));
+ alertDriver(sim,v);beginExtraction(sim,v);
+ const out=throwDriverOut(sim,crowd,v,-1);
+ assert.ok(out?.pedestrian);
+ // Anything that moves a pedestrian outside `move` has to rewrite the grid bucket by hand:
+ // insert them in the new cell AND take them out of the old one. Doing only the first leaves
+ // the same body in two cells, which every neighbour query then counts twice -- silent, and
+ // exactly the sort of thing that is only ever found as a symptom somewhere else.
+ const bucket=crowd.grid.get(crowd.cell(out.pedestrian.x,out.pedestrian.z))??[];
+ assert.ok(bucket.includes(out.pedestrian),'the thrown driver was left in their old grid cell');
+ let appearances=0;
+ for(const cell of crowd.grid.values())for(const q of cell)if(q===out.pedestrian)appearances++;
+ assert.equal(appearances,1,`the thrown driver is in ${appearances} grid cells at once`);
+ // And the simulation carries them without complaint.
+ for(let i=0;i<200;i++)crowd.update(1/30);
+ assert.equal(crowd.audit().major,0,'the thrown driver broke the crowd audit');
+ crowd.dispose?.();sim.dispose();
 });

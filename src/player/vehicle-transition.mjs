@@ -51,10 +51,38 @@ export const EXIT_STAGES=Object.freeze([
  Object.freeze({name:'DOOR_CLOSE',seconds:.30,from:'exit', to:'exit', door:DOOR.CLOSING})
 ]);
 
+/**
+ * Taking a car off the person driving it.
+ *
+ * The same shape as an entry with three stages spliced in where the driver has to be dealt
+ * with, so getting into a stolen car is not a separate animation from getting into an empty
+ * one -- it is the same one with a fight in the middle.
+ *
+ *   GRAB   the door is open and the player reaches in.        driver -> ALERT
+ *   PULL   the driver is hauled across the sill.              driver -> BEING_EXTRACTED
+ *   THROW  the body lands on the road and the seat is free.   driver -> a pedestrian
+ *
+ * Nothing here decides any of that; the stage names are the schedule and the caller acts on
+ * them. Splitting it this way is what makes the seat empty for a beat before the player is in
+ * it -- so the car briefly has NO occupant, which is the honest description of a carjacking
+ * in progress and is what stops the player driving off with the driver still sitting there.
+ */
+export const CARJACK_STAGES=Object.freeze([
+ Object.freeze({name:'ALIGN',     seconds:.40,from:'start',to:'entry',door:DOOR.CLOSED}),
+ Object.freeze({name:'DOOR_OPEN', seconds:.30,from:'entry',to:'entry',door:DOOR.OPENING}),
+ Object.freeze({name:'GRAB',      seconds:.34,from:'entry',to:'entry',door:DOOR.OPEN}),
+ Object.freeze({name:'PULL',      seconds:.46,from:'entry',to:'entry',door:DOOR.OPEN}),
+ Object.freeze({name:'THROW',     seconds:.30,from:'entry',to:'entry',door:DOOR.OPEN}),
+ Object.freeze({name:'ENTRY',     seconds:.46,from:'entry',to:'seat', door:DOOR.OPEN}),
+ Object.freeze({name:'SEAT',      seconds:.18,from:'seat', to:'seat', door:DOOR.OPEN}),
+ Object.freeze({name:'DOOR_CLOSE',seconds:.28,from:'seat', to:'seat', door:DOOR.CLOSING})
+]);
+
 /** Kept for callers that only want to know roughly how long the whole thing takes. */
 export const VEHICLE_TRANSITION=Object.freeze({
  enter:ENTER_STAGES.reduce((n,s)=>n+s.seconds,0),
- exit:EXIT_STAGES.reduce((n,s)=>n+s.seconds,0)
+ exit:EXIT_STAGES.reduce((n,s)=>n+s.seconds,0),
+ carjack:CARJACK_STAGES.reduce((n,s)=>n+s.seconds,0)
 });
 
 const smooth=t=>t*t*(3-2*t);
@@ -86,7 +114,8 @@ export function createVehicleTransition(){
    */
   begin(kind,points,slot=null){
    if(action)return false;
-   const stages=kind==='enter'?ENTER_STAGES:kind==='exit'?EXIT_STAGES:null;
+   const stages=kind==='enter'?ENTER_STAGES:kind==='exit'?EXIT_STAGES
+    :kind==='carjack'?CARJACK_STAGES:null;
    if(!stages)return false;
    const at={start:points.start??points.entry??points.seat,
              entry:points.entry??points.start??points.seat,
@@ -124,7 +153,7 @@ export function createVehicleTransition(){
    const pose=lerpPose(action.at[stage.from],action.at[stage.to],smooth(t));
    // The body is in the seat from the moment the stage that ends there completes. Both lists
    // are built so that is the stage before DOOR_CLOSE.
-   if(action.kind==='enter'&&(done||stage.name==='SEAT'||stage.name==='DOOR_CLOSE'))action.seated=true;
+   if(action.kind!=='exit'&&(done||stage.name==='SEAT'||stage.name==='DOOR_CLOSE'))action.seated=true;
    const out={
     kind:action.kind,stage:stage.name,stageIndex:action.index,
     door:done?DOOR.CLOSED:stage.door,

@@ -132,7 +132,11 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
     const {p,d}=candidates[k];
     let i=crowd.indexOf(p.id);
     if(i<0){
-     const look=appearanceOf(p.id,p.height!==undefined?undefined:undefined);
+     // RUN 9: `appearanceId` lets a pedestrian wear a face that is not their pool id's. It
+     // exists for one case -- someone dragged out of a car was already drawn sitting in it,
+     // and arriving on the pavement as a different person would undo the whole point of the
+     // driver having an identity. Everyone else has no such field and is themselves.
+     const look=appearanceOf(p.appearanceId??p.id,p.height!==undefined?undefined:undefined);
      const lane=laneCache.get(`${look.archetype.id}|${lodFor(d,null)}`);
      i=crowd.spawn(p.id,look,lane??0,
       {x:p.renderX??p.x,y:p.height??0,z:p.renderZ??p.z,heading:p.heading??0,speed:p.speed??0});
@@ -156,7 +160,7 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
      const current=crowd.lanes[lane]?.lod;
      const wanted=lodFor(d,current);
      if(wanted!==current){
-      const target=laneCache.get(`${appearanceOf(p.id).archetype.id}|${wanted}`);
+      const target=laneCache.get(`${appearanceOf(p.appearanceId??p.id).archetype.id}|${wanted}`);
       if(target!==undefined&&target>=0&&crowd.moveLane(i,target)){moves++;stats.moves++;}
      }
     }

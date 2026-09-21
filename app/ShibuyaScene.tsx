@@ -14,6 +14,7 @@ import {buildCrowd} from '../src/life/render.mjs';
 import {buildPedestrianNetworkAsync} from '../src/life/network.mjs';
 import {buildTraffic} from '../src/traffic/render.mjs';
 import {createSeatedDrivers} from '../src/traffic/drivers.mjs';
+import {isOccupied,canCarjack,alertDriver,beginExtraction,throwDriverOut,abortCarjack} from '../src/player/carjack.mjs';
 import {buildStreetscapeAsync as buildStreetscape} from '../src/streetscape/render.mjs';
 import {buildSignageAsync as buildSignage} from '../src/signs/render.mjs';
 import S1Data from './S1Data';
@@ -103,7 +104,7 @@ export default function Home(){
  const VIEW_LIMIT=180,VIEW_CEILING=60,EYE_FLOOR=1.6;
  // The player is created once the crowd network is up, since it walks on that context.
  let player:any=null,playerMarker:any=null,carMarker:any=null,playerFigure:any=null,playerShadow:any=null,deferredCharacter:any=null,playerCar:any=null,playerAudio:any=null,crowdVoices:any=null,touchPad:any=null,blood:any=null,driving=false,playerMode=false;const followPose:any={x:0,y:0,z:0,tx:0,ty:0,tz:0};const playerBox={x:0,z:0,heading:0};
- let seatedDrivers:any=null;let seatedHidden=false;let vehicleVisual:any=null,vehicleEffects:any=null,playUI:any=null,localCrowdClock=0,frameHits=0,combatDeathReported=false;const followCamera=createFollowCamera(),melee=createMeleeCombat({
+ let seatedDrivers:any=null;let seatedHidden=false;let carjackSide=-1,carjackStage:string|null=null,lastCarjack:any=null;let vehicleVisual:any=null,vehicleEffects:any=null,playUI:any=null,localCrowdClock=0,frameHits=0,combatDeathReported=false;const followCamera=createFollowCamera(),melee=createMeleeCombat({
   // RUN 8: a punch is an event the crowd can see. The HQ layer bounds it by its own spatial
   // grid, so this costs the cells around the fight and not the population.
   onWitness:(event:any)=>lifeEntry.hooks.current?.witness?.(event)??0
@@ -148,13 +149,20 @@ export default function Home(){
   const entry=playerCar.nearestEntry(player.state.x,player.state.z);
   if(!entry||!entry.inRange)return;                                           // too far from any door
   const door=playerCar.doorPose(entry.slot,player.state.x,player.state.z);if(!door)return;
+  // An OCCUPIED car is a different interaction from an empty one. This is the branch the old
+  // code did not have: every car was empty, so every entry was the same, and taking one from
+  // somebody was `takeOver` at the button press.
+  const traffic=trafficEntry.hooks.current?.sim;
+  const occupied=isOccupied(traffic,entry.slot);
+  if(occupied&&!canCarjack(traffic,entry.slot))return;      // moving: not at this speed
   // RESERVE, not take over. The car is frozen so traffic cannot pull away mid-sequence and
   // its door can swing, but `active` stays false, so it cannot be driven and nothing is
   // struck by it. Control transfers when the body reaches the seat -- see the frame loop.
   if(entry.slot&&entry.slot!==playerCar.state.slot)playerCar.reserve(entry.slot);
   playerCar.state.doorSide=door.side;playerCar.state.doorPhase=0;
   const a=playerCar.anchors(entry.slot,door.side);
-  vehicleTransition.begin('enter',{
+  carjackSide=door.side;carjackStage=null;
+  vehicleTransition.begin(occupied?'carjack':'enter',{
    start:{x:player.state.x,z:player.state.z,heading:player.state.bodyHeading??player.state.heading},
    entry:{x:door.x,z:door.z,heading:door.heading},
    seat:{x:a.seat.x,z:a.seat.z,heading:entry.slot.heading}},entry.slot);
@@ -349,7 +357,13 @@ export default function Home(){
   // surface it queries are reachable, so a check can tell those two apart.
   if(config.qa){(window as any).__SHIBUYA_FIGURE__=playerFigure;(window as any).__SHIBUYA_CTX__=ctx;(window as any).__SHIBUYA_LIFE__=lifeEntry.hooks.current;(window as any).__SHIBUYA_TRAFFIC__=trafficEntry.hooks.current;}
   return true;};
- const exitPlayer=()=>{if(!playerMode)return;playUI?.hide();vehicleVisual?.hide();vehicleEffects?.hide();lifeEntry.hooks.current?.setPlayerFocus(null);followCamera.reset();melee.reset();vehicleTransition.cancel();playerMode=false;driving=false;setDriving(false);playerCar?.release();playerCar=null;carMarker?.hide();playerAudio?.silence();touchPad?.hide();player?.detach();playerMarker?.hide();playerFigure?.hide();playerShadow?.begin();playerShadow?.end();releaseCrowdSlot();delete (window as any).__SHIBUYA_PLAYER__;delete (window as any).__SHIBUYA_CAR__;delete (window as any).__SHIBUYA_FIGURE__;delete (window as any).__SHIBUYA_CTX__;delete (window as any).__SHIBUYA_LIFE__;delete (window as any).__SHIBUYA_TRAFFIC__;
+ const exitPlayer=()=>{if(!playerMode)return;playUI?.hide();vehicleVisual?.hide();vehicleEffects?.hide();lifeEntry.hooks.current?.setPlayerFocus(null);followCamera.reset();melee.reset();
+  // An abandoned carjack must not leave a driver half out of a car, a door hanging open, or a
+  // slot frozen out of traffic for the rest of the session.
+  {const was=vehicleTransition.cancel();
+   if(was?.kind==='carjack'&&was.slot){abortCarjack(trafficEntry.hooks.current?.sim,was.slot);was.slot.doorPhase=0;}
+   if(was&&!was.seated)playerCar?.unreserve();}
+  playerMode=false;driving=false;setDriving(false);playerCar?.release();playerCar=null;carMarker?.hide();playerAudio?.silence();touchPad?.hide();player?.detach();playerMarker?.hide();playerFigure?.hide();playerShadow?.begin();playerShadow?.end();releaseCrowdSlot();delete (window as any).__SHIBUYA_PLAYER__;delete (window as any).__SHIBUYA_CAR__;delete (window as any).__SHIBUYA_FIGURE__;delete (window as any).__SHIBUYA_CTX__;delete (window as any).__SHIBUYA_LIFE__;delete (window as any).__SHIBUYA_TRAFFIC__;
   view.fov=50;view.updateProjectionMatrix();controls.enabled=!config.qa;setPlayerHit(null);setMode('observe');preset(currentCamera,false);};
  resize();setTier(currentTier);setTime(clock.value);setModules(system.snapshot());
  const observer=new ResizeObserver(resize);observer.observe(mount.current);
@@ -361,7 +375,7 @@ export default function Home(){
  const prerequisitesReady=()=>!!renderer&&!renderer.getContext().isContextLost()&&currentTier==='high'&&dayNight.active&&!!fidelity.pipeline&&requiredStages.every(id=>system.entries.get(id)?.status==='ready')&&!!ground&&['buildings','heroes','station','stationDetail','signs','streetscape','traffic','life','trains','construction','nightglow'].every(id=>!!system.entries.get(id)?.hooks.current)&&buildQueue.snapshot().queueLength===0&&!buildQueue.snapshot().activeBuildName;
  const startupBuildComplete=()=>{if(!startup||startupTrace.milestones.sceneBuildCompleteMs!==null)return startupTrace?.milestones.sceneBuildCompleteMs!==null;const latest=new Map<string,any>();for(const record of startupTrace.stages)if(record.endMs!==null)latest.set(record.key,record);const queue=buildQueue.snapshot();const complete=prerequisitesReady()&&startup.openStageCount===0&&queue.queueLength===0&&!queue.activeBuildName&&requiredTimingStages.every(key=>latest.get(key)?.completedSuccessfully);if(complete){startup.completeScene();renderStartupPanel();}return complete;};
  const finalizeStartupTiming=()=>{if(!startup||startupTrace.ready)return;startup.finalize();renderStartupPanel();appendStartupBoundaryDetails();console.info('[Startup Timing Report]',startupTrace);};
- const metricsFor=()=>{const info=renderer?.info,pipeline=fidelity.pipeline,trafficNow=trafficEntry.hooks.current?.stats,trainsNow=trainsEntry.hooks.current;renderer?.getDrawingBufferSize(drawingSize);return {tier:currentTier,time:clock.value,camera:publicCameraName(currentCamera),fps:latestFps,dpr:renderer?.getPixelRatio()??null,renderScale:PROFILES[currentTier]?.scale??null,framebufferWidth:renderer?drawingSize.x:null,framebufferHeight:renderer?drawingSize.y:null,triangles:info?.render.triangles??null,drawCalls:info?.render.calls??null,geometries:info?.memory.geometries??null,textures:info?.memory.textures??null,crowdCount:lifeEntry.hooks.current?.stats.total??null,nearCharacters:lifeEntry.hooks.current?.stats.nearCharacters??null,hqCrowd:lifeEntry.hooks.current?.stats.hqCrowd??null,melee:playerMode?melee.snapshot():null,seatedDrivers:seatedDrivers?.inspect()??null,occupancy:trafficEntry.hooks.current?.sim?.occupancy?.inspect()??null,movingVehicles:trafficNow?.moving??null,parkedVehicles:trafficNow?.parked??null,bicycles:null,trainCars:trainsNow?Object.values(trainsNow.meshes as Record<string,any>).reduce((n:number,m:any)=>n+(m.count??0),0):null,activePointLights:fidelity.lights.filter((l:any)=>l.visible&&l.intensity>0).length,activeSpotLights:fidelity.spots.filter((l:any)=>l.visible&&l.intensity>0).length,shadowMapSize:dayNight.key.shadow.mapSize.x||null,exposure:renderer?.toneMappingExposure??null,environmentIntensity:scene.environment?scene.environmentIntensity:null,gtaoEnabled:!!pipeline&&pipeline.ao.enabled!==false,bloomEnabled:!!pipeline&&pipeline.bloom.enabled!==false,bloomStrength:pipeline?.bloom.strength??null,bloomThreshold:pipeline?.bloom.threshold??null,smaaEnabled:!!pipeline&&pipeline.smaa.enabled!==false};};
+ const metricsFor=()=>{const info=renderer?.info,pipeline=fidelity.pipeline,trafficNow=trafficEntry.hooks.current?.stats,trainsNow=trainsEntry.hooks.current;renderer?.getDrawingBufferSize(drawingSize);return {tier:currentTier,time:clock.value,camera:publicCameraName(currentCamera),fps:latestFps,dpr:renderer?.getPixelRatio()??null,renderScale:PROFILES[currentTier]?.scale??null,framebufferWidth:renderer?drawingSize.x:null,framebufferHeight:renderer?drawingSize.y:null,triangles:info?.render.triangles??null,drawCalls:info?.render.calls??null,geometries:info?.memory.geometries??null,textures:info?.memory.textures??null,crowdCount:lifeEntry.hooks.current?.stats.total??null,nearCharacters:lifeEntry.hooks.current?.stats.nearCharacters??null,hqCrowd:lifeEntry.hooks.current?.stats.hqCrowd??null,melee:playerMode?melee.snapshot():null,seatedDrivers:seatedDrivers?.inspect()??null,transition:vehicleTransition.active?{kind:vehicleTransition.kind,stage:vehicleTransition.stage}:null,lastCarjack:lastCarjack?{driverId:lastCarjack.driverId,seed:lastCarjack.seed,vehicle:lastCarjack.vehicle,thrown:!!lastCarjack.thrown,pedestrian:lastCarjack.pedestrian?.id??null,reason:lastCarjack.reason??null}:null,occupancy:trafficEntry.hooks.current?.sim?.occupancy?.inspect()??null,movingVehicles:trafficNow?.moving??null,parkedVehicles:trafficNow?.parked??null,bicycles:null,trainCars:trainsNow?Object.values(trainsNow.meshes as Record<string,any>).reduce((n:number,m:any)=>n+(m.count??0),0):null,activePointLights:fidelity.lights.filter((l:any)=>l.visible&&l.intensity>0).length,activeSpotLights:fidelity.spots.filter((l:any)=>l.visible&&l.intensity>0).length,shadowMapSize:dayNight.key.shadow.mapSize.x||null,exposure:renderer?.toneMappingExposure??null,environmentIntensity:scene.environment?scene.environmentIntensity:null,gtaoEnabled:!!pipeline&&pipeline.ao.enabled!==false,bloomEnabled:!!pipeline&&pipeline.bloom.enabled!==false,bloomStrength:pipeline?.bloom.strength??null,bloomThreshold:pipeline?.bloom.threshold??null,smaaEnabled:!!pipeline&&pipeline.smaa.enabled!==false};};
  const frameSamples=createFrameSamples();
  const waitFrames=(count:number)=>waitForRenderedFrames({count,getFrame:()=>renderedFrames,isDisposed:()=>disposed});
  const samplePerformance=async(count=120)=>{frameSamples.begin(count);await waitFrames(count+1);const result=frameSamples.snapshot();if(!result.complete)throw new Error('Incomplete frame sample; keep the tab visible');return result;};
@@ -402,6 +416,23 @@ export default function Home(){
     // which is the wrong shape for a door however smooth it is.
     if(playerCar?.state)playerCar.state.doorPhase=pose.doorPhase;
     player.state.vehicleKind=pose.kind;player.transitionTo(pose.x,pose.z,pose.heading,pose.phase);
+    // The carjack's consequences hang off stage CHANGES, so a long frame that crosses two
+    // stages still fires both in order rather than skipping the one in the middle.
+    if(pose.kind==='carjack'&&pose.stage!==carjackStage){
+     const slot=pose.slot,traffic=trafficEntry.hooks.current?.sim,crowd=lifeEntry.hooks.current?.sim;
+     const from=carjackStage;carjackStage=pose.stage;
+     const order=['ALIGN','DOOR_OPEN','GRAB','PULL','THROW','ENTRY','SEAT','DOOR_CLOSE'];
+     const wasAt=from?order.indexOf(from):-1;
+     for(let step=wasAt+1;step<=order.indexOf(pose.stage);step++){
+      const name=order[step];
+      if(name==='GRAB')alertDriver(traffic,slot);
+      else if(name==='PULL')beginExtraction(traffic,slot);
+      else if(name==='THROW'){
+       lastCarjack=throwDriverOut(traffic,crowd,slot,carjackSide);
+       if(lastCarjack?.pedestrian)crowdVoices?.say?.(lastCarjack.pedestrian,'scream',1);
+      }
+     }
+    }
     // The body is drawn on foot right up until it is in the seat, and the car draws it after.
     // The old sequence hid the player only at the very end, so a figure stood in the doorway
     // while the door shut through it.
