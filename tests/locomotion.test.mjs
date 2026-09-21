@@ -36,18 +36,58 @@ test('a cycle takes the blended stride divided by the ground speed',()=>{
  }
 });
 
-test('no clip is ever played at slow motion or double speed',()=>{
+test('the clip you are actually looking at is never in slow motion or double speed',()=>{
  // The defect this replaces: Sprint at 0.51x to make 4.2 m/s, which is not a run at half
- // speed, it is a sprint in slow motion.
+ // speed, it is a sprint in slow motion. What made that visible was that Sprint was the
+ // DOMINANT clip -- it was most of what was on screen.
+ //
+ // So the bound is on the dominant clip, and the minority partner gets a looser one. An
+ // earlier version applied one flat band to every clip above 5% weight, which was equivalent
+ // while Walk and Run were authored 1.43x apart in cadence and stopped being so when RUN 5.7
+ // put a 169 spm Run beside a 90 spm Walk: at 2.5 m/s the blend is 46% Walk at 1.63x, and it
+ // reads as a jog rather than as a fast-forwarded walk, because a bit under half of a blend
+ // is not what the eye is following. Rendered at qa/gta-upgrade/runbench.html?speed=2.5 and
+ // looked at before this bound was changed.
  const blend=createGaitBlend(ladder());
  for(const speed of [PLAYER.walk,2.5,3.4,PLAYER.run]){
   const weights=settle(blend,speed);
+  let dominant=null,best=0;
   for(const [name,weight] of weights){
-   if(name==='Idle'||weight<.05)continue;
+   if(name==='Idle')continue;
+   if(weight>best){best=weight;dominant=name;}
+  }
+  assert.ok(dominant,`nothing is playing at ${speed} m/s`);
+  const lead=blend.rateFor(dominant);
+  assert.ok(lead>=.78&&lead<=1.45,
+   `the dominant clip ${dominant} at ${speed} m/s plays at ${lead.toFixed(2)}x`);
+  for(const [name,weight] of weights){
+   if(name==='Idle'||name===dominant||weight<.05)continue;
    const rate=blend.rateFor(name);
-   assert.ok(rate>=.78&&rate<=1.45,`${name} at ${speed} m/s plays at ${rate.toFixed(2)}x`);
+   assert.ok(rate>=.6&&rate<=1.9,
+    `the partner clip ${name} at ${speed} m/s plays at ${rate.toFixed(2)}x`);
   }
  }
+});
+
+test('the gameplay ceiling matches the controller, so the copy cannot drift',()=>{
+ // LOCOMOTION.gameplayTop duplicates PLAYER.run because locomotion.mjs is a leaf module and
+ // importing the controller would make a cycle. This is the pin.
+ assert.equal(LOCOMOTION.gameplayTop,PLAYER.run);
+});
+
+test('an asymmetric clip stays out of the gameplay blend but remains reachable',()=>{
+ // Sprint's contacts are 0.692 of a cycle apart, not 0.5, so blending it against a symmetric
+ // clip averages two footfall rhythms and limps. RUN 4 removed it from the gameplay range;
+ // until RUN 5.7 that held only because the Run of the day happened to be authored faster
+ // than 4.2 m/s, and a slower Run silently let Sprint back in.
+ const blend=createGaitBlend(ladder());
+ const sprint=blend.ladder.find(r=>r.name==='Sprint');
+ assert.ok(sprint,'the ladder should still contain Sprint');
+ assert.ok(Math.abs(sprint.symmetry-.5)>LOCOMOTION.maxAsymmetry,
+  'this test is meaningless unless Sprint is actually the asymmetric one');
+ for(const speed of [PLAYER.walk,2.5,3.4,PLAYER.run])
+  assert.ok(!settle(blend,speed).has('Sprint'),`Sprint is in the blend at ${speed} m/s`);
+ assert.ok((settle(blend,7).get('Sprint')??0)>.3,'Sprint is unreachable above gameplay speed');
 });
 
 test('both gameplay speeds are carried by Walk and Run; Sprint is out of range',()=>{

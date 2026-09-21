@@ -234,6 +234,41 @@ for(const [name,source] of Object.entries(CLIPS)){
  clip.optimize();
  clips.push(clip);
 }
+// ---- PHASE A -- the hybrid Run -------------------------------------------------------
+//
+// If the derived hybrid clip is present, it replaces the Quaternius Run. It is a normal
+// AnimationClip by the time it reaches this point and by the time it reaches the game: the
+// composition of CMU legs with a Quaternius upper body happened offline, in
+// scripts/cmu/hybrid.mjs, and nothing at runtime samples two sources or knows there were ever
+// two. See assets/character/hybrid-run.json for the provenance of each half.
+//
+// Absent, the build falls back to the upstream Run without comment, so a checkout that does
+// not carry the derived clip still produces a working character.
+let hybridRun=null;
+try{
+ hybridRun=JSON.parse(readFileSync('assets/character/hybrid-run.json','utf8'));
+}catch{}
+if(hybridRun){
+ const index=clips.findIndex(c=>c.name==='Run');
+ if(index<0)console.warn('no Run clip to replace');
+ else{
+  const tracks=[];
+  for(const [bone,values] of Object.entries(hybridRun.tracks))
+   tracks.push(new T.QuaternionKeyframeTrack(`${bone}.quaternion`,hybridRun.times,values));
+  tracks.push(new T.VectorKeyframeTrack('pelvis.position',hybridRun.times,hybridRun.rootPos));
+  const replacement=new T.AnimationClip('Run',hybridRun.gait.duration,tracks);
+  replacement.optimize();
+  clips[index]=replacement;
+  // The stride the blend drives its period from has to be the one this clip actually has,
+  // not the upstream Jog's. Getting this wrong is the difference between matched feet and
+  // the foot sliding RUN 4 existed to remove.
+  gait.Run=hybridRun.gait.speed;
+  hybridRun.applied={tracks:replacement.tracks.length,duration:replacement.duration};
+  console.log(`Run replaced by the hybrid: ${replacement.duration.toFixed(3)} s, `+
+   `${replacement.tracks.length} tracks, native ${gait.Run} m/s`);
+ }
+}
+
 root.animations=clips;
 
 const report={
@@ -243,8 +278,15 @@ const report={
   garmentMaskVertices:masked+hairVertices,hairVertices,hairstyle:HAIR,
   bones:skeleton.bones.length,animatedBones:skeleton.bones.length-fingers.size,
   height:Number(height.toFixed(4)),scaleToGame:Number((TARGET_HEIGHT/height).toFixed(5))},
- clips:clips.map(c=>({name:c.name,upstream:CLIPS[c.name],seconds:Number(c.duration.toFixed(3)),tracks:c.tracks.length})),
- gait
+ clips:clips.map(c=>({name:c.name,
+  upstream:c.name==='Run'&&hybridRun?.applied?'hybrid (CMU 16_45 legs + Quaternius upper)':CLIPS[c.name],
+  seconds:Number(c.duration.toFixed(3)),tracks:c.tracks.length})),
+ gait,
+ ...(hybridRun?.applied?{hybridRun:{
+  stride:hybridRun.gait.stride,speed:hybridRun.gait.speed,
+  lowerBody:hybridRun.provenance.lowerBody.source,
+  upperBody:hybridRun.provenance.upperBody.source,
+  boundary:hybridRun.provenance.boundary.bone}}:{})
 };
 
 mkdirSync(OUT,{recursive:true});

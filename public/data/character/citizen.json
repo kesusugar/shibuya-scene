@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-20",
+ "generated": "2026-09-21",
  "source": "Quaternius Universal Base Characters [Standard] + Universal Animation Library [Standard], CC0-1.0",
  "body": {
   "meshes": 3,
@@ -29,9 +29,9 @@
   },
   {
    "name": "Run",
-   "upstream": "Jog_Fwd_Loop",
-   "seconds": 0.933,
-   "tracks": 50
+   "upstream": "hybrid (CMU 16_45 legs + Quaternius upper)",
+   "seconds": 0.708,
+   "tracks": 23
   },
   {
    "name": "Sprint",
@@ -108,15 +108,22 @@
  ],
  "gait": {
   "Walk": 0.975,
-  "Run": 5.3571,
+  "Run": 3.7929,
   "Sprint": 8.25,
   "Fall": 0.2708,
   "Death": 0.2708
  },
+ "hybridRun": {
+  "stride": 2.6866,
+  "speed": 3.7929,
+  "lowerBody": "CMU Graphics Lab Motion Capture Database, trial 16_45",
+  "upperBody": "Quaternius Universal Animation Library [Standard], Jog_Fwd_Loop, CC0-1.0",
+  "boundary": "spine_01"
+ },
  "output": {
   "file": "public/data/character/citizen.glb",
-  "bytes": 1443376,
-  "sha256": "fb29de05ded84e8df7246f38e330f05fa0f67758ef96a01b8c672a9cf8db8241"
+  "bytes": 1414612,
+  "sha256": "17be99b28f5e27c63d5d3111c71178c0da83240cd52a151ddfb17796de05e873"
  },
  "gaitDetail": {
   "samples": 120,
@@ -135,15 +142,15 @@
     "leftContact": 0.108
    },
    "Run": {
-    "seconds": 0.933,
-    "speed": 5.3571,
-    "stride": 5,
-    "step": 2.5,
-    "cadence": 128.6,
-    "duty": 0.329,
-    "airborne": 0.342,
+    "seconds": 0.708,
+    "speed": 3.7929,
+    "stride": 2.687,
+    "step": 1.343,
+    "cadence": 169.4,
+    "duty": 0.4,
+    "airborne": 0.2,
     "contactOffset": 0.5,
-    "leftContact": 0.008
+    "leftContact": 0.917
    },
    "Sprint": {
     "seconds": 0.667,

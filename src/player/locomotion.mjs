@@ -26,7 +26,15 @@ export const LOCOMOTION=Object.freeze({
  // A cycle may not take longer or shorter than this however the stride arithmetic comes out.
  // Outside the band the feet would slide, but a clip played at 0.5x or 2x reads as wrong
  // whatever the feet are doing, so the sliding is the cheaper error and it is bounded here.
- minPeriod:.72, maxPeriod:1.16,
+ //
+ // 0.62 s is 194 steps a minute. It was 0.72 (167 spm), which was ample when the Run clip was
+ // authored at 129 spm, and became the binding constraint the moment RUN 5.7's Run arrived at
+ // 169: a 4.2 m/s run wants a 0.640 s cycle and the old clamp forced 0.720, so the feet
+ // implied 3.73 m/s while the body moved at 4.2. That is foot sliding, reintroduced by the one
+ // line in this file that is documented as the only place it can come from. The clamp has to
+ // be set by what playback rate looks wrong, not by an absolute period: at 0.62 the fastest
+ // clip runs at 1.14x, which is nothing.
+ minPeriod:.62, maxPeriod:1.16,
  // Turning. A rate, not a spring: a spring covers most of a half-turn in three frames and
  // then crawls, which is exactly the instant snap this is meant to remove.
  turnRate:7.0,          // rad/s while moving
@@ -37,7 +45,25 @@ export const LOCOMOTION=Object.freeze({
  // short and leaving the character permanently askew.
  pivotStart:.95, pivotStop:.04,
  // A body leans into a turn. Small: this is a person, not a motorcycle.
- leanPerRadPerSecond:.035, maxLean:.17
+ leanPerRadPerSecond:.035, maxLean:.17,
+ // The fastest speed gameplay will ever ask the legs for.
+ //
+ // The ladder blends between the two rungs a speed sits between, so a clip faster than this
+ // can only enter the mix by bracketing one that is slower -- and Sprint is exactly that clip:
+ // its contacts are 0.692 of a cycle apart rather than 0.5, so blending it against a symmetric
+ // clip limps. RUN 4 took it out of the gameplay range by arithmetic, because the Run clip of
+ // the day was authored at 5.36 m/s and 4.2 fell short of it. RUN 5.7's Run is authored at
+ // 3.79, so 4.2 now falls PAST it and reaches into Sprint -- reintroducing by accident exactly
+ // what RUN 4 removed on purpose. This states the intent instead of relying on the arithmetic:
+ // at or below this speed the blend uses only the rungs at or below it, and above it the whole
+ // ladder is available, so a faster gameplay speed later needs no new plumbing.
+ //
+ // It duplicates PLAYER.run, because locomotion.mjs is a leaf module and importing the
+ // controller would make a cycle. A test pins the two together so the copy cannot drift.
+ gameplayTop:4.2,
+ // How far a clip's left/right contact offset may sit from a half cycle before it is kept out
+ // of the gameplay blend. Sprint measures 0.692; Walk and Run measure 0.500.
+ maxAsymmetry:.08
 });
 
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
@@ -87,6 +113,30 @@ export function createGaitBlend(ladder,{idleName='Idle'}={}){
  const weights=new Map();
  let phase=0,period=LOCOMOTION.maxPeriod,started=false,blendedStride=0;
  const empty=ladder.length===0;
+ // Both views of the ladder, built once. Filtering per frame would allocate, and the gait
+ // blend runs for every character every frame.
+ //
+ // The gameplay set leaves out clips that limp when blended, then stops at the first clip
+ // that covers the top gameplay speed.
+ //
+ // The exclusion is RUN 4's own reason, stated as a property of the clip rather than as an
+ // accident of speeds: a gait whose two feet are not half a cycle apart cannot be mixed with
+ // one that is, because the blend averages two different footfall rhythms and the result
+ // limps. Sprint is 0.692 apart. Walk and Run are 0.500.
+ //
+ // Two speed filters were tried first and each broke one of the two configurations this has
+ // to serve. `speed <= top` throws away a Run authored at 5.36 m/s, which is above a 4.2
+ // ceiling and is still obviously the clip a 4.2 m/s run wants, leaving a walk at 2.15x.
+ // "up to the first rung reaching top" then lets Sprint in whenever the Run falls short of
+ // 4.2, which is exactly the RUN 5.7 case. Symmetry decides it correctly in both, because it
+ // is describing the actual defect.
+ //
+ // Sprint stays in the full ladder and is still reachable above the gameplay range, so raising
+ // the gameplay speed later needs no new plumbing.
+ const symmetric=ladder.filter(r=>Math.abs((r.symmetry??.5)-.5)<=LOCOMOTION.maxAsymmetry);
+ const usable=symmetric.length?symmetric:ladder;
+ const reaching=usable.findIndex(r=>r.speed>=LOCOMOTION.gameplayTop);
+ const gameplay=reaching>=0?usable.slice(0,reaching+1):usable;
 
  return {
   get phase(){return phase;},
@@ -116,13 +166,16 @@ export function createGaitBlend(ladder,{idleName='Idle'}={}){
    if(moving<1)weights.set(idleName,1-moving);
    if(empty||moving<=0){started=false;return weights;}
 
-   // Which two rungs of the ladder this speed sits between.
-   let lower=ladder[0],upper=ladder[ladder.length-1],w=0;
+   // Which two rungs this speed sits between. Inside the gameplay range only the rungs that
+   // belong to it are considered, so a clip authored faster than gameplay ever goes cannot
+   // bracket one that is slower and bleed into an ordinary run.
+   const rungs=(speed<=LOCOMOTION.gameplayTop&&gameplay.length)?gameplay:ladder;
+   let lower=rungs[0],upper=rungs[rungs.length-1],w=0;
    if(speed<=lower.speed){upper=lower;w=0;}
    else if(speed>=upper.speed){lower=upper;w=0;}
-   else for(let i=1;i<ladder.length;i++){
-    if(speed>ladder[i].speed)continue;
-    lower=ladder[i-1];upper=ladder[i];
+   else for(let i=1;i<rungs.length;i++){
+    if(speed>rungs[i].speed)continue;
+    lower=rungs[i-1];upper=rungs[i];
     w=(speed-lower.speed)/(upper.speed-lower.speed||1);
     break;
    }
