@@ -85,18 +85,22 @@ export function buildGaitSpace(clips,gait,detail=null){
  */
 export function createGaitBlend(ladder,{idleName='Idle'}={}){
  const weights=new Map();
- let phase=0,period=LOCOMOTION.maxPeriod,started=false;
+ let phase=0,period=LOCOMOTION.maxPeriod,started=false,blendedStride=0;
  const empty=ladder.length===0;
 
  return {
   get phase(){return phase;},
   get period(){return period;},
   get cadence(){return 120/period;},
+  // Read-only, for the benches: the stride the blend is currently driving the period from.
+  // Reporting it is the difference between "this looks like slow motion" and "this is a
+  // 2.38 m step at 106 spm", and the second one can be acted on.
+  get stride(){return blendedStride;},
   get ladder(){return ladder;},
 
   /** Drop back to standing, ready to take the first step from the top of a cycle. */
   reset(){
-   phase=0;started=false;period=LOCOMOTION.maxPeriod;weights.clear();
+   phase=0;started=false;period=LOCOMOTION.maxPeriod;blendedStride=0;weights.clear();
   },
   /**
    * Start somewhere else in the cycle.
@@ -126,6 +130,7 @@ export function createGaitBlend(ladder,{idleName='Idle'}={}){
    // The cycle takes exactly as long as the blended stride divided by the ground speed, so
    // the planted foot does not slide. The clamp is the only place that reintroduces sliding.
    const stride=lerp(lower.stride,upper.stride,w);
+   blendedStride=stride;
    period=clamp(stride/Math.max(speed,1e-3),LOCOMOTION.minPeriod,LOCOMOTION.maxPeriod);
 
    // The first step of a journey starts just before a contact rather than wherever the cycle

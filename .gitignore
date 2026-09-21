@@ -53,6 +53,8 @@ next-env.d.ts
 !/qa/gta-upgrade/footik-contact.mjs
 !/qa/gta-upgrade/clip-audit.mjs
 !/qa/gta-upgrade/clipbench.html
+!/qa/gta-upgrade/runbench.html
+!/qa/gta-upgrade/penetration-definitions.mjs
 
 # character pipeline: upstream downloads are verified, never committed
 /assets/character/upstream/
