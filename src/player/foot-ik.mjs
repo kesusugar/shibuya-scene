@@ -5,6 +5,22 @@
 // road -- so a character standing astride one has one foot 13 cm inside the tarmac or 13 cm
 // above the kerb, and neither foot knows about the ramps that take a kerb down to a crossing.
 //
+// THE ROLE OF THIS FILE IS BOUNDED, AND THE BOUNDARY IS DELIBERATE.
+//
+// Foot IK adapts a CORRECT animation to the terrain. It does not correct the animation.
+//
+// The difference is not pedantry, it is the whole design. A solver that drove every sole onto
+// the nearest surface would also hide a clip whose foot is in the wrong place -- and this
+// character has one: the Run clip's sole sits 11 mm below the plane the Idle clip stands on,
+// and at gameplay speed measures 49 mm mean error against a flat road. Sucking that foot down
+// would make the screenshot better and the project worse: the defect would stop being visible,
+// the heel-to-toe roll would be spent paying for it, and nobody would ever replace the clip.
+//
+// So on flat ground this file does NOTHING, by construction, and the audit that judges clips
+// lives elsewhere (qa/gta-upgrade/clip-audit.mjs). Bad foot poses are an animation and retarget
+// problem and are reported as one. If you are about to add an absolute-height term here to
+// close a contact number, you are about to cross this line.
+//
 // What this is NOT: a system that pins feet to the ground. That produces skating, crouching,
 // and knees bent the wrong way, because the animation never agreed to be pinned. The order of
 // priorities here is natural animation, then a stable body, then contact -- and when they
