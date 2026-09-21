@@ -47,14 +47,30 @@ export function createMeleeCombat({onWitness=null}={}){
  const stats={swings:0,hits:0,misses:0,npcHits:0,npcDeaths:0,witnessEvents:0,witnesses:0};
 
  /**
+  * Someone whose movement belongs to something other than their own will: the Scramble
+  * choreography's fixed track, or an in-progress crossing.
+  *
+  * They can be HIT. They cannot be STOPPED. Taking either off their route mid-stride is what
+  * holds a signal group, and a held group stops the clock for every signal on the map.
+  */
+ const onRails=p=>!!(p.crossing||p.choreographed);
+
+ /**
   * Who may be punched.
   *
-  * A pedestrian on a crossing IS a valid target -- excluding them made the middle of a
-  * scramble crossing, which is most of this map, a place where combat silently did nothing.
-  * What protects the signals is not refusing to hit them; it is refusing to take them off
-  * their route for anything short of going down. See `engage`.
+  * A pedestrian on a crossing, and a member of the choreographed Scramble cast, are BOTH
+  * valid targets. Excluding either made the middle of a scramble crossing -- most of this
+  * map, and 74-85% of the population -- a place where combat silently did nothing: the live
+  * QA threw punches at a crowd 8 cm away and every one of them missed, because every body
+  * near the player was cast.
+  *
+  * Being hit is safe for them because `simulation.step` tests `struck` BEFORE it hands a
+  * choreographed pedestrian to `choreography.move`, so a falling body is carried by the
+  * knock-down path and not by its track. This is the same route a car already takes through
+  * `strike`. What protects the signals is not refusing to hit them; it is refusing to take
+  * them off their route for anything short of going down. See `engage`.
   */
- const eligible=(p,crowd)=>p.active&&!p.controlled&&!p.choreographed&&p.struck===undefined&&
+ const eligible=(p,crowd)=>p.active&&!p.controlled&&p.struck===undefined&&
   !p.combatDead&&p.archetype!=='kid'&&crowd.network.ctx.safe(p.x,p.z,.28);
 
  /** The best target for a swing landing right now, or null. Range and arc, not nearest. */
@@ -76,17 +92,24 @@ export function createMeleeCombat({onWitness=null}={}){
  /**
   * Make a pedestrian hostile.
   *
-  * A pedestrian who is mid-crossing is NOT pulled off their route to fight. Stopping them
-  * where they stand would hold their signal group while the controller waits for the crossing
-  * to clear, and eight of those is what froze every signal on the map once before. They take
-  * the damage and the reaction and keep walking; only going down takes them off the route,
-  * and that happens through `crowd.strike`, which releases the group properly.
+  * A pedestrian who is mid-crossing, or who is part of the choreographed Scramble cast, is
+  * NOT pulled off their route to fight. Stopping one where they stand would hold their signal
+  * group while the controller waits for the crossing to clear, and eight of those is what
+  * froze every signal on the map once before; a cast member would in any case be moved back
+  * onto their track by `choreography.move` on the very next tick, so the two would fight over
+  * the body every frame. They take the damage and the reaction and keep walking.
+  *
+  * Only going down takes them off the route, and that happens through `crowd.strike`, which
+  * releases the group properly and is handled ahead of the choreography in `simulation.step`.
+  *
+  * The hostility window is still opened, so a cast member who is punched and then reaches the
+  * far kerb turns and fights -- see the retaliation filter below.
   */
  function engage(crowd,p,state){
   p.combatHealth??=100;
   p.combatTarget='player';
   p.combatUntil=crowd.time+COMBAT.hostileSeconds;
-  if(!p.crossing){
+  if(!onRails(p)){
    crowd.leave(p);
    p.combatNext=Math.max(p.combatNext??0,crowd.time+COMBAT.npcWindup);
    p.state='fighting';p.speed=0;p.heading=angleTo(p,state);
@@ -179,8 +202,11 @@ export function createMeleeCombat({onWitness=null}={}){
     }
    }
 
+   // Only pedestrians whose movement is their own may be walked toward the player and
+   // stopped to fight. Someone on a track or a crossing keeps going, and picks the fight up
+   // when they are off it, while the hostility window lasts.
    const hostiles=nearby(crowd,state.x,state.z,COMBAT.notice)
-    .filter(p=>eligible(p,crowd)&&p.combatTarget==='player'&&p.combatUntil>crowd.time&&!p.crossing);
+    .filter(p=>eligible(p,crowd)&&p.combatTarget==='player'&&p.combatUntil>crowd.time&&!onRails(p));
    for(const p of hostiles){
     const d=Math.hypot(state.x-p.x,state.z-p.z);
     p.heading=angleTo(p,state);p.state='fighting';p.speed=0;

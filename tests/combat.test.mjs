@@ -376,3 +376,66 @@ test('a pedestrian punched on a crossing fights back once they are off it',()=>{
  run(melee,c,p,3);
  assert.ok(p.state.health<before,'the retaliating pedestrian never landed a punch');
 });
+
+// The bug the live scene found and every test here missed: `eligible` excluded
+// `p.choreographed`, and the choreographed Scramble cast is 74-85% of the population. Six
+// punches at a crowd 8 cm away all missed, because every body within reach was cast. Every
+// test in this file builds its NPCs with `choreographed` falsy, so none of them could see it.
+//
+// Being hit is safe for a cast member: `simulation.step` tests `struck` BEFORE it hands a
+// choreographed pedestrian to `choreography.move`, so a falling body is carried by the
+// knock-down path, not by its track. A car has always been able to do this through `strike`.
+const cast=(id,x,z,extra={})=>npc(id,x,z,{choreographed:true,mode:'scramble',state:'crossing',
+ track:{distance:1,length:20,forward:true},...extra});
+
+test('the choreographed Scramble cast CAN be punched',()=>{
+ const target=cast(1,0,1.0);
+ const c=crowd([target]),p=player(),melee=createMeleeCombat();
+ melee.request();run(melee,c,p,1.2);
+ assert.equal(melee.snapshot().hits,1,'the punch missed a cast member standing 1 m in front');
+ assert.equal(target.combatHealth,100-COMBAT.playerDamage);
+});
+
+test('a cast member is not taken off their track to fight',()=>{
+ const target=cast(1,0,1.0);
+ const c=crowd([target]),p=player(),melee=createMeleeCombat();
+ melee.request();run(melee,c,p,1.2);
+ // `choreography.move` owns state and speed every tick; stopping them here would have the
+ // two writing over each other, and would hold their signal group besides.
+ assert.equal(target.state,'crossing','the cast member was stopped where they stood');
+ assert.equal(c.log.left.includes(target.id),false,'a survivable hit released the signal group');
+ assert.ok(target.track,'the track was discarded');
+ // ...but they remember it.
+ assert.equal(target.combatTarget,'player');
+ assert.ok(target.combatUntil>c.time);
+ // And they never start walking at the player while they are still cast.
+ const x=target.x,z=target.z;
+ run(melee,c,p,2);
+ assert.equal(target.x,x,'the retaliation loop dragged a cast member off their track');
+ assert.equal(target.z,z);
+});
+
+test('a fatal hit on a cast member goes through strike, not around it',()=>{
+ const target=cast(1,0,1.0,{combatHealth:COMBAT.playerDamage});
+ const c=crowd([target]),p=player(),melee=createMeleeCombat();
+ melee.request();run(melee,c,p,1.2);
+ assert.equal(target.combatDead,true,'the cast member survived a fatal punch');
+ assert.equal(c.log.struck.length,1,'the body was knocked down outside the simulation');
+ assert.equal(c.log.struck[0].id,target.id);
+ // `strike` calls `leave` itself, which is what releases the signal group.
+ assert.ok(c.log.left.includes(target.id),'a fatal hit did not release the group');
+});
+
+test('a cast member fights back once they are no longer cast',()=>{
+ const target=cast(1,0,1.0);
+ const c=crowd([target]),p=player(),melee=createMeleeCombat();
+ melee.request();run(melee,c,p,1.2);
+ assert.ok(target.combatHealth<100);
+ // They finish the crossing and are recycled onto a sidewalk route.
+ target.choreographed=false;target.crossing=null;target.track=null;
+ run(melee,c,p,.5);
+ assert.equal(target.state,'fighting','leaving the cast did not release them to fight');
+ const before=p.state.health;
+ run(melee,c,p,3);
+ assert.ok(p.state.health<before,'the ex-cast pedestrian never landed a punch');
+});

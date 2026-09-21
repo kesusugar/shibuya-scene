@@ -58,7 +58,7 @@ cdb6271  RUN 6.7: near-pool budgets on every tier
 | 7B | HQ crowd integrated into Shibuya | **COMPLETE** |
 | 7C | HQ crowd colour / lighting integration | **COMPLETE** |
 | 7 | NPC life / behaviour states | **WIP ONLY — NOT VERIFIED, NOT COMPLETE** |
-| 8 | Melee combat phases | not started |
+| 8 | Melee combat phases + mass crowd reaction | **COMPLETE** |
 | 9 | Knockdown / death / recovery | not started |
 | 10 | Vehicle enter / exit state machine | not started |
 | 11 | Carjacking | not started |
@@ -674,6 +674,309 @@ than tone. Structurally the colour cannot shift with detail: every lane shares o
 1,974–1,978 HQ pedestrians, 0 skeletons, 0 mixers, 4 crowd lanes (8 draw calls with two LODs
 in use), offline prebake unchanged, 295/295 tests, typecheck and build clean.
 
+## 9e. RUN 8 — melee with a hit window
+
+The old melee applied damage in the same tick as the input: `request()` set a flag, the next
+update chose a target and subtracted health, and `attackTime` was only a countdown for the
+renderer. A punch could land before the arm moved, and **could not miss** — anyone in range at
+the press was hit.
+
+### Attack state machine
+
+`IDLE → WINDUP → ACTIVE → RECOVERY → IDLE`. A swing is an object with a clock; the hit test
+runs inside the clip's own active window, at most once per swing. A press during recovery is
+dropped rather than queued — there is no input buffering, so you cannot punch faster than the
+arm moves.
+
+### The timings are measured, not chosen
+
+`qa/gta-upgrade/punch-timing.mjs` samples each clip at 120 steps, finds which hand travels
+furthest from the pelvis, and reads the window where that hand is within 12% of full
+extension — the part of the swing where a fist would be touching someone.
+
+| clip | duration | hand | wind-up | **ACTIVE** | recovery | peak |
+| --- | ---: | --- | ---: | ---: | ---: | ---: |
+| `Punch` | 0.867 s | LEFT | 0–0.188 | **0.188–0.368** | 0.368–0.867 | 0.202 |
+| `PunchCross` | 1.000 s | RIGHT | 0–0.233 | **0.233–0.508** | 0.508–1.000 | 0.400 |
+
+They turn out to be a natural one-two — a left jab and a right cross — so alternating them
+reads as combination punching rather than the same arm twice. That is a property of the clips,
+found by measuring. `PunchCross` was baked and unused until this run.
+
+### Crossing the window, not landing in it
+
+The hit test asks whether the **step crossed** the active window, not whether it landed inside
+it. A frame long enough to step over a 180 ms window would otherwise skip the punch entirely.
+At 60 Hz that never happens, but a stall, a background tab, or a test on coarse steps all
+produce it — and a punch that silently does nothing when the frame rate dips is worse than one
+that lands a frame late. **The NPC swing uses the same rule**; having one and not the other
+meant a long frame quietly disarmed the crowd while the player kept punching.
+
+### Combat on a crossing, without breaking the crossing
+
+Pedestrians mid-crossing used to be excluded from targeting entirely, which made the middle of
+a scramble crossing — most of this map — a place where combat silently did nothing.
+
+They are now valid targets. What protects the signals is not refusing to hit them; it is
+refusing to take them off their route for anything short of going down:
+
+- a **survivable** hit damages and alarms them, and they keep crossing. `crossing`, `queueKey`
+  and their signal group are untouched, and they are never stopped to fight.
+- a **fatal** hit goes through `crowd.strike()`, which calls `leave()` first — so the group is
+  **released**, never abandoned.
+
+Both halves are pinned by tests, because a pedestrian stopped mid-crossing holds their signal
+group, and the controller stops the clock for the whole map while any group is held.
+
+### One authority
+
+The **simulation** decides who was hit, how much health they lost, and whether they go down.
+The HQ crowd renderer only shows it — it reads `struck` and `combatDead` off the pedestrian,
+exactly as it already does for a car. Nothing in `combat.mjs` reaches into the HQ crowd.
+
+### The crowd sees it
+
+A punch raises a **witness event** — where it happened, how bad, and how far that carries —
+which `src/life/hq-layer.mjs` turns into reactions. `combat.mjs` never scans the crowd itself;
+it hands the event to whoever is listening and the listener owns the bounding.
+
+| | value |
+| --- | --- |
+| radius | 11 m |
+| severity, connecting punch | 0.72 |
+| severity, punch that misses | 0.40 (0.72 × 0.55) |
+| bands | `felt ≥ 0.52` FLEE · `≥ 0.30` AVOID · `≥ 0.12` LOOK |
+
+`felt = severity × (1 − d/radius) / nerve`, and **nerve is per-citizen**, hashed from the same
+id their appearance comes from, spread over 0.55–1.45. So one punch produces a spread of
+responses rather than a chorus, and the same person is reliably the nervous one. The rule is
+borrowed from `src/life/awareness.mjs`; the storage deliberately is not, because two thousand
+JS state objects is the thing this architecture exists to avoid.
+
+A punch that misses still raises an event at reduced severity. Bystanders reacting to a swing
+that connected with nobody is the correct behaviour — they saw someone throw a punch.
+
+Someone already fleeing, or already off their feet, is **not made to react again**. The second
+punch in a fight therefore moves far fewer people than the first, and that is not the crowd
+ignoring it.
+
+### NPC retaliation
+
+A struck pedestrian becomes hostile for 14 s, closes to `range × 0.72`, and swings on the same
+phase model the player does: a wind-up, then damage when the arm is out. A player who has to
+respect a hit window while the crowd lands instantly is not fighting, they are being audited.
+
+| | player | NPC |
+| --- | ---: | ---: |
+| damage | 34 | 14 (+0–4 by id) |
+| reach | 1.75 m | 1.75 m |
+| arc | ±1.05 rad | — |
+| cooldown | clip recovery | 1.05 s (+0–0.36 by id) |
+
+Three punches kill a pedestrian; eight kill the player. The arc matters: a punch is not a
+radius, and someone directly behind you cannot be hit.
+
+### Player death and restart
+
+`hurt()` takes health, holds a 0.34 s hurt lock so one frame of overlap cannot delete the
+player, and at zero sets `alive=false` with `hitBy='fight'`. The scene shows
+**「喧嘩で倒れました」** and a **「やり直す」** button, which calls `revive()` → `place()`:
+health 100, alive, timers cleared, back at the start point. A dead player cannot swing and
+cannot take further damage.
+
+### Cost
+
+`qa/gta-upgrade/combat-cost.mjs`, 600 frames at 1/60 s with 12 hostiles already engaged.
+CPU only — no frame rate is claimed from this hardware.
+
+| people | melee µs/frame | witness ms/punch | reacted (first punch) | seen |
+| ---: | ---: | ---: | ---: | ---: |
+| 64 | 14.5 | 0.074 | 60 | 60 |
+| 256 | 14.0 | 0.098 | 93 | 163 |
+| 1024 | 17.1 | 0.330 | 93 | 206 |
+| 1978 | 11.5 | 0.558 | 93 | 206 |
+
+**`melee.update` is flat in population** — 1,978 people cost no more than 64, because the fight
+only ever walks the grid cells inside `notice` (4.5 m). At ~15 µs it is under 0.1% of a 16.7 ms
+frame.
+
+**`witness` is not flat**, and the reason is `grid.rebuild`, which is O(population) per call.
+0.56 ms at full crowd, against roughly two punches a second, is ~1.1 ms/s — acceptable, and
+recorded here because it is the term that would matter if punches ever became rapid.
+
+The people reacting saturates at 93 of 206 seen, which is the bounding working: density inside
+11 m stops growing once the disc is full, so a bigger city does not make a bigger reaction.
+
+### Tests
+
+`tests/combat.test.mjs` is new — the PRE-RUN 8 audit found **zero** combat tests. 22 cases.
+Two of them contradict each other on purpose, so neither can pass vacuously:
+
+- *DAMAGE DOES NOT HAPPEN ON THE INPUT TICK* — the bug this run exists for.
+- *damage lands inside the active window* — and it does happen, later.
+
+The rest pin the things that were previously unpinned: a punch at nobody misses; someone out
+of range, or behind, misses; a target who walks away during the wind-up is missed and one who
+walks **in** is hit; one swing damages at most once; a press during recovery does not start a
+second swing; the two clips alternate; a fatal hit goes through `crowd.strike`, not around it;
+a pedestrian on a crossing **can** be hit; a light hit does **not** take them off the crossing
+and a fatal one **does** use the formal `leave` path; a witness event fires once per swing and
+a miss fires a weaker one; the NPC swings on the same model the player does; a dead player
+cannot swing; and nothing produces a NaN or a stuck phase.
+
+`tests/hq-layer.test.mjs` gained three: a punch is seen by the people near it **and only by
+them**; witnesses do not all react the same way and they recover; a punch in a dense crowd is
+seen by a useful number of people.
+
+The death loop (case 22) runs against the **real controller**, not the stub the rest of the
+file uses — testing a copy of `hurt` would have proved nothing about the game. Both of its
+guards were mutation-checked: removing `state.alive` from the swing start, and clamping health
+to 1 instead of 0, each fail it.
+
+### A bug RUN 8's QA found, which was not RUN 8's
+
+The browser QA raised the scene's shader-error banner —
+「描画シェーダーのコンパイルに失敗しました」— and the first read of it was wrong: the
+browser had been open for over an hour, so a stale WebGL context looked like the obvious
+answer. It was not. A **fresh** browser raised the same banner, at a reproducible moment: about
+35 seconds into player mode, never in observer mode.
+
+The captured log says exactly what happened:
+
+```
+ERROR: 0:76: 'instanceColor' : redefinition
+```
+
+`src/traffic/vehicle-shadow.mjs` declared `attribute vec3 instanceColor` inside its own vertex
+shader. A `ShaderMaterial` — unlike a `RawShaderMaterial` — is given three.js's vertex prefix,
+and that prefix already declares `instanceColor` under the very same `#ifdef`
+(`WebGLProgram.js`). The second declaration is a redefinition, so:
+
+- the program never compiled,
+- the renderer logged `useProgram: program not valid` on every frame,
+- **every vehicle in the scene lost its contact shadow**, and
+- the scene told the user that roads and buildings might be missing, which was not the problem.
+
+Why it only appeared in player mode: `USE_INSTANCING_COLOR` is defined only once an
+`instanceColor` buffer exists, and that buffer is created by the first `setColorAt`. Until a
+vehicle shadow is given its falloff exponent, the define is absent, the redundant declaration
+is compiled out, and the shader is fine. Nothing to do with combat.
+
+Fixed by deleting the declaration and keeping the guard. `tests/vehicle-shape.test.mjs` now
+pins it: no custom shader may declare an attribute the renderer already injects. The test was
+checked against the unfixed file and fails there.
+
+**The lesson for the next RUN.** No unit test could have caught this — it needs a real GL
+context, a real compile, and a coloured instance. The banner had been on screen in earlier
+QA screenshots and was read as scenery. A red banner is a blocker whatever RUN raised it.
+
+### Browser QA, in the real scene
+
+`?qa=1&tier=high&time=day&camera=scramble&hq=1`, headless Chromium on SwiftShader. **No frame
+rate is reported** — this hardware cannot produce performance evidence, only counts, CPU
+timings, errors, and whether a thing renders at all.
+
+| scenario | result | evidence |
+| --- | --- | --- |
+| player mode enters | **WORKS** | alive, health 100 |
+| witnesses react to a punch | **WORKS** | peak **251** people reacted, `witnessMs` 2.1 |
+| witnesses recover | **WORKS** | `reacting` 88, `down` 0, `disowned` 0 |
+| **crossings keep running during combat** | **WORKS** | **22 completed, 0 abandoned, 0 stuck, 0 queued** |
+| HQ scale preserved | **WORKS** | 1,945 HQ bodies, **0 skeletons, 0 mixers**, 12 draw calls |
+| first air punch | inconclusive | sampled before the HQ crowd had spawned: `candidates=0` |
+| player takes damage from the crowd | **NOT OBSERVED** | health stayed 100 — see below |
+
+The line that matters most is the crossing one. Combat now happens in the middle of a scramble
+crossing, and across the run the signals kept cycling with **nothing abandoned and nothing
+stuck** — which is the failure mode this design was shaped around.
+
+`witnessMs` in the live scene is **2.1 ms**, against 0.56 ms in the offline bench at the same
+population. The bench does not carry the scene's grid occupancy; the live figure is the one to
+believe, and it is the number to watch if punching ever becomes rapid.
+
+### The bug that mattered: combat could not touch the crowd
+
+RUN 8's first browser QA reported witnesses reacting in the hundreds and **not one knockdown**.
+Six punches at a pedestrian **8 cm away**, standing still, `waiting`, not crossing — nothing.
+`melee.snapshot()` was not exposed to QA at the time, so the run could see the crowd *react*
+to a punch but could not tell a hit from a miss. That metric was added
+(`__SHIBUYA_QA__.metrics.melee`) and the answer arrived immediately:
+
+```
+punch 5  melee={"swings":2,"hits":0,"misses":1,...}
+```
+
+Two swings, **zero hits**. Reproducing `eligible`'s clauses against the live simulation named
+the failing one straight away — every pedestrian within reach carried `choreographed: true`:
+
+| id | distance | in range | in arc | choreographed |
+| --- | ---: | --- | --- | --- |
+| 1115 | 0.06 m | yes | no | **yes** |
+| 88 | 0.08 m | yes | no | **yes** |
+| 669 | 0.24 m | yes | **yes** | **yes** |
+| 149 | 0.40 m | yes | no | **yes** |
+| 59 | 0.43 m | yes | no | **yes** |
+
+`eligible` excluded `p.choreographed`. The choreographed Scramble cast is **74–85% of the
+population** (`ScrambleChoreography.refill`: `target = total × 0.74…0.85`) — it *is* the crowd
+in the crossing. Combat was therefore switched off exactly where the game happens, and the
+one pedestrian in arc was cast like all the others.
+
+**Why the exclusion was wrong.** `simulation.step` tests `struck` **before** it hands a
+choreographed pedestrian to `choreography.move`:
+
+```js
+if(p.struck!==undefined){p.struck+=dt;p.speed=0;this.fly(p,dt); ... continue;}
+...
+if(p.choreographed)return this.choreography.move(p,dt);
+```
+
+A falling body is carried by the knock-down path, not by its track. **A car has always been
+able to knock the cast down through `strike`.** Only a fist could not.
+
+**The fix** is the crossing rule, generalised. `onRails(p) = p.crossing || p.choreographed`:
+
+- they **can** be hit, damaged, alarmed and killed;
+- they are **never** stopped to fight, because `choreography.move` would put them back on the
+  track the next tick and the two would write over each other every frame — and because
+  stopping one mid-crossing holds their signal group;
+- the hostility window still opens, so a cast member who is punched and later leaves the cast
+  turns and fights.
+
+**Verified in the live scene, end to end:**
+
+| | before the fix | after |
+| --- | ---: | ---: |
+| swings | 2 | 3 |
+| hits | **0** | **3** |
+| misses | 1 | 0 |
+| NPC deaths | 0 | **1** |
+| `sim.struck` | 0 | **1** |
+| GPU crowd `KNOCKDOWN` / `down` | 0 / 0 | **1 / 1** |
+
+**Why no unit test caught it.** Every NPC in `tests/combat.test.mjs` was built with
+`choreographed` falsy — the helper never set it, so 23 passing cases all tested the 15–26% of
+the population combat already worked on. Four cases now build a cast member explicitly, and
+each fails against the old `eligible`.
+
+**A frame-rate artefact, not a bug.** Sixteen key presses produced three swings. `FrameGate`
+clamps `dt` to 0.1 s, so on a renderer reporting 0.2 FPS a 0.867 s clip needs nine frames and
+takes about six real seconds; a press during that recovery is dropped by design. At 60 Hz the
+clamp never engages. This is measurement noise from SwiftShader, and it is the reason the kill
+needed a small viewport to reach in reasonable time.
+
+### Not verified live
+
+- **A visual frame of a body on the ground.** The knockdown is proven by numbers above
+  (`KNOCKDOWN=1`, `down=1`, `sim.struck=1`), but the viewport small enough to reach a kill
+  quickly is also small enough that the HUD covers the crowd. The impact frames were captured
+  in a spot where the camera sits inside the crowd and the player's arm is occluded.
+- **NPC retaliation damaging the player.** Health stayed at 100 throughout. At 0.2 FPS an NPC
+  needs its own wind-up plus a 1.05 s cooldown per swing, and the player was never held still
+  long enough near a non-cast pedestrian. Pinned by unit tests, not observed in the browser.
+- **A full 108-second signal cycle under combat load** — as before RUN 8.
+
+
 ## 10–15. Not yet implemented
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
@@ -766,6 +1069,29 @@ threshold. Two speed-only filters were tried first and each broke a different co
 **Pelvis displaced backwards instead of down, three separate times.** The skeleton is Z-up in
 bone space. See §5 — this is the single most repeated mistake in this project.
 
+**`'instanceColor' : redefinition` — every vehicle lost its shadow.** A `ShaderMaterial` is
+given three.js's vertex prefix, which already declares `instanceColor` under `#ifdef
+USE_INSTANCING_COLOR`; `src/traffic/vehicle-shadow.mjs` declared it a second time. The program
+never compiled, the frame log filled with `useProgram: program not valid`, and the scene told
+the user roads and buildings might be missing. It only appeared once a `setColorAt` had
+created the buffer that defines the macro, which is why it looked like a player-mode problem.
+Found by RUN 8's browser QA; no unit test could see it, so `tests/vehicle-shape.test.mjs` now
+asserts that no custom shader declares an attribute the renderer injects.
+**A red banner in a QA screenshot is a blocker, not scenery** — this one had been on screen in
+earlier runs and was read past.
+
+**Combat silently did nothing to 74-85% of the crowd.** `eligible` excluded
+`p.choreographed`, and the choreographed Scramble cast IS the crowd in the crossing. Punches at
+a pedestrian 8 cm away all missed. A car could always knock the cast down through `strike` --
+`simulation.step` tests `struck` before it hands a choreographed pedestrian to
+`choreography.move` -- so only the fist was blocked. Every NPC in the combat tests was built
+with `choreographed` falsy, so 23 passing cases tested only the minority the code already
+worked on. **When a test helper omits a flag, it is testing the flag's absence.**
+
+**Reading a browser symptom as environment before testing it.** The first diagnosis of the
+banner above was "the browser has been open for an hour". A clean browser reproduced it in 35
+seconds. Check the fresh case before blaming the harness.
+
 ## 17. Files that matter
 
 | Path | What it is |
@@ -795,7 +1121,11 @@ bone space. See §5 — this is the single most repeated mistake in this project
 | `src/life/awareness.mjs` | **RUN 7 WIP** — NPC perception / life states, unverified |
 | `src/life/simulation.mjs` | crowd sim: routes, crossings, `scatter`, `strike`, signals |
 | `src/player/controller.mjs` | player movement and input |
-| `src/player/combat.mjs` | melee, health, damage |
+| `src/player/combat.mjs` | **RUN 8** — phased melee: swing clock, hit window, witness events |
+| `src/player/attack-timing.mjs` | **RUN 8** — the measured clip windows; generated, not chosen |
+| `tests/combat.test.mjs` | **RUN 8** — 23 cases; the audit found zero before this |
+| `qa/gta-upgrade/punch-timing.mjs` | **RUN 8** — measures each punch clip's active window |
+| `qa/gta-upgrade/combat-cost.mjs` | **RUN 8** — melee and witness CPU against population |
 | `src/player/vehicle-transition.mjs` | enter / exit sequencing (RUN 10 target) |
 | `src/player/vehicle-dynamics.mjs` | driving model |
 | `src/player/pedestrian-threat.mjs` | oncoming-car prediction; feeds awareness |
@@ -851,6 +1181,25 @@ bone space. See §5 — this is the single most repeated mistake in this project
 - Foot IK is player-only in the solver's *design intent*; RUN 6 gives it to up to 8 near
   humanoids under an explicit budget. Beyond that is unmeasured.
 - `npm run test:legacy` is an audit tool, not a merge gate.
+- **A punched pedestrian on a crossing, or in the choreographed Scramble cast, keeps walking.**
+  They take the damage, the alarm and the reaction, and they can be killed — but they are not
+  stopped to fight. Stopping one mid-crossing holds their signal group and freezes every signal
+  on the map, and a cast member would be put back on their track by `choreography.move` the
+  next tick. Since the cast is 74–85% of the population, this means **most of the crowd can be
+  hit and killed but will not brawl with you**; the ones that fight back are the sidewalk
+  pedestrians and anyone who has left the cast inside their 14 s hostility window. A deliberate
+  trade, not an oversight: see §9e.
+- **`witness` rebuilds the crowd grid on every call**, which is O(population): 0.07 ms at 64
+  people, 0.56 ms at 1,978. Two punches a second is ~1.1 ms/s and acceptable; anything faster
+  than that would need the rebuild shared with `sync` rather than repeated.
+- **There is one punch combination and no combos.** `Punch` and `PunchCross` alternate. There
+  is no input buffering — a press during recovery is dropped, not queued — so the rhythm is
+  the clips' own. Blocking, dodging, grappling and weapons do not exist.
+- **The NPC hit reaction is the existing `Hit`/knockdown chain, not a directional one.** A
+  punch from the front and a punch from behind produce the same animation. `hit` remains a
+  **C** for the reason recorded above.
+- **The shader-compile banner appears in this headless SwiftShader browser.** See §9e; it is
+  an environment result, recorded with what was and was not established about it.
 
 ## 19. Optional future polish
 

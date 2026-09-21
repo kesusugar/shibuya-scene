@@ -65,6 +65,7 @@ next-env.d.ts
 !/qa/gta-upgrade/lodpop.mjs
 !/qa/gta-upgrade/signalcycle.mjs
 !/qa/gta-upgrade/punch-timing.mjs
+!/qa/gta-upgrade/combat-cost.mjs
 !/qa/gta-upgrade/hq-vehicle.mjs
 !/qa/gta-upgrade/hq-ladder.mjs
 !/qa/gta-upgrade/feet-compare.mjs
