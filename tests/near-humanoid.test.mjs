@@ -49,11 +49,12 @@ test('the pool reports what it deployed, and stays within its own limits',async(
  pool.dispose();
 });
 
-test('the pool stays bounded once the humanoid asset arrives',async()=>{
- // This is the case the bound exists for, and the earlier version of this test could not
- // reach it: the growth condition that can run away is "a candidate wants a humanoid and
- // every free slot is baked", which requires a humanoid asset to exist at all. Without one
- // the pool simply never takes that branch, and a broken bound passes unnoticed.
+test('the pool stays bounded, and aims, under a crowd dense enough to churn',async()=>{
+ // Density is the whole point of this test. An earlier version used 40 people and passed
+ // against a pool that was in fact building 27 humanoids against a budget of 8: below about
+ // a hundred, slots are never recycled fast enough for the fault to appear. The scramble
+ // crossing carries ~1978 people and the scene reproduced the 28. 300 is the smallest count
+ // measured (qa/gta-upgrade/poolprobe.mjs) that reproduces it reliably.
  const {readFileSync}=await import('node:fs');
  const {GLTFLoader}=await import('three/addons/loaders/GLTFLoader.js');
  const {humanoidCitizen}=await import('../src/player/character-asset.mjs');
@@ -67,30 +68,47 @@ test('the pool stays bounded once the humanoid asset arrives',async()=>{
  const pool=createNearCharacters('high');
  pool.setHumanAsset(asset);
  const people=[];
- for(let id=0;id<40;id++)
-  people.push({id,active:true,archetype:'adult',x:id*.4,z:0,heading:0,speed:1,
-   renderX:id*.4,renderZ:0,height:0,reactionUntil:-1});
- // Rotate who is nearest, so slots are released and re-taken by different people and the
- // humanoid/baked composition has to churn. This is the hardest case the pool sees, and what
- // it pins is the budgets -- capacity, humanoid count, foot IK count -- holding under churn.
- for(let frame=0;frame<500;frame++){
+ for(let id=0;id<300;id++)people.push({id,active:true,archetype:'adult',
+  x:0,z:0,heading:0,speed:1.3,renderX:0,renderZ:0,height:0,reactionUntil:-1,
+  ang:id*.41,rad:2+(id*7%26),drift:(id%2?1:-1)*(.2+(id%5)*.15)});
+
+ let peakHumanoids=0,peakCapacity=0,peakIK=0,aimed=0,samples=0;
+ for(let frame=0;frame<900;frame++){
   for(const p of people){
-   const angle=(p.id*.7+frame*.05);
-   p.x=p.renderX=Math.cos(angle)*(4+(p.id%5));
-   p.z=p.renderZ=Math.sin(angle)*(4+(p.id%5));
+   p.rad+=p.drift*(1/60);if(p.rad>34)p.rad=1;if(p.rad<1)p.rad=34;p.ang+=.02;
+   p.x=p.renderX=Math.cos(p.ang)*p.rad;p.z=p.renderZ=Math.sin(p.ang)*p.rad;
   }
-  pool.update(people,{x:0,z:0},1/60,frame/60);
+  const selected=pool.update(people,{x:0,z:0},1/60,frame/60);
+  const now=pool.inspect();
+  peakHumanoids=Math.max(peakHumanoids,now.humanoidSlots,now.humanoidsActive);
+  peakCapacity=Math.max(peakCapacity,now.capacity);
+  peakIK=Math.max(peakIK,now.footIK);
+  // Does the fidelity land on the people the camera is looking at? Rank the held citizens by
+  // distance and count how many of the nearest few are wearing a humanoid.
+  if(frame>120&&frame%10===0){
+   const nearest=[...selected].map(id=>people.find(q=>q.id===id))
+    .sort((a,b)=>Math.hypot(a.x,a.z)-Math.hypot(b.x,b.z)).slice(0,HUMANOID_LIMITS.high);
+   if(nearest.length){
+    let hit=0;for(const q of nearest)if(pool.bodyOf(q.id)==='humanoid')hit++;
+    aimed+=hit/nearest.length;samples++;
+   }
+  }
  }
- const after=pool.inspect();
- assert.ok(after.capacity<=NEAR_LIMITS.high,
-  `the pool grew to ${after.capacity} slots against a limit of ${NEAR_LIMITS.high}`);
- assert.ok(after.humanoidsActive>0,'the humanoid asset was never used');
- assert.ok(after.humanoidsActive<=HUMANOID_LIMITS.high,
-  `${after.humanoidsActive} humanoids against a budget of ${HUMANOID_LIMITS.high}`);
- assert.ok(after.footIK<=NEAR_IK_LIMITS.high,
-  `${after.footIK} foot IK slots against a budget of ${NEAR_IK_LIMITS.high}`);
+ assert.ok(peakCapacity<=NEAR_LIMITS.high,
+  `the pool grew to ${peakCapacity} slots against a limit of ${NEAR_LIMITS.high}`);
+ assert.ok(peakHumanoids>0,'the humanoid asset was never used');
+ assert.ok(peakHumanoids<=HUMANOID_LIMITS.high,
+  `${peakHumanoids} humanoids against a budget of ${HUMANOID_LIMITS.high}`);
  // Without a ground context no slot may take foot IK at all.
- assert.equal(after.footIK,0,'foot IK without a ground query');
+ assert.equal(peakIK,0,'foot IK without a ground query');
+
+ // The budget holding is not enough on its own: eight humanoids spent on the eight people
+ // furthest away would satisfy every assertion above and miss the entire point of the run.
+ // Measured at 84-85%; the shortfall is the swap hysteresis and one swap per frame, both
+ // deliberate. 70% is a floor with room, not the measurement.
+ const aim=aimed/samples;
+ assert.ok(aim>=.7,
+  `only ${(aim*100).toFixed(0)}% of the nearest citizens wear a humanoid`);
  pool.dispose();
 });
 

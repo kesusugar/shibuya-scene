@@ -91,49 +91,89 @@ export function createNearCharacters(tier='high',{ctx=null}={}){
    const limit=NEAR_LIMITS[tier]??4;
    const candidates=people.filter(p=>p.active&&!p.controlled&&p.archetype!=='kid'&&p.struck===undefined&&Math.hypot(p.x-focus.x,p.z-focus.z)<(selected.has(p.id)?30:25))
     .map(p=>({p,score:Math.hypot(p.x-focus.x,p.z-focus.z)-(selected.has(p.id)?3:0)-(p.combatTarget?40:0)-(p.reactionUntil>clock?20:0)})).sort((a,b)=>a.score-b.score||a.p.id-b.p.id).slice(0,limit);
-   // The nearest by score get the humanoid; the priority order itself is untouched, so a
-   // combat target or a reacting pedestrian still outranks someone merely closer.
-   const humanLimit=human?Math.min(limitFor(HUMANOID_LIMITS),candidates.length):0;
-   const ikLimit=Math.min(limitFor(NEAR_IK_LIMITS),humanLimit);
-   for(let i=0;i<candidates.length;i++)candidates[i].wantsHuman=i<humanLimit;
+   // The priority order is untouched by any of this: a combat target or a reacting pedestrian
+   // still outranks someone merely closer, and only then does body quality follow rank.
 
-   // Grow by one per frame, only while player mode needs a visible rig. No scene-startup work.
+   // Grow by one slot per frame, only while player mode needs a visible rig. No scene-startup
+   // work, and never more slots than the tier allows.
    //
-   // Two reasons to add a slot: there are fewer slots than candidates, or a candidate wants a
-   // humanoid and every free slot is baked. The second exists because a slot's kind is fixed
-   // when it is built.
+   // A slot's kind comes from the POOL'S OWN QUOTA, not from the rank of whichever candidate
+   // happens to be asking. That distinction is the whole of this block, and getting it wrong
+   // is not hypothetical: the first version of this code chose the kind from the asking
+   // candidate's rank, and a citizen who had been rank 3 kept its humanoid while drifting to
+   // rank 20, so the new rank 3 found no free humanoid and built another one. Under a crowd
+   // dense enough to churn the near radius -- 300 people, which is what a scramble crossing
+   // actually is -- that converged on 27 humanoid slots against a budget of 8. The earlier
+   // tests used 40 people and never reached the density where it shows. qa/gta-upgrade/
+   // poolprobe.mjs is the measurement, and tests/near-humanoid.test.mjs now pins it at 300.
    //
-   // `slots.length < limit` is a hard invariant rather than a fix for an observed leak. It was
-   // added on the suspicion that the second condition could run away, and then measured: with
-   // a real humanoid asset and a crowd churning through the near radius for five hundred
-   // frames, capacity converges to the candidate count and stops, with or without the bound,
-   // because free slots are reused by kind. The bound stays because the pool promises a
-   // ceiling and a promise should not rest on a convergence argument -- but it is insurance,
-   // and saying otherwise would be inventing a bug to have fixed.
-   const needed=candidates.find(c=>!slots.some(s=>s.id===c.p.id&&s.human===c.wantsHuman));
-   if(slots.length<limit&&
-      (slots.length<candidates.length||(needed&&!slots.some(s=>s.id===null&&s.human===needed.wantsHuman)))){
-    const wantHuman=needed?.wantsHuman??false;
+   // Filling the humanoid quota first is what makes the bound structural: the count can only
+   // go up by one at a time and stops at the quota, so no assignment policy below can inflate
+   // it.
+   const humanSlotCount=slots.filter(s=>s.human).length;
+   if(slots.length<limit&&slots.length<candidates.length){
+    const wantHuman=!!human&&humanSlotCount<limitFor(HUMANOID_LIMITS);
     if(!asset){asset=bakedAsset();palette.push(...new Set(Object.values(ARCHETYPES).flatMap(a=>a.colors)));
      trianglesPerRig=measure(asset);}
-    if(!wantHuman||human){
-     const source=wantHuman?human:asset;
-     // Foot IK only for the humanoid slots that are inside the budget, and only when the
-     // ground query exists. RUN 5's solver is not changed for this; it is simply given or
-     // not given a context.
-     const wantsIK=wantHuman&&ctx&&slots.filter(s=>s.ik).length<ikLimit;
-     const figure=createPlayerFigure(source,undefined,wantsIK?{ctx}:{});
-     root.add(figure.root);slots.push({figure,id:null,elapsed:0,human:wantHuman,ik:!!wantsIK});
-    }
+    const source=wantHuman?human:asset;
+    // Foot IK only for humanoid slots inside the budget, and only when a ground query exists.
+    // RUN 5's solver is not changed for this; it is given or not given a context.
+    const wantsIK=wantHuman&&!!ctx&&slots.filter(s=>s.ik).length<limitFor(NEAR_IK_LIMITS);
+    const figure=createPlayerFigure(source,undefined,wantsIK?{ctx}:{});
+    root.add(figure.root);slots.push({figure,id:null,elapsed:0,human:wantHuman,ik:wantsIK});
    }
+
    const wanted=new Set(candidates.map(c=>c.p.id));
    for(const s of slots)if(!wanted.has(s.id)){s.id=null;s.figure.hide();}
+
+   // One swap per frame, so the good bodies drift toward the camera instead of sticking to
+   // whoever reached the radius first.
+   //
+   // Holding a slot for as long as its citizen stays near is what keeps the pool quiet, but on
+   // its own it aims badly: measured over 900 frames of a churning crowd, only 18-35% of the
+   // nearest eight were the ones wearing a humanoid, because the humanoids had been claimed by
+   // people who have since walked away. So each frame the furthest-fallen humanoid holder and
+   // the highest-ranked citizen stuck on a baked figure both release their slots, and the
+   // assignment pass below -- humanoid slots first, candidates already in score order -- puts
+   // them back the right way round.
+   //
+   // HOLD is hysteresis. Without it a citizen sitting on the quota boundary would be demoted
+   // and promoted on alternate frames, which is a body swapping its clothes twice a frame.
+   const HOLD=4,quota=limitFor(HUMANOID_LIMITS);
+   if(quota>0){
+    const rank=new Map();for(let i=0;i<candidates.length;i++)rank.set(candidates[i].p.id,i);
+    let promote=null,demote=null;
+    for(const c of candidates){
+     if(rank.get(c.p.id)>=quota)break;
+     if(slots.some(x=>x.id===c.p.id&&!x.human)){promote=c.p.id;break;}
+    }
+    if(promote!==null)for(const x of slots){
+     if(!x.human||x.id===null)continue;
+     const r=rank.get(x.id)??Infinity;
+     if(r>=quota+HOLD&&(!demote||r>(rank.get(demote.id)??Infinity)))demote=x;
+    }
+    if(demote){
+     demote.id=null;demote.figure.hide();
+     const held=slots.find(x=>x.id===promote);
+     if(held){held.id=null;held.figure.hide();}
+    }
+   }
+
+   // Free humanoid slots go to the nearest candidates who do not already have a body. Held
+   // slots are never taken away mid-stride: swapping a citizen between a humanoid and a baked
+   // figure changes its wardrobe and its height, which is a pop, and the radius churns fast
+   // enough that a humanoid frees up within a second or so anyway. `freeSlots` is humanoid
+   // first and `candidates` is already score-ordered, so this hands the better bodies to the
+   // nearest without a second sort of the people.
+   const freeSlots=slots.filter(s=>s.id===null).sort((a,b)=>(b.human?1:0)-(a.human?1:0));
+   let nextFree=0;
+
    selected.clear();
    stats.humanoids=0;stats.baked=0;stats.ik=0;
-   for(const {p,wantsHuman} of candidates){
+   for(const {p} of candidates){
     let slot=slots.find(s=>s.id===p.id);
     if(!slot){
-     slot=slots.find(s=>s.id===null&&s.human===wantsHuman)??slots.find(s=>s.id===null);
+     slot=freeSlots[nextFree++];
      if(!slot)continue;
      slot.id=p.id;slot.figure.reset();
      if(slot.human){
@@ -148,7 +188,7 @@ export function createNearCharacters(tier='high',{ctx=null}={}){
     }
     selected.add(p.id);slot.elapsed+=Math.max(0,dt);
     if(slot.human)stats.humanoids++;else stats.baked++;
-    if(slot.ik&&slot.id!==null)stats.ik++;
+    if(slot.ik)stats.ik++;
     const distance=Math.hypot(p.x-focus.x,p.z-focus.z),interval=distance<12?0:1/30;
     const reaction=p.reactionUntil>clock?p.trafficReaction:p.reactionUntil+.6>clock?'recover':null;
     const state={trafficReaction:reaction,threatHeading:p.threatHeading,x:p.renderX??p.x,y:p.height??0,z:p.renderZ??p.z,heading:p.heading,speed:p.speed,alive:true,animationPhase:Math.abs(p.id)*.137,attackTime:p.combatAction>0?Math.min(.42,p.combatAction*.42):0};
@@ -157,7 +197,18 @@ export function createNearCharacters(tier='high',{ctx=null}={}){
    }
    return selected;
   },
-  setTier(value){tier=value;clear();while(slots.length>(NEAR_LIMITS[tier]??4))slots.pop().figure.dispose();},
+  /** Which body a citizen currently wears, or null if the pool is not holding them. */
+  bodyOf(id){const s=slots.find(x=>x.id===id);return s?(s.human?'humanoid':'baked'):null;},
+  setTier(value){
+   tier=value;clear();
+   // Dropping to a tier with a smaller humanoid quota has to drop humanoids, not just slots:
+   // LOW allows none at all, and popping off the end would keep whichever kind happened to be
+   // last. Humanoids over quota go first, then any slot over the pool limit.
+   let overHuman=slots.filter(s=>s.human).length-limitFor(HUMANOID_LIMITS);
+   for(let i=slots.length-1;i>=0&&overHuman>0;i--)
+    if(slots[i].human){slots.splice(i,1)[0].figure.dispose();overHuman--;}
+   while(slots.length>(NEAR_LIMITS[tier]??4))slots.pop().figure.dispose();
+  },
   inspect(){
    const humanSlots=slots.filter(s=>s.human).length;
    return {active:selected.size,capacity:slots.length,limit:NEAR_LIMITS[tier]??4,
