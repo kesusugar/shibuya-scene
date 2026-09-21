@@ -242,7 +242,7 @@ export default function Home(){
   if(!player.place()){console.warn('[Player] no standable ground at the start point');return false;}
   if(!playerMarker){playerMarker=createPlayerMarker();groups.dynamic.add(playerMarker.mesh);}
   if(!carMarker){carMarker=createPlayerMarker(MARKER.car);groups.dynamic.add(carMarker.mesh);}
-  if(!playerFigure){playerFigure=createPlayerFigure();groups.dynamic.add(playerFigure.root);}
+  if(!playerFigure){playerFigure=createPlayerFigure(undefined,undefined,{ctx});groups.dynamic.add(playerFigure.root);}
   // The crowd's own contact shadows skip the controlled slot, so the player was the one person
   // in the city standing on nothing. Same module, same single draw call, one instance.
   if(!playerShadow){playerShadow=createContactShadows(1);groups.dynamic.add(playerShadow.mesh);}
@@ -253,9 +253,11 @@ export default function Home(){
   deferredCharacter.request();
   deferredCharacter.onReady((asset:any)=>{
    if(!playerFigure||playerFigure.asset===asset)return;
-   const next=createPlayerFigure(asset);groups.dynamic.add(next.root);
+   const next=createPlayerFigure(asset,undefined,{ctx:lifeEntry.hooks.current?.network?.ctx??null});
+   groups.dynamic.add(next.root);
    next.update(player.state,0);
    playerFigure.dispose();playerFigure=next;
+   if(config.qa&&(window as any).__SHIBUYA_FIGURE__)(window as any).__SHIBUYA_FIGURE__=next;
    if(!playerMode||driving)next.hide();
   });
   if(!vehicleVisual){vehicleVisual=createVehicleVisual();groups.dynamic.add(vehicleVisual.root);
@@ -285,8 +287,12 @@ export default function Home(){
   if(sim&&!playerCar){playerCar=createPlayerVehicle(sim,ctx);if(!playerCar.spawn(player.state.x,player.state.z))console.warn('[Player] no room to park the car');}
   playerMode=true;combatDeathReported=false;controls.enabled=false;player.attach(canvas,{onExit:()=>exitPlayer(),onDrive:()=>toggleDrive(),onAttack:()=>attack()});setPlayerHit(null);setMode('player');
   (window as any).__SHIBUYA_PLAYER__=player;(window as any).__SHIBUYA_CAR__=playerCar;
+  // Foot IK is invisible from outside: a solver that never ran and a solver that ran and
+  // declined to move anything look identical on screen. Under ?qa=1 the figure and the
+  // surface it queries are reachable, so a check can tell those two apart.
+  if(config.qa){(window as any).__SHIBUYA_FIGURE__=playerFigure;(window as any).__SHIBUYA_CTX__=ctx;}
   return true;};
- const exitPlayer=()=>{if(!playerMode)return;playUI?.hide();vehicleVisual?.hide();vehicleEffects?.hide();lifeEntry.hooks.current?.setPlayerFocus(null);followCamera.reset();melee.reset();vehicleTransition.cancel();playerMode=false;driving=false;setDriving(false);playerCar?.release();playerCar=null;carMarker?.hide();playerAudio?.silence();touchPad?.hide();player?.detach();playerMarker?.hide();playerFigure?.hide();playerShadow?.begin();playerShadow?.end();releaseCrowdSlot();delete (window as any).__SHIBUYA_PLAYER__;delete (window as any).__SHIBUYA_CAR__;
+ const exitPlayer=()=>{if(!playerMode)return;playUI?.hide();vehicleVisual?.hide();vehicleEffects?.hide();lifeEntry.hooks.current?.setPlayerFocus(null);followCamera.reset();melee.reset();vehicleTransition.cancel();playerMode=false;driving=false;setDriving(false);playerCar?.release();playerCar=null;carMarker?.hide();playerAudio?.silence();touchPad?.hide();player?.detach();playerMarker?.hide();playerFigure?.hide();playerShadow?.begin();playerShadow?.end();releaseCrowdSlot();delete (window as any).__SHIBUYA_PLAYER__;delete (window as any).__SHIBUYA_CAR__;delete (window as any).__SHIBUYA_FIGURE__;delete (window as any).__SHIBUYA_CTX__;
   view.fov=50;view.updateProjectionMatrix();controls.enabled=!config.qa;setPlayerHit(null);setMode('observe');preset(currentCamera,false);};
  resize();setTier(currentTier);setTime(clock.value);setModules(system.snapshot());
  const observer=new ResizeObserver(resize);observer.observe(mount.current);

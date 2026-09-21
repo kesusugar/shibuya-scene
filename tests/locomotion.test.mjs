@@ -166,3 +166,208 @@ test('a figure blends rather than switching, and keeps walking through a punch',
  assert.ok(figure.gait.period>0);
  figure.dispose();
 });
+
+// --- RUN 5: foot IK ------------------------------------------------------------------------
+
+test('stance weight follows the measured contact window, and standing is both feet',async()=>{
+ const {stanceWeight}=await import('../src/player/foot-ik.mjs');
+ // Standing: duty of one, both feet down for the whole cycle.
+ assert.equal(stanceWeight(0,1,0),1);
+ assert.equal(stanceWeight(.5,1,.5),1);
+ // Walking: the left foot plants at phase 0 and lifts after its duty.
+ assert.ok(stanceWeight(.2,.4,0)>.9,'mid-stance is not planted');
+ assert.equal(stanceWeight(.5,.4,0),0,'planted during its own swing');
+ // The right foot is half a cycle out for a symmetric gait.
+ assert.ok(stanceWeight(.7,.4,.5)>.9);
+ assert.equal(stanceWeight(.2,.4,.5),0);
+ // Edges are faded, or the correction switches on visibly.
+ assert.ok(stanceWeight(.005,.4,0)<.2);
+});
+
+test('the two-bone solver reaches its target and keeps the knee bending the same way',async()=>{
+ const {createTwoBoneSolver}=await import('../src/player/foot-ik.mjs');
+ const {Object3D,Bone,Vector3}=await import('three');
+ const root=new Object3D();
+ const hip=new Bone();hip.position.set(0,1,0);root.add(hip);
+ const knee=new Bone();knee.position.set(0,-.45,.02);hip.add(knee);
+ const ankle=new Bone();ankle.position.set(0,-.45,0);knee.add(ankle);
+ root.updateMatrixWorld(true);
+ const solve=createTwoBoneSolver();
+ const at=new Vector3();
+ for(const target of [[0,.15,0],[0,.30,.15],[.1,.12,-.1],[0,.55,.25]]){
+  hip.rotation.set(0,0,0);knee.rotation.set(0,0,0);root.updateMatrixWorld(true);
+  solve(hip,knee,ankle,new Vector3(...target));
+  ankle.updateWorldMatrix(true,false);
+  at.setFromMatrixPosition(ankle.matrixWorld);
+  assert.ok(at.distanceTo(new Vector3(...target))<.01,
+   `${target} -> ${at.toArray().map(v=>v.toFixed(3))}`);
+  // The knee must stay in front. A solver that inverts it is worse than no solver.
+  const kneeAt=new Vector3().setFromMatrixPosition(knee.matrixWorld);
+  assert.ok(kneeAt.z>-.06,`knee folded backwards to z ${kneeAt.z.toFixed(3)}`);
+ }
+});
+
+test('a step is read as a step, not a slope',async()=>{
+ const {sampleGround}=await import('../src/player/foot-ik.mjs');
+ const {Vector3}=await import('three');
+ const out={height:0,normal:new Vector3(),edge:false};
+ // A kerb: 13 cm over nothing. Standing a sole on that normal looks like a broken ankle.
+ sampleGround({heightExact:x=>x<0?.15:.02},-.01,0,out);
+ assert.equal(out.edge,true);
+ assert.equal(out.normal.y,1);
+ // A kerb ramp: 15 cm over 1.5 m, which is the real slope this city has.
+ sampleGround({heightExact:x=>Math.max(.02,Math.min(.15,.02+(-x)*.0867))},-.75,0,out);
+ assert.equal(out.edge,false);
+ assert.ok(out.normal.y>.99&&out.normal.y<1,`normal ${out.normal.toArray()}`);
+ assert.ok(Math.abs(out.normal.x)>.001,'a ramp reported perfectly flat');
+});
+
+test('foot IK corrects a kerb and leaves flat ground alone',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const {GLTFLoader}=await import('three/addons/loaders/GLTFLoader.js');
+ const {humanoidCitizen}=await import('../src/player/character-asset.mjs');
+ const {createPlayerFigure}=await import('../src/player/figure.mjs');
+ const {Vector3}=await import('three');
+ globalThis.ProgressEvent??=class{constructor(type,init={}){Object.assign(this,{type},init);}};
+ const report=JSON.parse(readFileSync('public/data/character/citizen.json','utf8'));
+ const bytes=readFileSync('public/data/character/citizen.glb');
+ const gltf=await new Promise((res,rej)=>new GLTFLoader()
+  .parse(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),'',res,rej));
+ const asset=humanoidCitizen(gltf,report);
+
+ // `stand` is the surface the body's own position reports, which is the plane the animation
+ // is assumed to have been authored over -- on a kerb that is the pavement the character is
+ // standing on, with one foot hanging over the road.
+ const run=(surface,stand=surface(0))=>{
+  const ctx={heightExact:surface,height:surface,solid:()=>false,safe:()=>true,onRoad:()=>false};
+  const figure=createPlayerFigure(asset,undefined,{ctx});
+  const state={x:0,y:stand,z:0,heading:0,bodyHeading:0,speed:0,alive:true,vehiclePhase:0};
+  for(let i=0;i<90;i++)figure.update(state,1/60);
+  figure.root.updateMatrixWorld(true);
+  const feet=['ball_l','ball_r'].map(name=>{
+   const bone=figure.root.getObjectByName(name);
+   bone.updateWorldMatrix(true,false);
+   const at=new Vector3().setFromMatrixPosition(bone.matrixWorld);
+   return Math.abs(at.y-.0215-surface(at.x));
+  });
+  const stats={...figure.footIK.stats};
+  figure.dispose();
+  return {feet,stats};
+ };
+
+ // Flat pavement: the animation is already right, so nothing should be solved at all.
+ const flat=run(()=>.15);
+ assert.equal(flat.stats.solved,0,'solved on flat ground, where there is nothing to correct');
+
+ // Astride a kerb: pavement at 15 cm on one side, road at 2 cm on the other.
+ const kerb=run(x=>x<0?.15:.02,.15);
+ assert.ok(kerb.stats.solved>0,'did not correct a kerb');
+ assert.ok(kerb.stats.pelvisDrop>.12,'the hips did not come down to the lower foot');
+ assert.ok(kerb.stats.pelvisDrop<=.17,`the hips dropped ${kerb.stats.pelvisDrop} m`);
+ // BOTH feet, not just the low one, and to the same tolerance flat ground gets. Two bugs hid
+ // behind a looser bound here and each of them moved a foot by tens of millimetres: the
+ // pelvis drop was applied along a Z-up skeleton's local Y, so the hips went backwards
+ // instead of down; and the two-bone solve was left free to pitch the planted foot, which
+ // drove its toe into the pavement while its ankle sat exactly where it was asked to. A
+ // threshold generous enough to pass with either of those in place is not a test.
+ const flatError=Math.max(...flat.feet);
+ for(const error of kerb.feet)
+  assert.ok(error<=flatError+.004,
+   `a foot is ${(error*1000).toFixed(1)} mm off its surface astride a kerb, against `+
+   `${(flatError*1000).toFixed(1)} mm on flat ground`);
+});
+
+test('the pelvis drop is metres downwards in the world, not units along a bone axis',async()=>{
+ // This skeleton is authored Z-up -- the pelvis bone's rest position is (0.005, 0.086, 0.877)
+ // -- and a wrapper node rotates it into the scene's Y-up. `pelvis.position.y -= drop`
+ // therefore moved the hips backwards rather than down, and still reported the drop it meant
+ // to make, so every counter agreed with itself while the body was wrong. The only honest
+ // check is the world matrix.
+ const {readFileSync}=await import('node:fs');
+ const {GLTFLoader}=await import('three/addons/loaders/GLTFLoader.js');
+ const {humanoidCitizen}=await import('../src/player/character-asset.mjs');
+ const {createPlayerFigure}=await import('../src/player/figure.mjs');
+ const {Vector3}=await import('three');
+ globalThis.ProgressEvent??=class{constructor(type,init={}){Object.assign(this,{type},init);}};
+ const report=JSON.parse(readFileSync('public/data/character/citizen.json','utf8'));
+ const bytes=readFileSync('public/data/character/citizen.glb');
+ const gltf=await new Promise((res,rej)=>new GLTFLoader()
+  .parse(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),'',res,rej));
+ const asset=humanoidCitizen(gltf,report);
+ const kerb=x=>x<0?.15:.02;
+ const at=enabled=>{
+  const ctx={heightExact:kerb,height:kerb,solid:()=>false,safe:()=>true,onRoad:()=>false};
+  const figure=createPlayerFigure(asset,undefined,{ctx});
+  figure.footIK.setEnabled(enabled);
+  const state={x:0,y:.15,z:0,heading:0,bodyHeading:0,speed:0,alive:true,vehiclePhase:0};
+  for(let i=0;i<90;i++)figure.update(state,1/60);
+  figure.root.updateMatrixWorld(true);
+  const bone=figure.root.getObjectByName('pelvis');
+  bone.updateWorldMatrix(true,false);
+  const world=new Vector3().setFromMatrixPosition(bone.matrixWorld);
+  const drop=figure.footIK.stats.pelvisDrop;
+  figure.dispose();
+  return {world,drop};
+ };
+ const off=at(false),on=at(true);
+ assert.ok(on.drop>.12,`the solver only asked for ${(on.drop*1000).toFixed(0)} mm`);
+ // Down by what it said, to a millimetre, and no sideways or forward drift at all.
+ assert.ok(Math.abs((off.world.y-on.world.y)-on.drop)<.001,
+  `reported a ${(on.drop*1000).toFixed(1)} mm drop but the hips moved `+
+  `${((off.world.y-on.world.y)*1000).toFixed(1)} mm`);
+ assert.ok(Math.hypot(off.world.x-on.world.x,off.world.z-on.world.z)<.002,
+  'the hips moved horizontally, which is the axis bug wearing a different hat');
+});
+
+test('foot IK stands down when the feet are not on anything',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const {GLTFLoader}=await import('three/addons/loaders/GLTFLoader.js');
+ const {humanoidCitizen}=await import('../src/player/character-asset.mjs');
+ const {createPlayerFigure}=await import('../src/player/figure.mjs');
+ globalThis.ProgressEvent??=class{constructor(type,init={}){Object.assign(this,{type},init);}};
+ const report=JSON.parse(readFileSync('public/data/character/citizen.json','utf8'));
+ const bytes=readFileSync('public/data/character/citizen.glb');
+ const gltf=await new Promise((res,rej)=>new GLTFLoader()
+  .parse(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),'',res,rej));
+ const asset=humanoidCitizen(gltf,report);
+ const ctx={heightExact:x=>x<0?.15:.02,height:x=>x<0?.15:.02,
+  solid:()=>false,safe:()=>true,onRoad:()=>false};
+ const figure=createPlayerFigure(asset,undefined,{ctx});
+ const base={x:0,y:.15,z:0,heading:0,bodyHeading:0,speed:0,alive:true,vehiclePhase:0};
+ const settle=state=>{for(let i=0;i<40;i++)figure.update(state,1/60);return figure.footIK.stats.solved;};
+
+ assert.ok(settle(base)>0,'not correcting when it should');
+ // Each of these is a state where the feet are deliberately not on the ground.
+ assert.equal(settle({...base,alive:false,runOver:.2}),0,'corrected during a knock-down');
+ assert.equal(settle({...base,alive:false,runOver:2}),0,'corrected while dead');
+ assert.equal(settle({...base,vehiclePhase:.5,vehicleKind:'enter'}),0,'corrected getting into a car');
+ assert.equal(settle({...base,vehiclePhase:.5,vehicleKind:'exit'}),0,'corrected getting out of a car');
+ assert.ok(settle(base)>0,'did not come back');
+ // A teleport drops the correction rather than dragging a foot across the city.
+ figure.update({...base,x:40,z:40},1/60);
+ assert.equal(figure.footIK.stats.solved,0,'corrected through a teleport');
+ figure.dispose();
+});
+
+test('foot IK allocates nothing per frame',async()=>{
+ const {createTwoBoneSolver,sampleGround}=await import('../src/player/foot-ik.mjs');
+ const {Object3D,Bone,Vector3}=await import('three');
+ const root=new Object3D();
+ const hip=new Bone();hip.position.set(0,1,0);root.add(hip);
+ const knee=new Bone();knee.position.set(0,-.45,.02);hip.add(knee);
+ const ankle=new Bone();ankle.position.set(0,-.45,0);knee.add(ankle);
+ root.updateMatrixWorld(true);
+ const solve=createTwoBoneSolver();
+ const target=new Vector3(0,.2,.05);
+ const out={height:0,normal:new Vector3(),edge:false};
+ const ctx={heightExact:(x,z)=>Math.sin(x)*.01+Math.cos(z)*.01};
+ const warm=()=>{solve(hip,knee,ankle,target);sampleGround(ctx,.3,.4,out);};
+ for(let i=0;i<2000;i++)warm();
+ if(!globalThis.gc){return;}   // run with --expose-gc for the strict form
+ globalThis.gc();
+ const before=process.memoryUsage().heapUsed;
+ for(let i=0;i<20000;i++)warm();
+ globalThis.gc();
+ const growth=process.memoryUsage().heapUsed-before;
+ assert.ok(growth<262144,`heap grew ${growth} bytes over 20000 solves`);
+});

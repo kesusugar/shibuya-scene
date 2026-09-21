@@ -94,10 +94,10 @@ export function dressCitizen(root,palette={}){
 }
 
 /** Shared plumbing: the providers differ only in where their scene, clips and clothes come from. */
-function asset({id,template,clips,gait,gaitDetail,height,scale,dress,bones}){
+function asset({id,template,clips,gait,gaitDetail,height,scale,dress,bones,legBones=null}){
  let disposed=false;
  return {
-  id,height,scale,gait:Object.freeze({...gait}),gaitDetail:gaitDetail??null,bones,
+  id,height,scale,gait:Object.freeze({...gait}),gaitDetail:gaitDetail??null,bones,legBones,
   get template(){return template;},
   instance(palette){
    if(disposed)throw new Error(`character asset ${id} is disposed`);
@@ -166,5 +166,8 @@ export function humanoidCitizen(gltf,report,base=WARDROBE){
   // which foot is down.
   gaitDetail:report.gaitDetail??null,
   height:report.body.height*report.body.scaleToGame,scale:report.body.scaleToGame,
-  dress,bones:{head:'Head'}});
+  dress,bones:{head:'Head'},
+  // The joints foot IK needs. Named here rather than guessed, so an asset that does not have
+  // them simply goes without rather than half-solving something.
+  legBones:{pelvis:'pelvis',left:['thigh_l','calf_l','foot_l'],right:['thigh_r','calf_r','foot_r']}});
 }

@@ -82,6 +82,37 @@ function contacts(frames,side){
  };
 }
 
+/**
+ * How far the ankle joint sits above the sole, in the idle pose.
+ *
+ * The solver does not read this: it corrects a foot by the *difference* between the surface
+ * under it and the surface the body stands on, and a difference is indifferent to how tall an
+ * ankle is. What needs it is measurement -- `qa/gta-upgrade/footikbench.html` reports how far
+ * each sole is from the pavement, and it can only do that if it knows where the sole is
+ * relative to the joint it can see. It is a property of the model, so it is measured here
+ * rather than left as a constant somebody has to remember to change.
+ */
+function ankleHeight(){
+ const idle=gltf.animations.find(c=>c.name==='Idle');
+ if(idle){const action=mixer.clipAction(idle);mixer.stopAllAction();action.reset().play();
+  action.time=0;mixer.update(0);}
+ root.updateMatrixWorld(true);
+ let low=Infinity;const p=new T.Vector3();
+ root.traverse(o=>{
+  if(!o.isSkinnedMesh)return;
+  o.skeleton.update();
+  const position=o.geometry.attributes.position;
+  for(let i=0;i<position.count;i++){
+   p.fromBufferAttribute(position,i);o.applyBoneTransform(i,p);o.localToWorld(p);
+   low=Math.min(low,p.y);
+  }
+ });
+ const ankle=bone('foot_l');ankle.updateWorldMatrix(true,false);
+ const y=new T.Vector3().setFromMatrixPosition(ankle.matrixWorld).y;
+ mixer.stopAllAction();
+ return Number((y-low).toFixed(4));
+}
+
 const rows=[];
 for(const entry of report.clips){
  const clip=gltf.animations.find(c=>c.name===entry.name);
@@ -112,6 +143,7 @@ for(const entry of report.clips){
 // Written back into the asset's own report rather than to a second file, so the runtime gets
 // it from the fetch it already makes and there is one place that describes this character.
 report.gaitDetail={samples:SAMPLES,measured:new Date().toISOString().slice(0,10),
+ ankleHeight:ankleHeight(),
  clips:Object.fromEntries(rows.map(r=>[r.clip,{
   seconds:r.seconds,speed:r.speed,stride:r.stride,step:r.step,cadence:r.cadence,
   duty:r.duty,airborne:r.airborne,contactOffset:r.contactOffset,
@@ -120,6 +152,7 @@ report.gaitDetail={samples:SAMPLES,measured:new Date().toISOString().slice(0,10)
   leftContact:r.leftContact[0]}]))};
 writeFileSync(REPORT,JSON.stringify(report,null,1)+'\n');
 const pad=(v,n)=>String(v).padStart(n);
+console.log('ankle above sole:',report.gaitDetail.ankleHeight,'m');
 console.log('clip     upstream           dur    m/s  stride   step  cadence  duty  air  L contact      R contact     offset');
 for(const r of rows)console.log(
  r.clip.padEnd(8),r.upstream.padEnd(18),pad(r.seconds,5),pad(r.speed,6),pad(r.stride,7),pad(r.step,6),

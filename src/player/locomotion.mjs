@@ -63,8 +63,10 @@ export function buildGaitSpace(clips,gait,detail=null){
   ladder.push({
    name:clip.name,duration:clip.duration,speed,
    stride:measured?.stride??speed*clip.duration,
-   // Phase within the clip at which the left foot plants.
+   // Phase within the clip at which the left foot plants, and how much of the cycle each foot
+   // spends planted -- the second is what foot IK switches on and off with.
    contact:measured?.leftContact??0,
+   duty:measured?.duty??.4,
    // 0.5 is a symmetric gait. Anything else limps when blended against a symmetric one, so
    // it is recorded and reported rather than silently averaged away.
    symmetry:measured?.contactOffset??.5
@@ -154,6 +156,28 @@ export function createGaitBlend(ladder,{idleName='Idle'}={}){
   rateFor(name){
    const rung=ladder.find(r=>r.name===name);
    return rung?rung.duration/period:1;
+  },
+  /**
+   * How long a foot is on the ground, blended.
+   *
+   * Foot IK needs to know when to correct and when to leave the animation alone. Stance is a
+   * property of the clips being mixed, not of the blend, so it is averaged by the same weights
+   * -- a walk with a long stance mixed with a run with a short one gives something between.
+   * `offset` is where the right foot plants relative to the left; 0.5 is a symmetric gait, and
+   * anything else limps, which is why it is carried rather than assumed.
+   */
+  stance(){
+   let duty=0,offset=0,total=0;
+   for(const [name,weight] of weights){
+    const rung=ladder.find(r=>r.name===name);
+    if(!rung||!weight)continue;
+    duty+=(rung.duty??.4)*weight;offset+=rung.symmetry*weight;total+=weight;
+   }
+   // Standing is not a phase of a gait, but it is the case where both feet are certainly on
+   // the ground. Reporting a full duty says exactly that, and is what lets foot IK plant a
+   // standing character instead of waiting for a step that is never coming.
+   if(!total)return {duty:1,offset:0,standing:true};
+   return {duty:duty/total,offset:offset/total,standing:false};
   }
  };
 }

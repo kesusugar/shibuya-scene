@@ -20,8 +20,23 @@ function bindPedestrianContext(context,ground){
   if(result&&roadEdges.query(bb(a,b,margin)).some(({value:[p,q]})=>edgeDistance(a,b,p,q)<margin))result=false;
   if(result)for(let i=0;i<8;i++)if(!walkPoint(a+Math.cos(i*Math.PI/4)*margin,b+Math.sin(i*Math.PI/4)*margin)){result=false;break;}
   safeCache.set(key,result);return result;};
- const heights=new Map();const height=(x,z)=>{const a=Math.round(x*4)/4,b=Math.round(z*4)/4,key=a+','+b;if(!heights.has(key))heights.set(key,onRoad(a,b)?.02:sidewalk.query(bb(a,b)).some(v=>inside([a,b],v.value))?ground.height([a,b]):0);return heights.get(key);};
- return {sidewalk,walk,roads,solids,roadEdges,onRoad,solid,safe,footwaySources,height};
+ // The surface, sampled exactly. Road, kerb, and the ramps that take a kerb down to the road
+ // at a crossing -- ground.height is continuous inside a corridor, so this is a real slope and
+ // not a staircase.
+ const point=[0,0];
+ const exact=(x,z)=>{
+  point[0]=x;point[1]=z;
+  if(onRoad(x,z))return .02;
+  return sidewalk.query(bb(x,z)).some(v=>inside(point,v.value))?ground.height(point):0;
+ };
+ // What the crowd walks on: the same surface rounded to a quarter metre and memoised, because
+ // two thousand pedestrians asking per frame cannot each pay for a spatial query. The rounding
+ // is invisible at crowd scale and would be a 25 cm staircase under a foot, so anything that
+ // needs to place a foot asks `heightExact` instead.
+ const heights=new Map();
+ const height=(x,z)=>{const a=Math.round(x*4)/4,b=Math.round(z*4)/4,key=a+','+b;
+  if(!heights.has(key))heights.set(key,exact(a,b));return heights.get(key);};
+ return {sidewalk,walk,roads,solids,roadEdges,onRoad,solid,safe,footwaySources,height,heightExact:exact};
 }
 export function pedestrianContext(data,{ground,generic,street,core,detail}){
  const footways=data.footways.filter(f=>surface(f)&&f.highway!=='steps'&&f.tags.footway!=='crossing'&&!['no','private'].includes(f.tags.access));

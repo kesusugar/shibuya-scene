@@ -1,6 +1,7 @@
 import {AnimationMixer,LoopOnce,LoopRepeat} from 'three';
 import {bakedCitizen} from './character-asset.mjs';
 import {buildGaitSpace,createGaitBlend,createBodyFacing,LOCOMOTION} from './locomotion.mjs';
+import {createFootIK} from './foot-ik.mjs';
 import pack from './generated/character.mjs';
 
 export const FIGURE=Object.freeze({height:1.76,shirt:0xc94d38,trousers:0x263443,skin:0xdfb994,hair:0x25282a,cycle:1.55});
@@ -46,7 +47,16 @@ export function bakedAsset(){return baked??=bakedCitizen(pack);}
  * asset is loaded over the network and the baked one is not, so the same figure has to be
  * able to start on one and continue on the other.
  */
-export function createPlayerFigure(asset=bakedAsset(),palette=undefined){
+/**
+ * States in which the feet are not walking on anything, and the solver stands down.
+ *
+ * Correcting a foot towards the ground during a knock-down, a vehicle transition or a death
+ * is worse than not correcting it: the animation is deliberately not grounded, and forcing it
+ * there folds the leg. Cheaper to believe the animation.
+ */
+const UNGROUNDED=new Set(['Fall','Death','Enter','Exit','Drive']);
+
+export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=null}={}){
  const instance=asset.instance(palette),root=instance.root;
  const mixer=new AnimationMixer(root),actions={};
  for(const clip of instance.clips){
@@ -57,7 +67,17 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined){
  const head=root.getObjectByName(asset.bones.head);
  const gait=createGaitBlend(buildGaitSpace(instance.clips,asset.gait,asset.gaitDetail));
  const facing=createBodyFacing(0);
+ // Foot IK only exists where the skeleton names the joints it needs; the offline-baked figure
+ // has eleven bones and none of these names, so it simply goes without.
+ const footIK=asset.legBones?createFootIK(root,{bones:asset.legBones,ctx}):null;
  let overlay=null,previousAttack=0,disposed=false,seeded=false,dominant='Idle';
+ // A jump in world position is a teleport, not a stride. Locked feet have to be forgotten or
+ // one gets dragged across the city on the next frame.
+ let lastX=null,lastZ=null;
+ const teleported=state=>{
+  const jumped=lastX!==null&&Math.hypot(state.x-lastX,state.z-lastZ)>1.2;
+  lastX=state.x;lastZ=state.z;return jumped;
+ };
 
  // The gait clips are driven by hand: weight and time are set every frame from the blend, and
  // the mixer is only asked to evaluate. Crossfades are what a blend exists to avoid.
@@ -133,8 +153,19 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined){
    if(state.trafficReaction==='look'&&Number.isFinite(state.threatHeading)&&head)
     head.rotation.y=Math.max(-.8,Math.min(.8,Math.atan2(Math.sin(state.threatHeading-facing.heading),Math.cos(state.threatHeading-facing.heading))));
    root.updateMatrixWorld(true);
+
+   // Feet last, on top of the finished pose, because it corrects what the animation produced
+   // rather than producing it. A teleport or a state where the feet are not on anything drops
+   // every lock instead of dragging one across the city.
+   if(footIK){
+    const grounded=state.alive!==false&&!UNGROUNDED.has(overlay)&&!state.riding;
+    if(!grounded||teleported(state))footIK.reset();
+    else footIK.update({phase:gait.phase,...gait.stance()},dt);
+   }
   },
+  get footIK(){return footIK;},
   reset(){
+   footIK?.reset();
    mixer.stopAllAction();
    for(const action of Object.values(actions))action.reset();
    overlay=null;previousAttack=0;seeded=false;dominant='Idle';
