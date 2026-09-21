@@ -1,0 +1,180 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {createHQLayer,HQ_LOD} from '../src/life/hq-layer.mjs';
+import {STATE} from '../src/life/hq-crowd.mjs';
+import {appearanceOf} from '../src/life/appearance.mjs';
+
+const manifest=JSON.parse(readFileSync('public/data/crowd/hq-crowd.json','utf8'));
+const raw=readFileSync('public/data/crowd/hq-crowd.bin');
+const bin=raw.buffer.slice(raw.byteOffset,raw.byteOffset+raw.byteLength);
+
+/** A stand-in for the simulation's pool: the fields the layer is allowed to read. */
+function pool(count,spread=1.4){
+ const out=[];
+ for(let id=0;id<count;id++){
+  const row=Math.floor(id/40),col=id%40;
+  out.push({id,active:true,controlled:false,archetype:'adult',state:'walking',
+   x:(col-20)*spread,z:(row-20)*spread,renderX:(col-20)*spread,renderZ:(row-20)*spread,
+   height:0,heading:Math.PI,speed:1.3,crossing:null,queueKey:null,edge:3,route:[3]});
+ }
+ return out;
+}
+
+test('the layer draws no more than its budget, and holds no more than it draws',()=>{
+ // The bug this pins: citizens that fall out of the budget were never released, so the crowd
+ // only grew -- frozen bodies standing in the street beside the legacy pedestrian they were
+ // meant to replace. In the real scene it reached 224 held against 128 drawn within a minute.
+ const people=pool(900);
+ const layer=createHQLayer(manifest,bin,{budget:128});
+ const camera={x:0,z:0};
+ for(let f=0;f<40;f++){
+  // Move the camera so the nearest 128 keeps changing, which is what exposed it.
+  camera.x=Math.sin(f*.3)*22;camera.z=Math.cos(f*.3)*22;
+  const drawn=layer.sync(people,camera,1/60,{time:f/60});
+  assert.ok(drawn.size<=128,`drew ${drawn.size} against a budget of 128`);
+  assert.equal(layer.crowd.population,drawn.size,
+   `frame ${f}: holding ${layer.crowd.population} citizens while drawing ${drawn.size}`);
+ }
+ layer.dispose();
+});
+
+test('a released citizen leaves no gap in the lanes it was drawn from',()=>{
+ const people=pool(400);
+ const layer=createHQLayer(manifest,bin,{budget:64});
+ const camera={x:0,z:0};
+ for(let f=0;f<30;f++){
+  camera.x=Math.sin(f*.5)*18;
+  layer.sync(people,camera,1/60,{time:f/60});
+  let laneTotal=0;
+  for(const lane of layer.crowd.lanes){
+   laneTotal+=lane.count;
+   // Every occupied slot must point back at a citizen that points back at it.
+   for(let slot=0;slot<lane.count;slot++){
+    const owner=lane.owners[slot];
+    assert.ok(owner>=0&&owner<layer.crowd.population,
+     `lane slot ${slot} owned by ${owner}, population ${layer.crowd.population}`);
+    assert.equal(layer.crowd.state.slot[owner],slot,'a citizen and its slot disagree');
+   }
+  }
+  assert.equal(laneTotal,layer.crowd.population,'lanes and population disagree');
+ }
+ layer.dispose();
+});
+
+test('identity survives being released and drawn again',()=>{
+ const people=pool(300);
+ const layer=createHQLayer(manifest,bin,{budget:32});
+ const first=new Map();
+ layer.sync(people,{x:0,z:0},1/60,{time:0});
+ for(let i=0;i<layer.crowd.population;i++)
+  first.set(layer.crowd.state.id[i],{
+   lane:layer.crowd.state.lane[i],phase:layer.crowd.state.phase[i],
+   height:layer.crowd.state.height[i],width:layer.crowd.state.width[i]});
+ // Walk away, then come back.
+ for(let f=0;f<20;f++)layer.sync(people,{x:60,z:60},1/60,{time:f/60});
+ layer.sync(people,{x:0,z:0},1/60,{time:1});
+ let checked=0;
+ for(let i=0;i<layer.crowd.population;i++){
+  const was=first.get(layer.crowd.state.id[i]);
+  if(!was)continue;
+  checked++;
+  assert.equal(layer.crowd.state.phase[i],was.phase,'a citizen came back on a different foot');
+  assert.equal(layer.crowd.state.height[i],was.height,'a citizen came back a different height');
+  assert.equal(layer.crowd.state.width[i],was.width);
+  // The archetype is derived from the id, so it cannot have changed.
+  assert.equal(appearanceOf(layer.crowd.state.id[i]).archetype.id,
+   layer.crowd.lanes[layer.crowd.state.lane[i]].archetype.id,
+   'a citizen came back as a different body');
+ }
+ assert.ok(checked>4,`only ${checked} citizens returned to be checked`);
+ layer.dispose();
+});
+
+test('the layer never touches route, crossing, queue or signal state',()=>{
+ // The rule the whole file exists for. A pedestrian released from a crossing without
+ // releasing its signal group freezes every signal on the map.
+ const people=pool(200);
+ for(const p of people){p.crossing='hachiko-n';p.queueKey='k';}
+ const before=people.map(p=>({crossing:p.crossing,queueKey:p.queueKey,edge:p.edge,
+  route:[...p.route],x:p.x,z:p.z}));
+ const layer=createHQLayer(manifest,bin,{budget:128});
+ for(let f=0;f<20;f++)layer.sync(people,{x:0,z:0},1/60,{time:f/60});
+ people.forEach((p,i)=>{
+  assert.equal(p.crossing,before[i].crossing,'the renderer cleared a crossing');
+  assert.equal(p.queueKey,before[i].queueKey,'the renderer cleared a queue key');
+  assert.equal(p.edge,before[i].edge);
+  assert.deepEqual(p.route,before[i].route);
+  assert.equal(p.x,before[i].x,'the renderer moved a pedestrian');
+  assert.equal(p.z,before[i].z,'the renderer moved a pedestrian');
+ });
+ layer.dispose();
+});
+
+test('a vehicle makes many of the drawn citizens react at once',()=>{
+ const people=pool(900,1.15);
+ const layer=createHQLayer(manifest,bin,{budget:600});
+ let cz=0;for(const p of people)cz+=p.z;cz/=people.length;
+ layer.sync(people,{x:0,z:cz},1/60,{time:0});
+ const car={x:0,z:cz-24,heading:0,speed:14};
+ let peakReacting=0,peakDown=0;
+ for(let f=0;f<150;f++){
+  car.z+=14/60;
+  layer.sync(people,{x:0,z:cz},1/60,{time:f/60});
+  layer.vehicle(car,1/60);
+  const got=layer.inspect();
+  peakReacting=Math.max(peakReacting,got.reacting);
+  peakDown=Math.max(peakDown,got.down);
+ }
+ assert.ok(peakReacting>=20,`only ${peakReacting} reacted at once`);
+ assert.ok(peakDown>=1,`nobody was knocked down over a whole pass`);
+ layer.dispose();
+});
+
+test('movement authority is handed over on a hit and handed back after',()=>{
+ const people=pool(400,1.15);
+ const taken=[],given=[];
+ const layer=createHQLayer(manifest,bin,{budget:300,
+  onDisown:id=>taken.push(id),onReclaim:id=>given.push(id)});
+ let cz=0;for(const p of people)cz+=p.z;cz/=people.length;
+ layer.sync(people,{x:0,z:cz},1/60,{time:0});
+ const car={x:0,z:cz-16,heading:0,speed:16};
+ for(let f=0;f<120;f++){
+  car.z+=16/60;
+  layer.sync(people,{x:0,z:cz},1/60,{time:f/60});
+  layer.vehicle(car,1/60);
+ }
+ assert.ok(taken.length>0,'nobody was ever thrown, so the handover was not exercised');
+ assert.ok(layer.disowned.size<=taken.length);
+ // And a thrown body is not being dragged back onto its route while it flies.
+ for(const id of layer.disowned){
+  const i=layer.crowd.indexOf(id);
+  assert.ok(i>=0,'a disowned citizen was released mid-flight');
+  const b=layer.crowd.state.behaviour[i];
+  assert.ok(b===STATE.HIT||b===STATE.KNOCKDOWN||b===STATE.DOWNED,
+   `citizen ${id} is owned by the reaction system but is in state ${b}`);
+ }
+ layer.dispose();
+});
+
+test('the level of detail follows distance, with hysteresis',()=>{
+ assert.ok(HQ_LOD.bands.length>=3,'fewer than three levels of detail');
+ for(const band of HQ_LOD.bands)
+  assert.ok(band.out>=band.in,`band ${band.lod} has no hysteresis`);
+ const people=pool(300,1.2);
+ // Stand the camera IN the crowd. `pool` lays rows out from the origin, so three hundred
+ // people never come within L0's band of (0,0) -- an earlier version of this test stood
+ // outside the crowd and concluded the LOD selection was broken.
+ let cx=0,cz=0;for(const p of people){cx+=p.x;cz+=p.z;}
+ cx/=people.length;cz/=people.length;
+ const camera={x:cx,z:cz};
+ const layer=createHQLayer(manifest,bin,{budget:300});
+ layer.sync(people,camera,1/60,{time:0});
+ for(let f=0;f<40;f++)layer.sync(people,camera,HQ_LOD.reviewInterval,{time:f});
+ const got=layer.inspect();
+ const used=Object.entries(got.byLod).filter(([,n])=>n>0).map(([k])=>k);
+ assert.ok(used.length>=2,
+  `a crowd spanning tens of metres used only ${used.join(',')||'nothing'}`);
+ assert.ok(got.byLod.L0>0,'nobody near the camera got the best body');
+ layer.dispose();
+});

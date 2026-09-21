@@ -221,7 +221,39 @@ export default function Home(){
  const lifeEntry=system.entries.get('life');lifeEntry.enabled=false;
  let lifeReportClock=0;
  lifeEntry.hooks=buildingLifecycle({timingKey:'life',timingName:'R1 / S10 Crowd / Life',appearance:'firstPersonVisible',parent:groups.dynamic,build:async(data:any,record:any)=>{const pack=await loadStaticModels(),network=pack?.life?.[currentTrafficTier]??await buildPedestrianNetworkAsync(data,{ground:ground?.model,generic:buildingsEntry.hooks.current?.model,core:stationEntry.hooks.current?.model,detail:detailEntry.hooks.current?.model,street:streetEntry.hooks.current?.model},record?.timing);const started=performance.now(),result=buildCrowd(data,{network,choreography:true,heroStart:currentTrafficTier==='high',tier:currentTrafficTier,traffic:trafficEntry.hooks.current?.sim,ground:ground?.model,generic:buildingsEntry.hooks.current?.model,core:stationEntry.hooks.current?.model,detail:detailEntry.hooks.current?.model,street:streetEntry.hooks.current?.model,debug:config.debug});if(record?.timing)record.timing.computeMs+=performance.now()-started;return result;},onReport:setLifeReport,onReady(result:any){registerSceneRoot(result.root);startup?.appearance('crowdBuildComplete','life');if(playerMode)exitPlayer();player=null;playUI?.dispose();playUI=null;lifeEntry.status='ready';console.info('[R1 Crowd Density]',result.stats);setModules(system.snapshot());},onError(e:any){lifeEntry.status='failed';console.error('[R1 Crowd Density]',e);setModules(system.snapshot());}});
- lifeEntry.hooks.update=(dt:number)=>{const result=lifeEntry.hooks.current;if(!result)return;result.update(dt,playerMode&&player?{x:player.state.x,z:player.state.z}:view.position);lifeReportClock+=dt;if(lifeReportClock>=1){lifeReportClock=0;setLifeReport({...result.stats});}};
+ lifeEntry.hooks.update=(dt:number)=>{const result=lifeEntry.hooks.current;if(!result)return;result.setHQCamera?.(playerMode&&player?player.state:view.position);void requestHQCrowd();result.update(dt,playerMode&&player?{x:player.state.x,z:player.state.z}:view.position);lifeReportClock+=dt;if(lifeReportClock>=1){lifeReportClock=0;setLifeReport({...result.stats});}};
+ // RUN 7B. When `?hq=` asks for the high-fidelity crowd, its prebuilt pack is fetched and
+ // handed to the crowd renderer AFTER the city is standing, exactly as the humanoid character
+ // is: nothing about the scene waits on it, and a session that never loads it keeps the
+ // legacy instanced bodies. Nothing is baked here -- the pack comes from npm run bake:crowd-hq.
+ const HQ_TIER_BUDGET:Record<string,number>={high:1978,medium:512,low:0};
+ let hqRequested=false;
+ const requestHQCrowd=async()=>{
+  const asked=(config as any).hqCrowd as number|null;
+  if(hqRequested||asked===null||asked===0)return;
+  const hooks=lifeEntry.hooks.current;
+  if(!hooks?.enableHQCrowd)return;
+  hqRequested=true;
+  try{
+   const base=(import.meta as any).env?.BASE_URL??'/';
+   const [manifest,bin]=await Promise.all([
+    fetch(`${base}data/crowd/hq-crowd.json`).then(r=>{if(!r.ok)throw new Error(`hq manifest ${r.status}`);return r.json();}),
+    fetch(`${base}data/crowd/hq-crowd.bin`).then(r=>{if(!r.ok)throw new Error(`hq pack ${r.status}`);return r.arrayBuffer();})
+   ]);
+   const tierMax=HQ_TIER_BUDGET[currentTier]??0;
+   const budget=asked<0?tierMax:Math.min(asked,tierMax);
+   if(!budget)return;
+   const layer=hooks.enableHQCrowd(manifest,bin,{budget,
+    // A pedestrian the reaction system has thrown must stop being walked along a route by the
+    // simulation, or the two fight over the same body. `leave` is the simulation's own path
+    // out of a crossing, which is what keeps the signal group released.
+    onDisown:(id:number)=>{const p=hooks.sim?.pool?.[id];if(p&&p.active){hooks.sim.leave(p);p.reactionOwned=true;}},
+    onReclaim:(id:number)=>{const p=hooks.sim?.pool?.[id];if(p)p.reactionOwned=false;}});
+   hooks.setHQCamera(playerMode&&player?player.state:view.position);
+   console.info('[HQ crowd] enabled',{budget,archetypes:manifest.archetypes.length,
+    bytes:bin.byteLength,lods:layer?.crowd?.inspect?.().lods});
+  }catch(e){console.warn('[HQ crowd] unavailable, staying on the legacy crowd',String(e));}
+ };
  system.setEnabled('life',(config.only===null||config.only.includes('life'))&&!config.skip.includes('life'));
  const trainsEntry=system.entries.get('trains');trainsEntry.enabled=false;let trainReportClock=0;
  trainsEntry.hooks=buildingLifecycle({timingKey:'trains',timingName:'S11 Trains',appearance:'firstTrainVisible',parent:groups.dynamic,build:(data:any,record:any)=>{const started=performance.now(),result=buildTrains(data,{tier:currentTrafficTier,core:stationEntry.hooks.current?.model,debug:config.debug});if(record?.timing)record.timing.computeMs+=performance.now()-started;return result;},onReport:setTrainReport,onReady(result:any){registerSceneRoot(result.root);trainsEntry.status='ready';console.info('[S11 Trains]',result.stats);setModules(system.snapshot());},onError(e:any){trainsEntry.status='failed';console.error('[S11 Trains]',e);setModules(system.snapshot());}});
@@ -309,7 +341,7 @@ export default function Home(){
  const prerequisitesReady=()=>!!renderer&&!renderer.getContext().isContextLost()&&currentTier==='high'&&dayNight.active&&!!fidelity.pipeline&&requiredStages.every(id=>system.entries.get(id)?.status==='ready')&&!!ground&&['buildings','heroes','station','stationDetail','signs','streetscape','traffic','life','trains','construction','nightglow'].every(id=>!!system.entries.get(id)?.hooks.current)&&buildQueue.snapshot().queueLength===0&&!buildQueue.snapshot().activeBuildName;
  const startupBuildComplete=()=>{if(!startup||startupTrace.milestones.sceneBuildCompleteMs!==null)return startupTrace?.milestones.sceneBuildCompleteMs!==null;const latest=new Map<string,any>();for(const record of startupTrace.stages)if(record.endMs!==null)latest.set(record.key,record);const queue=buildQueue.snapshot();const complete=prerequisitesReady()&&startup.openStageCount===0&&queue.queueLength===0&&!queue.activeBuildName&&requiredTimingStages.every(key=>latest.get(key)?.completedSuccessfully);if(complete){startup.completeScene();renderStartupPanel();}return complete;};
  const finalizeStartupTiming=()=>{if(!startup||startupTrace.ready)return;startup.finalize();renderStartupPanel();appendStartupBoundaryDetails();console.info('[Startup Timing Report]',startupTrace);};
- const metricsFor=()=>{const info=renderer?.info,pipeline=fidelity.pipeline,trafficNow=trafficEntry.hooks.current?.stats,trainsNow=trainsEntry.hooks.current;renderer?.getDrawingBufferSize(drawingSize);return {tier:currentTier,time:clock.value,camera:publicCameraName(currentCamera),fps:latestFps,dpr:renderer?.getPixelRatio()??null,renderScale:PROFILES[currentTier]?.scale??null,framebufferWidth:renderer?drawingSize.x:null,framebufferHeight:renderer?drawingSize.y:null,triangles:info?.render.triangles??null,drawCalls:info?.render.calls??null,geometries:info?.memory.geometries??null,textures:info?.memory.textures??null,crowdCount:lifeEntry.hooks.current?.stats.total??null,nearCharacters:lifeEntry.hooks.current?.stats.nearCharacters??null,movingVehicles:trafficNow?.moving??null,parkedVehicles:trafficNow?.parked??null,bicycles:null,trainCars:trainsNow?Object.values(trainsNow.meshes as Record<string,any>).reduce((n:number,m:any)=>n+(m.count??0),0):null,activePointLights:fidelity.lights.filter((l:any)=>l.visible&&l.intensity>0).length,activeSpotLights:fidelity.spots.filter((l:any)=>l.visible&&l.intensity>0).length,shadowMapSize:dayNight.key.shadow.mapSize.x||null,exposure:renderer?.toneMappingExposure??null,environmentIntensity:scene.environment?scene.environmentIntensity:null,gtaoEnabled:!!pipeline&&pipeline.ao.enabled!==false,bloomEnabled:!!pipeline&&pipeline.bloom.enabled!==false,bloomStrength:pipeline?.bloom.strength??null,bloomThreshold:pipeline?.bloom.threshold??null,smaaEnabled:!!pipeline&&pipeline.smaa.enabled!==false};};
+ const metricsFor=()=>{const info=renderer?.info,pipeline=fidelity.pipeline,trafficNow=trafficEntry.hooks.current?.stats,trainsNow=trainsEntry.hooks.current;renderer?.getDrawingBufferSize(drawingSize);return {tier:currentTier,time:clock.value,camera:publicCameraName(currentCamera),fps:latestFps,dpr:renderer?.getPixelRatio()??null,renderScale:PROFILES[currentTier]?.scale??null,framebufferWidth:renderer?drawingSize.x:null,framebufferHeight:renderer?drawingSize.y:null,triangles:info?.render.triangles??null,drawCalls:info?.render.calls??null,geometries:info?.memory.geometries??null,textures:info?.memory.textures??null,crowdCount:lifeEntry.hooks.current?.stats.total??null,nearCharacters:lifeEntry.hooks.current?.stats.nearCharacters??null,hqCrowd:lifeEntry.hooks.current?.stats.hqCrowd??null,movingVehicles:trafficNow?.moving??null,parkedVehicles:trafficNow?.parked??null,bicycles:null,trainCars:trainsNow?Object.values(trainsNow.meshes as Record<string,any>).reduce((n:number,m:any)=>n+(m.count??0),0):null,activePointLights:fidelity.lights.filter((l:any)=>l.visible&&l.intensity>0).length,activeSpotLights:fidelity.spots.filter((l:any)=>l.visible&&l.intensity>0).length,shadowMapSize:dayNight.key.shadow.mapSize.x||null,exposure:renderer?.toneMappingExposure??null,environmentIntensity:scene.environment?scene.environmentIntensity:null,gtaoEnabled:!!pipeline&&pipeline.ao.enabled!==false,bloomEnabled:!!pipeline&&pipeline.bloom.enabled!==false,bloomStrength:pipeline?.bloom.strength??null,bloomThreshold:pipeline?.bloom.threshold??null,smaaEnabled:!!pipeline&&pipeline.smaa.enabled!==false};};
  const frameSamples=createFrameSamples();
  const waitFrames=(count:number)=>waitForRenderedFrames({count,getFrame:()=>renderedFrames,isDisposed:()=>disposed});
  const samplePerformance=async(count=120)=>{frameSamples.begin(count);await waitFrames(count+1);const result=frameSamples.snapshot();if(!result.complete)throw new Error('Incomplete frame sample; keep the tab visible');return result;};

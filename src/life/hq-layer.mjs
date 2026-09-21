@@ -1,0 +1,209 @@
+/**
+ * The RUN 7A crowd, driven by the real Shibuya pedestrian simulation.
+ *
+ * RUN 7B. The one rule this file exists to enforce:
+ *
+ *   THE SIMULATION IS THE SOURCE OF TRUTH. This layer READS it.
+ *
+ * Position, heading, speed, route, crossing membership, queue membership and signal group all
+ * stay exactly where they were, in src/life/simulation.mjs. Nothing here moves a pedestrian
+ * along a route, admits one to a crossing, or releases one from a signal group -- a
+ * pedestrian who leaves a crossing without releasing its group freezes every signal on the
+ * map, and that has happened before. What this layer changes is what a pedestrian LOOKS like.
+ *
+ * The one exception is deliberate and bounded: a citizen who has been HIT is, for the length
+ * of the knockdown, moved by the reaction system instead of by their route, because a body
+ * thrown by a car is not walking anywhere. Movement authority is handed back on recovery, and
+ * `onDisown`/`onReclaim` let the caller tell the simulation about it rather than this file
+ * reaching into it.
+ */
+import {createHQCrowd,STATE} from './hq-crowd.mjs';
+import {createCrowdGrid,applyVehicleThreat} from './hq-threat.mjs';
+import {appearanceOf} from './appearance.mjs';
+
+/**
+ * Distance bands, in metres, for level of detail.
+ *
+ * `out` is hysteresis: a citizen promoted to L0 at 12 m is not demoted until 15 m, so a camera
+ * drifting on a boundary does not swap their body back and forth every frame.
+ */
+export const HQ_LOD=Object.freeze({
+ bands:[{lod:'L0',in:14,out:17},{lod:'L1',in:38,out:44},{lod:'L2',in:Infinity,out:Infinity}],
+ movesPerFrame:24,      // bounded: an LOD change is a slot swap, but not thousands at once
+ reviewInterval:.25     // seconds between LOD reviews; the camera does not move that fast
+});
+
+export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
+                                            interpolate=true,onDisown=null,onReclaim=null}={}){
+ // Capacity is per lane, and a lane is one archetype at one LOD. The worst case is everyone
+ // in one archetype at one LOD, which cannot happen, so this is sized for a generous share.
+ const perLane=Math.ceil(budget*.55)+24;
+ const crowd=createHQCrowd(manifest,bin,{capacity:perLane,lods,interpolate});
+ const grid=createCrowdGrid();
+ const scratch=[];
+ const rendered=new Set();          // pedestrian ids this layer is drawing
+ const laneCache=new Map();         // `${archetypeId}|${lod}` -> lane index
+ const disowned=new Set();          // ids whose movement the reaction system has taken
+ let reviewClock=0;
+ const stats={hq:0,legacy:0,budget,moves:0,syncMs:0,threatMs:0,candidates:0,
+  reacting:0,down:0,byLod:{}};
+
+ for(const a of manifest.archetypes)for(const l of lods)
+  laneCache.set(`${a.id}|${l}`,crowd.laneFor(a.id,l));
+
+ const lodFor=(distance,current)=>{
+  for(const band of HQ_LOD.bands){
+   if(distance<=band.in)return band.lod;
+   // Already in this band and not yet past its release distance: stay.
+   if(current===band.lod&&distance<=band.out)return band.lod;
+  }
+  return HQ_LOD.bands[HQ_LOD.bands.length-1].lod;
+ };
+
+ /** Which clip a pedestrian's own simulated state calls for. */
+ const behaviourFor=p=>{
+  if(p.struck!==undefined||p.combatDead)return STATE.KNOCKDOWN;
+  const speed=Math.abs(p.speed??0);
+  if(p.state==='waiting'||p.state==='idle'||speed<.12)return STATE.NORMAL;
+  return speed>2.6?STATE.FLEE:STATE.NORMAL;
+ };
+
+ return {
+  root:crowd.root,crowd,grid,stats,
+  get rendered(){return rendered;},
+
+  /**
+   * Take the simulation's pedestrians and draw the nearest `budget` of them as HQ citizens.
+   * Returns the set of ids drawn, which the legacy renderer uses as a mask -- a pedestrian
+   * drawn here must NOT also be drawn there, or the crossing holds two of everybody.
+   */
+  sync(pool,camera,dt,{time=0,exclude=null}={}){
+   const start=(typeof performance!=='undefined'?performance.now():0);
+   rendered.clear();
+   if(!camera){stats.hq=0;return rendered;}
+
+   // Nearest first, so the budget is spent where the camera is looking.
+   const candidates=[];
+   for(const p of pool){
+    if(!p.active||p.controlled)continue;
+    if(exclude&&exclude.has(p.id))continue;     // the near-character pool already has them
+    const d=Math.hypot((p.renderX??p.x)-camera.x,(p.renderZ??p.z)-camera.z);
+    candidates.push({p,d});
+   }
+   candidates.sort((a,b)=>a.d-b.d);
+   const take=Math.min(stats.budget,candidates.length);
+
+   reviewClock+=dt;
+   const review=reviewClock>=HQ_LOD.reviewInterval;
+   if(review)reviewClock=0;
+   let moves=0;
+
+   for(let k=0;k<take;k++){
+    const {p,d}=candidates[k];
+    let i=crowd.indexOf(p.id);
+    if(i<0){
+     const look=appearanceOf(p.id,p.height!==undefined?undefined:undefined);
+     const lane=laneCache.get(`${look.archetype.id}|${lodFor(d,null)}`);
+     i=crowd.spawn(p.id,look,lane??0,
+      {x:p.renderX??p.x,y:p.height??0,z:p.renderZ??p.z,heading:p.heading??0,speed:p.speed??0});
+     if(i<0)continue;                            // a lane is full; they stay legacy this frame
+    }
+    rendered.add(p.id);
+
+    // A body the reaction system owns is NOT repositioned from the route: it is mid-flight.
+    if(!disowned.has(p.id))
+     crowd.place(i,p.renderX??p.x,p.height??0,p.renderZ??p.z,p.heading??0,p.speed??0);
+
+    // The clip follows the pedestrian's own simulated state, not anything invented here.
+    const want=behaviourFor(p);
+    const now=crowd.state.behaviour[i];
+    const reacting=now===STATE.HIT||now===STATE.KNOCKDOWN||now===STATE.DOWNED
+     ||now===STATE.LOOK||now===STATE.AVOID||now===STATE.FLEE||now===STATE.RECOVER;
+    if(!reacting&&now!==want)crowd.setState(i,want);
+
+    if(review&&moves<HQ_LOD.movesPerFrame){
+     const lane=crowd.state.lane[i];
+     const current=crowd.lanes[lane]?.lod;
+     const wanted=lodFor(d,current);
+     if(wanted!==current){
+      const target=laneCache.get(`${appearanceOf(p.id).archetype.id}|${wanted}`);
+      if(target!==undefined&&target>=0&&crowd.moveLane(i,target)){moves++;stats.moves++;}
+     }
+    }
+   }
+
+   // Anyone the crowd still holds who is no longer being drawn goes, or the population only
+   // ever grows and the street fills with frozen bodies beside their legacy twins. Bodies the
+   // reaction system owns are exempt: a citizen mid-knockdown is finishing their fall.
+   if(crowd.population>rendered.size){
+    const stale=[];
+    for(let i=0;i<crowd.population;i++){
+     const id=crowd.state.id[i];
+     if(!rendered.has(id)&&!disowned.has(id))stale.push(id);
+    }
+    for(const id of stale)crowd.release(id);
+   }
+
+   crowd.update(dt,{time});
+   const got=crowd.inspect();
+   stats.hq=rendered.size;stats.legacy=candidates.length-rendered.size;
+   stats.byLod=got.byLod;
+   stats.syncMs=(typeof performance!=='undefined'?performance.now():0)-start;
+   return rendered;
+  },
+
+  /**
+   * Drive the real player vehicle through the crowd.
+   *
+   * `car` is the vehicle's own state. Only pedestrians this layer is drawing can react, which
+   * is correct: a citizen four hundred metres away behind a building is not in the accident.
+   */
+  vehicle(car,dt){
+   if(!car||!crowd.population)return null;
+   const start=(typeof performance!=='undefined'?performance.now():0);
+   grid.rebuild(crowd);
+   const before=[];
+   for(let i=0;i<crowd.population;i++)before.push(crowd.state.behaviour[i]);
+   const result=applyVehicleThreat(crowd,grid,car,dt,scratch);
+   // Anyone newly thrown has their movement taken off the route until they are back up.
+   for(let i=0;i<crowd.population;i++){
+    const now=crowd.state.behaviour[i],was=before[i];
+    const thrown=now===STATE.HIT||now===STATE.KNOCKDOWN||now===STATE.DOWNED;
+    const wasThrown=was===STATE.HIT||was===STATE.KNOCKDOWN||was===STATE.DOWNED;
+    const id=crowd.state.id[i];
+    if(thrown&&!wasThrown&&!disowned.has(id)){
+     disowned.add(id);
+     onDisown?.(id,{x:crowd.state.x[i],z:crowd.state.z[i],
+      impulseX:crowd.state.impulseX[i],impulseZ:crowd.state.impulseZ[i]});
+    }else if(!thrown&&wasThrown&&disowned.has(id)){
+     disowned.delete(id);
+     onReclaim?.(id,{x:crowd.state.x[i],z:crowd.state.z[i]});
+    }
+   }
+   let reacting=0,down=0;
+   for(let i=0;i<crowd.population;i++){
+    const b=crowd.state.behaviour[i];
+    if(b===STATE.LOOK||b===STATE.AVOID||b===STATE.FLEE)reacting++;
+    else if(b===STATE.HIT||b===STATE.KNOCKDOWN||b===STATE.DOWNED)down++;
+   }
+   stats.candidates=result.candidates;stats.reacting=reacting;stats.down=down;
+   stats.threatMs=(typeof performance!=='undefined'?performance.now():0)-start;
+   return result;
+  },
+
+  /** Ids whose movement the reaction system currently owns. */
+  get disowned(){return disowned;},
+
+  setBudget(n){stats.budget=Math.max(0,n|0);},
+
+  inspect(){
+   const got=crowd.inspect();
+   return {...got,hq:stats.hq,budget:stats.budget,moves:stats.moves,
+    syncMs:Number(stats.syncMs.toFixed(3)),threatMs:Number(stats.threatMs.toFixed(3)),
+    candidates:stats.candidates,reacting:stats.reacting,down:stats.down,
+    disowned:disowned.size};
+  },
+
+  dispose(){crowd.dispose();rendered.clear();disowned.clear();}
+ };
+}

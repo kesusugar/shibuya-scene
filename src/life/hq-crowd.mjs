@@ -161,7 +161,11 @@ function geometryFrom(level,bin){
  * @param bin      its .bin, as an ArrayBuffer
  * @param capacity how many citizens each archetype may hold
  */
-export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',interpolate=true}={}){
+export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,interpolate=true}={}){
+ // RUN 7B: a lane per (archetype, LOD). A citizen moves between LODs by changing lane, which
+ // is a slot swap -- geometry, palette and phase all come with them, so nothing about who
+ // they are depends on how far away they happen to be.
+ const levels=lods??[lod];
  const root=new Group();root.name='hq-crowd';
  const atlasData=new Float32Array(bin,manifest.atlas.byteOffset,manifest.atlas.count);
  const atlas=new DataTexture(atlasData,manifest.atlas.width,manifest.atlas.height,
@@ -174,15 +178,15 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',interpolate=tr
  const lanes=[];                       // one per archetype
  const scratch=new Object3D();
 
- for(const archetype of manifest.archetypes){
-  const level=archetype.levels.find(l=>l.name===lod)??archetype.levels[0];
+ for(const archetype of manifest.archetypes)for(const wanted of levels){
+  const level=archetype.levels.find(l=>l.name===wanted)??archetype.levels[0];
   const geometry=geometryFrom(level,bin);
   const material=new MeshStandardMaterial({vertexColors:true,roughness:.82,metalness:0});
   installCrowdSkinning(material,atlas,atlasSize,{interpolate});
   const mesh=new InstancedMesh(geometry,material,capacity);
   mesh.instanceMatrix.setUsage(DynamicDrawUsage);
   mesh.frustumCulled=false;mesh.count=0;
-  mesh.name='hq-crowd-'+archetype.id;
+  mesh.name=`hq-crowd-${archetype.id}-${level.name}`;
 
   const clipAttr=new InstancedBufferAttribute(new Float32Array(capacity*2),2).setUsage(DynamicDrawUsage);
   const animAttr=new InstancedBufferAttribute(new Float32Array(capacity*2),2).setUsage(DynamicDrawUsage);
@@ -194,8 +198,10 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',interpolate=tr
   geometry.setAttribute('aShoe',shoeAttr);
 
   root.add(mesh);
-  lanes.push({archetype,mesh,geometry,material,level,
+  lanes.push({archetype,mesh,geometry,material,level,lod:level.name,
    clipAttr,animAttr,palAttr,shoeAttr,count:0,
+   // slot -> citizen index, so a slot can be vacated by swapping the last one into it.
+   owners:new Int32Array(capacity).fill(-1),
    triangles:level.triangles,vertices:level.vertices});
  }
 
@@ -218,6 +224,9 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',interpolate=tr
   fallen:new Float32Array(max),     // 0..1 how far into the ground pose
   health:new Uint8Array(max)
  };
+ // The palette also lives here, not only in the instanced attribute, because moving a citizen
+ // between LOD lanes has to rewrite it into the new lane and an attribute is write-mostly.
+ const palette=new Float32Array(max*4),shoe=new Float32Array(max);
  let population=0;
  const byId=new Map();
 
@@ -253,7 +262,7 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',interpolate=tr
    if(!lane||lane.count>=lane.mesh.instanceMatrix.count)return -1;
    const i=population++;
    const slot=lane.count++;
-   state.id[i]=id;state.lane[i]=laneIndex;state.slot[i]=slot;
+   state.id[i]=id;state.lane[i]=laneIndex;state.slot[i]=slot;lane.owners[slot]=i;
    state.x[i]=x;state.y[i]=y;state.z[i]=z;
    state.heading[i]=heading;state.speed[i]=speed;
    state.height[i]=look.height;state.width[i]=look.width;
@@ -266,8 +275,11 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',interpolate=tr
    state.behaviour[i]=STATE.NORMAL;state.timer[i]=0;
    state.health[i]=100;state.fallen[i]=0;
    state.impulseX[i]=state.impulseZ[i]=state.impulseY[i]=0;
-   lane.palAttr.setXYZW(slot,PACK(look.skin),PACK(look.top),PACK(look.bottom),PACK(look.hairColour));
-   lane.shoeAttr.setX(slot,PACK(look.shoe));
+   palette[i*4]=PACK(look.skin);palette[i*4+1]=PACK(look.top);
+   palette[i*4+2]=PACK(look.bottom);palette[i*4+3]=PACK(look.hairColour);
+   shoe[i]=PACK(look.shoe);
+   lane.palAttr.setXYZW(slot,palette[i*4],palette[i*4+1],palette[i*4+2],palette[i*4+3]);
+   lane.shoeAttr.setX(slot,shoe[i]);
    lane.palAttr.needsUpdate=true;lane.shoeAttr.needsUpdate=true;
    writeClip(i);
    byId.set(id,i);
@@ -275,6 +287,88 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',interpolate=tr
   },
 
   indexOf(id){return byId.has(id)?byId.get(id):-1;},
+
+  /**
+   * Take a citizen out of the crowd.
+   *
+   * Two swap-removes: one in the lane, so `mesh.count` stays the number actually drawn, and
+   * one in the state arrays, so `population` stays the number actually held. Without this a
+   * layer that keeps re-choosing who to draw only ever grows: instances drop out of the
+   * budget, stop being positioned, and are still rendered -- frozen bodies standing in the
+   * street next to the legacy pedestrian they were supposed to replace.
+   */
+  release(id){
+   const i=byId.get(id);
+   if(i===undefined)return false;
+   const lane=lanes[state.lane[i]],slot=state.slot[i],lastSlot=lane.count-1;
+   if(slot!==lastSlot){
+    const moved=lane.owners[lastSlot];
+    lane.palAttr.setXYZW(slot,lane.palAttr.getX(lastSlot),lane.palAttr.getY(lastSlot),
+     lane.palAttr.getZ(lastSlot),lane.palAttr.getW(lastSlot));
+    lane.shoeAttr.setX(slot,lane.shoeAttr.getX(lastSlot));
+    lane.clipAttr.setXY(slot,lane.clipAttr.getX(lastSlot),lane.clipAttr.getY(lastSlot));
+    lane.animAttr.setXY(slot,lane.animAttr.getX(lastSlot),lane.animAttr.getY(lastSlot));
+    lane.owners[slot]=moved;
+    if(moved>=0)state.slot[moved]=slot;
+    lane.palAttr.needsUpdate=lane.shoeAttr.needsUpdate=true;
+    lane.clipAttr.needsUpdate=lane.animAttr.needsUpdate=true;
+   }
+   lane.owners[lastSlot]=-1;lane.count--;
+   byId.delete(id);
+   const last=population-1;
+   if(i!==last){
+    for(const key of Object.keys(state))state[key][i]=state[key][last];
+    for(let k=0;k<4;k++)palette[i*4+k]=palette[last*4+k];
+    shoe[i]=shoe[last];
+    byId.set(state.id[i],i);
+    lanes[state.lane[i]].owners[state.slot[i]]=i;
+   }
+   population--;
+   return true;
+  },
+
+  /** Which lane holds a given archetype at a given LOD, or -1. */
+  laneFor(archetypeId,lodName){
+   return lanes.findIndex(l=>l.archetype.id===archetypeId&&l.lod===lodName);
+  },
+
+  /**
+   * Move a citizen to another lane -- in practice, another level of detail.
+   *
+   * Swap-remove from the old lane: the last instance is moved into the vacated slot and its
+   * owner is told where it went, so the lane stays densely packed and `mesh.count` remains
+   * the number actually drawn. Everything that makes a citizen who they are -- palette,
+   * phase, clip, height, build -- is rewritten into the new lane from their own state, so an
+   * LOD change cannot alter their appearance or restart their walk cycle.
+   */
+  moveLane(i,laneIndex){
+   if(i<0||i>=population)return false;
+   const from=lanes[state.lane[i]],to=lanes[laneIndex];
+   if(!to||from===to)return false;
+   if(to.count>=to.mesh.instanceMatrix.count)return false;
+   const slot=state.slot[i],last=from.count-1;
+   if(slot!==last){
+    const moved=from.owners[last];
+    // Carry the last instance's attributes into the hole it is filling.
+    from.palAttr.setXYZW(slot,from.palAttr.getX(last),from.palAttr.getY(last),
+     from.palAttr.getZ(last),from.palAttr.getW(last));
+    from.shoeAttr.setX(slot,from.shoeAttr.getX(last));
+    from.clipAttr.setXY(slot,from.clipAttr.getX(last),from.clipAttr.getY(last));
+    from.animAttr.setXY(slot,from.animAttr.getX(last),from.animAttr.getY(last));
+    from.owners[slot]=moved;
+    if(moved>=0)state.slot[moved]=slot;
+    from.palAttr.needsUpdate=from.shoeAttr.needsUpdate=true;
+    from.clipAttr.needsUpdate=from.animAttr.needsUpdate=true;
+   }
+   from.owners[last]=-1;from.count--;
+   const target=to.count++;
+   state.lane[i]=laneIndex;state.slot[i]=target;to.owners[target]=i;
+   to.palAttr.setXYZW(target,palette[i*4],palette[i*4+1],palette[i*4+2],palette[i*4+3]);
+   to.shoeAttr.setX(target,shoe[i]);
+   to.palAttr.needsUpdate=to.shoeAttr.needsUpdate=true;
+   writeClip(i);
+   return true;
+  },
 
   /** Move a citizen. Cheap enough to call for everyone, every frame. */
   place(i,x,y,z,heading,speed){
@@ -372,7 +466,8 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',interpolate=tr
   },
 
   inspect(){
-   return {population,lod,drawCalls:stats.drawCalls,triangles:stats.triangles,
+   const byLod={};for(const l of lanes)byLod[l.lod]=(byLod[l.lod]??0)+l.count;
+   return {population,lod,lods:levels,byLod,drawCalls:stats.drawCalls,triangles:stats.triangles,
     vertices:stats.vertices,updateMs:Number((stats.updateMs??0).toFixed(3)),
     stateChanges:stats.stateChanges,
     skeletons:0,mixers:0,

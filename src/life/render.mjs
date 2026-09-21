@@ -1,5 +1,6 @@
 import {createNearCharacters} from './near-characters.mjs';
 import {createAwareness} from './awareness.mjs';
+import {createHQLayer} from './hq-layer.mjs';
 import {createContactShadows} from './shadows.mjs';
 import {tagLimb,addGait,installGait} from './gait.mjs';
 import {Group,BoxGeometry,CapsuleGeometry,SphereGeometry,ConeGeometry,CylinderGeometry,TorusGeometry,InstancedMesh,MeshStandardMaterial,Object3D,Color,DynamicDrawUsage,BufferGeometry,Float32BufferAttribute,LineSegments,LineBasicMaterial} from 'three';
@@ -77,6 +78,12 @@ export function buildCrowd(data,options={}){
  installGait(material);
  let playerFocus=null;const nearCharacters=options.nearRigs===false?null:createNearCharacters(options.tier??'high',{ctx:network.ctx});if(nearCharacters)root.add(nearCharacters.root);
  const awareness=options.awareness===false?null:createAwareness();
+ // RUN 7B. The high-fidelity crowd is a RENDERER, switchable, with the legacy instanced
+ // bodies kept as the fallback. Nothing about the simulation changes when it is on: the HQ
+ // layer reads sim.pool and returns the ids it drew, and those ids are masked out of the
+ // legacy meshes below so nobody is drawn twice.
+ let hq=null,hqCamera=null;
+ const hqStats={enabled:false,hq:0,budget:0};
  const geometry={};for(let i=0;i<BODY_VARIANTS.length;i++)geometry[BODY_VARIANTS[i].key]=bodyGeometry(i);geometry.head=new SphereGeometry(1,10,7);for(let i=0;i<HAIR_VARIANTS.length;i++)geometry[HAIR_VARIANTS[i].key]=hairGeometry(i);
  Object.assign(geometry,{phone:new BoxGeometry(1,1,1),bag:new BoxGeometry(1,1,1),cane:new CylinderGeometry(1,1,1,6),suitcase:suitcaseGeometry(),umbrella:new ConeGeometry(1,.35,8)});
  const capacities={...Object.fromEntries(BODY_VARIANTS.map(v=>[v.key,v.count])),head:POOL_SIZE,...Object.fromEntries(HAIR_VARIANTS.map(v=>[v.key,v.count])),...ACCESSORY_TARGETS};
@@ -102,7 +109,11 @@ export function buildCrowd(data,options={}){
  function sync(dt=0){
   // Perception first: the figures below render whatever state it leaves behind.
   if(playerFocus)awareness?.update(sim,playerFocus,playerFocus,dt);
-  const detailed=nearCharacters?.update(sim.pool,playerFocus,dt,sim.time)??new Set();for(const k of Object.keys(meshes))counts[k]=0;shadows.begin();for(const p of sim.pool){if(!p.active||p.controlled)continue;const def=ARCHETYPES[p.archetype],h=def.height*(.96+(p.id%5)*.02),w=def.width*(1.06+(p.id%7)*.015),walk=p.speed>.05,phase=p.animationTime*(walk?7:1)+p.phase,fidelity=p.lod==='near'?1:p.lod==='mid'?.65:.15,sway=walk?Math.sin(phase)*.035*fidelity:Math.sin(phase)*.012,bob=walk?Math.abs(Math.cos(phase))*.024*fidelity:Math.sin(phase)*.008;
+  const near=nearCharacters?.update(sim.pool,playerFocus,dt,sim.time)??new Set();
+  // The HQ layer draws whoever it can afford, EXCLUDING anyone the near pool already has --
+  // a citizen drawn twice is the failure this mask exists to prevent.
+  const drawn=hq?hq.sync(sim.pool,hqCamera??playerFocus,dt,{time:sim.time,exclude:near}):null;
+  const detailed=drawn?new Set([...near,...drawn]):near;for(const k of Object.keys(meshes))counts[k]=0;shadows.begin();for(const p of sim.pool){if(!p.active||p.controlled)continue;const def=ARCHETYPES[p.archetype],h=def.height*(.96+(p.id%5)*.02),w=def.width*(1.06+(p.id%7)*.015),walk=p.speed>.05,phase=p.animationTime*(walk?7:1)+p.phase,fidelity=p.lod==='near'?1:p.lod==='mid'?.65:.15,sway=walk?Math.sin(phase)*.035*fidelity:Math.sin(phase)*.012,bob=walk?Math.abs(Math.cos(phase))*.024*fidelity:Math.sin(phase)*.008;
    const blend=dt?Math.min(1,dt*(p.lod==='far'?10:25)):1;p.renderX+=(p.x-p.renderX)*blend;p.renderZ+=(p.z-p.renderZ)*blend;
    // A thrown body's shadow belongs to the road it is over, not to the body: `p.height`
    // follows the arc, so using it would send the shadow into the air with the person.
@@ -130,10 +141,26 @@ export function buildCrowd(data,options={}){
   stats.contactShadows={drawn:shadows.drawn,batches:shadows.drawn?1:0,geometries:1,materials:1};
   stats.nearCharacters=nearCharacters?.inspect()??null;
   stats.bodyCounts=Object.fromEntries(BODY_VARIANTS.map(v=>[v.key,counts[v.key]]));stats.hairCounts=Object.fromEntries(HAIR_VARIANTS.map(v=>[v.key,counts[v.key]]));stats.accessories=Object.fromEntries(Object.keys(ACCESSORY_TARGETS).map(k=>[k,counts[k]]));stats.instanceCounts={...counts};
-  reportClock+=dt;if(reportClock>=1||!dt){reportClock=0;Object.assign(stats,network.stats,sim.snapshot(options.debug));stats.awareness=awareness?.inspect()??null;}
+  reportClock+=dt;if(reportClock>=1||!dt){reportClock=0;Object.assign(stats,network.stats,sim.snapshot(options.debug));stats.awareness=awareness?.inspect()??null;stats.hqCrowd=hq?hq.inspect():null;}
  }
  sync();return {root,network,sim,stats,meshes,setPlayerFocus(p){if(!p&&playerFocus)awareness?.clear(sim);playerFocus=p;},
+  /**
+   * Turn the RUN 7B high-fidelity crowd on, with its prebuilt pack. Off by default and
+   * removable at any time, so legacy remains a one-call rollback for the whole run.
+   */
+  enableHQCrowd(manifest,bin,options={}){
+   if(hq)return hq;
+   hq=createHQLayer(manifest,bin,options);
+   root.add(hq.root);
+   hqStats.enabled=true;hqStats.budget=options.budget??0;
+   return hq;
+  },
+  disableHQCrowd(){if(!hq)return;hq.dispose();hq=null;hqStats.enabled=false;hqStats.hq=0;},
+  /** Where the HQ budget should be spent, when it is not the player. */
+  setHQCamera(p){hqCamera=p;},
+  setHQBudget(n){hq?.setBudget(n);hqStats.budget=n;},
+  get hqCrowd(){return hq;},
   // The humanoid arrives late, exactly as it does for the player. Until it does the near
   // pool runs on baked figures, so nothing waits on it.
-  setNearCharacterAsset(a){nearCharacters?.setHumanAsset(a);},update(dt,camera){if(disposed)return;if(camera)sim.setCamera(camera.x,camera.z);sim.update(dt);sync(dt);},setTier(t){sim.setTier(t);nearCharacters?.setTier(t);sync();},dispose(){if(disposed)return;disposed=true;nearCharacters?.dispose();shadows.dispose();sim.dispose();for(const m of Object.values(meshes))m.dispose();for(const g of Object.values(geometry))g.dispose();material.dispose();headMaterial.dispose();hairMaterial.dispose();debug?.geometry.dispose();debug?.material.dispose();root.removeFromParent();root.clear();}};
+  setNearCharacterAsset(a){nearCharacters?.setHumanAsset(a);},update(dt,camera){if(disposed)return;if(camera)sim.setCamera(camera.x,camera.z);sim.update(dt);sync(dt);},setTier(t){sim.setTier(t);nearCharacters?.setTier(t);sync();},dispose(){if(disposed)return;disposed=true;hq?.dispose();hq=null;nearCharacters?.dispose();shadows.dispose();sim.dispose();for(const m of Object.values(meshes))m.dispose();for(const g of Object.values(geometry))g.dispose();material.dispose();headMaterial.dispose();hairMaterial.dispose();debug?.geometry.dispose();debug?.material.dispose();root.removeFromParent();root.clear();}};
 }
