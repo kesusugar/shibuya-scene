@@ -61,6 +61,9 @@ next-env.d.ts
 !/qa/gta-upgrade/asset-audit.mjs
 !/qa/gta-upgrade/bindcheck.mjs
 !/qa/gta-upgrade/lineup.html
+!/qa/gta-upgrade/hqcrowd.html
+!/qa/gta-upgrade/hq-vehicle.mjs
+!/qa/gta-upgrade/hq-ladder.mjs
 !/qa/gta-upgrade/feet-compare.mjs
 !/qa/gta-upgrade/archetype-feet.mjs
 

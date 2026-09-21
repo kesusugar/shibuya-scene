@@ -15,6 +15,7 @@ const files=[
  'tests/near-characters.test.mjs',
  'tests/near-humanoid.test.mjs',
  'tests/appearance.test.mjs',
+ 'tests/hq-crowd.test.mjs',
  'tests/shader-warmup.test.mjs',
  'tests/pedestrian-threat.test.mjs',
  'tests/npc-awareness.test.mjs',

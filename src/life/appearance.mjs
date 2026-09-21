@@ -68,8 +68,13 @@ const TOPS=Object.freeze([
 ]);
 const BOTTOMS=Object.freeze([
  0x1c2028,0x2a2f38,0x232a36,0x39404b,0x2d3542,0x171a20,
- // Lighter legs, so a dark top is not always over dark trousers.
- 0x4a5566,0x6b6558,0x8a8578,0x5d6470,0xa89f8d
+ // Lighter legs, so a dark top is not always over dark trousers -- but every one of them
+ // stays DARKER THAN SKIN. The first version had beige at 0x8a8578 and 0xa89f8d, and in a
+ // crowd of two thousand those legs read as bare: at LOD2 the trouser hem is a few vertices
+ // and the eye only has the tone to go on. Chasing a minimum distance from every skin tone
+ // is the wrong rule -- a dark-skinned person in dark trousers is not a bug -- so the rule
+ // that is actually enforced is luminance, and a test pins it.
+ 0x3a414c,0x44403a,0x333b33,0x3f3a44
 ]);
 const SHOES=Object.freeze([0x14161a,0x1f2126,0x2b2d33,0xe8e6e1,0x3a3c42]);
 const SKINS=Object.freeze([0xe8c9a8,0xdfb994,0xc79a72,0xa3764f,0x7a5334,0x5d3d26]);
