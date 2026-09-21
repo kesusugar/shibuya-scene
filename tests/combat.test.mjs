@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createMeleeCombat,COMBAT,PHASE} from '../src/player/combat.mjs';
 import {ATTACKS,attackOf,activeWindow} from '../src/player/attack-timing.mjs';
+import {createPlayer,PLAYER} from '../src/player/controller.mjs';
 
 /** The parts of the crowd simulation combat actually touches. */
 function crowd(people=[]){
@@ -294,4 +295,84 @@ test('nothing produces NaN or a stuck phase',()=>{
  }
  assert.ok(Number.isFinite(p.state.health));
  assert.equal(melee.phase,PHASE.IDLE,`combat ended stuck in ${melee.phase}`);
+});
+
+// RUN 8, STEP 15. The minimum death loop, against the REAL controller rather than the stub the
+// rest of this file uses -- the stub's `hurt` is a copy of the controller's, so testing the copy
+// would prove nothing about the game. What has to hold is that a fight can end the player, that
+// it says the fight ended it, that a corpse cannot keep punching, and that restarting is whole.
+test('an NPC fight can kill the player, and restarting puts them back',()=>{
+ const flat={solid:()=>false,safe:()=>true,height:()=>0,onRoad:()=>false};
+ const p=createPlayer(flat);
+ p.place(0,0,0);
+ assert.equal(p.state.alive,true);
+
+ // Punches land through the same 0.34 s hurt lock the crowd has to wait out, so the player
+ // cannot be deleted by one frame of overlap.
+ let punches=0;
+ for(let i=0;i<200&&p.state.alive;i++){
+  if(p.hurt(COMBAT.npcDamage,'fight'))punches++;
+  p.state.hurtTime=0;                       // the lock expiring, without simulating 0.34 s
+ }
+ assert.equal(p.state.alive,false,'the player survived an unlimited beating');
+ assert.equal(p.state.health,0);
+ assert.equal(p.state.hitBy,'fight','death blamed the wrong thing');
+ assert.ok(punches>=Math.ceil(100/COMBAT.npcDamage),
+  `died in ${punches} punches, which is fewer than ${COMBAT.npcDamage} damage each allows`);
+
+ // A dead player is inert: no further damage, no attack.
+ assert.equal(p.hurt(COMBAT.npcDamage,'fight'),false,'a corpse took damage');
+ assert.equal(p.startAttack(.5),false,'a corpse threw a punch');
+ const melee=createMeleeCombat();
+ const target=npc(1,0,1.0),c=crowd([target]);
+ melee.request();run(melee,c,p,1.2);
+ assert.equal(target.combatHealth,100,'a dead player landed a punch');
+
+ // Restart. `revive` is what the on-screen やり直す button calls.
+ assert.equal(p.revive(),true);
+ assert.equal(p.state.alive,true);
+ assert.equal(p.state.health,100);
+ assert.equal(p.state.hitBy,null);
+ assert.equal(p.state.hurtTime,0);
+ assert.equal(p.state.attackTime,0);
+ assert.equal(p.state.speed,0);
+
+ // Restarting also returns the player to the start point rather than reviving them where
+ // they fell, which is why the fight below has to re-place them next to the target.
+ assert.deepEqual([Math.round(p.state.x),Math.round(p.state.z)],
+  [Math.round(PLAYER.start[0]),Math.round(PLAYER.start[1])]);
+
+ // And the revived player fights again: the point of restarting.
+ p.place(0,0,0);
+ const melee2=createMeleeCombat();
+ melee2.request();run(melee2,c,p,1.2);
+ assert.ok(target.combatHealth<100,'the revived player could not punch');
+});
+
+// The other half of the crossing rule, and the part that makes it read as a fight rather than
+// as impunity: a pedestrian punched mid-crossing is not stopped, but they do not forgive it
+// either. `combatUntil` is set when they are hit, and the moment they are off the crossing --
+// still inside the 14 s window -- the retaliation loop picks them up.
+test('a pedestrian punched on a crossing fights back once they are off it',()=>{
+ const target=npc(1,0,1.0,{crossing:{id:'north'},queueKey:'north'});
+ const c=crowd([target]),p=player(),melee=createMeleeCombat();
+ melee.request();run(melee,c,p,1.2);
+
+ assert.ok(target.combatHealth<100,'the crossing pedestrian was not hit at all');
+ assert.deepEqual(target.crossing,{id:'north'},'they were pulled off the crossing');
+ assert.equal(target.state,'walking','they were stopped to fight mid-crossing');
+ assert.equal(target.combatTarget,'player','being hit did not make them hostile');
+ assert.ok(target.combatUntil>c.time,'the hostility window was never opened');
+ assert.equal(c.log.left.includes(target.id),false,'the signal group was released for a non-fatal hit');
+
+ // They reach the far kerb. Nothing else changes.
+ target.crossing=null;target.queueKey=null;
+ run(melee,c,p,.5);
+ assert.equal(target.state,'fighting','they walked off the crossing and forgot about it');
+ assert.equal(target.speed,0);
+
+ // And they swing, on the same phased model the player uses.
+ const before=p.state.health;
+ run(melee,c,p,3);
+ assert.ok(p.state.health<before,'the retaliating pedestrian never landed a punch');
 });
