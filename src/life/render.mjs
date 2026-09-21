@@ -156,6 +156,13 @@ export function buildCrowd(data,options={}){
    return hq;
   },
   disableHQCrowd(){if(!hq)return;hq.dispose();hq=null;hqStats.enabled=false;hqStats.hq=0;},
+  /**
+   * Report a violent event to the crowd. Returns how many people reacted.
+   *
+   * RUN 8. Safe to call when the HQ crowd is off: the legacy renderer has no mass state to
+   * change, so it reports nobody rather than throwing.
+   */
+  witness(event){return hq?hq.witness(event):0;},
   /** Where the HQ budget should be spent, when it is not the player. */
   setHQCamera(p){hqCamera=p;},
   setHQBudget(n){hq?.setBudget(n);hqStats.budget=n;},

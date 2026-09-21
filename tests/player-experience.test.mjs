@@ -70,11 +70,31 @@ test('melee selects a facing adult, provokes counterattacks, and either side can
  const p={id:7,active:true,controlled:false,choreographed:false,struck:undefined,combatDead:false,archetype:'casual',crossing:null,x:0,z:1,heading:Math.PI,state:'walking',speed:0};
  const grid=new Map([['0,0',[p]]]),crowd={grid,time:0,network:{ctx:flat},cell:(x,z)=>Math.floor(x/2)+','+Math.floor(z/2),insert(q){const k=this.cell(q.x,q.z);if(!this.grid.has(k))this.grid.set(k,[]);this.grid.get(k).push(q);},leave(){},say(){},vehicleOverlap:()=>false,strike(q){q.struck=0;return true;}};
  const player=createPlayer(flat,{start:[0,0],heading:0}),fight=createMeleeCombat();
- fight.request();fight.update(.1,crowd,player);assert.equal(p.combatHealth,100-COMBAT.playerDamage);assert.equal(p.combatTarget,'player');
+ // RUN 8: damage lands inside the clip's active window, not on the tick of the input. This
+ // assertion used to read `update(.1)` and expect health already gone, which was the
+ // instant-damage behaviour that run removed. Advancing past the wind-up is the fix; the
+ // claim being tested -- that a facing adult is selected and damaged -- is unchanged.
+ fight.request();fight.update(.1,crowd,player);
+ assert.equal(p.combatHealth,undefined,'damage landed during the wind-up');
+ fight.update(.3,crowd,player);
+ assert.equal(p.combatHealth,100-COMBAT.playerDamage);assert.equal(p.combatTarget,'player');
  crowd.time=.7;fight.update(.4,crowd,player);assert.ok(player.state.health<100);
- player.state.hurtTime=0;for(let i=0;i<2;i++){fight.request();fight.update(.5,crowd,player);}assert.equal(p.combatDead,true);assert.equal(p.fatal,true);assert.equal(fight.snapshot().npcDeaths,1);
+ // Each swing has to finish before the next one starts: a press during recovery is dropped
+ // rather than queued, so landing two more hits means waiting for the arm to come back twice
+ // rather than pressing twice.
+ player.state.hurtTime=0;
+ for(let i=0;i<2;i++){
+  while(fight.phase!=='idle')fight.update(.1,crowd,player);
+  fight.request();
+  for(let k=0;k<14;k++){fight.update(.1,crowd,player);player.state.hurtTime=0;}
+ }
+ assert.equal(p.combatDead,true);assert.equal(p.fatal,true);assert.equal(fight.snapshot().npcDeaths,1);
  const killer={...p,id:8,z:1,active:true,struck:undefined,combatDead:false,combatHealth:100,combatTarget:'player',combatUntil:99,combatNext:0};crowd.grid.set('0,0',[killer]);player.place(0,0,0);
- for(let i=0;i<8&&player.state.alive;i++){player.state.hurtTime=0;crowd.time+=2;fight.update(.5,crowd,player);}assert.equal(player.state.alive,false);assert.equal(player.state.hitBy,'fight');
+ // An NPC punch now costs a wind-up too, so beating the player down takes more simulated
+ // time than it did when their damage landed on the frame they decided to throw it. The loop
+ // still exits the moment the player dies; it just has room to get there.
+ for(let i=0;i<32&&player.state.alive;i++){player.state.hurtTime=0;crowd.time+=2;fight.update(.5,crowd,player);}
+ assert.equal(player.state.alive,false);assert.equal(player.state.hitBy,'fight');
  fight.dispose();
 });
 const simpleNetwork=()=>{const nodes=[[0,0],[-40,-35],[-75,-55],[15,25]].map(([x,z],id)=>({id,x,z,edges:[],component:0})),edges=[];for(const a of nodes)for(const b of nodes){if(a===b)continue;const e={id:edges.length,from:a.id,to:b.id,length:Math.hypot(a.x-b.x,a.z-b.z)};edges.push(e);a.edges.push(e.id);}return {nodes,edges,eligible:nodes,ctx:flat};};

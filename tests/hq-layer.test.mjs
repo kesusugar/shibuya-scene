@@ -254,3 +254,79 @@ test('a knocked-down body gets up, and ownership drains when the car stops',()=>
  assert.equal(end.disowned,0);
  layer.dispose();
 });
+
+test('a punch is witnessed by the people near it, and only by them',()=>{
+ // RUN 8. A crowd that keeps walking through a fight is wrong; a crowd that empties the
+ // crossing because of one punch is worse. This pins both ends.
+ const people=pool(900,1.3);
+ const layer=createHQLayer(manifest,bin,{budget:900});
+ let cx=0,cz=0;for(const p of people){cx+=p.x;cz+=p.z;}
+ cx/=people.length;cz/=people.length;
+ layer.sync(people,{x:cx,z:cz},1/60,{time:0});
+
+ const radius=11;
+ const reacted=layer.witness({x:cx,z:cz,severity:.72,radius});
+ assert.ok(reacted>0,'nobody noticed a punch beside them');
+
+ // Everyone who changed state must be inside the radius. This is the "no global panic" half.
+ let outside=0,inside=0;
+ for(let i=0;i<layer.crowd.population;i++){
+  const b=layer.crowd.state.behaviour[i];
+  if(b===STATE.NORMAL)continue;
+  const d=Math.hypot(layer.crowd.state.x[i]-cx,layer.crowd.state.z[i]-cz);
+  if(d>radius+.01)outside++;else inside++;
+ }
+ assert.equal(outside,0,`${outside} citizens reacted from outside the event radius`);
+ assert.equal(inside,reacted);
+ // And it must not be the whole crowd.
+ assert.ok(reacted<layer.crowd.population*.5,
+  `${reacted} of ${layer.crowd.population} reacted to one punch`);
+
+ const got=layer.inspect();
+ assert.ok(got.witnessCandidates<layer.crowd.population,
+  'the witness query scanned the entire population');
+ layer.dispose();
+});
+
+test('witnesses do not all react the same way, and they recover',()=>{
+ const people=pool(900,1.15);
+ const layer=createHQLayer(manifest,bin,{budget:900});
+ let cx=0,cz=0;for(const p of people){cx+=p.x;cz+=p.z;}
+ cx/=people.length;cz/=people.length;
+ const camera={x:cx,z:cz};
+ layer.sync(people,camera,1/60,{time:0});
+ layer.witness({x:cx,z:cz,severity:.72,radius:11});
+
+ const kinds=new Set();
+ for(let i=0;i<layer.crowd.population;i++){
+  const b=layer.crowd.state.behaviour[i];
+  if(b!==STATE.NORMAL)kinds.add(b);
+ }
+ assert.ok(kinds.size>=2,
+  `every witness reacted identically (${kinds.size} distinct response)`);
+
+ // Nobody flees forever.
+ let settled=null;
+ for(let f=0;f<900&&settled===null;f++){
+  layer.sync(people,camera,1/60,{time:(1+f)/60});
+  let busy=0;
+  for(let i=0;i<layer.crowd.population;i++)
+   if(layer.crowd.state.behaviour[i]!==STATE.NORMAL)busy++;
+  if(busy===0)settled=f/60;
+ }
+ assert.ok(settled!==null,'witnesses were still reacting 15 s after one punch');
+ layer.dispose();
+});
+
+test('a punch in a dense crowd is seen by a useful number of people',()=>{
+ // The QA threshold from the brief: in the dense scramble centre, a punch should reach at
+ // least twenty people. Not a spec for every situation -- a measurement of this one.
+ const people=pool(1200,1.05);
+ const layer=createHQLayer(manifest,bin,{budget:1200});
+ let cx=0,cz=0;for(const p of people){cx+=p.x;cz+=p.z;}
+ cx/=people.length;cz/=people.length;
+ layer.sync(people,{x:cx,z:cz},1/60,{time:0});
+ const reacted=layer.witness({x:cx,z:cz,severity:.72,radius:11});
+ assert.ok(reacted>=20,`only ${reacted} people reacted to a punch in a dense crowd`);
+ layer.dispose();
+});

@@ -46,7 +46,7 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
  const disowned=new Set();          // ids whose movement the reaction system has taken
  let reviewClock=0;
  const stats={hq:0,legacy:0,budget,moves:0,syncMs:0,threatMs:0,candidates:0,
-  reacting:0,down:0,byLod:{}};
+  reacting:0,down:0,byLod:{},witnessMs:0,witnessCandidates:0,witnessReacted:0};
 
  for(const a of manifest.archetypes)for(const l of lods)
   laneCache.set(`${a.id}|${l}`,crowd.laneFor(a.id,l));
@@ -203,6 +203,50 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
    return result;
   },
 
+  /**
+   * Something violent happened here; let the people who can see it react.
+   *
+   * RUN 8. A punch in a crowd that keeps walking is worse than no punch at all, but a punch
+   * that empties the crossing is worse still. So this is bounded twice over: by the query
+   * radius, which walks only the grid cells the event touches, and by distance bands inside
+   * it, so the people beside it startle and the people across the road look up.
+   *
+   * REACTIONS ARE NOT UNIFORM. Each citizen's threshold moves with a hash of their own id --
+   * the same seed their appearance comes from -- so the same event produces a spread of
+   * responses rather than a chorus, and the same person is reliably the nervous one. That
+   * rule is borrowed from src/life/awareness.mjs; the storage deliberately is not, because
+   * two thousand JS state objects is the thing this whole architecture avoids.
+   *
+   * Nothing here decides damage. The simulation already did that.
+   */
+  witness({x,z,severity=.7,radius=11}={}){
+   if(!crowd.population)return 0;
+   const start=(typeof performance!=='undefined'?performance.now():0);
+   grid.rebuild(crowd);
+   grid.near(x,z,radius,scratch);
+   let reacted=0;
+   for(const i of scratch){
+    const behaviour=crowd.state.behaviour[i];
+    // Anyone already off their feet, or already running, is not made to notice again.
+    if(behaviour===STATE.HIT||behaviour===STATE.KNOCKDOWN||behaviour===STATE.DOWNED
+     ||behaviour===STATE.FLEE)continue;
+    const d=Math.hypot(crowd.state.x[i]-x,crowd.state.z[i]-z);
+    if(d>radius)continue;
+    // Nerve, from the citizen's own id. High nerve needs a closer or nastier event.
+    let h=Math.imul((crowd.state.id[i]|0)^0x9e3779b9,0x85ebca6b);
+    h^=h>>>13;h=Math.imul(h,0xc2b2ae35);h^=h>>>16;
+    const nerve=.55+(((h>>>7)&255)/255)*.9;
+    const felt=severity*(1-d/radius)/nerve;
+    const want=felt>=.52?STATE.FLEE:felt>=.30?STATE.AVOID:felt>=.12?STATE.LOOK:null;
+    if(!want)continue;
+    if(crowd.setState(i,want))reacted++;
+   }
+   stats.witnessMs=(typeof performance!=='undefined'?performance.now():0)-start;
+   stats.witnessCandidates=scratch.length;
+   stats.witnessReacted=reacted;
+   return reacted;
+  },
+
   /** Ids whose movement the reaction system currently owns. */
   get disowned(){return disowned;},
 
@@ -213,6 +257,8 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
    return {...got,hq:stats.hq,budget:stats.budget,moves:stats.moves,
     syncMs:Number(stats.syncMs.toFixed(3)),threatMs:Number(stats.threatMs.toFixed(3)),
     candidates:stats.candidates,reacting:stats.reacting,down:stats.down,
+    witnessMs:Number(stats.witnessMs.toFixed(3)),witnessCandidates:stats.witnessCandidates,
+    witnessReacted:stats.witnessReacted,
     disowned:disowned.size};
   },
 

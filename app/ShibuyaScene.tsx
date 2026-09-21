@@ -102,7 +102,11 @@ export default function Home(){
  const VIEW_LIMIT=180,VIEW_CEILING=60,EYE_FLOOR=1.6;
  // The player is created once the crowd network is up, since it walks on that context.
  let player:any=null,playerMarker:any=null,carMarker:any=null,playerFigure:any=null,playerShadow:any=null,deferredCharacter:any=null,playerCar:any=null,playerAudio:any=null,crowdVoices:any=null,touchPad:any=null,blood:any=null,driving=false,playerMode=false;const followPose:any={x:0,y:0,z:0,tx:0,ty:0,tz:0};const playerBox={x:0,z:0,heading:0};
- let vehicleVisual:any=null,vehicleEffects:any=null,playUI:any=null,localCrowdClock=0,frameHits=0,combatDeathReported=false;const followCamera=createFollowCamera(),melee=createMeleeCombat(),vehicleTransition=createVehicleTransition();
+ let vehicleVisual:any=null,vehicleEffects:any=null,playUI:any=null,localCrowdClock=0,frameHits=0,combatDeathReported=false;const followCamera=createFollowCamera(),melee=createMeleeCombat({
+  // RUN 8: a punch is an event the crowd can see. The HQ layer bounds it by its own spatial
+  // grid, so this costs the cells around the fight and not the population.
+  onWitness:(event:any)=>lifeEntry.hooks.current?.witness?.(event)??0
+ }),vehicleTransition=createVehicleTransition();
  const playerSize={width:PLAYER.radius*2,length:PLAYER.radius*2};const PLAYER_HEIGHT=1.76;
  // Getting in and out begins with the player's parked car, but a stopped traffic slot can
  // later become the controlled one. The slot is reused so traffic still sees its body.

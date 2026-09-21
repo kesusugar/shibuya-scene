@@ -17,6 +17,7 @@ const files=[
  'tests/appearance.test.mjs',
  'tests/hq-crowd.test.mjs',
  'tests/hq-layer.test.mjs',
+ 'tests/combat.test.mjs',
  'tests/shader-warmup.test.mjs',
  'tests/pedestrian-threat.test.mjs',
  'tests/npc-awareness.test.mjs',
