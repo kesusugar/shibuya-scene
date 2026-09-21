@@ -71,7 +71,22 @@ vec3 unpackRGB(float v){
  float r=floor(v/65536.0);
  float g=floor(mod(v,65536.0)/256.0);
  float b=mod(v,256.0);
- return vec3(r,g,b)/255.0;
+ vec3 c=vec3(r,g,b)/255.0;
+ // sRGB -> linear-sRGB, the SAME conversion THREE.Color applies when ColorManagement is on.
+ //
+ // This is the RUN 7C root cause. The palette is packed as an 8-bit sRGB hex, and the
+ // renderer's working space is linear, so handing it straight to diffuseColor made every
+ // colour too bright -- and NOT uniformly: measured against new THREE.Color(hex), a dark
+ // navy #1c2028 came out 9.5x too bright, a mid grey 2.9x, and a cream top only 1.1x. Dark
+ // clothing stopped reading as dark while light clothing looked nearly right, which is
+ // exactly what a washed-out crowd is. The RUN 6.8 near characters were correct all along
+ // because they pass their palette through THREE.Color, which does this for them.
+ //
+ // The conversion is done here rather than at pack time on purpose: a linear value for a
+ // dark colour is about 0.012, and eight bits of that is three levels, which would band.
+ // Eight bits of sRGB expanded here is what an sRGB texture does, and it has the precision
+ // where the eye needs it.
+ return mix(pow(c*0.9478672986+0.0521327014,vec3(2.4)),c*0.0773993808,step(c,vec3(0.04045)));
 }
 mat4 readBone(float row,float bone){
  vec2 inv=1.0/boneAtlasSize;
@@ -128,7 +143,22 @@ vec3 unpackRGB(float v){
  float r=floor(v/65536.0);
  float g=floor(mod(v,65536.0)/256.0);
  float b=mod(v,256.0);
- return vec3(r,g,b)/255.0;
+ vec3 c=vec3(r,g,b)/255.0;
+ // sRGB -> linear-sRGB, the SAME conversion THREE.Color applies when ColorManagement is on.
+ //
+ // This is the RUN 7C root cause. The palette is packed as an 8-bit sRGB hex, and the
+ // renderer's working space is linear, so handing it straight to diffuseColor made every
+ // colour too bright -- and NOT uniformly: measured against new THREE.Color(hex), a dark
+ // navy #1c2028 came out 9.5x too bright, a mid grey 2.9x, and a cream top only 1.1x. Dark
+ // clothing stopped reading as dark while light clothing looked nearly right, which is
+ // exactly what a washed-out crowd is. The RUN 6.8 near characters were correct all along
+ // because they pass their palette through THREE.Color, which does this for them.
+ //
+ // The conversion is done here rather than at pack time on purpose: a linear value for a
+ // dark colour is about 0.012, and eight bits of that is three levels, which would band.
+ // Eight bits of sRGB expanded here is what an sRGB texture does, and it has the precision
+ // where the eye needs it.
+ return mix(pow(c*0.9478672986+0.0521327014,vec3(2.4)),c*0.0773993808,step(c,vec3(0.04045)));
 }`);
   shader.fragmentShader=shader.fragmentShader.replace('#include <color_fragment>',`
  float wShoe=max(0.0,1.0-vColor.r-vColor.g-vColor.b-vColor.a);
