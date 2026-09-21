@@ -74,7 +74,7 @@ export function buildCrowd(data,options={}){
  const network=options.network??buildPedestrianNetwork(data,{ground,generic,core,street,detail}),sim=options.sim??new CrowdSimulation(network,options),root=new Group();root.name='r1-crowd';
  const material=new MeshStandardMaterial({color:0xffffff,roughness:.9}),headMaterial=new MeshStandardMaterial({color:0xffffff,roughness:.7}),hairMaterial=new MeshStandardMaterial({color:0xffffff,roughness:.8});
  installGait(material);
- let playerFocus=null;const nearCharacters=options.nearRigs===false?null:createNearCharacters(options.tier??'high');if(nearCharacters)root.add(nearCharacters.root);
+ let playerFocus=null;const nearCharacters=options.nearRigs===false?null:createNearCharacters(options.tier??'high',{ctx:network.ctx});if(nearCharacters)root.add(nearCharacters.root);
  const geometry={};for(let i=0;i<BODY_VARIANTS.length;i++)geometry[BODY_VARIANTS[i].key]=bodyGeometry(i);geometry.head=new SphereGeometry(1,10,7);for(let i=0;i<HAIR_VARIANTS.length;i++)geometry[HAIR_VARIANTS[i].key]=hairGeometry(i);
  Object.assign(geometry,{phone:new BoxGeometry(1,1,1),bag:new BoxGeometry(1,1,1),cane:new CylinderGeometry(1,1,1,6),suitcase:suitcaseGeometry(),umbrella:new ConeGeometry(1,.35,8)});
  const capacities={...Object.fromEntries(BODY_VARIANTS.map(v=>[v.key,v.count])),head:POOL_SIZE,...Object.fromEntries(HAIR_VARIANTS.map(v=>[v.key,v.count])),...ACCESSORY_TARGETS};
@@ -127,5 +127,8 @@ export function buildCrowd(data,options={}){
   stats.bodyCounts=Object.fromEntries(BODY_VARIANTS.map(v=>[v.key,counts[v.key]]));stats.hairCounts=Object.fromEntries(HAIR_VARIANTS.map(v=>[v.key,counts[v.key]]));stats.accessories=Object.fromEntries(Object.keys(ACCESSORY_TARGETS).map(k=>[k,counts[k]]));stats.instanceCounts={...counts};
   reportClock+=dt;if(reportClock>=1||!dt){reportClock=0;Object.assign(stats,network.stats,sim.snapshot(options.debug));}
  }
- sync();return {root,network,sim,stats,meshes,setPlayerFocus(p){playerFocus=p;},update(dt,camera){if(disposed)return;if(camera)sim.setCamera(camera.x,camera.z);sim.update(dt);sync(dt);},setTier(t){sim.setTier(t);nearCharacters?.setTier(t);sync();},dispose(){if(disposed)return;disposed=true;nearCharacters?.dispose();shadows.dispose();sim.dispose();for(const m of Object.values(meshes))m.dispose();for(const g of Object.values(geometry))g.dispose();material.dispose();headMaterial.dispose();hairMaterial.dispose();debug?.geometry.dispose();debug?.material.dispose();root.removeFromParent();root.clear();}};
+ sync();return {root,network,sim,stats,meshes,setPlayerFocus(p){playerFocus=p;},
+  // The humanoid arrives late, exactly as it does for the player. Until it does the near
+  // pool runs on baked figures, so nothing waits on it.
+  setNearCharacterAsset(a){nearCharacters?.setHumanAsset(a);},update(dt,camera){if(disposed)return;if(camera)sim.setCamera(camera.x,camera.z);sim.update(dt);sync(dt);},setTier(t){sim.setTier(t);nearCharacters?.setTier(t);sync();},dispose(){if(disposed)return;disposed=true;nearCharacters?.dispose();shadows.dispose();sim.dispose();for(const m of Object.values(meshes))m.dispose();for(const g of Object.values(geometry))g.dispose();material.dispose();headMaterial.dispose();hairMaterial.dispose();debug?.geometry.dispose();debug?.material.dispose();root.removeFromParent();root.clear();}};
 }

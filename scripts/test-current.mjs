@@ -13,6 +13,7 @@ const files=[
  'tests/locomotion.test.mjs',
  'tests/hybrid-clip.test.mjs',
  'tests/near-characters.test.mjs',
+ 'tests/near-humanoid.test.mjs',
  'tests/pedestrian-threat.test.mjs',
  'tests/launch-config.test.mjs',
  'tests/asphalt-material.test.mjs',
