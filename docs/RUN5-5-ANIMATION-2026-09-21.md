@@ -186,7 +186,7 @@ reporting. Two external options, with what is known about each.
 | --- | --- |
 | Licence | Permissive. The bundled `READMEFIRST.txt` states: *"Use this data! This data is free for use in research and commercial projects worldwide."* An acknowledgment of `mocap.cs.cmu.edu` and NSF EIA-0196217 is requested, not required. |
 | Commercial use | Explicitly allowed |
-| Redistribution | CMU's own terms elsewhere ask that the data not be resold directly, even converted. Converting only the clips Shibuya needs into the character pack is consistent with that and with this project's existing rule against redistributing raw data as an asset pack. **This is the clause to read in full before committing to it.** |
+| Redistribution | The bundled document contains **no restriction of any kind** — verified by reading it, see RUN 5.6. An earlier draft of this row claimed CMU asks that the data not be resold even converted; that was recalled rather than sourced and is withdrawn. The project's own rule against redistributing raw data as a third-party asset pack still applies and is stricter than the licence. |
 | Reachable | Yes — mirrored on GitHub (`una-dinosauria/cmu-mocap`), which is the only host this environment can reach |
 | Content | Very large; multiple subjects walking, jogging and running at a range of real speeds. This is the only source found that would actually solve the problem. |
 | Cost | **Substantial.** BVH, with MotionBuilder joint naming, not the UE 65-bone naming. Needs a retargeting pipeline: bone mapping, rest-pose alignment, scale normalisation, and a conversion step in `scripts/`. This is new code of a kind RUN 5.5 has so far avoided entirely. |
