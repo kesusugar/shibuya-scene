@@ -16,6 +16,7 @@ const files=[
  'tests/near-humanoid.test.mjs',
  'tests/shader-warmup.test.mjs',
  'tests/pedestrian-threat.test.mjs',
+ 'tests/npc-awareness.test.mjs',
  'tests/launch-config.test.mjs',
  'tests/asphalt-material.test.mjs',
  'tests/build-runner.test.mjs',

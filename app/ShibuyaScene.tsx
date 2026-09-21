@@ -295,9 +295,9 @@ export default function Home(){
   // Foot IK is invisible from outside: a solver that never ran and a solver that ran and
   // declined to move anything look identical on screen. Under ?qa=1 the figure and the
   // surface it queries are reachable, so a check can tell those two apart.
-  if(config.qa){(window as any).__SHIBUYA_FIGURE__=playerFigure;(window as any).__SHIBUYA_CTX__=ctx;}
+  if(config.qa){(window as any).__SHIBUYA_FIGURE__=playerFigure;(window as any).__SHIBUYA_CTX__=ctx;(window as any).__SHIBUYA_LIFE__=lifeEntry.hooks.current;}
   return true;};
- const exitPlayer=()=>{if(!playerMode)return;playUI?.hide();vehicleVisual?.hide();vehicleEffects?.hide();lifeEntry.hooks.current?.setPlayerFocus(null);followCamera.reset();melee.reset();vehicleTransition.cancel();playerMode=false;driving=false;setDriving(false);playerCar?.release();playerCar=null;carMarker?.hide();playerAudio?.silence();touchPad?.hide();player?.detach();playerMarker?.hide();playerFigure?.hide();playerShadow?.begin();playerShadow?.end();releaseCrowdSlot();delete (window as any).__SHIBUYA_PLAYER__;delete (window as any).__SHIBUYA_CAR__;delete (window as any).__SHIBUYA_FIGURE__;delete (window as any).__SHIBUYA_CTX__;
+ const exitPlayer=()=>{if(!playerMode)return;playUI?.hide();vehicleVisual?.hide();vehicleEffects?.hide();lifeEntry.hooks.current?.setPlayerFocus(null);followCamera.reset();melee.reset();vehicleTransition.cancel();playerMode=false;driving=false;setDriving(false);playerCar?.release();playerCar=null;carMarker?.hide();playerAudio?.silence();touchPad?.hide();player?.detach();playerMarker?.hide();playerFigure?.hide();playerShadow?.begin();playerShadow?.end();releaseCrowdSlot();delete (window as any).__SHIBUYA_PLAYER__;delete (window as any).__SHIBUYA_CAR__;delete (window as any).__SHIBUYA_FIGURE__;delete (window as any).__SHIBUYA_CTX__;delete (window as any).__SHIBUYA_LIFE__;
   view.fov=50;view.updateProjectionMatrix();controls.enabled=!config.qa;setPlayerHit(null);setMode('observe');preset(currentCamera,false);};
  resize();setTier(currentTier);setTime(clock.value);setModules(system.snapshot());
  const observer=new ResizeObserver(resize);observer.observe(mount.current);

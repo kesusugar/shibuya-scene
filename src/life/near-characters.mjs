@@ -1,4 +1,5 @@
 import {ARCHETYPES} from './config.mjs';
+import {LIFE} from './awareness.mjs';
 import {Group} from 'three';
 import {createPlayerFigure,bakedAsset} from '../player/figure.mjs';
 
@@ -54,6 +55,24 @@ const SKIN=[0xdfb994,0xc79a72,0xa3764f,0x7a5334,0xecd0b0];
 // that now shares its body. No citizen top is allowed near it -- a test asserts the distance,
 // because "they look different to me" is not a property a palette has.
 
+
+/**
+ * The clip word for a citizen's life state.
+ *
+ * `look` turns the head towards `threatHeading` and leaves the gait alone; `startle` and
+ * `guard` are whole-body clips. Avoiding and fleeing are already visible as motion -- the
+ * simulation is running them somewhere -- so they read as `look`, which keeps the head on
+ * what they are running from instead of overriding the run with a flinch.
+ */
+function lifeReaction(p){
+ switch(p.lifeState){
+  case LIFE.STARTLE:return 'startle';
+  case LIFE.AVOID:return 'guard';
+  case LIFE.FLEE:case LIFE.LOOK:return 'look';
+  case LIFE.RECOVER:return 'recover';
+  default:return null;
+ }
+}
 
 /** Deterministic per-citizen so a body keeps its identity across pool reuse. */
 function wardrobe(id){
@@ -190,8 +209,12 @@ export function createNearCharacters(tier='high',{ctx=null}={}){
     if(slot.human)stats.humanoids++;else stats.baked++;
     if(slot.ik)stats.ik++;
     const distance=Math.hypot(p.x-focus.x,p.z-focus.z),interval=distance<12?0:1/30;
-    const reaction=p.reactionUntil>clock?p.trafficReaction:p.reactionUntil+.6>clock?'recover':null;
-    const state={trafficReaction:reaction,threatHeading:p.threatHeading,x:p.renderX??p.x,y:p.height??0,z:p.renderZ??p.z,heading:p.heading,speed:p.speed,alive:true,animationPhase:Math.abs(p.id)*.137,attackTime:p.combatAction>0?Math.min(.42,p.combatAction*.42):0};
+    // RUN 7's life state, when there is one, decides what the body does: it already folded
+    // the car reaction into itself, so reading both here would let two machines argue. The
+    // older mapping stays as the fallback for a crowd built without awareness.
+    const reaction=lifeReaction(p)??
+     (p.reactionUntil>clock?p.trafficReaction:p.reactionUntil+.6>clock?'recover':null);
+    const state={trafficReaction:reaction,threatHeading:p.lifeThreatHeading??p.threatHeading,x:p.renderX??p.x,y:p.height??0,z:p.renderZ??p.z,heading:p.heading,speed:p.speed,alive:true,animationPhase:Math.abs(p.id)*.137,attackTime:p.combatAction>0?Math.min(.42,p.combatAction*.42):0};
     if(slot.elapsed>=interval){slot.figure.update(state,Math.min(.1,slot.elapsed));slot.elapsed=0;}
     else slot.figure.root.position.set(state.x,state.y,state.z);
    }
