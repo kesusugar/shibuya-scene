@@ -990,6 +990,159 @@ needed a small viewport to reach in reasonable time.
 - **A full 108-second signal cycle under combat load** — as before RUN 8.
 
 
+## 9f. RUN 9 — vehicle occupancy, staged entry, and a real carjack
+
+The PRE-RUN 8 audit found that driving worked, entry existed as one smoothstep, exit existed
+behind a safe-doorstep rule, doors animated, and the anchors were already authored. What was
+missing was underneath all of it: **traffic vehicles had no driver entity at all**. Nothing in
+the project could say who was in a car, so "carjacking" was `takeOver(slot)` at the moment the
+button went down — there was nobody to take it from.
+
+### Occupancy is one authority
+
+`src/traffic/occupancy.mjs`. Occupancy is never inferred from a mesh, from `controlled`, or
+from whether a driver happens to be drawn.
+
+```
+OCCUPANT   NONE | TRAFFIC_DRIVER | PLAYER
+DRIVER     SEATED -> ALERT -> BEING_EXTRACTED -> EXTRACTED
+```
+
+Data-oriented: the traffic pool is a fixed 146 slots, so occupancy is parallel typed arrays
+indexed by slot id. No object per car, no allocation per spawn, **a driver costs 13 bytes
+rather than a skeleton**. A driver is an *identity* — `driverId` and an appearance seed — not
+an actor.
+
+The model enforces its own invariants rather than trusting call sites:
+
+| invariant | how it is guaranteed |
+| --- | --- |
+| one seat, one occupant | `seat` and `takeSeat` refuse a seat that is not `NONE` |
+| the player is in at most one car | the seat they are in is a **single value**, so a second cannot exist |
+| a driver cannot vanish from the seat | `advance` moves one state at a time; `extract` refuses unless `BEING_EXTRACTED` |
+
+That last one is the instant takeover this RUN exists to remove, expressed as a state machine.
+
+**Seats are reconciled, not assigned.** A vehicle becomes active in three places — `spawn`,
+the central streams, and the rotary service — and seating at each means the next one added
+forgets. `reconcileOccupancy` walks the pool once per frame instead, so no activation path can
+be missed. The same reasoning produced `reconcileOwnership` in the HQ crowd layer.
+
+Three cars stay empty on purpose: **parked** cars (an empty parked car *is* the normal-entry
+case), the car the player is **controlling**, and a car whose driver has just been **dragged
+out** — without that last marker a fresh driver appears in the seat while the player is still
+walking round the bonnet.
+
+### The driver you can see
+
+`src/traffic/drivers.mjs` is deliberately the cheapest thing that stops a car reading as empty.
+**No skeleton, no AnimationMixer, no clip, no per-frame AI.** Head, shoulders and a hint of
+arms is the whole silhouette a cabin shows through glass.
+
+| | |
+| --- | ---: |
+| draw calls, any traffic count | **3** |
+| skeletons / mixers | **0 / 0** |
+| CPU | ~0.1 ms/frame |
+| budget | nearest 48 occupied cars within 46 m |
+
+Bounded by **distance, not population**, so a city full of traffic costs what a street does.
+Identity comes from `src/life/appearance.mjs`, the same recipe the crowd uses.
+
+Two things had to be fixed before any of it was visible:
+
+- the layer ranked cars by distance **from the camera body**, and the scramble preset sits
+  sixty metres back and above the crossing, so every cabin fell outside the radius and it drew
+  nobody. It now focuses on what is being *looked at*.
+- **the cabin was a solid dark box.** `glass` had no transparency at all, so the seated driver
+  was being drawn correctly and hidden completely, and no car in the scene could ever show that
+  someone was in it. Now tinted (opacity .62) rather than clear.
+
+### Anchors, finally used
+
+`driverSeat`, `driverDoor`, `driverEntry`, `driverExit` have existed since the vehicle assets
+were built and **nothing used them** — enter and exit invented their own offsets, so the
+authoritative numbers and the numbers actually used were two different things.
+`src/traffic/vehicle-anchors.mjs` is the one place that turns them into world poses, memoised
+per body. Measured, for a sedan: seat `[-0.418, 0.591, 0.989]`, entry `[-1.630, 0, 0.897]`,
+exit `[-1.690, 0, 0.598]`.
+
+The side mirrors, because the player may approach from whichever side is clear. **The seat does
+not** — walking round the far side of a car does not move the steering wheel to meet you.
+`doorPose` still chooses the side, because it also tests the ground for solids.
+
+### Entry and exit are sequences now
+
+```
+enter    ALIGN -> DOOR_OPEN -> ENTRY -> SEAT -> DOOR_CLOSE            1.62 s
+exit     DOOR_OPEN -> EXIT -> STAND -> DOOR_CLOSE                     1.24 s
+carjack  ALIGN -> DOOR_OPEN -> GRAB -> PULL -> THROW ->
+         ENTRY -> SEAT -> DOOR_CLOSE                                  2.72 s
+```
+
+Each stage carries its own duration, waypoints and door state. That buys three things the old
+`Math.sin(phase * PI)` could not express:
+
+- the door **opens before** the body moves through it and **shuts after** it has cleared. The
+  old shape opened the panel as the player set off walking and had it shut again as they sat.
+- **the seat is a real destination.** Entry used to end at the *door*; sitting down was the
+  renderer hiding the player while the car started drawing them.
+- there is a defined moment when **control transfers**, and it is the end.
+
+### Ownership is split in two
+
+`takeOver` became `reserve` + `commit`.
+
+`reserve` does what the animation needs: the car is frozen so traffic cannot pull away
+mid-sequence, permits are released so a held signal group does not stall the map while the
+player walks round the bonnet, and the slot becomes the one the player's renderer draws so its
+door can swing. It deliberately does **not** set `active` — every driving path is gated on
+that, so a reserved car sits there, input does nothing, `step` returns immediately, and nothing
+is struck by it.
+
+`commit` takes the wheel, and it **asks the occupancy model** whether the seat is free rather
+than assuming. A car whose driver is still in it cannot be driven away. An entry that cannot
+commit unreserves rather than stranding.
+
+`vacateSeat` ends occupancy without giving up the car — the player still owns it and is still
+offered it back as `own`, but a car nobody is sitting in must not report an occupant.
+
+### The carjack
+
+The carjack list is the entry list with three stages spliced in, so getting into a stolen car
+is the same animation as getting into an empty one **with a fight in the middle**.
+
+| stage | what happens |
+| --- | --- |
+| `GRAB` | the driver notices → `ALERT` |
+| `PULL` | hauled across the sill → `BEING_EXTRACTED` |
+| `THROW` | the body lands on the road, the seat is free |
+
+Consequences hang off stage *changes* and replay any stage a long frame crossed, so none is
+skipped — the same rule RUN 8's hit window needed.
+
+Splitting it this way is what makes the seat **empty for a beat** before the player is in it.
+Between `THROW` and `SEAT` the car has no occupant at all, which is the honest description of
+a carjacking in progress and is what stops the player driving off with the driver still there.
+
+**The person thrown out is the person who was sitting in it.** `appearanceId` carries the
+driver's seed onto the pedestrian and the crowd renderers prefer it over the pool id.
+Arriving on the pavement as somebody else would undo the whole reason a driver has an identity.
+
+They are handed to `crowd.strike` — the simulation's own knock-down, the same path a car uses.
+That buys the existing `HIT → KNOCKDOWN → DOWNED → RECOVER` chain, the blood and the scream,
+rather than a second knockdown architecture to keep in step with the first.
+
+A car doing more than **0.35 m/s refuses**: the same threshold `nearestEntry` already uses.
+Pulling someone out of a car doing thirty is a different feature, and RUN 9 is not it.
+
+Aborts are handled rather than hoped about. Leaving player mode mid-carjack settles the driver
+back into the seat, shuts the door and hands the frozen slot back to traffic. `abort` is legal
+only before the throw — once there is a person on the road, putting them back in the car is not
+an abort, it is a resurrection.
+
+<!--RUN9-TAIL-->
+
 ## 10–15. Not yet implemented
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
@@ -1020,6 +1173,24 @@ never mutates crossing or signal state.
 Do not treat the passing tests as verification. Do not build RUN 8 on it. Do not revert it.
 
 ## 16. Metrics
+
+### At the close of RUN 9
+
+`qa/gta-upgrade/occupancy-cost.mjs`, real Shibuya graph, CPU and counts only.
+
+| tier | cars | drivers | `reconcileOccupancy` | drivers drawn | driver layer | draws | skeletons | mixers |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| low | 17 | 14 | 6.2 µs/f | 3 | 22.2 µs/f | 3 | **0** | **0** |
+| medium | 37 | 30 | 7.2 µs/f | 4 | 36.3 µs/f | 3 | **0** | **0** |
+| high | 74 | 62 | 3.3 µs/f | 11 | 15.6 µs/f | 3 | **0** | **0** |
+
+Both terms are noise against a 16.7 ms frame. `reconcileOccupancy` is O(pool) on a fixed 146
+slots over typed arrays; the driver layer is bounded by its 46 m radius rather than by the
+traffic count, which is why HIGH with 62 drivers is no dearer than LOW with 14. Occupancy
+storage is **1,460 bytes for the whole city**. In the live scene the layer drew 8 at the
+scramble camera and 14 standing beside a taxi, at ~0.1 ms.
+
+**RUN 7's architecture is intact.** Nothing in RUN 9 added a skeleton or an AnimationMixer.
 
 ### At the close of RUN 8
 
@@ -1123,6 +1294,22 @@ a pedestrian 8 cm away all missed. A car could always knock the cast down throug
 `choreography.move` -- so only the fist was blocked. Every NPC in the combat tests was built
 with `choreographed` falsy, so 23 passing cases tested only the minority the code already
 worked on. **When a test helper omits a flag, it is testing the flag's absence.**
+
+**A carjack that never took the car.** The commit branch tested `pose.kind === 'enter'`, so a
+carjack ran its whole sequence -- driver alerted, hauled across the sill, thrown on the road --
+and then handed the car straight back, because the line that takes the wheel did not recognise
+the kind that had just earned it. **When a sequence is a variant of another, every branch that
+names the original has to be checked, not just the ones that obviously matter.**
+
+**A camera that shot the entry from inside the bodywork.** The follow camera framed the player
+until `driving`, which is the END of the sequence, so through the ENTRY and SEAT stages it
+tracked a point inside the vehicle and the eye sat on the roof. `seated` arrives before
+`driving` does, and that is the moment the framing has to change.
+
+**A driver drawn perfectly and hidden completely.** The seated driver was correct from the
+first run; the cabin `glass` was an opaque MeshStandardMaterial, so no car in the scene could
+ever show an occupant. Before concluding that something is not being drawn, check whether it
+is being drawn behind something.
 
 **Reading a browser symptom as environment before testing it.** The first diagnosis of the
 banner above was "the browser has been open for an hour". A clean browser reproduced it in 35
@@ -1289,8 +1476,15 @@ six real seconds and inputs during its recovery are dropped by design. Anything 
 wall-clock time will under-count. Shrink the viewport to raise the frame rate, or drive the
 check off state rather than off delays. **Never report a frame rate from it.**
 
-**Start at RUN 9, not RUN 7.** RUN 8 is complete (§9e). The RUN 7 awareness WIP at `f6aa8e8`
-is still unverified and is not a prerequisite for anything that followed.
+**Start at RUN 12, not RUN 7.** RUN 8 is complete (§9e) and RUN 9 is complete (§9f), which
+absorbed the old RUN 10 (enter/exit) and RUN 11 (carjacking) as well. The RUN 7 awareness WIP
+at `f6aa8e8` is still unverified and is not a prerequisite for anything that followed.
+
+`window.__SHIBUYA_TRAFFIC__` is exposed under `?qa=1` as well, and
+`__SHIBUYA_QA__.metrics` now carries `occupancy`, `seatedDrivers`, `transition` and
+`lastCarjack`. **Use occupancy as the signal for whether the player got into a car** --
+`car.state.active` is not one, because `ensureCar` spawns the player's own car already active,
+and a probe waiting on it reports success before the sequence has even run.
 
 Work one RUN at a time and close each one completely — implement, unit test, verify in a real
 browser, capture screenshots and numbers, check for regressions, commit, push, update this
