@@ -3,8 +3,8 @@
 The one document to read when resuming this work with no conversation history. Read
 `AGENTS.md` and `CLAUDE.md` first for the repository rules, then this.
 
-**Updated at the close of RUN 7A.** RUNs 0–6 and 6.8 are complete, and RUN 7A is a finished
-POC. RUN 7 proper is still only an unverified WIP commit — see §10.
+**Updated at the close of RUN 7B.** RUNs 0–6, 6.8, 7A and 7B are complete. RUN 7 proper —
+the NPC behaviour work — is still only an unverified WIP commit; see §10.
 
 ## 1. Goal
 
@@ -55,6 +55,7 @@ cdb6271  RUN 6.7: near-pool budgets on every tier
 | 6 | Near-NPC visual upgrade | **COMPLETE** |
 | 6.8 | Near-humanoid clone break | **COMPLETE** |
 | 7A | Massive HQ reactive crowd POC | **COMPLETE (POC)** |
+| 7B | HQ crowd integrated into Shibuya | **COMPLETE** |
 | 7 | NPC life / behaviour states | **WIP ONLY — NOT VERIFIED, NOT COMPLETE** |
 | 8 | Melee combat phases | not started |
 | 9 | Knockdown / death / recovery | not started |
@@ -454,6 +455,111 @@ hqcrowd.html` against its own crowd. Integration with the real pedestrian simula
 crossing queues and the signal groups is RUN 7 proper. The RUN 7 awareness WIP was not
 touched.
 
+## 9c. RUN 7B — the HQ crowd in the real Shibuya scene
+
+RUN 7A proved the architecture in its own bench. RUN 7B connects it to the game, and **all
+1,978 pedestrians in the crossing now carry a high-fidelity body.**
+
+### The rule the integration is built on
+
+**The simulation is the source of truth.** `src/life/hq-layer.mjs` READS `sim.pool`. Position,
+heading, speed, route, crossing membership, queue membership and signal group all stay in
+`src/life/simulation.mjs`. The layer changes what a pedestrian *looks like* and nothing else —
+a test asserts that a sync pass leaves `crossing`, `queueKey`, `edge`, `route`, `x` and `z`
+untouched.
+
+One bounded exception: a body thrown by a car is moved by the reaction system for the length
+of its knockdown, because it is not walking anywhere. `onDisown` / `onReclaim` hand that
+authority over and back, and the scene uses the simulation's own `leave()` so a crossing is
+**released**, never abandoned.
+
+`?hq=` switches the renderer (`hq=1` tier default, `hq=512` a budget, absent for legacy), so
+the legacy instanced bodies remain a one-parameter rollback. Both renderers share one mask:
+the ids the HQ layer draws are unioned with the near-character pool's and skipped in the
+legacy meshes, so nobody is drawn twice.
+
+### The integration ladder, measured in the scene
+
+HIGH / day / scramble, each rung a separate build:
+
+| budget | drawn / held | dup | crowd draws | scene draws | HQ tris | skel / mix | sync | errors |
+| ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 128 | 128 / 128 | OK | 4 | 367 | 492k | 0 / 0 | 0.9 ms | 0 |
+| 256 | 256 / 256 | OK | 4 | 367 | 566k | 0 / 0 | 1.1 ms | 0 |
+| 512 | 512 / 512 | OK | 4 | 365 | 1.14M | 0 / 0 | 2.4 ms | 0 |
+| 1024 | 1024 / 1024 | OK | 4 | 367 | 2.28M | 0 / 0 | 1.9 ms | 0 |
+| **1978** | **1978 / 1978** | **OK** | **4** | **341** | **4.41M** | **0 / 0** | **2.3 ms** | **0** |
+
+**The scene's draw call count goes DOWN** — 341 against legacy's 367 — because four instanced
+lanes replace thirteen legacy instanced meshes. There is still no `Skeleton` and no
+`AnimationMixer` at any rung.
+
+`sync` is the layer's own cost: it ranks all ~1,978 pedestrians by distance to spend the
+budget nearest the camera. That ranking, not the drawing, is where its 2.3 ms goes, and it is
+the clearest remaining CPU target.
+
+In player mode at full budget: 1,975 drawn, 23 at L0 and 1,952 at L2, 8 draw calls (four
+archetypes across the two levels in use).
+
+### LOD, and not popping
+
+Three bands with hysteresis — L0 ≤14 m (released at 17), L1 ≤38 m (released at 44), L2 beyond
+— reviewed four times a second, at most 24 moves a frame.
+
+A camera swept across every band for 400 frames (`qa/gta-upgrade/lodpop.mjs`) produced
+**8,611 level-of-detail changes** with all three levels in use and **zero** changes to body,
+hairstyle, height, build, walk phase or archetype. A lane change carries the citizen's
+palette, phase and clip with them, so detail is the only thing distance can alter. A test
+pins it.
+
+### The real vehicle, in the real crossing
+
+The player's own car — the same one that already calls `alertPedestrians` — hands its state to
+the layer, which runs RUN 7A's bounded query over the pedestrians it is drawing.
+
+```
+peak        265 reacting + 49 down SIMULTANEOUSLY
+sustained   218 reacting + 95 down
+query       413 candidates of 1,945 (21%), 0.4 ms
+disowned    25 bodies under the reaction system at once
+```
+
+The requirement was twenty.
+
+### Crossings and signals survive it
+
+Thirty seconds of simulation after driving through the crowd — the check that matters more
+than the spectacle:
+
+```
+crossings completed   29 -> 40      queue size    0
+abandoned crossings    0            stuck         0
+population         1,977 (steady)   console errors 0
+```
+
+The signals keep running and nothing locks. **Not claimed:** a full signal cycle was not
+observed. The cycle is 108 s with a 20 s pedestrian phase, and the sim clock runs about 0.75×
+wall under SwiftShader, so a 30 s sample covers roughly 22 s of simulation and sat inside one
+pedestrian window.
+
+### Two defects found by looking, not by measuring
+
+- **The crowd held 224 citizens while drawing 128.** A citizen that fell out of the budget was
+  never released: still rendered, no longer positioned — a frozen body standing beside the
+  legacy pedestrian it was meant to replace, which is exactly the duplicate-crowd failure this
+  integration must not have. It only appears when the nearest set keeps changing, which a
+  static bench never does. `release()` now swap-removes from both the lane and the state
+  arrays, and a test drives a moving camera over 900 people asserting population never exceeds
+  what is drawn.
+- **The HQ bodies read washed out** beside the RUN 6.8 near characters standing next to them.
+  The crowd material had one flat roughness where RUN 6.8 gives each garment its own, so skin,
+  cotton, denim, hair and a shoe were all the same plastic. It now uses the same values.
+
+### Quality tiers
+
+`HQ_TIER_BUDGET` is HIGH 1978, MEDIUM 512, LOW 0. LOW keeps the legacy crowd entirely, which
+is why the legacy renderer is worth keeping beyond this run.
+
 ## 10–15. Not yet implemented
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
@@ -562,6 +668,9 @@ bone space. See §5 — this is the single most repeated mistake in this project
 | `assets/character/hybrid-run.json` | the adopted run clip + provenance |
 | `src/life/appearance.mjs` | **RUN 6.8** — the deterministic appearance recipe |
 | `src/life/hq-crowd.mjs` | **RUN 7A** — the GPU crowd: no skeleton, no mixer, typed arrays |
+| `src/life/hq-layer.mjs` | **RUN 7B** — the bridge: reads the simulation, draws the crowd |
+| `tests/hq-layer.test.mjs` | pins source-of-truth, no duplicates, identity, LOD, mass hits |
+| `qa/gta-upgrade/lodpop.mjs` | LOD popping QA |
 | `src/life/hq-threat.mjs` | **RUN 7A** — spatial grid + mass vehicle reaction |
 | `scripts/bake-crowd-hq.mjs` | **RUN 7A** — offline bake: LOD geometry + bone atlas |
 | `tests/hq-crowd.test.mjs` | pins no-skeleton, draw calls, identity, multi-hit, query bound |
@@ -596,11 +705,15 @@ bone space. See §5 — this is the single most repeated mistake in this project
   gap against the reference image.
 - **Two faces.** The archetypes share the two base bodies' heads. At close range the faces
   repeat.
-- **RUN 7A is a POC and is not in the scene.** The GPU crowd is not wired to the pedestrian
-  simulation, the crossing queues or the signal groups; that is RUN 7 proper. Until then the
-  live scene still runs the old primitive crowd plus the RUN 6.8 near pool.
-- **The mass crowd has no foot IK and no per-person pathing.** It plays baked clips on a
-  flat assumption; terrain adaptation at that count is unmeasured.
+- **The mass crowd has no foot IK.** It plays baked clips on a flat assumption; terrain
+  adaptation at that count is unmeasured. The RUN 6.8 near pool still has it.
+- **The layer ranks all ~1,978 pedestrians by distance every frame** to spend its budget
+  nearest the camera — about 2.3 ms, and the clearest remaining CPU target. Re-ranking on a
+  slower cadence would cut most of it.
+- **A full 108-second signal cycle has not been observed under load**, only that crossings keep
+  completing with nothing abandoned or stuck across 30 seconds.
+- **RUN 7 behaviour proper is still not done.** The awareness WIP at `f6aa8e8` remains
+  unverified; RUN 7B connected the crowd, not the NPC minds.
 - **Near-humanoid aim is 71–74%**, down from RUN 6's 84–85%: a citizen only takes a humanoid
   of their own archetype, so when three of the nearest share one archetype the third waits on
   a baked figure. Deliberate — see §9a.
