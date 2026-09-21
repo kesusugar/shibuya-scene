@@ -56,6 +56,7 @@ next-env.d.ts
 !/qa/gta-upgrade/runbench.html
 !/qa/gta-upgrade/runcompare.html
 !/qa/gta-upgrade/penetration-definitions.mjs
+!/qa/gta-upgrade/poolprobe.mjs
 
 # character pipeline: upstream downloads are verified, never committed
 /assets/character/upstream/
