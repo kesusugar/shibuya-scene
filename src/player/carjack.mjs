@@ -87,7 +87,28 @@ export function throwDriverOut(traffic,crowd,slot,side=-1){
  const len=Math.hypot(dx,dz)||1;dx/=len;dz/=len;
  const x=at.x+dx*CARJACK.clear,z=at.z+dz*CARJACK.clear;
 
- const p=crowd.spawn('ambient');
+ // MAKE ROOM IF THERE IS NONE.
+ //
+ // The crowd pool is saturated at HIGH -- nearly two thousand people, all active -- so
+ // `spawn` fails and the browser QA caught exactly that: the driver left the seat and no
+ // body arrived, so they simply ceased to exist. A person being dragged out of a car in
+ // front of you matters more than the furthest pedestrian on the other side of the map, so
+ // one is retired to make room.
+ //
+ // `despawn` is the right way to do it: it calls `leave` first, which releases any signal
+ // group the retired pedestrian was holding. Taking someone off a crossing by hand is what
+ // froze every signal on the map once before.
+ let p=crowd.spawn('ambient');
+ if(!p){
+  let furthest=null,best=-1;
+  for(const q of crowd.pool){
+   if(!q.active||q.controlled||q.struck!==undefined)continue;
+   const d=(q.x-slot.x)**2+(q.z-slot.z)**2;
+   if(d>best){best=d;furthest=q;}
+  }
+  if(furthest)crowd.despawn(furthest,'carjack');
+  p=crowd.spawn('ambient');
+ }
  if(!p)return {...record,pedestrian:null,reason:'crowd pool full'};
 
  // Move them from wherever the spawn put them to the door of this car. The grid bucket has

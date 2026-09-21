@@ -570,3 +570,35 @@ test('a carjack reports the player seated, exactly as an entry does',()=>{
  for(let i=0;i<900&&m.active;i++)last=m.update(1/60)??last;
  assert.equal(last.seated,false,'getting out reported the player seated');
 });
+
+test('a driver still gets out when the crowd pool is full',()=>{
+ // Found by browser QA, not by a test: at HIGH the crowd pool is saturated -- nearly two
+ // thousand people, all active -- so `spawn` fails and the driver left the seat with no body
+ // arriving. They simply ceased to exist. One distant pedestrian is retired to make room.
+ const sim=new TrafficSimulation(graph,{tier:'high',street});
+ const network=buildPedestrianNetwork(data,{ground,generic,street,core});
+ const crowd=new CrowdSimulation(network,{traffic:sim,tier:'medium'});
+ sim.update(1/30);crowd.update(1/30);
+
+ // Saturate it: every slot active, exactly as the live scene is.
+ while(crowd.spawn('ambient'));
+ assert.equal(crowd.spawn('ambient'),false,'the pool was not actually full');
+ const activeBefore=crowd.pool.filter(q=>q.active).length;
+
+ const v=sim.pool.find(x=>x.active&&!x.parked&&sim.occupancy.hasDriver(x.id));
+ const seated=sim.occupancy.read(v.id);
+ alertDriver(sim,v);beginExtraction(sim,v);
+ const out=throwDriverOut(sim,crowd,v,-1);
+
+ assert.ok(out,'nobody was extracted');
+ assert.ok(out.pedestrian,`the driver vanished instead of getting out: ${out.reason}`);
+ assert.equal(out.thrown,true,'the driver was placed but never knocked down');
+ assert.equal(out.pedestrian.appearanceId,seated.seed,'the replacement wore the wrong face');
+ // Exactly one slot was freed, not a handful.
+ assert.equal(crowd.pool.filter(q=>q.active).length,activeBefore,
+  'making room changed the population');
+ // And the retired pedestrian released whatever they were holding: the audit stays clean.
+ for(let i=0;i<200;i++)crowd.update(1/30);
+ assert.equal(crowd.audit().major,0,'retiring a pedestrian to make room broke the crowd');
+ crowd.dispose?.();sim.dispose();
+});
