@@ -3,8 +3,8 @@
 The one document to read when resuming this work with no conversation history. Read
 `AGENTS.md` and `CLAUDE.md` first for the repository rules, then this.
 
-**Updated at the close of RUN 6.8.** RUNs 0–6 and 6.8 are complete. RUN 7 exists only as an
-unverified WIP commit and is still **not** started properly — see §10.
+**Updated at the close of RUN 7A.** RUNs 0–6 and 6.8 are complete, and RUN 7A is a finished
+POC. RUN 7 proper is still only an unverified WIP commit — see §10.
 
 ## 1. Goal
 
@@ -54,6 +54,7 @@ cdb6271  RUN 6.7: near-pool budgets on every tier
 | 5.7 | Hybrid run (CMU lower + Quaternius upper) | complete, **adopted** |
 | 6 | Near-NPC visual upgrade | **COMPLETE** |
 | 6.8 | Near-humanoid clone break | **COMPLETE** |
+| 7A | Massive HQ reactive crowd POC | **COMPLETE (POC)** |
 | 7 | NPC life / behaviour states | **WIP ONLY — NOT VERIFIED, NOT COMPLETE** |
 | 8 | Melee combat phases | not started |
 | 9 | Knockdown / death / recovery | not started |
@@ -343,6 +344,116 @@ onto the body; a skirt is a mesh, and meshes are new assets. No accessories, no 
 the two the base bodies have, no clothing physics. The reference image this run was measured
 against shows all of those; they are a future asset question, not a distribution one.
 
+## 9b. RUN 7A — massive high-fidelity reactive crowd (POC)
+
+The question RUN 7A had to answer: can a scramble crossing hold ~2,000 people who all look
+like RUN 6.8 citizens **and** can all react to a car, without a skeleton each?
+
+**Yes.** 1,978 of them, in a browser, cost **4 draw calls, 0 skeletons, 0 mixers and 0.3 ms
+of CPU per frame.**
+
+### Architecture: a shared GPU bone animation atlas
+
+Chosen by measuring the alternatives, not by preference:
+
+| candidate | payload | verdict |
+| --- | --- | --- |
+| Vertex animation texture | 5.5 MiB per archetype (22 MiB for four) | rejected — 60× the size |
+| **Bone matrix atlas** | **618 KiB total, shared by every archetype** | **chosen** |
+| Baked vertex frames | same order as VAT | rejected |
+| Extend the old primitive crowd | cheap, but the bodies stay capsules | rejected |
+
+A VAT stores every vertex at every frame. A bone atlas stores every *bone* at every frame —
+65 bones × 203 rows × a 4×3 matrix — and works precisely because RUN 6.8 already gave every
+archetype **one shared clip set**; they differ only in which vertices hang off those bones.
+
+What that buys:
+
+- **No `Skeleton` and no `AnimationMixer` per citizen, at any population.** A test asserts it.
+- Clip and phase live in instanced attributes; the vertex shader turns them into an atlas row
+  and skins from it. **Time advances on the GPU**, so a walking crowd costs the CPU nothing
+  between state changes.
+- **Draw calls follow the archetype count, not the population** — four meshes, two thousand
+  people.
+- State is typed arrays. A citizen is an index, not an object graph.
+
+### The ladder (STEP 7 / 20)
+
+CPU per frame, Node, `qa/gta-upgrade/hq-ladder.mjs`:
+
+| citizens | update ms | µs/citizen | draws | tris (L1) | tris (L2) | heap |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 32 | 0.077 | 2.41 | 4 | 176k | 73k | 0.5 MB |
+| 128 | 0.056 | 0.44 | 4 | 701k | 290k | 0.6 MB |
+| 256 | 0.081 | 0.32 | 4 | 1.39M | 574k | 2.0 MB |
+| 512 | 0.134 | 0.27 | 4 | 2.73M | 1.13M | 1.9 MB |
+| 1024 | 0.298 | 0.29 | 4 | 5.51M | 2.27M | 1.8 MB |
+| **1978** | **0.519** | **0.26** | **4** | 10.7M | **4.41M** | 1.8 MB |
+
+Per-citizen cost is **flat in the population** (0.26–0.44 µs), which is the property that
+matters: nothing here is O(N²) or allocating per person.
+
+**PLATINUM and the ~1978 target are both reached** on the CPU side. The remaining limit is
+GPU vertex throughput, not this code — which is why the LODs exist (L2 is 14% of L0's
+triangles). SwiftShader frame rates are recorded in the bench and are explicitly **not** used
+as acceptance, per the project rule.
+
+### Mass reaction (STEP 9–13)
+
+A car at 14 m/s through 1,978 in a dense block, **simultaneously**:
+
+```
+200 looking   286 fleeing   37 down        <- at the same instant, not cumulative
+172 knocked down in ONE frame, in 0.45 ms
+```
+
+The requirement was twenty. In the browser, 1,200 with a car running through them holds 188
+looking and 104 fleeing at 6 draw calls and 0.3 ms.
+
+The spatial grid is why that is affordable, and the claim is checked: the same population
+queried at four densities gives 1369 → 625 → 289 → 121 candidates. **Cost follows the radius
+and the density, never the population.**
+
+Knockdown is an impulse, a drag and a ground clamp — no rigid body, no ragdoll. Which side of
+the car's centreline a body is caught on decides where it goes, so a row of people is not a
+row of dominoes, and a test pins that.
+
+**Identity survives everything.** Appearance, archetype, phase and height are the same
+function of the pedestrian id used by RUN 6.8, so being hit by a car cannot change who
+someone is — asserted directly.
+
+### Three things found by looking rather than reasoning
+
+- **The first bake gave everyone claws.** Forty of the sixty-five bones are finger joints;
+  their vertices are dense and adjacent, and vertex clustering merged them into one
+  representative carrying a single finger's weights. Finger weights are now folded into the
+  hand before decimating.
+- **The crowd looked bare-legged.** The garment mask was correct; the palette was not. Beige
+  trousers read as skin when a hem is four vertices wide at LOD2. Every trouser colour is now
+  darker than every skin tone, pinned by a luminance test.
+- **three's `SimplifyModifier` is unusable here** — it keeps position, normal and uv and
+  discards exactly the skin indices and garment mask this crowd is built on. Hence the
+  attribute-preserving clustering decimator in the baker.
+
+### Payload and startup
+
+```
+public/data/crowd/hq-crowd.bin   2,761 KiB
+  bone atlas                       618 KiB   shared by all four archetypes
+  geometry, 4 archetypes x 3 LODs  2,143 KiB
+build 1,978 citizens at runtime        ~9 ms
+```
+
+Everything is baked offline by **`npm run bake:crowd-hq`**. Nothing is generated at startup,
+which is the constraint the old crowd's fast start depends on.
+
+### What RUN 7A is not
+
+A POC. It is **not wired into the live Shibuya scene** — it runs in `qa/gta-upgrade/
+hqcrowd.html` against its own crowd. Integration with the real pedestrian simulation, the
+crossing queues and the signal groups is RUN 7 proper. The RUN 7 awareness WIP was not
+touched.
+
 ## 10–15. Not yet implemented
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
@@ -450,6 +561,13 @@ bone space. See §5 — this is the single most repeated mistake in this project
 | `scripts/convert-character.mjs` | offline character bake, folds in the hybrid run |
 | `assets/character/hybrid-run.json` | the adopted run clip + provenance |
 | `src/life/appearance.mjs` | **RUN 6.8** — the deterministic appearance recipe |
+| `src/life/hq-crowd.mjs` | **RUN 7A** — the GPU crowd: no skeleton, no mixer, typed arrays |
+| `src/life/hq-threat.mjs` | **RUN 7A** — spatial grid + mass vehicle reaction |
+| `scripts/bake-crowd-hq.mjs` | **RUN 7A** — offline bake: LOD geometry + bone atlas |
+| `tests/hq-crowd.test.mjs` | pins no-skeleton, draw calls, identity, multi-hit, query bound |
+| `qa/gta-upgrade/hqcrowd.html` | the HQ crowd bench, with a vehicle mode |
+| `qa/gta-upgrade/hq-ladder.mjs` | the scale ladder |
+| `qa/gta-upgrade/hq-vehicle.mjs` | the mass reaction measurement |
 | `src/life/awareness.mjs` | **RUN 7 WIP** — NPC perception / life states, unverified |
 | `src/life/simulation.mjs` | crowd sim: routes, crossings, `scatter`, `strike`, signals |
 | `src/player/controller.mjs` | player movement and input |
@@ -478,6 +596,11 @@ bone space. See §5 — this is the single most repeated mistake in this project
   gap against the reference image.
 - **Two faces.** The archetypes share the two base bodies' heads. At close range the faces
   repeat.
+- **RUN 7A is a POC and is not in the scene.** The GPU crowd is not wired to the pedestrian
+  simulation, the crossing queues or the signal groups; that is RUN 7 proper. Until then the
+  live scene still runs the old primitive crowd plus the RUN 6.8 near pool.
+- **The mass crowd has no foot IK and no per-person pathing.** It plays baked clips on a
+  flat assumption; terrain adaptation at that count is unmeasured.
 - **Near-humanoid aim is 71–74%**, down from RUN 6's 84–85%: a citizen only takes a humanoid
   of their own archetype, so when three of the nearest share one archetype the third waits on
   a baked figure. Deliberate — see §9a.
