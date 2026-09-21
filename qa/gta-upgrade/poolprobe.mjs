@@ -41,6 +41,7 @@ function run(label,seedCount,mode){
  console.log(label.padEnd(26),JSON.stringify({cap:s.capacity,humanSlots:s.humanoidSlots,
   peakHumanSlots:worstCap,active:s.humanoidsActive,peakActive:worst,baked:s.bakedActive,
   limit:HUMANOID_LIMITS.high,tris:Math.round(s.triangles/1000)+'k',draw:s.drawCallsUpperBound,
+  archetypes:s.archetypes,matched:s.matched,rebuilds:s.rebuilds,slots:s.archetypeSlots,
   nearestOnHumanoid:aim.length?(100*aim.reduce((a,b)=>a+b,0)/aim.length).toFixed(0)+'%':'n/a'}));
  pool.dispose();
 }

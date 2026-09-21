@@ -94,27 +94,75 @@ export function dressCitizen(root,palette={}){
 }
 
 /** Shared plumbing: the providers differ only in where their scene, clips and clothes come from. */
-function asset({id,template,clips,gait,gaitDetail,height,scale,dress,bones,legBones=null}){
+function asset({id,template,clips,gait,gaitDetail,height,scale,dress,bones,legBones=null,
+                variants=null,pick=null}){
  let disposed=false;
  return {
   id,height,scale,gait:Object.freeze({...gait}),gaitDetail:gaitDetail??null,bones,legBones,
+  /**
+   * The appearance archetypes this asset can wear, or null if it has exactly one look.
+   *
+   * RUN 6.8. An asset may carry several bodies on several armatures; `instance` is told which
+   * one to build, and everything downstream -- mixer, clips, foot IK, the pool -- is unchanged,
+   * because every archetype has the same bone names and shares the same clip objects.
+   */
+  variants:variants?Object.freeze(variants.map(v=>Object.freeze({...v}))):null,
   get template(){return template;},
-  instance(palette){
+  instance(palette,variant){
    if(disposed)throw new Error(`character asset ${id} is disposed`);
-   const root=clone(template);
-   root.scale.setScalar(scale);
-   const worn=dress(root,palette);
+   // `pick` returns the subtree for this archetype and the scale that subtree needs. Cloning
+   // the subtree rather than the whole template is what keeps an instance at one body and one
+   // skeleton however many archetypes the asset holds.
+   const chosen=pick?pick(template,variant):null;
+   const root=clone(chosen?.node??template);
+   chosen?.prepare?.(root);
+   // Locals, not the asset's own scale and height: an archetype's rig has its own natural
+   // height, and writing that back onto the asset would make the next instance inherit it.
+   const unit=chosen?.scale??scale,natural=chosen?.height??height;
+   // A horizontal factor, applied to the two world axes the body is broad across. Bones are
+   // untouched, so skinning, the foot IK joint chain and every clip are unaffected; the
+   // person is simply wider or narrower. Kept small on purpose -- see APPEARANCE.width.
+   let broad=Number.isFinite(variant?.width)?variant.width:1,worn=unit;
+   const wear=k=>{worn=k;root.scale.set(k*broad,k,k*broad);};
+   wear(unit);
+   const clothes=dress(root,palette);
    // SkeletonUtils.clone rebinds onto a fresh Skeleton, and a Skeleton owns a data texture of
    // bone matrices. Geometry and the template's own skeleton belong to the asset and outlive
    // this instance; the clone's skeleton does not, and releasing a pooled citizen without
    // releasing it leaks one texture per body per swap.
+   //
+   // SkeletonUtils.clone gives every SkinnedMesh its own Skeleton, even though they were all
+   // bound to one in the template and the clone shares a single set of Bone objects between
+   // them. Each of those Skeletons allocates a bone matrix texture, so a citizen was paying
+   // for three of them and, once RUN 6.8 split the hair into its own mesh, would have paid for
+   // four. They are collapsed back onto one: the bones are the same objects and the bone
+   // inverses came from the same source, so the extra Skeletons are duplicates of each other
+   // in everything but identity. Each mesh keeps its own bind matrix.
+   const meshes=[];
+   root.traverse(o=>{if(o.isSkinnedMesh)meshes.push(o);});
    const skeletons=new Set();
-   root.traverse(o=>{if(o.isSkinnedMesh)skeletons.add(o.skeleton);});
+   if(meshes.length){
+    const shared=meshes[0].skeleton;
+    for(const mesh of meshes.slice(1)){
+     const spare=mesh.skeleton;
+     mesh.bind(shared,mesh.bindMatrix);
+     if(spare!==shared)spare.dispose();
+    }
+    skeletons.add(shared);
+   }
    return {root,clips,
-    recolour:worn.recolour,
-    /** Wear a different height without losing the asset's own units-to-metres factor. */
-    setHeight(metres){root.scale.setScalar(scale*metres/height);},
-    dispose(){worn.dispose();skeletons.forEach(s=>s.dispose());root.removeFromParent();root.clear();}};
+    recolour:clothes.recolour,
+    /**
+     * How broad this body is, as a factor on the two horizontal axes.
+     *
+     * Settable rather than fixed at construction so one pooled slot can be a narrow person and
+     * later a broad one without rebuilding a skeleton and a mixer. Bones are never touched, so
+     * skinning, the foot IK chain and every clip are indifferent to it.
+     */
+    setBuild(width){if(Number.isFinite(width)&&width>0){broad=width;wear(worn);}},
+    /** Wear a different height without losing this archetype's own units-to-metres factor. */
+    setHeight(metres){wear(unit*metres/natural);},
+    dispose(){clothes.dispose();skeletons.forEach(s=>s.dispose());root.removeFromParent();root.clear();}};
   },
   dispose(){
    if(disposed)return;disposed=true;
@@ -160,7 +208,73 @@ export function humanoidCitizen(gltf,report,base=WARDROBE){
   const worn=dressCitizen(root,{...base,...palette});
   return {recolour:worn.recolour,dispose(){worn.materials.forEach(m=>m.dispose());}};
  };
- return asset({id:'humanoid',template,clips:gltf.animations,gait:report.gait,
+
+ // RUN 6.8. A converted file may carry several rigs, each with every hairstyle attached. An
+ // archetype names one rig and one hairstyle; building it means cloning that rig's subtree and
+ // dropping the hair it is not wearing, which leaves a body, two flat accessory meshes and one
+ // head of hair. A file from before RUN 6.8 has no `rigs` and no `rig:` groups, so `variants`
+ // is null and `pick` returns nothing -- the whole template is cloned exactly as it was.
+ const rigs=report.rigs??null;
+ const hairstyles=(report.hairstyles??[]).map(h=>h.name);
+
+ // glTF requires unique node names within a file, so exporting two armatures that use the
+ // same sixty-five bone names gives the second one `pelvis_1`, `root_1`, `thigh_l_1` and so
+ // on. An AnimationMixer resolves a track like `pelvis.quaternion` by NAME, and foot IK looks
+ // its joint chain up by name too, so the second rig would silently animate nothing.
+ //
+ // The names are put back. It is safe because a name only has to be unique within the tree it
+ // is resolved against, and an instance clones exactly one rig: two bodies with a bone called
+ // `pelvis` never share a tree. Skinning is unaffected either way -- a Skeleton binds by index.
+ // Renaming by index rather than by stripping a suffix is deliberate: `spine_01` and
+ // `index_01_l` already end in digits and underscores, so a pattern would be guesswork,
+ // whereas the bone ORDER is identical across rigs and that is checked when the file is built.
+ if(rigs&&rigs.length>1){
+  const armature=id=>{let found=null;
+   template.traverse(o=>{if(!found&&o.userData?.rig===id)found=o;});return found;};
+  const bonesOf=node=>{const out=[];node?.traverse(o=>{if(o.isBone)out.push(o);});return out;};
+  const reference=bonesOf(armature(rigs[0].id)).map(b=>b.name);
+  for(const rig of rigs.slice(1)){
+   const bones=bonesOf(armature(rig.id));
+   if(bones.length!==reference.length){
+    console.warn(`[character] rig ${rig.id} has ${bones.length} bones against `+
+     `${reference.length}; leaving its names alone`);
+    continue;
+   }
+   for(let i=0;i<bones.length;i++)bones[i].name=reference[i];
+  }
+ }
+ const variants=rigs&&hairstyles.length
+  ?rigs.flatMap(rig=>hairstyles.map(hair=>({rig:rig.id,hair,
+    id:`${rig.id}:${hair}`,body:rig.body,
+    height:rig.height,scale:rig.scaleToGame})))
+  :null;
+ // What an instance gets when nobody names an archetype -- the player, and anything written
+ // before RUN 6.8. It is the body and hairstyle the single-look file used to ship, so the
+ // player's appearance is unchanged by this run rather than quietly reassigned to whichever
+ // variant happened to be enumerated first.
+ const fallback=variants?(variants.find(v=>v.rig===rigs[0].id&&v.hair===report.body?.hairstyle)
+  ??variants[0]):null;
+ const pick=variants?(root,variant)=>{
+  const wanted=variant&&variants.find(v=>v.id===variant.id||v.id===variant);
+  const chosen=wanted??fallback;
+  // Matched on userData, not on name: glTF strips punctuation from node names and suffixes
+  // duplicates, so the second rig's hair arrives as `hairHair_Long_1`. `extras` survives.
+  let node=null;
+  root.traverse(o=>{if(!node&&o.userData?.rig===chosen.rig)node=o;});
+  if(!node)throw new Error(`character asset has no rig ${chosen.rig}`);
+  // The template keeps every hairstyle for the next instance, so the unwanted ones are
+  // removed from the CLONE. `prepare` runs after the caller clones, which is why this returns
+  // the template subtree rather than a copy of it -- cloning here and again there would build
+  // every body twice.
+  return {node,scale:chosen.scale,height:chosen.height,
+   prepare(copy){
+    const shed=[];
+    copy.traverse(o=>{const hair=o.userData?.hair;if(hair&&hair!==chosen.hair)shed.push(o);});
+    for(const o of shed)o.removeFromParent();
+   }};
+ }:null;
+
+ return asset({id:'humanoid',template,clips:gltf.animations,gait:report.gait,variants,pick,
   // Measured stride and foot-contact timing, from scripts/analyse-gait.mjs. The blend needs
   // both: stride sets how long a cycle takes, contact keeps two clips from disagreeing about
   // which foot is down.

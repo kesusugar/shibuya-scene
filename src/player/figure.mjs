@@ -56,8 +56,9 @@ export function bakedAsset(){return baked??=bakedCitizen(pack);}
  */
 const UNGROUNDED=new Set(['Fall','Death','Enter','Exit','Drive']);
 
-export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=null}={}){
- const instance=asset.instance(palette),root=instance.root;
+export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=null,variant=null}={}){
+ // `variant` names an appearance archetype (RUN 6.8). Assets with one look ignore it.
+ const instance=asset.instance(palette,variant),root=instance.root;
  const mixer=new AnimationMixer(root),actions={};
  for(const clip of instance.clips){
   const action=mixer.clipAction(clip),loop=looping.has(clip.name);
@@ -177,6 +178,8 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
   },
   recolour(palette){instance.recolour(palette);},
   setHeight(metres){instance.setHeight(metres);},
+  /** RUN 6.8: how broad this body is. A no-op on an asset that has one build. */
+  setBuild(width){instance.setBuild?.(width);},
   /** What the body is mostly doing, for diagnostics and for the capture harness. */
   get action(){return overlay??dominant;},
   hide(){root.visible=false;},

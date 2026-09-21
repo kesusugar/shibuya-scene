@@ -28,8 +28,6 @@ globalThis.ProgressEvent??=class{constructor(type,init={}){Object.assign(this,{t
 const UP='assets/character/upstream';
 const OUT='public/data/character';
 const TARGET_HEIGHT=1.76;        // FIGURE.height; the pack is authored around 1.82 m
-const BODY='SuperHero_Male';
-const HAIR='Hair_SimpleParted';
 
 // Logical name -> upstream clip. Everything the player state machine can ask for, and nothing
 // else. 'Fall' and 'Death' are two views of one clip: the game scrubs Fall by hand while the
@@ -150,76 +148,141 @@ function garmentMask(geometry,bones,fixed=null){
  geometry.setAttribute('color',new T.BufferAttribute(mask,4,true));
 }
 
+// --- RUN 6.8: several appearance archetypes, one clip set ------------------------------
+//
+// RUN 6 gave the nearest citizens the player's body and they all looked like the same person
+// recoloured. The fix is silhouette, not palette, and the upstream pack already has the parts:
+// two base bodies and three hairstyles, all CC0, all on the same sixty-five bone naming.
+//
+// THE TWO BODIES DO NOT SHARE A REST POSE. Bone *names* match, which is what the old
+// single-hairstyle merge checked, but the female rig is proportioned differently -- 64 of 65
+// bones move, the upperarms by 7.1 cm and the clavicles by 4.6 cm. Binding her mesh to his
+// skeleton would flatten her shoulders by that much. So each body keeps its own armature, and
+// what is shared is the thing that actually costs: ONE set of AnimationClips. Clip tracks
+// address bones by name, so the same clip array drives either rig, and a mixer binds it to
+// whichever root its instance has. Four archetypes therefore cost four bodies' worth of
+// geometry and ONE library of animation, not four.
+//
+// Hair is a separate mesh here rather than merged into the body as it was when there was only
+// one hairstyle. Merging would duplicate a whole body per hairstyle; separate meshes let the
+// exporter store each body once and each hairstyle once, and cost one draw call per citizen.
+// qa/gta-upgrade/bindcheck.mjs is where the rest-pose numbers above come from.
+const RIGS=[
+ {id:'m',file:'Superhero_Male_FullBody',  body:'SuperHero_Male'},
+ {id:'f',file:'Superhero_Female_FullBody',body:'Superhero_Female'}
+];
+const HAIRS=['Hair_Buzzed','Hair_SimpleParted','Hair_Long'];
+
 const animations=await loadGLB(`${UP}/ual1/UAL1_Standard.glb`);
 const gait=await measureGait(`${UP}/ual1/UAL1_Standard_RM.glb`);
-const body=await loadPair(`${UP}/ubc/BaseCharacters/Superhero_Male_FullBody`);
-const hair=await loadPair(`${UP}/ubc/Hairstyles/${HAIR}`);
 
-const root=new T.Group();root.name='citizen';
-const meshes=[];
-body.scene.traverse(o=>{if(o.isSkinnedMesh)meshes.push(o);});
-if(!meshes.length)throw new Error('body has no skinned mesh');
-const skeleton=meshes[0].skeleton;
-
-// The armature subtree is shared by every mesh; move it across intact so the bind poses and
-// the animation track names keep pointing at the same objects.
-let top=skeleton.bones[0];while(top.parent&&top.parent!==body.scene)top=top.parent;
-root.add(top);
-
-let vertices=0,triangles=0,dropped=0,masked=0,hairVertices=0;
-for(const mesh of meshes){
- for(const name of DROP)if(mesh.geometry.attributes[name]){mesh.geometry.deleteAttribute(name);dropped++;}
- quantiseWeights(mesh.geometry);
-
- if(mesh.name===BODY){
-  garmentMask(mesh.geometry,skeleton.bones);
-  masked=mesh.geometry.attributes.position.count;
-
-  // The hairstyle is a separate download rigged to the same sixty-five bones with the same
-  // bind pose, so it is not a second object to draw -- it is more of this one. Merging it in
-  // keeps a citizen at one draw call for everything the eye reads as a person, and the mask's
-  // fourth channel gives the hair its own colour anyway.
-  const piece=[];hair.scene.traverse(o=>{if(o.isSkinnedMesh)piece.push(o);});
-  const names=b=>b.map(x=>x.name).join(',');
-  if(piece.length!==1||names(piece[0].skeleton.bones)!==names(skeleton.bones))
-   throw new Error(`hairstyle ${HAIR} does not share the body skeleton`);
-  const g=piece[0].geometry;
-  for(const name of DROP)if(g.attributes[name])g.deleteAttribute(name);
-  quantiseWeights(g);garmentMask(g,skeleton.bones,HAIRMASK);
-  hairVertices=g.attributes.position.count;
-  const merged=mergeGeometries([mesh.geometry,g],false);
-  if(!merged)throw new Error('hair and body geometry do not merge');
-  mesh.geometry.dispose();g.dispose();mesh.geometry=merged;
- }
-
- // Flat, untextured, tinted at runtime. Shipping the 4K superhero set would cost twelve
- // megabytes to dress every citizen in the same suit; the city wants variety, not detail.
- mesh.material=new T.MeshStandardMaterial({
-  name:mesh.name===BODY?'citizen':mesh.material.name,
-  color:FLAT[mesh.name]??0xffffff,roughness:.78,metalness:0,
-  vertexColors:mesh.name===BODY
- });
- mesh.frustumCulled=false;root.add(mesh);
- vertices+=mesh.geometry.attributes.position.count;
- triangles+=(mesh.geometry.index?mesh.geometry.index.count:mesh.geometry.attributes.position.count)/3;
+// Hair geometry is prepared once and shared by both rigs. A BufferGeometry can back two
+// SkinnedMeshes with different skeletons: the skin indices are bone *positions*, and the bone
+// order is identical even where the rest pose is not. Hair is weighted to the head and neck,
+// which is where the two rigs agree.
+const hairGeometry=new Map();
+for(const name of HAIRS){
+ const g=await loadPair(`${UP}/ubc/Hairstyles/${name}`);
+ const found=[];g.scene.traverse(o=>{if(o.isSkinnedMesh)found.push(o);});
+ if(found.length!==1)throw new Error(`hairstyle ${name}: expected one mesh, found ${found.length}`);
+ const geometry=found[0].geometry;
+ for(const attribute of DROP)if(geometry.attributes[attribute])geometry.deleteAttribute(attribute);
+ quantiseWeights(geometry);
+ garmentMask(geometry,found[0].skeleton.bones,HAIRMASK);
+ hairGeometry.set(name,geometry);
 }
 
+const root=new T.Group();root.name='citizen';
+const rigs=[];                       // {id, group, skeleton, height, meshes, fingers}
+let vertices=0,triangles=0,dropped=0,masked=0,hairVertices=0;
+
+for(const rig of RIGS){
+ const source=await loadPair(`${UP}/ubc/BaseCharacters/${rig.file}`);
+ const meshes=[];
+ source.scene.traverse(o=>{if(o.isSkinnedMesh)meshes.push(o);});
+ if(!meshes.length)throw new Error(`${rig.file} has no skinned mesh`);
+ const skeleton=meshes[0].skeleton;
+
+ // Every rig must carry the same bone names, or one clip set cannot drive both.
+ const names=skeleton.bones.map(b=>b.name).join(',');
+ if(rigs.length&&names!==rigs[0].names)
+  throw new Error(`${rig.file} does not share the bone naming of ${RIGS[0].file}`);
+
+ const group=new T.Group();group.name=`rig_${rig.id}`;
+ // glTF rewrites node names -- it strips punctuation and suffixes duplicates, so the second
+ // rig's meshes come back as `hairHair_Long_1`. userData survives as `extras` untouched, so
+ // that is what the runtime matches on.
+ group.userData.rig=rig.id;
+ let top=skeleton.bones[0];while(top.parent&&top.parent!==source.scene)top=top.parent;
+ group.add(top);
+
+ for(const mesh of meshes){
+  for(const attribute of DROP)if(mesh.geometry.attributes[attribute]){
+   mesh.geometry.deleteAttribute(attribute);dropped++;}
+  quantiseWeights(mesh.geometry);
+  const isBody=mesh.name===rig.body;
+  if(isBody){
+   garmentMask(mesh.geometry,skeleton.bones);
+   masked+=mesh.geometry.attributes.position.count;
+   mesh.name='body';
+  }
+  mesh.material=new T.MeshStandardMaterial({
+   name:isBody?'citizen':mesh.material.name,
+   color:FLAT[mesh.name]??0xffffff,roughness:.78,metalness:0,vertexColors:isBody
+  });
+  mesh.frustumCulled=false;group.add(mesh);
+  vertices+=mesh.geometry.attributes.position.count;
+  triangles+=(mesh.geometry.index?mesh.geometry.index.count:mesh.geometry.attributes.position.count)/3;
+ }
+
+ // Each hairstyle, bound to this rig. The instance keeps one and drops the rest, so a citizen
+ // still draws a body, two flat accessory meshes and exactly one head of hair.
+ for(const name of HAIRS){
+  const geometry=hairGeometry.get(name);
+  const piece=new T.SkinnedMesh(geometry,new T.MeshStandardMaterial({
+   name:'citizen',color:0xffffff,roughness:.78,metalness:0,vertexColors:true}));
+  piece.name=`hair_${name}`;
+  piece.userData.hair=name;
+  piece.frustumCulled=false;
+  group.add(piece);
+  piece.bind(skeleton,new T.Matrix4());
+  if(rig===RIGS[0])hairVertices+=geometry.attributes.position.count;
+ }
+
+ root.add(group);
+ group.updateMatrixWorld(true);
+ const box=new T.Box3();
+ // Measure the body only: Hair_Long reaches below the chin and the accessory meshes sit
+ // inside the head, so the silhouette that defines "how tall is this person" is the body.
+ box.setFromObject(group.getObjectByName('body'));
+ rigs.push({...rig,names,group,skeleton,height:box.max.y-box.min.y,meshes});
+}
+
+// The clips are authored against the first rig, and its skeleton is the one the finger-relax
+// pass and the gait measurement below refer to.
+const skeleton=rigs[0].skeleton;
+const height=rigs[0].height;
+const meshes=rigs[0].meshes;
+
 root.updateMatrixWorld(true);
-const box=new T.Box3().setFromObject(root);
-const height=box.max.y-box.min.y;
 
 // Left at the bind pose the hands are flat, splayed and obviously a T-pose. Idle's first frame
 // is a relaxed hand, so bake that into the rest transform and let every clip inherit it.
+// Every rig needs it, not just the first: they are separate armatures.
 const idle=animations.animations.find(c=>c.name===CLIPS.Idle);
 const fingers=new Map();
-for(const bone of skeleton.bones)if(FINGER.test('.'+bone.name))fingers.set(bone.name,bone);
-for(const track of idle?.tracks??[]){
- const cut=track.name.lastIndexOf('.');
- const bone=fingers.get(track.name.slice(0,cut));if(!bone)continue;
- if(track.name.slice(cut+1)==='quaternion')bone.quaternion.fromArray(track.values,0);
- else if(track.name.slice(cut+1)==='position')bone.position.fromArray(track.values,0);
+for(const entry of rigs){
+ const bones=new Map();
+ for(const bone of entry.skeleton.bones)if(FINGER.test('.'+bone.name))bones.set(bone.name,bone);
+ for(const track of idle?.tracks??[]){
+  const cut=track.name.lastIndexOf('.');
+  const bone=bones.get(track.name.slice(0,cut));if(!bone)continue;
+  if(track.name.slice(cut+1)==='quaternion')bone.quaternion.fromArray(track.values,0);
+  else if(track.name.slice(cut+1)==='position')bone.position.fromArray(track.values,0);
+ }
+ entry.skeleton.bones[0].updateMatrixWorld(true);
+ if(entry===rigs[0])for(const [name,bone] of bones)fingers.set(name,bone);
 }
-skeleton.bones[0].updateMatrixWorld(true);
 
 const clips=[];
 let tracksKept=0,tracksCut=0;
@@ -275,9 +338,25 @@ const report={
  generated:new Date().toISOString().slice(0,10),
  source:'Quaternius Universal Base Characters [Standard] + Universal Animation Library [Standard], CC0-1.0',
  body:{meshes:meshes.length,vertices,triangles,attributesDropped:dropped,
-  garmentMaskVertices:masked+hairVertices,hairVertices,hairstyle:HAIR,
+  // Counted by walking the scene, which is how anything reading the file sees it. Hair
+  // geometry is shared between the rigs -- stored once, drawn by two meshes -- so counting
+  // geometries instead would under-report what a traversal finds.
+  garmentMaskVertices:(()=>{let n=0;root.traverse(o=>{
+   if(o.isMesh&&o.geometry.attributes.color)n+=o.geometry.attributes.color.count;});return n;})(),
+  hairVertices,hairstyle:HAIRS[1],
   bones:skeleton.bones.length,animatedBones:skeleton.bones.length-fingers.size,
   height:Number(height.toFixed(4)),scaleToGame:Number((TARGET_HEIGHT/height).toFixed(5))},
+ // RUN 6.8. Every rig is scaled to the same game height from its OWN measured height, so a
+ // body that is naturally shorter does not arrive short -- the proportion difference is in
+ // the bones, which is where it belongs, not in the overall size.
+ rigs:rigs.map(r=>({id:r.id,source:r.file,body:r.body,
+  height:Number(r.height.toFixed(4)),
+  scaleToGame:Number((TARGET_HEIGHT/r.height).toFixed(5)),
+  bones:r.skeleton.bones.length})),
+ hairstyles:HAIRS.map(name=>({name,
+  vertices:hairGeometry.get(name).attributes.position.count,
+  triangles:(hairGeometry.get(name).index?.count
+   ??hairGeometry.get(name).attributes.position.count)/3})),
  clips:clips.map(c=>({name:c.name,
   upstream:c.name==='Run'&&hybridRun?.applied?'hybrid (CMU 16_45 legs + Quaternius upper)':CLIPS[c.name],
   seconds:Number(c.duration.toFixed(3)),tracks:c.tracks.length})),
@@ -298,9 +377,10 @@ report.output={file:'public/data/character/citizen.glb',bytes:bytes.length,sha25
 writeFileSync(`${OUT}/citizen.json`,JSON.stringify(report,null,1)+'\n');
 
 console.log(`citizen.glb  ${(bytes.length/1024).toFixed(1)} KiB`);
-console.log(`  ${meshes.length} meshes, ${vertices} vertices, ${triangles} triangles, ${report.body.bones} bones`);
+console.log(`  ${rigs.length} rigs x ${HAIRS.length} hairstyles, ${vertices} vertices, ${triangles} triangles, ${report.body.bones} bones each`);
+for(const r of report.rigs)console.log(`    rig ${r.id}: ${r.source} ${r.height.toFixed(3)} m -> scale ${r.scaleToGame}`);
 console.log(`  ${clips.length} clips: ${clips.map(c=>c.name).join(' ')}`);
 console.log(`  height ${height.toFixed(3)} m -> scale ${report.body.scaleToGame}`);
 console.log(`  gait ${JSON.stringify(gait)}`);
-console.log(`  garment mask on ${masked+hairVertices} vertices (${HAIR} merged: ${hairVertices})`);
+console.log(`  garment mask on ${masked+hairVertices} vertices (hair kept separate: ${hairVertices} across ${HAIRS.length} styles)`);
 console.log(`  tracks ${tracksKept} kept, ${tracksCut} cut (${fingers.size} finger bones held at a relaxed pose)`);

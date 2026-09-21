@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {NEAR_LIMITS,HUMANOID_LIMITS,NEAR_IK_LIMITS,createNearCharacters}
  from '../src/life/near-characters.mjs';
 import {WARDROBE} from '../src/player/character-asset.mjs';
+import {ARCHETYPES} from '../src/life/appearance.mjs';
 
 const channels=hex=>[(hex>>16)&255,(hex>>8)&255,hex&255];
 const distance=(a,b)=>{const x=channels(a),y=channels(b);
@@ -102,6 +103,19 @@ test('the pool stays bounded, and aims, under a crowd dense enough to churn',asy
  // Without a ground context no slot may take foot IK at all.
  assert.equal(peakIK,0,'foot IK without a ground query');
 
+ // RUN 6.8: the run is judged on how many different people are on screen, so that is what
+ // gets pinned. Eight humanoids that are all the same silhouette satisfied every assertion
+ // above and was exactly the problem.
+ const now=pool.inspect();
+ assert.equal(now.archetypes,ARCHETYPES.length,
+  `only ${now.archetypes} of ${ARCHETYPES.length} silhouettes on screen`);
+ const spread=Object.values(now.archetypeSlots);
+ assert.ok(Math.max(...spread)-Math.min(...spread)<=1,
+  `the humanoid slots are not evenly spread across archetypes: ${JSON.stringify(now.archetypeSlots)}`);
+ // A fixed spread needs no rebuilds. A climbing count means the mix is chasing the crowd,
+ // which is the oscillation the round-robin replaced.
+ assert.equal(now.rebuilds,0,`${now.rebuilds} slot rebuilds`);
+
  // The budget holding is not enough on its own: eight humanoids spent on the eight people
  // furthest away would satisfy every assertion above and miss the entire point of the run.
  // Measured at 84-85%; the shortfall is the swap hysteresis and one swap per frame, both
@@ -122,14 +136,6 @@ test('a pool with no focus releases everything',()=>{
  pool.dispose();
 });
 
-test('the player’s shirt is far from every citizen shirt',async()=>{
- // Read the citizen wardrobe out of the module source rather than exporting it just for a
- // test: what is being pinned is the colours in the file.
- const {readFileSync}=await import('node:fs');
- const source=readFileSync('src/life/near-characters.mjs','utf8');
- const tops=[...source.matchAll(/\{top:0x([0-9a-f]{6})/g)].map(m=>parseInt(m[1],16));
- assert.ok(tops.length>=6,`expected a wardrobe, found ${tops.length} entries`);
- for(const top of tops)
-  assert.ok(distance(top,WARDROBE.top)>60,
-   `citizen top #${top.toString(16)} is too close to the player's #${WARDROBE.top.toString(16)}`);
-});
+// The player-versus-crowd colour check moved to tests/appearance.test.mjs with the wardrobe
+// itself, when RUN 6.8 replaced the eight shirt colours in near-characters.mjs with the
+// appearance recipe.

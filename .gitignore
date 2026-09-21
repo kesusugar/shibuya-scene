@@ -59,6 +59,10 @@ next-env.d.ts
 !/qa/gta-upgrade/poolprobe.mjs
 !/qa/gta-upgrade/tierprobe.mjs
 !/qa/gta-upgrade/asset-audit.mjs
+!/qa/gta-upgrade/bindcheck.mjs
+!/qa/gta-upgrade/lineup.html
+!/qa/gta-upgrade/feet-compare.mjs
+!/qa/gta-upgrade/archetype-feet.mjs
 
 # character pipeline: upstream downloads are verified, never committed
 /assets/character/upstream/

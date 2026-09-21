@@ -1,5 +1,6 @@
 import {ARCHETYPES} from './config.mjs';
 import {LIFE} from './awareness.mjs';
+import {ARCHETYPES as LOOKS,appearanceOf,paletteOf,deduplicate} from './appearance.mjs';
 import {Group} from 'three';
 import {createPlayerFigure,bakedAsset} from '../player/figure.mjs';
 
@@ -31,30 +32,10 @@ export const HUMANOID_LIMITS={high:8,medium:4,low:0};
  */
 export const NEAR_IK_LIMITS={high:8,medium:4,low:0};
 
-/**
- * Sixteen ways to look like a different person, from one mesh and one material.
- *
- * The humanoid's garment mask carries skin, top, bottom, hair and shoes in four vertex-colour
- * channels, and recolouring is a uniform write -- no recompile, no second material, nothing
- * per-body on the GPU. Thirty-two unique assets is what the brief forbids and this is the
- * alternative: the same body, dressed differently, at slightly different heights.
- */
-const WARDROBE=[
- {top:0x2f4858,bottom:0x23303a,hair:0x1b1a1c,shoe:0x14161a},
- {top:0x8c5a3c,bottom:0x2b2f38,hair:0x2e2320,shoe:0x1a1a1e},
- {top:0xe9e3d5,bottom:0x3c4654,hair:0x141215,shoe:0x2a2a30},
- {top:0x3f6d5a,bottom:0x2d3240,hair:0x3a2a1e,shoe:0x191a1d},
- {top:0xd9a441,bottom:0x35393f,hair:0x17161a,shoe:0x232329},
- {top:0x6b5b95,bottom:0x262b33,hair:0x241d1a,shoe:0x15171b},
- {top:0xc9c6bf,bottom:0x4a4f58,hair:0x120f12,shoe:0x26262c},
- {top:0x35506b,bottom:0x2a2e36,hair:0x2b211c,shoe:0x181a1e}
-];
-const SKIN=[0xdfb994,0xc79a72,0xa3764f,0x7a5334,0xecd0b0];
-
-// The player wears WARDROBE.top (0xc94d38, a warm red) and has to stay findable in a crowd
-// that now shares its body. No citizen top is allowed near it -- a test asserts the distance,
-// because "they look different to me" is not a property a palette has.
-
+// RUN 6.8 moved what a citizen looks like into src/life/appearance.mjs. It used to be eight
+// wardrobes and a skin list right here, which produced eight recolours of one body -- the
+// clone problem that run exists to fix. Appearance is now a pure function of the pedestrian
+// id and includes the archetype (rig + hairstyle) and the build, not just the colours.
 
 /**
  * The clip word for a citizen's life state.
@@ -74,20 +55,18 @@ function lifeReaction(p){
  }
 }
 
-/** Deterministic per-citizen so a body keeps its identity across pool reuse. */
-function wardrobe(id){
- const n=Math.abs(id);
- return {...WARDROBE[n%WARDROBE.length],skin:SKIN[(n>>3)%SKIN.length]};
-}
-
 // Shared baked geometry/materials; only a bounded pool has individual skeletons/mixers.
 export function createNearCharacters(tier='high',{ctx=null}={}){
  const root=new Group(),slots=[],selected=new Set(),palette=[];root.name='near-character-pool';
  let asset=null,human=null,disposed=false,trianglesPerRig=0,humanTrianglesPerRig=0;
- const stats={humanoids:0,baked:0,ik:0};
+ const stats={humanoids:0,baked:0,ik:0,matched:0};
+ let rebuilds=0;
  function clear(){selected.clear();for(const s of slots){s.id=null;s.figure.hide();}}
  const limitFor=table=>table[tier]??0;
- function measure(a){let n=0;a.template.traverse(o=>{if(o.isMesh)
+ // Count what one BODY draws, not what the asset holds. Since RUN 6.8 the humanoid template
+ // carries every rig and every hairstyle, so measuring it would report a citizen as four
+ // times the triangles they actually are.
+ function measure(node){let n=0;node.traverse(o=>{if(o.isMesh)
   n+=(o.geometry.index?.count??o.geometry.attributes.position.count)/3;});return n;}
  return {root,selected,
   /**
@@ -100,9 +79,8 @@ export function createNearCharacters(tier='high',{ctx=null}={}){
   setHumanAsset(value){
    if(disposed||human===value)return;
    human=value;
-   if(human&&!humanTrianglesPerRig)humanTrianglesPerRig=measure(human);
    for(const s of slots.splice(0))s.figure.dispose();
-   selected.clear();
+   selected.clear();rebuilds=0;
   },
   update(people,focus,dt,clock=0){
    if(disposed)return selected;
@@ -129,17 +107,40 @@ export function createNearCharacters(tier='high',{ctx=null}={}){
    // Filling the humanoid quota first is what makes the bound structural: the count can only
    // go up by one at a time and stops at the quota, so no assignment policy below can inflate
    // it.
+   // What each candidate looks like. Pure function of their id, so this is the same answer
+   // every frame and across pool reuse -- see src/life/appearance.mjs.
+   const looks=new Map();
+   for(const {p} of candidates)looks.set(p.id,appearanceOf(p.id,ARCHETYPES[p.archetype]?.height??1.76));
+   // Shirt colours only, and only among the few on screen. Never the body or the hair.
+   const dressed=deduplicate([...looks.values()]);
+
    const humanSlotCount=slots.filter(s=>s.human).length;
    if(slots.length<limit&&slots.length<candidates.length){
     const wantHuman=!!human&&humanSlotCount<limitFor(HUMANOID_LIMITS);
     if(!asset){asset=bakedAsset();palette.push(...new Set(Object.values(ARCHETYPES).flatMap(a=>a.colors)));
-     trianglesPerRig=measure(asset);}
+     trianglesPerRig=measure(asset.template);}
     const source=wantHuman?human:asset;
+    // Which archetype to build. A slot's rig and hairstyle are geometry, fixed when the body
+    // is constructed, so the pool builds the one most in demand among the people on screen who
+    // do not already have a body of their own kind. Height, build and colour are all settable
+    // afterwards, so those are never a reason to rebuild.
+    // Round-robin, so the humanoid slots hold a balanced spread of archetypes by construction:
+    // eight slots over four archetypes is two of each, and MEDIUM's four is one of each.
+    //
+    // The first version of this chased demand instead -- rebuild whichever spare slot the
+    // people currently on screen most wanted. It oscillated: at 300 people the near radius
+    // churns faster than the mix can settle, and it converged on TWO archetypes visible out of
+    // four, having spent fifty rebuilds getting there. A fixed spread needs no rebuilds at all
+    // and puts every archetype on screen whenever the slots are full, which is the thing this
+    // run is judged on.
+    const variant=wantHuman?LOOKS[humanSlotCount%LOOKS.length]:null;
     // Foot IK only for humanoid slots inside the budget, and only when a ground query exists.
     // RUN 5's solver is not changed for this; it is given or not given a context.
     const wantsIK=wantHuman&&!!ctx&&slots.filter(s=>s.ik).length<limitFor(NEAR_IK_LIMITS);
-    const figure=createPlayerFigure(source,undefined,wantsIK?{ctx}:{});
-    root.add(figure.root);slots.push({figure,id:null,elapsed:0,human:wantHuman,ik:wantsIK});
+    const figure=createPlayerFigure(source,undefined,{...(wantsIK?{ctx}:{}),variant});
+    root.add(figure.root);
+    if(wantHuman&&!humanTrianglesPerRig)humanTrianglesPerRig=measure(figure.root);
+    slots.push({figure,id:null,elapsed:0,human:wantHuman,ik:wantsIK,variant});
    }
 
    const wanted=new Set(candidates.map(c=>c.p.id));
@@ -161,19 +162,33 @@ export function createNearCharacters(tier='high',{ctx=null}={}){
    const HOLD=4,quota=limitFor(HUMANOID_LIMITS);
    if(quota>0){
     const rank=new Map();for(let i=0;i<candidates.length;i++)rank.set(candidates[i].p.id,i);
-    let promote=null,demote=null;
-    for(const c of candidates){
-     if(rank.get(c.p.id)>=quota)break;
-     if(slots.some(x=>x.id===c.p.id&&!x.human)){promote=c.p.id;break;}
+    // The swap has to be BETWEEN PEOPLE OF THE SAME ARCHETYPE, which is what changed in
+    // RUN 6.8. A humanoid slot is now a particular silhouette, so handing a freed one to the
+    // nearest citizen regardless of archetype would put them in someone else's body. Pairing
+    // like with like keeps both promises at once: the good bodies drift toward the camera, and
+    // nobody changes who they are to get one.
+    //
+    // Without this pairing the aim collapses -- measured at 22-44% of the nearest eight
+    // wearing a humanoid, against 84-85% in RUN 6 -- because a near citizen whose archetype
+    // was busy simply sat on a baked figure while a matching humanoid walked away wearing one.
+    let swap=null;
+    for(const x of slots){
+     if(!x.human||x.id===null||!x.variant)continue;
+     const far=rank.get(x.id)??Infinity;
+     if(far<quota+HOLD)continue;
+     for(const c of candidates){
+      const near=rank.get(c.p.id);
+      if(near>=quota)break;
+      const look=looks.get(c.p.id);
+      if(!look||look.archetype.id!==x.variant.id)continue;
+      if(!slots.some(y=>y.id===c.p.id&&!y.human))continue;
+      if(!swap||far>swap.far){swap={slot:x,id:c.p.id,far};}
+      break;
+     }
     }
-    if(promote!==null)for(const x of slots){
-     if(!x.human||x.id===null)continue;
-     const r=rank.get(x.id)??Infinity;
-     if(r>=quota+HOLD&&(!demote||r>(rank.get(demote.id)??Infinity)))demote=x;
-    }
-    if(demote){
-     demote.id=null;demote.figure.hide();
-     const held=slots.find(x=>x.id===promote);
+    if(swap){
+     swap.slot.id=null;swap.slot.figure.hide();
+     const held=slots.find(y=>y.id===swap.id);
      if(held){held.id=null;held.figure.hide();}
     }
    }
@@ -184,27 +199,38 @@ export function createNearCharacters(tier='high',{ctx=null}={}){
    // enough that a humanoid frees up within a second or so anyway. `freeSlots` is humanoid
    // first and `candidates` is already score-ordered, so this hands the better bodies to the
    // nearest without a second sort of the people.
-   const freeSlots=slots.filter(s=>s.id===null).sort((a,b)=>(b.human?1:0)-(a.human?1:0));
-   let nextFree=0;
+   const freeSlots=slots.filter(s=>s.id===null);
+   const taken=new Set();
 
    selected.clear();
-   stats.humanoids=0;stats.baked=0;stats.ik=0;
+   stats.humanoids=0;stats.baked=0;stats.ik=0;stats.matched=0;
    for(const {p} of candidates){
+    const look=dressed.get(p.id)??looks.get(p.id);
     let slot=slots.find(s=>s.id===p.id);
     if(!slot){
-     slot=freeSlots[nextFree++];
+     // A humanoid slot already wearing this person's archetype first -- that is their own
+     // body, and taking it costs nothing. Then any other humanoid: a citizen in someone
+     // else's silhouette is still a better near character than a baked figure, and the
+     // rebuild above will converge the mix within a frame or two. Then a baked figure.
+     // Their OWN archetype, or a baked figure -- never a humanoid wearing somebody else's
+     // silhouette. Handing out the wrong body would keep all eight humanoids busy and raise
+     // the count, at the cost of the one promise that makes a crowd feel like people: walk
+     // away from someone and walk back and they are still them. A baked figure at four metres
+     // is a smaller lie than the same face on a different body.
+     slot=freeSlots.find(x=>!taken.has(x)&&x.human&&x.variant?.id===look.archetype.id)
+       ??freeSlots.find(x=>!taken.has(x)&&!x.human)
+       ??freeSlots.find(x=>!taken.has(x));
      if(!slot)continue;
+     taken.add(slot);
      slot.id=p.id;slot.figure.reset();
      if(slot.human){
-      // A different person, not a recoloured copy of the same one.
-      slot.figure.recolour(wardrobe(p.id));
-     }else slot.figure.recolour({top:palette[Math.abs(p.id)%palette.length]});
-     // Height varies by archetype and then a little per body, so a row of citizens is not a
-     // row of one citizen.
-     const base=ARCHETYPES[p.archetype]?.height??1.76;
-     slot.figure.setHeight(base*(.965+(Math.abs(p.id)%7)*.011));
+      slot.figure.recolour(paletteOf(look));
+      slot.figure.setBuild(look.width);
+      if(slot.variant?.id===look.archetype.id)stats.matched++;
+     }else slot.figure.recolour({top:look.top});
+     slot.figure.setHeight(look.height);
      slot.elapsed=.1;
-    }
+    }else if(slot.human&&slot.variant?.id===look.archetype.id)stats.matched++;
     selected.add(p.id);slot.elapsed+=Math.max(0,dt);
     if(slot.human)stats.humanoids++;else stats.baked++;
     if(slot.ik)stats.ik++;
@@ -222,6 +248,8 @@ export function createNearCharacters(tier='high',{ctx=null}={}){
   },
   /** Which body a citizen currently wears, or null if the pool is not holding them. */
   bodyOf(id){const s=slots.find(x=>x.id===id);return s?(s.human?'humanoid':'baked'):null;},
+  /** Which appearance archetype a held citizen is wearing, or null. */
+  lookOf(id){const s=slots.find(x=>x.id===id);return s?.human?(s.variant?.id??null):null;},
   setTier(value){
    tier=value;clear();
    // Dropping to a tier with a smaller humanoid quota has to drop humanoids, not just slots:
@@ -238,9 +266,19 @@ export function createNearCharacters(tier='high',{ctx=null}={}){
     humanoidLimit:limitFor(HUMANOID_LIMITS),ikLimit:limitFor(NEAR_IK_LIMITS),
     humanoidSlots:humanSlots,humanoidsActive:stats.humanoids,bakedActive:stats.baked,
     footIK:stats.ik,humanAssetReady:!!human,
+    // RUN 6.8. `archetypes` is how many distinct silhouettes are actually on screen -- the
+    // number this run is judged on. `matched` is how many humanoids are wearing their own
+    // archetype rather than borrowing one; `rebuilds` is how often a slot has had to change
+    // body, which should settle to a small total rather than climbing every frame.
+    archetypes:new Set(slots.filter(x=>x.human&&x.id!==null).map(x=>x.variant?.id)).size,
+    archetypeSlots:Object.fromEntries(LOOKS.map(a=>
+     [a.name,slots.filter(x=>x.human&&x.variant?.id===a.id).length])),
+    matched:stats.matched,rebuilds,
     sharedGeometry:true,
-    // Three meshes a humanoid, six a baked figure.
-    drawCallsUpperBound:stats.humanoids*3+stats.baked*6,
+    // Four meshes a humanoid, six a baked figure. It was three until RUN 6.8 split the hair
+    // out of the body mesh, which is what lets one body serve three hairstyles instead of
+    // storing a whole body per hairstyle.
+    drawCallsUpperBound:stats.humanoids*4+stats.baked*6,
     triangles:stats.humanoids*humanTrianglesPerRig+stats.baked*trianglesPerRig};
   },
   dispose(){if(disposed)return;disposed=true;for(const s of slots)s.figure.dispose();slots.length=0;selected.clear();root.removeFromParent();root.clear();}

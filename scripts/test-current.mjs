@@ -14,6 +14,7 @@ const files=[
  'tests/hybrid-clip.test.mjs',
  'tests/near-characters.test.mjs',
  'tests/near-humanoid.test.mjs',
+ 'tests/appearance.test.mjs',
  'tests/shader-warmup.test.mjs',
  'tests/pedestrian-threat.test.mjs',
  'tests/npc-awareness.test.mjs',
