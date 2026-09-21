@@ -948,16 +948,21 @@ able to knock the cast down through `strike`.** Only a fist could not.
 - the hostility window still opens, so a cast member who is punched and later leaves the cast
   turns and fights.
 
-**Verified in the live scene, end to end:**
+**Verified in the live scene, end to end**, over two runs at different viewport sizes:
 
-| | before the fix | after |
-| --- | ---: | ---: |
-| swings | 2 | 3 |
-| hits | **0** | **3** |
-| misses | 1 | 0 |
-| NPC deaths | 0 | **1** |
-| `sim.struck` | 0 | **1** |
-| GPU crowd `KNOCKDOWN` / `down` | 0 / 0 | **1 / 1** |
+| | before the fix | after (480×320) | after (900×620) |
+| --- | ---: | ---: | ---: |
+| swings | 2 | 3 | 5 |
+| hits | **0** | **3** | **5** |
+| misses | 1 | 0 | 0 |
+| NPC deaths | 0 | **1** | **1** |
+| `sim.struck` | 0 | **1** | **1** |
+| GPU crowd `down` | 0 | **1** | **1** |
+| GPU crowd state reached | — | `KNOCKDOWN` | `KNOCKDOWN` → **`DOWNED`** |
+
+Five swings, five hits, no misses. The longer run also watched the body move through the
+knockdown chain — `KNOCKDOWN` and then `DOWNED` — which is **RUN 7C's chain being driven by a
+punch for the first time**; until now only a car had ever put a body on the ground.
 
 **Why no unit test caught it.** Every NPC in `tests/combat.test.mjs` was built with
 `choreographed` falsy — the helper never set it, so 23 passing cases all tested the 15–26% of
@@ -973,9 +978,12 @@ needed a small viewport to reach in reasonable time.
 ### Not verified live
 
 - **A visual frame of a body on the ground.** The knockdown is proven by numbers above
-  (`KNOCKDOWN=1`, `down=1`, `sim.struck=1`), but the viewport small enough to reach a kill
-  quickly is also small enough that the HUD covers the crowd. The impact frames were captured
-  in a spot where the camera sits inside the crowd and the player's arm is occluded.
+  (`KNOCKDOWN` → `DOWNED`, `down=1`, `sim.struck=1`, `npcDeaths=1`) and was captured at
+  900×620 with the scene healthy — but the body is not identifiable in it. To reach a kill the
+  player has to stand inside the crowd, and from there the camera looks at a wall of standing
+  people that hides anyone lying at their feet. The same position hides the player's own arm,
+  so the impact frames do not read as a punch either. **What is missing is a camera angle, not
+  a behaviour.** A free or raised camera, or a kill at the edge of the crowd, would settle it.
 - **NPC retaliation damaging the player.** Health stayed at 100 throughout. At 0.2 FPS an NPC
   needs its own wind-up plus a 1.05 s cooldown per swing, and the player was never held still
   long enough near a non-cast pedestrian. Pinned by unit tests, not observed in the browser.
