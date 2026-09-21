@@ -551,9 +551,14 @@ pedestrian window.
   static bench never does. `release()` now swap-removes from both the lane and the state
   arrays, and a test drives a moving camera over 900 people asserting population never exceeds
   what is drawn.
-- **The HQ bodies read washed out** beside the RUN 6.8 near characters standing next to them.
-  The crowd material had one flat roughness where RUN 6.8 gives each garment its own, so skin,
-  cotton, denim, hair and a shoe were all the same plastic. It now uses the same values.
+- **The HQ bodies read washed out in the scene, and this is NOT fixed.** The crowd material
+  did have one flat roughness where RUN 6.8 gives each garment its own, so skin, cotton,
+  denim, hair and a shoe were all the same plastic; that is corrected and is an improvement on
+  its own. **It did not fix the wash-out.** The cause is now isolated rather than guessed: the
+  identical palette and shader render correctly in `qa/gta-upgrade/hqcrowd.html` — dark
+  trousers, distinct tops, varied skin — and only go pale in the scene, so it is the scene's
+  environment, tone mapping, exposure or fog acting on the crowd material, not the crowd
+  material itself. Carried into RUN 7C. See the limitations in §18.
 
 ### Quality tiers
 
@@ -714,6 +719,14 @@ bone space. See §5 — this is the single most repeated mistake in this project
   completing with nothing abandoned or stuck across 30 seconds.
 - **RUN 7 behaviour proper is still not done.** The awareness WIP at `f6aa8e8` remains
   unverified; RUN 7B connected the crowd, not the NPC minds.
+- **The HQ crowd looks washed out in the scene.** Functionally complete and visually wrong:
+  the bodies are pale against the RUN 6.8 near characters beside them. The same palette and
+  shader are correct in the bench, so the cause is the scene's environment / tone mapping /
+  exposure / fog, not the material. **This is the first thing RUN 7C should fix** — it is the
+  gap between "1,978 high-fidelity bodies" and "1,978 bodies that look right".
+- **The garment boundary softens at LOD2.** Decimation blurs the mask, so a sleeve fades into
+  the arm over several centimetres. Acceptable at the distance L2 is used, visible if L2 is
+  ever brought close.
 - **Near-humanoid aim is 71–74%**, down from RUN 6's 84–85%: a citizen only takes a humanoid
   of their own archetype, so when three of the nearest share one archetype the third waits on
   a baked figure. Deliberate — see §9a.
