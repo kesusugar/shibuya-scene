@@ -417,7 +417,11 @@ export default function Home(){
       setDriving(true);touchPad?.setDriving(true);struckCountRef=0;setStruckCount(0);}
      else {playerCar.unreserve();playerFigure?.update(player.state,dt);groundPlayerShadow();}
     }
-    else if(pose.done){player.state.vehiclePhase=0;if(playerCar?.state)playerCar.state.doorPhase=0;}}}
+    else if(pose.done){player.state.vehiclePhase=0;if(playerCar?.state)playerCar.state.doorPhase=0;
+     // The seat is empty the moment the body is standing on the pavement. The car is still
+     // the player's -- it is still drawn as theirs and still offered back as 'own' -- but a
+     // car nobody is sitting in must not report an occupant.
+     if(pose.kind==='exit')playerCar?.vacateSeat();}}}
   else if(driving&&playerCar){const drive=player.input();playerCar.step(dt,drive);const c=playerCar.state;player.rideTo(c.x,c.z,c.heading);playerMarker?.update(c,dt,playerCar.def.height);
    const crowdSim=lifeEntry.hooks.current?.sim;playerCar.alertPedestrians(crowdSim);lifeEntry.hooks.current?.hqCrowd?.vehicle(playerCar.state,dt);
    const struck=playerCar.strikePedestrians(crowdSim);

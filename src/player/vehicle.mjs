@@ -231,6 +231,20 @@ export function createPlayerVehicle(sim, ctx) {
    return true;
   },
 
+  /**
+   * Get out of the seat while keeping the car.
+   *
+   * Stepping out is not the same as giving the car up: the player still owns it, it is still
+   * the slot the renderer draws, and `nearestEntry` still offers it back as 'own'. What ends
+   * is the OCCUPANCY -- the seat is empty the moment the body is standing on the pavement, and
+   * a car the player is not sitting in must not report them as its occupant.
+   */
+  vacateSeat() {
+   const slot = state.slot;
+   if (!slot) return false;
+   return !!sim.occupancy?.leaveSeat(slot.id);
+  },
+
   /** Give a reserved car back without ever having driven it. Used when an entry is aborted. */
   unreserve() {
    const slot = state.slot;
