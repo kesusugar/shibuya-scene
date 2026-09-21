@@ -132,10 +132,26 @@ for(const [r,view] of VIEWS.entries()){
  document.body.appendChild(nm);
 }
 const stride=figure.gait.stride??0;
+const step=stride/2, spm=120/cycle;
+// The reference, computed from the speed rather than remembered.
+//
+// At a fixed speed step length and cadence are the SAME FACT -- step = speed / (spm/60) -- so
+// a clip cannot get them wrong independently, and quoting both as separate defects double
+// counts one. The only free variable is cadence. People running at 4.2 m/s turn their legs
+// over at roughly 160-170 spm, which fixes the step; printing that range next to the measured
+// value is what stops a plausible-sounding pair of numbers being compared to a pair that never
+// described the same runner. An earlier note compared a running cadence against a WALKING step
+// length and concluded the clip was 2.4x too long; it is about 1.3x.
+const REF_SPM=[160,170];
+const refStep=REF_SPM.map(c=>SPEED/(c/60));            // [long, short]
+const ratio=step/((refStep[0]+refStep[1])/2);
 document.getElementById('l').textContent=
  `RUN slot "${LABEL}"   target ${SPEED.toFixed(2)} m/s   foot IK ${IK?'on':'off'}   floor = road at ${ROAD*1000} mm\n`+
- `blended stride ${stride.toFixed(2)} m   step ${(stride/2).toFixed(2)} m   `+
- `cycle ${cycle.toFixed(3)} s   cadence ${(120/cycle).toFixed(0)} spm   duty ${st0.duty.toFixed(3)}\n`+
+ `measured: step ${step.toFixed(2)} m   cadence ${spm.toFixed(0)} spm   `+
+ `stride ${stride.toFixed(2)} m   cycle ${cycle.toFixed(3)} s   duty ${st0.duty.toFixed(3)}\n`+
+ `reference at ${SPEED.toFixed(1)} m/s: ${refStep[1].toFixed(2)}-${refStep[0].toFixed(2)} m `+
+ `at ${REF_SPM[1]}-${REF_SPM[0]} spm   ->  this clip is ${ratio.toFixed(2)}x the step, `+
+ `${(spm/((REF_SPM[0]+REF_SPM[1])/2)).toFixed(2)}x the cadence (one fact, two ways)\n`+
  `sole below the road across one stride: worst ${stats.worst.toFixed(0)} mm, `+
  `mean ${(stats.mean/Math.max(1,stats.n)).toFixed(0)} mm`;
 document.title='ready';

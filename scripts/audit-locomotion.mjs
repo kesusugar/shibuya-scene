@@ -256,10 +256,16 @@ Forty-three clips in the library, and exactly four of them are upright forward l
 The remaining forward loops are crouched, pushing, or swimming, at 46°–88° of lean. They are
 measured above rather than dismissed by name, and they are not candidates.
 
-**There is nothing between 0.93 m/s and 5.10 m/s.** The gameplay run is 4.2 m/s, and a person
-running at 4.2 m/s takes roughly 0.75–0.85 m steps at 160–170 spm. The only clip in range is
-\`Jog_Fwd_Loop\`, which at that speed gives **2.38 m steps at 106 spm** — about three times the
-step at two thirds of the cadence. That is a bound, and it is why it reads as slow motion.
+**There is nothing between 0.93 m/s and 5.10 m/s.**
+
+The gameplay run is 4.2 m/s. **At a fixed speed, step length and cadence are the same fact**
+— \`step = speed / (spm/60)\` — so they are not two independent things a clip can get wrong.
+The one free variable is cadence, and people running at 4.2 m/s turn their legs over at
+roughly 160–170 spm, which fixes the step at **1.48–1.58 m** (1.53 m at 165 spm).
+
+The only clip in range is \`Jog_Fwd_Loop\`, which at 4.2 m/s gives **2.38 m steps at
+106 spm** — 1.55× the reference step, equivalently 0.64× the reference cadence. One
+number, stated two ways. It is a bound, and that is why it reads as slow motion.
 
 So the first pool is exhausted. The next section covers the second one.
 

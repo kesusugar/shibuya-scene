@@ -116,12 +116,37 @@ close-up of the current run at 4.2 m/s, through `qa/gta-upgrade/runbench.html`:
 | duty | 0.349 |
 | sole below the road, worst across one stride | 39 mm |
 
-A person running at 4.2 m/s takes roughly **0.75–0.85 m steps at 160–170 spm**. This is
-**2.4× the step at three quarters of the cadence**. The side view shows what that is: the legs
-split into a bound and hang there. It is not slow motion in the sense of being played too
-slowly — it is a clip of someone moving much faster, retimed, and **retiming cannot shorten a
-stride that is baked into the keyframes.** That is the whole of the problem and no playback
-rate, blend weight or IK term touches it.
+### The reference, computed rather than recalled
+
+**At a fixed speed, step length and cadence are the same fact.** `step = speed / (spm/60)`,
+so a clip driven at 4.2 m/s cannot get them wrong independently — the measured 2.01 m at
+125 spm multiplies back to 4.19 m/s, which is the speed it was asked for. The one free
+variable is cadence.
+
+People running at 4.2 m/s turn their legs over at roughly **160–170 spm**, which fixes the
+step at:
+
+| cadence | step at 4.2 m/s |
+| ---: | ---: |
+| 125 spm *(current clip)* | **2.02 m** |
+| 160 spm | 1.58 m |
+| 165 spm | 1.53 m |
+| 170 spm | 1.48 m |
+| 180 spm | 1.40 m |
+
+So the current run is **1.32× the reference step**, equivalently **0.76× the reference
+cadence** — one defect stated two ways, not two defects.
+
+**An earlier draft of this note claimed “0.75–0.85 m steps at 160–170 spm” and called the
+current clip 2.4× too long. That is withdrawn:** 0.8 m at 165 spm is 2.2 m/s, a walking step
+length placed next to a running cadence. The two figures never described the same runner.
+The reference range above is computed from the speed, and the bench now prints it beside
+whatever it measures so the comparison cannot drift again.
+
+The problem is real and unchanged in kind — the side view shows the legs splitting into a
+bound and hanging there, and **retiming cannot shorten a stride baked into the keyframes** —
+but it is a 30% overshoot, not a 140% one, and the decision gate for a replacement should be
+set against the smaller number.
 
 ## STEP 5 — there is no candidate
 
