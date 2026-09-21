@@ -30,9 +30,11 @@ export function createVehicleShadows(capacity){
   transparent:true,depthWrite:false,
   vertexShader:`
    varying vec2 vUv;varying vec3 vShape;
-   #ifdef USE_INSTANCING_COLOR
-    attribute vec3 instanceColor;
-   #endif
+   // instanceColor is NOT declared here. A ShaderMaterial gets three.js's own vertex
+   // prefix, which already declares it under this same #ifdef, and declaring it again is a
+   // redefinition: the program fails to compile, the renderer raises the shader-error
+   // banner, and every vehicle loses its shadow to useProgram: program not valid. The
+   // guard stays because the attribute only exists once a colour has been written.
    void main(){
     vUv=uv;
     vShape=vec3(2.0,0.3,0.0);

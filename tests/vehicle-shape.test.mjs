@@ -181,3 +181,24 @@ test('the deferred wrapper announces its root once the pack lands',async()=>{
  assert.equal(seen[0],built);
  deferred.dispose();
 });
+
+// Found during RUN 8 browser QA, and not by any test: the vehicle shadow's vertex shader
+// declared `attribute vec3 instanceColor` itself. A ShaderMaterial is given three.js's own
+// vertex prefix, which already declares that attribute under the same `#ifdef`, so the
+// program failed to compile the moment an instance colour existed -- the scene raised its
+// shader-error banner and every car lost its shadow to `useProgram: program not valid`.
+//
+// The whole scene has to be rendered for a browser to catch it, so it is pinned here instead:
+// no custom shader may declare an attribute the renderer already injects.
+test('the vehicle shadow shader does not redeclare what three.js injects',()=>{
+ const shadows=createVehicleShadows(4);
+ const vertex=shadows.mesh.material.vertexShader;
+ // three.js injects each of these into every non-raw vertex shader, under its own #ifdef.
+ for(const name of ['instanceColor','instanceMatrix','position','normal','uv'])
+  assert.equal(new RegExp(`attribute\\s+\\w+\\s+${name}\\s*;`).test(vertex),false,
+   `the shader declares ${name}, which three.js already declares -- the program will not compile`);
+ // ...but it must still USE instanceColor, guarded, or the falloff exponent never arrives.
+ assert.ok(vertex.includes('USE_INSTANCING_COLOR'),'the guard was removed with the declaration');
+ assert.ok(/vShape\s*=\s*instanceColor/.test(vertex),'the instance colour is no longer read');
+ shadows.dispose();
+});
