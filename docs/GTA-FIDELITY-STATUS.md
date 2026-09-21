@@ -3,8 +3,8 @@
 The one document to read when resuming this work with no conversation history. Read
 `AGENTS.md` and `CLAUDE.md` first for the repository rules, then this.
 
-**Updated for the ChatGPT Work handoff.** RUN 6 is complete. RUN 7 exists only as an
-unverified WIP commit. **The next task is RUN 6.8, not RUN 7** — see §9a and §21.
+**Updated at the close of RUN 6.8.** RUNs 0–6 and 6.8 are complete. RUN 7 exists only as an
+unverified WIP commit and is still **not** started properly — see §10.
 
 ## 1. Goal
 
@@ -19,8 +19,9 @@ in use now is a placeholder for the pipeline, not the final visual asset.
 ## 2. Branch and HEAD
 
 - Working branch: **`claude/gta-fidelity-upgrade`**, pushed to `origin`. Stay on it.
-- HEAD at handoff: **`f6aa8e8`** — local and remote match, working tree clean, no stashes.
-- The last **complete** RUN is `b32e5a7` (RUN 6). `f6aa8e8` on top of it is the RUN 7 WIP.
+- HEAD: **`03fcd5b`** (RUN 6.8) — local and remote match, working tree clean, no stashes.
+- The last **complete** RUN is RUN 6.8 at `03fcd5b`. `f6aa8e8`, beneath it, is the RUN 7 WIP
+  and is still unverified — RUN 6.8 changed nothing about it.
 - `master` is untouched by this work and must stay that way. It moved ahead independently
   (PRs #17 and #18 from `codex/prebaked-motion`); the local `master` here is `c538aa2`, a
   clean ancestor of the remote `39175bd`. Nothing has been merged into or pushed from it.
@@ -28,6 +29,8 @@ in use now is a placeholder for the pipeline, not the final visual asset.
 Checkpoint history, newest first:
 
 ```
+03fcd5b  RUN 6.8: Break near-humanoid clone appearance
+3e9213b  Prepare ChatGPT Work handoff
 f6aa8e8  RUN 7 WIP: NPC awareness state machine - NOT verified, NOT complete
 b32e5a7  RUN 6 complete: handoff status document
 cdb6271  RUN 6.7: near-pool budgets on every tier
@@ -50,7 +53,7 @@ cdb6271  RUN 6.7: near-pool budgets on every tier
 | 5.6 | CMU run retarget POC | complete, not integrated as-is |
 | 5.7 | Hybrid run (CMU lower + Quaternius upper) | complete, **adopted** |
 | 6 | Near-NPC visual upgrade | **COMPLETE** |
-| 6.8 | Near-humanoid clone break | **NEXT TASK — not started** |
+| 6.8 | Near-humanoid clone break | **COMPLETE** |
 | 7 | NPC life / behaviour states | **WIP ONLY — NOT VERIFIED, NOT COMPLETE** |
 | 8 | Melee combat phases | not started |
 | 9 | Knockdown / death / recovery | not started |
@@ -211,125 +214,134 @@ every poll when the owner is disposed, and gives up at a deadline. **Nothing is 
 nothing is silenced.** `tests/shader-warmup.test.mjs` reproduces the original TypeError
 against the unfixed module.
 
-## 9a. RUN 6 succeeded technically, and still looks like clones — RUN 6.8
+## 9a. RUN 6.8 — near-humanoid clone break
 
 RUN 6 met every criterion it set: humanoid budget held at 8, far crowd 1,978, console errors
-0, foot IK bounded, all three tiers within budget. **The visual result is still wrong**, and
-saying otherwise would be marking our own homework.
+0, foot IK bounded, all three tiers within budget. **The visual result was still wrong.**
+Eight people who differ only in colour read as one person recoloured eight times, and no
+amount of extra palette entries fixes that, because the thing the eye reads is *shape*.
 
-Looking at the near crowd, most people share:
+RUN 6.8 gives them different shapes. Evidence, from the same camera:
+`node qa/gta-upgrade/lineup.html` — **before: 1 silhouette across eight citizens. After: 4.**
+`?before=1` reproduces the RUN 6 appearance model exactly, so the comparison is a comparison.
 
-- the same hair silhouette
-- the same head
-- the same body proportions
-- the same clothing geometry
+### Four archetypes, from assets already verified
 
-Eight people who differ only in colour read as **one person recoloured eight times**, not as
-eight people. Skin and clothing colour variation is not enough, and no amount of additional
-palette entries will fix it, because the thing the eye is reading is *shape*.
+| archetype | rig | hairstyle | height × | build × |
+| --- | --- | --- | ---: | ---: |
+| casual | Superhero_Male | `Hair_SimpleParted` | 1.000 | 1.00 |
+| long hair | Superhero_Female | `Hair_Long` | 0.955 | 0.95 |
+| cropped | Superhero_Male | `Hair_Buzzed` | 1.035 | 1.05 |
+| short bob | Superhero_Female | `Hair_SimpleParted` | 0.975 | 0.97 |
 
-So the next task is **RUN 6.8 — Near Humanoid Clone Break Pass**, before RUN 7.
+Both bodies and all three hairstyles come from the Quaternius pack downloaded and licence-
+checked for RUN 2. **No new asset, no new rig, no retargeting.**
 
-### What the current asset actually contains
+### The two rigs do not share a rest pose — this is the load-bearing fact
 
-Audited, not assumed — `node qa/gta-upgrade/asset-audit.mjs`:
+Bone *names* match, which is all the old single-hairstyle merge ever checked. The rest poses
+do not: **64 of 65 bones differ, the upperarms by 7.1 cm and the clavicles by 4.6 cm.**
+Binding the female mesh to the male skeleton would have flattened her shoulders by that much.
+`qa/gta-upgrade/bindcheck.mjs` prints it.
+
+So each body keeps its own armature, and what is shared is the thing that actually costs:
+**one set of AnimationClips**. Clip tracks address bones by name, so one clip array drives
+either rig and a mixer binds it to whichever root its instance has. Four archetypes cost four
+bodies' worth of geometry and **one** animation library.
+
+### Two things glTF does that will break this if undone
+
+1. **It strips punctuation from node names and suffixes duplicates.** `rig:m` came back as
+   `rigm`, and the second rig's hair as `hairHair_Long_1`. Matching is therefore done on
+   `userData`, which survives as glTF `extras`.
+2. **It renames the second armature's bones** — `pelvis_1`, `thigh_l_1`, … Since a mixer
+   resolves tracks by name and foot IK looks its joint chain up by name, the female rig would
+   have silently animated nothing. The names are restored **by index** at load (bone order is
+   identical and checked at bake time; a pattern would be guesswork, as `spine_01` and
+   `index_01_l` already end in digits). Safe because a name only has to be unique within the
+   tree it is resolved against, and an instance clones exactly one rig.
+
+Hair is a separate mesh now rather than merged into the body: merging stores a whole body per
+hairstyle, separate meshes let the exporter keep each body once and each hairstyle once.
+
+### Appearance is a pure function of the pedestrian id
+
+`src/life/appearance.mjs`. Archetype, skin, hair colour, top, bottom, shoes, height and build
+all come from one well-mixed hash read at disjoint bit ranges, so the choices do not
+correlate — reading several with `id % n` gives visible repeating runs down a pavement.
+
+**Nothing comes from the pool, the frame, the tier, or the neighbours.** The pool recycles
+slots constantly and reorders every frame; anything reading from it would make people change
+clothes as the camera moves, which is worse than the clone problem. Walk away from someone
+and walk back and they are the same person.
+
+The one exception is `deduplicate`, and it is bounded: among the handful on screen it may move
+a **shirt colour** and nothing else, walking them in ascending id so the same set of people
+always gives the same answer whatever order the pool holds them in. Silhouette is never
+negotiated at runtime.
+
+### Slot allocation — a fixed spread, not demand chasing
+
+Humanoid slots hold a round-robin spread: two of each archetype at HIGH, one at MEDIUM. Every
+archetype is therefore on screen whenever the slots are full.
+
+The first version chased demand — rebuild whichever spare slot the crowd currently wanted. At
+300 people the near radius churns faster than that can settle: it converged on **two**
+archetypes visible out of four, after fifty rebuilds. The fixed spread needs none.
+
+A citizen takes a humanoid of their **own** archetype or a baked figure, never someone else's
+silhouette. That costs aim — the RUN 6 swap that pulled good bodies toward the camera had to
+become a swap *between people of the same archetype*, and nearest-eight coverage settles at
+**71–74%** against RUN 6's 84–85%. A baked figure at four metres is a smaller lie than the
+same face on a different body.
+
+### Skeletons per body: 3 → 1
+
+`SkeletonUtils.clone` gives every SkinnedMesh its own `Skeleton`, each owning a bone matrix
+texture, although they share one set of bones. A citizen was paying for three and would have
+paid for four once hair was split out. They are collapsed onto one.
+
+### Measured
+
+| | RUN 6 | RUN 6.8 |
+| --- | ---: | ---: |
+| archetypes on screen | 1 | **4** |
+| humanoid budget (HIGH / MED / LOW) | 8 / 4 / 0 | 8 / 4 / 0 |
+| near baked (HIGH) | 24 | 24 |
+| far crowd | 1,978 | 1,978 |
+| skeletons per humanoid | 3 | **1** |
+| mixers per humanoid | 1 | 1 |
+| meshes per humanoid | 3 | 4 |
+| pool draw calls (HIGH) | 168 | 176 |
+| pool triangles (HIGH) | 215k | 215k |
+| slot rebuilds over 900 frames | — | 0 |
+| foot IK | 8 | 8 |
+| console errors | 0 | **0** |
+
+Feet, with no IK, against a flat floor — the pre-existing Run float is neither introduced nor
+worsened:
+
+| clip | RUN 6 | RUN 6.8 (same body) | RUN 6.8 (all four archetypes) |
+| --- | ---: | ---: | ---: |
+| Idle | −8.3 mm | −8.2 mm | −8.6 … −4.7 mm |
+| Walk | −7.5 mm | −7.4 mm | −7.8 … −2.3 mm |
+| Run | 61.3 mm | 60.3 mm | 58.3 … 71.2 mm |
+
+Payload:
 
 ```
-public/data/character/citizen.glb   1,414,612 B
-meshes   3     Eyebrows (984 tris) | Eyes (768) | SuperHero_Male (13,867)
-bones    65
-morph targets    NONE
-hidden / optional meshes    NONE
-separate hair / hat / accessory meshes    NONE
+RUN 6    citizen.glb  1,414,612 B   1 body,  1 hairstyle, 15 clips
+RUN 6.8  citizen.glb  2,260,380 B   2 bodies, 3 hairstyles, 15 clips SHARED   (1.60x)
+naive 4 separate character files   ~5,658,448 B                               (2.50x)
+saved by sharing the clip library  ~3,398,068 B
 ```
 
-**The hair is merged into the body mesh.** `convert-character.mjs` takes one hairstyle
-(`Hair_SimpleParted`, 757 vertices) and merges it into the body geometry at bake time so a
-citizen stays one draw call. That is a good decision for cost and it means the shipped asset
-has **no runtime lever for silhouette at all** — no alternate hair to swap, no optional parts
-to hide, no morph targets to push.
+### What RUN 6.8 deliberately did not do
 
-So with the asset as it ships today, only these are possible:
-
-| lever | available now? | how |
-| --- | --- | --- |
-| skin / top / bottom / hair / shoe colour | **yes** | vertex-colour garment mask, uniform write |
-| overall height | **yes** | already used (`setHeight`) |
-| shoulder / torso width, limb length | **yes, unused** | per-bone scale on the shared skeleton |
-| hair silhouette | **no** | merged into the body mesh at bake time |
-| head shape | **no** | one head, no morph targets |
-| clothing geometry | **no** | painted on, not modelled |
-
-### The good news: the archetypes already exist, CC0 and verified
-
-The upstream Quaternius pack already downloaded for RUN 2 (`assets/character/upstream/`,
-gitignored, CC0-1.0 verified from the bundled `License_Standard.txt`) contains **more than
-the one body and one hairstyle currently baked**:
-
-```
-BaseCharacters/  Superhero_Male_FullBody     13,867 tris
-                 Superhero_Female_FullBody   15,060 tris
-Hairstyles/      Hair_Buzzed                    830 tris
-                 Hair_SimpleParted            1,301 tris
-                 Hair_Long                    2,906 tris
-```
-
-**All four alternates share the identical 65-bone skeleton** — verified by comparing bone
-name lists, not by trusting the folder layout. That means:
-
-- no retargeting, no new rig, no skeleton budget change
-- every existing clip, the Hybrid Run included, plays on all of them unchanged
-- **2 bodies × 3 hairstyles = 6 combinations from assets already licence-checked**
-
-So RUN 6.8 does not need a new download, and the "record a future asset spec instead of
-faking it" fallback is **not** required. Do not go asset hunting.
-
-### RUN 6.8 — scope
-
-Keep the current architecture exactly: one humanoid system, one skeleton, one animation set,
-near/far split unchanged, far crowd instanced and unchanged at ~1,978.
-
-Add **3–4 appearance archetypes**, in this priority order:
-
-1. **hair / head silhouette** — the strongest signal, and the one that needs the bake change
-2. **height** — already implemented, widen the spread
-3. **shoulder / torso width** — per-bone scale, free, currently unused
-4. **clothing silhouette impression** — what the mask can suggest without geometry
-5. **colour** — already done; last, not first
-
-Deterministic distribution: an archetype is chosen from the citizen id, exactly as the
-wardrobe already is, so a body keeps its identity across pool reuse.
-
-**Forbidden, as before:** 8 unique GLBs, 32 unique character assets, a new rig, a larger
-skeleton budget, humanoid far crowd, any animation system rewrite.
-
-### The decision RUN 6.8 has to make first
-
-The bake currently produces **one** `citizen.glb` at 1.41 MB containing geometry *and* all
-fifteen clips. Four archetypes must not become four copies of the animation data — the clips
-dominate that file, and payload is a hard constraint (see §4: prebaking and startup time).
-
-Two candidate shapes, both of which keep one skeleton:
-
-- **One file, several body meshes.** Bake male+buzzed, male+parted, female+long, … as
-  separate skinned meshes sharing one skeleton and one clip set; the pool shows one and hides
-  the rest per slot. Costs geometry once, animations once. Most likely the right answer.
-- **A small variant file per archetype, plus one shared animation file.** More requests, more
-  lifecycle, and the late-load path already exists — but it splits payload per tier.
-
-Measure before choosing. `qa/gta-upgrade/asset-audit.mjs` prints the triangle counts;
-`qa/gta-upgrade/poolprobe.mjs` and `tierprobe.mjs` already measure the pool's cost and will
-show what an archetype mix does to the budgets in §9.
-
-### RUN 6.8 acceptance
-
-- near humanoid budget still 8 / 4 / 0 (HIGH / MEDIUM / LOW), verified by `tierprobe.mjs`
-- far crowd still ~1,978
-- console errors 0
-- draw calls and triangles within the same order as §16; any increase stated and justified
-- **a screenshot of eight near citizens in which they are visibly different people** — this
-  is the criterion the run exists for, and numbers cannot stand in for it
-- typecheck, `test:ci`, `build` all clean
+No clothing geometry — no skirts, jackets, hoodies or bags. The garment mask paints clothes
+onto the body; a skirt is a mesh, and meshes are new assets. No accessories, no faces beyond
+the two the base bodies have, no clothing physics. The reference image this run was measured
+against shows all of those; they are a future asset question, not a distribution one.
 
 ## 10–15. Not yet implemented
 
@@ -378,11 +390,11 @@ Scene, HIGH / day / scramble, headless SwiftShader:
 
 ```
 npm run typecheck   clean
-npm run test:ci     264 / 264 pass
+npm run test:ci     273 / 273 pass
 npm run build       succeeds
 ```
 
-**264 passing tests does not mean RUN 7 is complete.** Ten of those tests are the RUN 7 WIP's
+**273 passing tests does not mean RUN 7 is complete.** Ten of those tests are the RUN 7 WIP's
 own unit tests. They exercise the state machine in isolation against a stub crowd; they say
 nothing about whether the live scene still runs its signals and crossings correctly with
 awareness wired in, which is the check that has not been done. RUN 6's own figure was 254/254.
@@ -437,6 +449,7 @@ bone space. See §5 — this is the single most repeated mistake in this project
 | `src/quality/warmup.mjs` | cancellable shader warm-up (RUN 6.1) |
 | `scripts/convert-character.mjs` | offline character bake, folds in the hybrid run |
 | `assets/character/hybrid-run.json` | the adopted run clip + provenance |
+| `src/life/appearance.mjs` | **RUN 6.8** — the deterministic appearance recipe |
 | `src/life/awareness.mjs` | **RUN 7 WIP** — NPC perception / life states, unverified |
 | `src/life/simulation.mjs` | crowd sim: routes, crossings, `scatter`, `strike`, signals |
 | `src/player/controller.mjs` | player movement and input |
@@ -447,7 +460,11 @@ bone space. See §5 — this is the single most repeated mistake in this project
 | `tests/npc-awareness.test.mjs` | **RUN 7 WIP** — 10 tests, passing, browser-unverified |
 | `tests/shader-warmup.test.mjs` | pins the `isReady` regression |
 | `tests/near-humanoid.test.mjs` | pins the near-pool budgets at 300-person density |
-| `qa/gta-upgrade/asset-audit.mjs` | what the citizen asset contains; RUN 6.8 feasibility |
+| `qa/gta-upgrade/asset-audit.mjs` | what the citizen asset contains |
+| `qa/gta-upgrade/bindcheck.mjs` | rest-pose comparison across rigs — why two armatures |
+| `qa/gta-upgrade/lineup.html` | the RUN 6.8 acceptance shot; `?before=1` for RUN 6 |
+| `qa/gta-upgrade/archetype-feet.mjs` | sole height per archetype per clip |
+| `tests/appearance.test.mjs` | pins the recipe: pure, spread, bounded, non-correlated |
 | `qa/gta-upgrade/poolprobe.mjs` | near-pool budget and aim under churn |
 | `qa/gta-upgrade/tierprobe.mjs` | budgets across HIGH / MEDIUM / LOW, and tier demotion |
 | `qa/gta-upgrade/` | the other benches; the numbers above come from here |
@@ -455,20 +472,24 @@ bone space. See §5 — this is the single most repeated mistake in this project
 
 ## 18. Known limitations
 
-- **The near humanoids read as clones.** This is the largest open visual problem and the
-  reason RUN 6.8 exists. Same hair silhouette, same head, same proportions, same clothing
-  geometry; only colour varies. See §9a.
+- **No clothing geometry.** RUN 6.8 gave the near citizens four silhouettes, but clothes are
+  still painted onto the body by the garment mask. No skirts, jackets, hoodies, bags, caps or
+  glasses — each of those is a mesh, and meshes are new assets. This is the largest remaining
+  gap against the reference image.
+- **Two faces.** The archetypes share the two base bodies' heads. At close range the faces
+  repeat.
+- **Near-humanoid aim is 71–74%**, down from RUN 6's 84–85%: a citizen only takes a humanoid
+  of their own archetype, so when three of the nearest share one archetype the third waits on
+  a baked figure. Deliberate — see §9a.
 - The body is Quaternius' Superhero base. Proportions are stylised and the face is minimal.
   It is a pipeline placeholder and is deliberately not polished — but "not the final asset"
   is not a defence of the clone problem, which is a distribution problem, not a quality one.
 - **RUN 7 is unverified.** `src/life/awareness.mjs` is wired into the live crowd at HEAD and
   has never been run in a browser. If the next session is not doing RUN 7, it should still be
-  aware that HEAD contains untested code on the crowd path.
+  aware that HEAD contains untested code on the crowd path. RUN 6.8 did not touch it.
 - `hit` is still a **C**: the current `Hit` clip barely moves. `Hit_Knockback` in Quaternius
   UAL2 (CC0, verified, identical 65-bone skeleton, 2.93 m of travel) is very likely the answer
   and needs no retargeting. Not implemented — RUN 5.5 was the Run slot only.
-- Near-pool aim is 84–85%, not 100%. The remainder is the swap hysteresis and one swap per
-  frame, both deliberate; closing it would cost visible clothing pops.
 - LOW and MEDIUM prebake coverage is incomplete — see
   `docs/ISSUE-LOW-TIER-PREBAKE-2026-09-20.md`. RUN 13 is where this is scheduled.
 - Foot IK is player-only in the solver's *design intent*; RUN 6 gives it to up to 8 near
