@@ -548,3 +548,25 @@ test('the occupancy model survives a thousand random transitions without a contr
  const seen=o.inspect();
  assert.equal(seen.none+seen.drivers+seen.player,seen.capacity,'the seats do not add up');
 });
+
+test('a carjack reports the player seated, exactly as an entry does',()=>{
+ // The bug this pins: the commit branch tested `kind === 'enter'`, so a carjack ran its whole
+ // sequence -- driver alerted, hauled out, thrown on the road -- and then handed the car back,
+ // because the one line that takes the wheel did not recognise the kind that had just earned
+ // it. A carjack IS an entry with a fight spliced into the middle, and both end the same way.
+ for(const kind of ['enter','carjack']){
+  const m=createVehicleTransition();
+  m.begin(kind,{start:{x:0,z:0,heading:0},entry:{x:2,z:0,heading:0},seat:{x:2.4,z:.4,heading:0}});
+  let last=null;
+  for(let i=0;i<900&&m.active;i++)last=m.update(1/60)??last;
+  assert.equal(last.done,true,`${kind} never finished`);
+  assert.equal(last.seated,true,`${kind} finished without reporting the player seated`);
+  assert.equal(last.doorPhase,0,`${kind} left the door open`);
+ }
+ // An exit is the one that must NOT report seated -- it ends with the body on the pavement.
+ const m=createVehicleTransition();
+ m.begin('exit',{seat:{x:0,z:0,heading:0},exit:{x:-3,z:0,heading:0}});
+ let last=null;
+ for(let i=0;i<900&&m.active;i++)last=m.update(1/60)??last;
+ assert.equal(last.seated,false,'getting out reported the player seated');
+});

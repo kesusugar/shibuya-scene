@@ -104,7 +104,7 @@ export default function Home(){
  const VIEW_LIMIT=180,VIEW_CEILING=60,EYE_FLOOR=1.6;
  // The player is created once the crowd network is up, since it walks on that context.
  let player:any=null,playerMarker:any=null,carMarker:any=null,playerFigure:any=null,playerShadow:any=null,deferredCharacter:any=null,playerCar:any=null,playerAudio:any=null,crowdVoices:any=null,touchPad:any=null,blood:any=null,driving=false,playerMode=false;const followPose:any={x:0,y:0,z:0,tx:0,ty:0,tz:0};const playerBox={x:0,z:0,heading:0};
- let seatedDrivers:any=null;let seatedHidden=false;let carjackSide=-1,carjackStage:string|null=null,lastCarjack:any=null;let vehicleVisual:any=null,vehicleEffects:any=null,playUI:any=null,localCrowdClock=0,frameHits=0,combatDeathReported=false;const followCamera=createFollowCamera(),melee=createMeleeCombat({
+ let seatedDrivers:any=null;let seatedHidden=false;let transitionSeated=false;let carjackSide=-1,carjackStage:string|null=null,lastCarjack:any=null;let vehicleVisual:any=null,vehicleEffects:any=null,playUI:any=null,localCrowdClock=0,frameHits=0,combatDeathReported=false;const followCamera=createFollowCamera(),melee=createMeleeCombat({
   // RUN 8: a punch is an event the crowd can see. The HQ layer bounds it by its own spatial
   // grid, so this costs the cells around the fight and not the population.
   onWitness:(event:any)=>lifeEntry.hooks.current?.witness?.(event)??0
@@ -177,7 +177,13 @@ export default function Home(){
   a.x=player.state.x;a.z=player.state.z;a.heading=player.state.heading;a.speed=player.state.speed;
   a.lod='near';a.animationTime=(a.animationTime??0)+dt;a.height=player.state.y;};
  const releaseCrowdSlot=()=>{const a=crowdSlot();if(!a)return;a.controlled=false;a.active=false;a.mode='ambient';};
- const applyPlayerCamera=(dt:number)=>{const ctx=lifeEntry.hooks.current?.network?.ctx??null;const state=driving&&playerCar?playerCar.state:player.state;const desired=driving&&playerCar?vehicleCamera(state,followPose,ctx):playerCamera(state,followPose,ctx);const c:any={...followCamera.update(desired,{x:state.x,y:state.y+(driving?CAR.eye:PLAYER.eye),z:state.z},ctx,dt,driving?'drive':'walk')};
+ const applyPlayerCamera=(dt:number)=>{const ctx=lifeEntry.hooks.current?.network?.ctx??null;// RUN 9: once the body is IN the car, frame the car, not the body. Following the player
+  // through the doorway put the eye a few metres behind a point that is inside the vehicle,
+  // so the camera sat on the roof and the whole entry was shot from inside the bodywork.
+  // `seated` arrives before `driving` does -- control transfers at the end of the sequence,
+  // and the camera has to move at the start of the seat, not after the door shuts.
+  const inCar=(driving||transitionSeated)&&playerCar;
+  const state=inCar?playerCar.state:player.state;const desired=inCar?vehicleCamera(state,followPose,ctx):playerCamera(state,followPose,ctx);const c:any={...followCamera.update(desired,{x:state.x,y:state.y+(driving?CAR.eye:PLAYER.eye),z:state.z},ctx,dt,driving?'drive':'walk')};
   if(shake>.002){const t=performance.now()/1000;
    // Two frequencies that do not divide into each other, so it reads as a knock rather than
    // a hum, and it only moves the eye -- the look-at point stays put or the view swims.
@@ -436,19 +442,20 @@ export default function Home(){
     // The body is drawn on foot right up until it is in the seat, and the car draws it after.
     // The old sequence hid the player only at the very end, so a figure stood in the doorway
     // while the door shut through it.
-    if(pose.kind==='enter'&&pose.seated){if(!seatedHidden){seatedHidden=true;playerFigure?.hide();playerShadow?.begin();playerShadow?.end();carMarker?.hide();}}
+    transitionSeated=pose.kind!=='exit'&&pose.seated;
+    if(pose.kind!=='exit'&&pose.seated){if(!seatedHidden){seatedHidden=true;playerFigure?.hide();playerShadow?.begin();playerShadow?.end();carMarker?.hide();}}
     else {seatedHidden=false;playerFigure?.update(player.state,dt);groundPlayerShadow();}
-    if(pose.done&&pose.kind==='enter'){
+    if(pose.done&&pose.kind!=='exit'){
      // CONTROL TRANSFERS HERE, at the end, with the door shut and the body in the seat --
      // not at the button press. `commit` asks the occupancy model whether the seat is free
      // and refuses if it is not, so a car whose driver is still in it cannot be driven away.
-     seatedHidden=false;
+     seatedHidden=false;transitionSeated=false;
      if(playerCar.commit()){driving=true;player.state.vehiclePhase=0;playerCar.state.doorPhase=0;
       playerFigure?.hide();playerShadow?.begin();playerShadow?.end();carMarker?.hide();
       setDriving(true);touchPad?.setDriving(true);struckCountRef=0;setStruckCount(0);}
      else {playerCar.unreserve();playerFigure?.update(player.state,dt);groundPlayerShadow();}
     }
-    else if(pose.done){player.state.vehiclePhase=0;if(playerCar?.state)playerCar.state.doorPhase=0;
+    else if(pose.done){transitionSeated=false;player.state.vehiclePhase=0;if(playerCar?.state)playerCar.state.doorPhase=0;
      // The seat is empty the moment the body is standing on the pavement. The car is still
      // the player's -- it is still drawn as theirs and still offered back as 'own' -- but a
      // car nobody is sitting in must not report an occupant.

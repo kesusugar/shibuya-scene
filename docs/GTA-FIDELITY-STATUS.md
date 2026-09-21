@@ -64,9 +64,9 @@ cdb6271  RUN 6.7: near-pool budgets on every tier
 | 7C | HQ crowd colour / lighting integration | **COMPLETE** |
 | 7 | NPC life / behaviour states | **WIP ONLY — NOT VERIFIED, NOT COMPLETE** |
 | 8 | Melee combat phases + mass crowd reaction | **COMPLETE** |
-| 9 | Knockdown / death / recovery | not started |
-| 10 | Vehicle enter / exit state machine | not started |
-| 11 | Carjacking | not started |
+| 9 | Vehicle occupancy / enter-exit / carjacking | **COMPLETE** |
+| 10 | Vehicle enter / exit state machine | folded into RUN 9 |
+| 11 | Carjacking | folded into RUN 9 |
 | 12 | Lighting / PBR polish | not started |
 | 13 | Performance / stability | not started |
 | 14 | Final QA and handoff | not started |
@@ -1162,7 +1162,13 @@ seconds. Check the fresh case before blaming the harness.
 | `tests/combat.test.mjs` | **RUN 8** — 23 cases; the audit found zero before this |
 | `qa/gta-upgrade/punch-timing.mjs` | **RUN 8** — measures each punch clip's active window |
 | `qa/gta-upgrade/combat-cost.mjs` | **RUN 8** — melee and witness CPU against population |
-| `src/player/vehicle-transition.mjs` | enter / exit sequencing (RUN 10 target) |
+| `src/traffic/occupancy.mjs` | **RUN 9** — the one authority on who is in which car |
+| `src/traffic/drivers.mjs` | **RUN 9** — seated drivers: 3 draw calls, no skeletons |
+| `src/traffic/vehicle-anchors.mjs` | **RUN 9** — seat / door / entry / exit in world space |
+| `src/player/carjack.mjs` | **RUN 9** — what happens at each carjack stage |
+| `src/player/vehicle-transition.mjs` | **RUN 9** — staged enter / exit / carjack |
+| `tests/vehicle-occupancy.test.mjs` | **RUN 9** — 33 cases, including an invariant fuzz |
+| `qa/gta-upgrade/occupancy-cost.mjs` | **RUN 9** — occupancy and driver CPU per tier |
 | `src/player/vehicle-dynamics.mjs` | driving model |
 | `src/player/pedestrian-threat.mjs` | oncoming-car prediction; feeds awareness |
 | `tests/npc-awareness.test.mjs` | **RUN 7 WIP** — 10 tests, passing, browser-unverified |
@@ -1234,8 +1240,22 @@ seconds. Check the fresh case before blaming the harness.
 - **The NPC hit reaction is the existing `Hit`/knockdown chain, not a directional one.** A
   punch from the front and a punch from behind produce the same animation. `hit` remains a
   **C** for the reason recorded above.
-- **The shader-compile banner appears in this headless SwiftShader browser.** See §9e; it is
-  an environment result, recorded with what was and was not established about it.
+- ~~The shader-compile banner appears in this headless SwiftShader browser.~~ **Fixed in RUN 8**
+  — see §9e; it was a real redefinition in the vehicle shadow shader, not the environment.
+- **Drivers sit on the left.** The vehicle anchors put `driverSeat` at −X, which for a Tokyo
+  scene is the wrong side. Changing it would move the seat, door, entry and exit for all seven
+  bodies and everything that reads them, and RUN 9's brief makes the anchors authoritative. It
+  is cosmetic in play, because `doorPose` already approaches from whichever side is clear.
+- **The seated driver is head, shoulders and a hint of arms.** No hands on the wheel, no head
+  turn, no idle. It is what a cabin shows through tinted glass at the distance it is drawn, and
+  it is deliberately not a character — see §9f.
+- **The cabin glass is tinted at a fixed 0.62.** It was fully opaque before RUN 9, which is why
+  no car could show an occupant. The value has not been checked against every time of day.
+- **A carjack cannot be started on a moving car** (over 0.35 m/s). Pulling someone out at
+  speed is a different feature.
+- **Nobody steals a car back.** Traffic drivers do not react to the player beyond being thrown
+  out, and no NPC ever takes a vehicle. Out of scope for RUN 9 by the brief.
+- **One driver, one seat.** No passengers, and no occupancy for any seat but the driver's.
 
 ## 19. Optional future polish
 
