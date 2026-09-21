@@ -380,7 +380,7 @@ export default function Home(){
     if(pose.done&&pose.kind==='enter'){driving=true;player.state.vehiclePhase=0;playerCar.state.doorPhase=0;playerFigure?.hide();playerShadow?.begin();playerShadow?.end();carMarker?.hide();setDriving(true);touchPad?.setDriving(true);struckCountRef=0;setStruckCount(0);}
     else if(pose.done){player.state.vehiclePhase=0;if(playerCar?.state)playerCar.state.doorPhase=0;}}}
   else if(driving&&playerCar){const drive=player.input();playerCar.step(dt,drive);const c=playerCar.state;player.rideTo(c.x,c.z,c.heading);playerMarker?.update(c,dt,playerCar.def.height);
-   const crowdSim=lifeEntry.hooks.current?.sim;playerCar.alertPedestrians(crowdSim);
+   const crowdSim=lifeEntry.hooks.current?.sim;playerCar.alertPedestrians(crowdSim);lifeEntry.hooks.current?.hqCrowd?.vehicle(playerCar.state,dt);
    const struck=playerCar.strikePedestrians(crowdSim);
    frameHits=struck;
    if(struck){struckCountRef+=struck;setStruckCount(n=>n+struck);playerAudio?.strike();
