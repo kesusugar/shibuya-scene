@@ -52,7 +52,11 @@ const SCENARIOS={
  // Facing along the kerb, so left and right land either side of it.
  curb:{name:'kerb: one foot up, one down',heading:0,start:[0,-1],
   input:{forward:0,strafe:0,running:false},at:[.3,.6,.9,1.3,1.8,2.4],view:'front'},
- ramp:{name:'kerb ramp, walking down it',heading:Math.PI/2,start:[-2.6,0],
+ // Down the ramp means from the pavement towards the road, which is +x here. Forward is
+ // (-sin h, -cos h), so +x is a heading of -PI/2. The first version used +PI/2 and walked the
+ // character away from the ramp along the flat pavement, which is why its numbers looked like
+ // flat ground: they were flat ground.
+ ramp:{name:'kerb ramp, walking down it',heading:-Math.PI/2,start:[-2.6,0],
   input:{forward:1,strafe:0,running:false},at:[.6,1.1,1.5,1.9,2.3,2.8],view:'side'},
  flat:{name:'walking, flat pavement',heading:0,start:[-4,-6],
   input:{forward:1,strafe:0,running:false},at:[1.2,1.35,1.5,1.65,1.8,1.95],view:'side'},
@@ -193,9 +197,20 @@ while(elapsed<total&&column<=scenario.at.length){
  if(column<scenario.at.length&&elapsed>=scenario.at[column]){
   const s=player.state,cx=column*CELL;
   renderer.setViewport(cx,0,CELL,CELL);renderer.setScissor(cx,0,CELL,CELL);
-  // Low and close enough that a 13 cm kerb is a visible difference between two feet.
-  if(scenario.view==='front'){camera.position.set(s.x-.35,.72,s.z+2.5);camera.lookAt(s.x,.42,s.z);}
-  else{camera.position.set(s.x+3.2,.85,s.z+.7);camera.lookAt(s.x,.55,s.z);}
+  // Across the kerb, low, and slightly off the axis. The kerb runs along z, so looking down
+  // +x puts the step across the frame as a horizontal line with one foot above it and one
+  // below; the z offset separates the two feet, which a dead-on view stacks one behind the
+  // other. Two earlier framings failed for those two reasons in turn -- looking ALONG the kerb
+  // made a 13 cm step almost invisible, and looking straight across it hid the far foot behind
+  // the near leg, which is precisely the foot the before sheet needs to show floating.
+  if(scenario.view==='front'){camera.position.set(s.x+2.4,.62,s.z+1.35);camera.lookAt(s.x,.19,s.z);}
+  else{
+   // Square on to the path, wherever the path points: the side offset is perpendicular to the
+   // heading, not a fixed +x. A scenario that walks along x was otherwise photographed head on,
+   // where a stride is a foreshortened smudge.
+   const h=scenario.heading,px=Math.cos(h)*3.2,pz=-Math.sin(h)*3.2;
+   camera.position.set(s.x+px,.85,s.z+pz);camera.lookAt(s.x,.55,s.z);
+  }
   camera.up.set(0,1,0);
   camera.updateProjectionMatrix();
   renderer.render(scene,camera);
