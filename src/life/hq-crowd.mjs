@@ -455,9 +455,21 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
      state.timer[i]-=dt;
      if(state.timer[i]<=0){
       // Knockdown settles into downed; downed waits to be recovered; everything else calms.
-      if(behaviour===STATE.KNOCKDOWN){state.behaviour[i]=STATE.DOWNED;state.timer[i]=STATE_HOLD[STATE.DOWNED];writeClip(i);}
-      else if(behaviour===STATE.HIT){state.behaviour[i]=STATE.KNOCKDOWN;state.timer[i]=STATE_HOLD[STATE.KNOCKDOWN];writeClip(i);}
-      else if(behaviour!==STATE.DOWNED){state.behaviour[i]=STATE.NORMAL;state.timer[i]=0;writeClip(i);}
+      // HIT -> KNOCKDOWN -> DOWNED -> RECOVER -> NORMAL. The chain must CLOSE.
+      //
+      // It did not: DOWNED was excluded from the fall-through on the theory that it "waits to
+      // be recovered", and nothing ever recovered it. Over 240 simulated seconds that left
+      // 132 bodies permanently DOWNED and permanently disowned from their own routes --
+      // stale state that only grows, which is precisely what a long-running crossing must not
+      // accumulate. A body now gets up.
+      const next=behaviour===STATE.HIT?STATE.KNOCKDOWN
+       :behaviour===STATE.KNOCKDOWN?STATE.DOWNED
+       :behaviour===STATE.DOWNED?STATE.RECOVER
+       :STATE.NORMAL;
+      state.behaviour[i]=next;
+      state.timer[i]=STATE_HOLD[next]??0;
+      if(next===STATE.NORMAL)state.fallen[i]=0;
+      writeClip(i);
      }
     }
     // A body that has been hit carries its own impulse and slides to a halt. No rigid body,

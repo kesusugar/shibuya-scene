@@ -214,3 +214,43 @@ test('changing level of detail changes nothing but the level of detail',()=>{
  assert.equal(phaseBreaks,0,`${phaseBreaks} citizens had their walk cycle reset by an LOD change`);
  layer.dispose();
 });
+
+test('a knocked-down body gets up, and ownership drains when the car stops',()=>{
+ // The bug this pins: DOWNED was excluded from the state fall-through on the theory that it
+ // "waits to be recovered", and nothing ever recovered it. Over 240 simulated seconds that
+ // left 132 bodies permanently down and permanently disowned from their own routes -- state
+ // that only grows, which a crossing running all day must never accumulate.
+ //
+ // A steady population of bodies under a car that never stops is NOT a leak, so the only way
+ // to tell the two apart is to remove the cause and watch it drain. That is what this does.
+ const people=pool(900,1.15);
+ const taken=new Set();
+ const layer=createHQLayer(manifest,bin,{budget:900,
+  onDisown:id=>taken.add(id),onReclaim:id=>taken.delete(id)});
+ let cz=0;for(const p of people)cz+=p.z;cz/=people.length;
+ const camera={x:0,z:cz};
+ const car={x:0,z:cz-30,heading:0,speed:16};
+ let peakDown=0;
+ for(let f=0;f<900;f++){                       // drive through them
+  car.z+=16/60;if(car.z>cz+30)car.z=cz-30;
+  layer.sync(people,camera,1/60,{time:f/60});
+  layer.vehicle(car,1/60);
+  peakDown=Math.max(peakDown,layer.inspect().down);
+ }
+ assert.ok(peakDown>=10,`only ${peakDown} were ever down -- the test never exercised it`);
+ assert.ok(layer.disowned.size>0,'nobody was disowned while a car was driving through them');
+
+ // Now the car leaves. Everybody must get back up.
+ let drainedAt=null;
+ for(let f=0;f<1200&&drainedAt===null;f++){
+  layer.sync(people,camera,1/60,{time:(900+f)/60});
+  if(layer.disowned.size===0)drainedAt=f/60;
+ }
+ assert.ok(drainedAt!==null,
+  `${layer.disowned.size} bodies were still down and disowned 20 s after the car left`);
+ assert.equal(taken.size,0,'onReclaim was never called for some bodies');
+ const end=layer.inspect();
+ assert.equal(end.down,0,`${end.down} citizens are still on the ground`);
+ assert.equal(end.disowned,0);
+ layer.dispose();
+});

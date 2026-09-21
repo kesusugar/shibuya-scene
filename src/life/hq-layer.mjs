@@ -51,6 +51,36 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
  for(const a of manifest.archetypes)for(const l of lods)
   laneCache.set(`${a.id}|${l}`,crowd.laneFor(a.id,l));
 
+ /** A body is owned by the reaction system exactly while it is off its feet. */
+ const thrownNow=i=>{
+  const b=crowd.state.behaviour[i];
+  return b===STATE.HIT||b===STATE.KNOCKDOWN||b===STATE.DOWNED;
+ };
+ function reconcileOwnership(){
+  // The reacting/down counts are recomputed HERE, not in `vehicle`, because `vehicle` only
+  // runs while someone is driving. Reporting them there meant `inspect()` kept returning the
+  // last figures from the last time a car went past -- a metric that lies the moment the
+  // player parks, and one a test duly believed.
+  let reacting=0,down=0;
+  for(let i=0;i<crowd.population;i++){
+   const id=crowd.state.id[i],thrown=thrownNow(i);
+   const b=crowd.state.behaviour[i];
+   if(b===STATE.LOOK||b===STATE.AVOID||b===STATE.FLEE)reacting++;
+   else if(thrown)down++;
+   if(thrown&&!disowned.has(id)){
+    disowned.add(id);
+    onDisown?.(id,{x:crowd.state.x[i],z:crowd.state.z[i],
+     impulseX:crowd.state.impulseX[i],impulseZ:crowd.state.impulseZ[i]});
+   }else if(!thrown&&disowned.has(id)){
+    disowned.delete(id);
+    onReclaim?.(id,{x:crowd.state.x[i],z:crowd.state.z[i]});
+   }
+  }
+  // A body released from the crowd while still disowned would leave its id owned forever.
+  for(const id of [...disowned])if(crowd.indexOf(id)<0){disowned.delete(id);onReclaim?.(id,null);}
+  stats.reacting=reacting;stats.down=down;
+ }
+
  const lodFor=(distance,current)=>{
   for(const band of HQ_LOD.bands){
    if(distance<=band.in)return band.lod;
@@ -145,6 +175,10 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
    }
 
    crowd.update(dt,{time});
+   // Ownership is reconciled here as well as after a vehicle pass, because a body gets back
+   // up on its own timer and the player may have stopped driving by then. Reconciling only
+   // in `vehicle` left citizens disowned from their own routes for as long as nobody drove.
+   reconcileOwnership();
    const got=crowd.inspect();
    stats.hq=rendered.size;stats.legacy=candidates.length-rendered.size;
    stats.byLod=got.byLod;
@@ -162,31 +196,9 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
    if(!car||!crowd.population)return null;
    const start=(typeof performance!=='undefined'?performance.now():0);
    grid.rebuild(crowd);
-   const before=[];
-   for(let i=0;i<crowd.population;i++)before.push(crowd.state.behaviour[i]);
    const result=applyVehicleThreat(crowd,grid,car,dt,scratch);
-   // Anyone newly thrown has their movement taken off the route until they are back up.
-   for(let i=0;i<crowd.population;i++){
-    const now=crowd.state.behaviour[i],was=before[i];
-    const thrown=now===STATE.HIT||now===STATE.KNOCKDOWN||now===STATE.DOWNED;
-    const wasThrown=was===STATE.HIT||was===STATE.KNOCKDOWN||was===STATE.DOWNED;
-    const id=crowd.state.id[i];
-    if(thrown&&!wasThrown&&!disowned.has(id)){
-     disowned.add(id);
-     onDisown?.(id,{x:crowd.state.x[i],z:crowd.state.z[i],
-      impulseX:crowd.state.impulseX[i],impulseZ:crowd.state.impulseZ[i]});
-    }else if(!thrown&&wasThrown&&disowned.has(id)){
-     disowned.delete(id);
-     onReclaim?.(id,{x:crowd.state.x[i],z:crowd.state.z[i]});
-    }
-   }
-   let reacting=0,down=0;
-   for(let i=0;i<crowd.population;i++){
-    const b=crowd.state.behaviour[i];
-    if(b===STATE.LOOK||b===STATE.AVOID||b===STATE.FLEE)reacting++;
-    else if(b===STATE.HIT||b===STATE.KNOCKDOWN||b===STATE.DOWNED)down++;
-   }
-   stats.candidates=result.candidates;stats.reacting=reacting;stats.down=down;
+   reconcileOwnership();
+   stats.candidates=result.candidates;
    stats.threatMs=(typeof performance!=='undefined'?performance.now():0)-start;
    return result;
   },

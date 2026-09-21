@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {createHQCrowd,STATE,CLIP_FOR} from '../src/life/hq-crowd.mjs';
+import {createHQCrowd,STATE,CLIP_FOR,STATE_HOLD} from '../src/life/hq-crowd.mjs';
 import {createCrowdGrid,applyVehicleThreat,THREAT} from '../src/life/hq-threat.mjs';
 import {appearanceOf,ARCHETYPES,PALETTE} from '../src/life/appearance.mjs';
 
@@ -144,11 +144,16 @@ test('nothing produces NaN, however hard it is hit',()=>{
 test('a knocked-down body settles on the ground and stops',()=>{
  const crowd=build(40);
  crowd.setState(0,STATE.KNOCKDOWN,{impulseX:8,impulseZ:0,impulseY:3,force:true});
- for(let f=0;f<300;f++)crowd.update(1/60,{time:f/60});
+ // Long enough for the whole chain: KNOCKDOWN 1.4 s, DOWNED 2.5 s, RECOVER 1.2 s.
+ const chain=STATE_HOLD[STATE.KNOCKDOWN]+STATE_HOLD[STATE.DOWNED]+STATE_HOLD[STATE.RECOVER];
+ for(let f=0;f<Math.ceil((chain+1)*60);f++)crowd.update(1/60,{time:f/60});
  assert.equal(crowd.state.y[0],0,'a body came to rest off the ground');
  assert.equal(crowd.state.impulseX[0],0,'a body never stopped sliding');
- assert.equal(crowd.state.behaviour[0],STATE.DOWNED,
-  `expected DOWNED, got ${crowd.state.behaviour[0]}`);
+ // ...and then gets back up. This assertion used to demand the body stay DOWNED forever,
+ // which is what the bug was: nothing recovered it, and a crossing running all day
+ // accumulated bodies that never stood again.
+ assert.equal(crowd.state.behaviour[0],STATE.NORMAL,
+  `a knocked-down body never got up: still in state ${crowd.state.behaviour[0]}`);
  crowd.dispose();
 });
 
