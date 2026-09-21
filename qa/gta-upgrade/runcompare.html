@@ -23,14 +23,19 @@ const VIEW=P.get('view')??'side';
 const SPEED=Number(P.get('speed')??4.2);
 const COLUMNS=Number(P.get('columns')??7);
 const CELL=Number(P.get('cell')??240);
-const CMU=(P.get('cmu')??'16_45,16_46').split(',').filter(Boolean);
+// Any JSON clip in cmu-clips/, by name. `?clips=16_45,hybrid-C` compares those against the
+// incumbent, which is always the first row.
+const CMU=(P.get('clips')??P.get('cmu')??'16_45,16_46').split(',').filter(Boolean);
 
 const ROAD=.02, BALL_TO_SOLE=.0215;
 const VIEWS={
  side:   {eye:[3.3,.95,0],     at:[0,.85,0]},
  rear:   {eye:[1.9,1.35,-2.6], at:[0,.85,0]},
  front:  {eye:[1.9,1.35,2.6],  at:[0,.85,0]},
- feet:   {eye:[2.0,.20,.55],   at:[0,.07,0]}
+ feet:   {eye:[2.0,.20,.55],   at:[0,.07,0]},
+ // The upper body, close, because that is where the CMU arms fail and a full-figure view at
+ // this size cannot show a 13 cm hand offset.
+ upper:  {eye:[2.1,1.28,.85],  at:[0,1.15,0]}
 };
 const view=VIEWS[VIEW]??VIEWS.side;
 
@@ -42,7 +47,7 @@ const asset=humanoidCitizen(gltf,report);
 // Every entry drives ONE clip in isolation: the question is what the clip looks like at
 // gameplay speed, not what the blend does with it.
 const entries=[{id:'current',label:'Quaternius Jog_Fwd_Loop (current)',cmu:null}];
-for(const id of CMU)entries.push({id,label:`CMU ${id} (retargeted)`,cmu:id});
+for(const id of CMU)entries.push({id,label:id.startsWith('hybrid')?`HYBRID ${id.slice(7)} (CMU legs + Quaternius upper)`:`FULL CMU ${id} (retargeted)`,cmu:id});
 for(const e of entries)
  if(e.cmu)e.data=await (await fetch(`/qa/gta-upgrade/cmu-clips/${e.cmu}.json`)).json();
 

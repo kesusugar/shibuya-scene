@@ -55,7 +55,7 @@ function sourceRest(bvh,scale){
  return sourceWorld(bvh,0,scale);
 }
 
-export async function retarget({bvhPath,glbPath,from,to,fps=30}){
+export async function retarget({bvhPath,glbPath,from,to,fps=30,leftOffset=0}){
  const bvh=parseBVH(readFileSync(bvhPath,'utf8'));
  const scale=deriveScale(bvh);
 
@@ -203,7 +203,7 @@ export async function retarget({bvhPath,glbPath,from,to,fps=30}){
 
  return {
   source:{bvh:bvhPath,from,to,scale,fps:bvh.frameTime?Math.round(1/bvh.frameTime):0},
-  duration,fps,times,groundOffset,
+  duration,fps,times,groundOffset,leftOffset,
   stride,speed:stride/duration,
   tracks:Object.fromEntries(tracks),
   rootPos
@@ -211,10 +211,13 @@ export async function retarget({bvhPath,glbPath,from,to,fps=30}){
 }
 
 if(process.argv[1].endsWith('retarget.mjs')){
- const [,,bvhPath,from,to,out]=process.argv;
- if(!out){console.error('usage: retarget.mjs <bvh> <fromFrame> <toFrame> <out.json>');process.exit(1);}
+ const [,,bvhPath,from,to,out,leftOffset]=process.argv;
+ if(!out){console.error('usage: retarget.mjs <bvh> <fromFrame> <toFrame> <out.json> [leftOffset]');process.exit(1);}
+ // leftOffset: where the LEFT foot lands within this cycle, as a fraction. The cycle is cut
+ // between two contacts of whichever foot lands twice (16_45 leads with the right), so the
+ // hybrid needs this to roll both sources onto a shared phase-zero.
  const clip=await retarget({bvhPath,glbPath:'public/data/character/citizen.glb',
-  from:+from,to:+to});
+  from:+from,to:+to,leftOffset:leftOffset?+leftOffset:0});
  mkdirSync(dirname(out),{recursive:true});
  writeFileSync(out,JSON.stringify(clip));
  console.log(`${out}: ${clip.duration.toFixed(3)} s, ${clip.times.length} keys, `+
