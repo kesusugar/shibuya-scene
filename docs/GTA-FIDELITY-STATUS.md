@@ -19,9 +19,9 @@ in use now is a placeholder for the pipeline, not the final visual asset.
 ## 2. Branch and HEAD
 
 - Working branch: **`claude/gta-fidelity-upgrade`**, pushed to `origin`. Stay on it.
-- HEAD: **`03fcd5b`** (RUN 6.8) — local and remote match, working tree clean, no stashes.
-- The last **complete** RUN is RUN 6.8 at `03fcd5b`. `f6aa8e8`, beneath it, is the RUN 7 WIP
-  and is still unverified — RUN 6.8 changed nothing about it.
+- HEAD: **`cd5c1bb`** (RUN 8.4) — working tree clean, no stashes.
+- The last **complete** RUN is **RUN 8**. `f6aa8e8`, well beneath it, is the RUN 7 WIP and is
+  still unverified — nothing since has changed that.
 - `master` is untouched by this work and must stay that way. It moved ahead independently
   (PRs #17 and #18 from `codex/prebaked-motion`); the local `master` here is `c538aa2`, a
   clean ancestor of the remote `39175bd`. Nothing has been merged into or pushed from it.
@@ -29,6 +29,11 @@ in use now is a placeholder for the pipeline, not the final visual asset.
 Checkpoint history, newest first:
 
 ```
+cd5c1bb  RUN 8.4: let a punch reach the crowd it is standing in
+986429c  RUN 8.3: pin crossing-safe combat and the death loop against the real controller
+04ca156  RUN 8.2: stop the vehicle shadow shader redeclaring what three.js injects
+01f57d1  RUN 8.1: melee lands when the fist arrives, not when the button is pressed
+9a2e62a  RUN 7C complete: document the colour space fix and the knockdown chain
 03fcd5b  RUN 6.8: Break near-humanoid clone appearance
 3e9213b  Prepare ChatGPT Work handoff
 f6aa8e8  RUN 7 WIP: NPC awareness state machine - NOT verified, NOT complete
@@ -1006,7 +1011,30 @@ never mutates crossing or signal state.
 
 Do not treat the passing tests as verification. Do not build RUN 8 on it. Do not revert it.
 
-## 16. Metrics at the close of RUN 6
+## 16. Metrics
+
+### At the close of RUN 8
+
+Scene, HIGH / day / scramble, HQ crowd on, headless SwiftShader. CPU and counts only.
+
+| | value |
+| --- | ---: |
+| draw calls, player mode with the city settled | 763 |
+| HQ crowd drawn | 1,945–1,973 |
+| HQ skeletons / mixers | **0 / 0** |
+| HQ draw calls | 12 |
+| shader compile failures | **0** (was 1 — see §9e) |
+| console errors | **0** |
+| `melee.update` | 11–17 µs/frame, flat from 64 to 1,978 people |
+| `witness`, offline bench at 1,978 | 0.56 ms/punch |
+| `witness`, live scene | 2.1 ms/punch |
+| people reacting to one punch, live | 206–278 |
+| crossings completed during combat | 22, **0 abandoned, 0 stuck** |
+| tests | **326 / 326** |
+
+No frame rate is reported. This hardware cannot produce performance evidence.
+
+### At the close of RUN 6
 
 Scene, HIGH / day / scramble, headless SwiftShader:
 
@@ -1220,16 +1248,31 @@ npm run dev:local
 Then open `http://127.0.0.1:5174/?qa=1&tier=high&time=day&camera=scramble`.
 
 `window.__SHIBUYA_QA__.metrics` carries the numbers in the table above, including
-`nearCharacters`, which is the near pool's own `inspect()`. In player mode
-`window.__SHIBUYA_FIGURE__`, `__SHIBUYA_PLAYER__` and `__SHIBUYA_CTX__` are exposed.
+`nearCharacters`, which is the near pool's own `inspect()`, `hqCrowd`, and — in player mode —
+`melee`, which is `createMeleeCombat().snapshot()`: swings, hits, misses, npcDeaths, witness
+events and the current phase and clip. **Use it.** RUN 8 spent a whole QA round unable to tell
+a hit from a miss because it did not exist, and read "the crowd reacted" as "the punch landed".
+In player mode `window.__SHIBUYA_FIGURE__`, `__SHIBUYA_PLAYER__`, `__SHIBUYA_LIFE__` and
+`__SHIBUYA_CTX__` are exposed.
 
-**Start at RUN 6.8, not RUN 7.** See §9a for why, what the asset audit found, and what the
-acceptance criteria are. `docs/CHATGPT-WORK-RESUME.md` is the short version to work from.
+**A caution about browser QA on this hardware.** The software renderer reports around 0.2 FPS
+with the HQ crowd up, and `FrameGate` clamps `dt` to 0.1 s, so a 0.9 s animation takes about
+six real seconds and inputs during its recovery are dropped by design. Anything paced against
+wall-clock time will under-count. Shrink the viewport to raise the frame rate, or drive the
+check off state rather than off delays. **Never report a frame rate from it.**
+
+**Start at RUN 9, not RUN 7.** RUN 8 is complete (§9e). The RUN 7 awareness WIP at `f6aa8e8`
+is still unverified and is not a prerequisite for anything that followed.
 
 Work one RUN at a time and close each one completely — implement, unit test, verify in a real
 browser, capture screenshots and numbers, check for regressions, commit, push, update this
-file — and stop and report before opening the next. Do not start RUN 7 (or verify the RUN 7
-WIP) until RUN 6.8 is accepted.
+file — and stop and report before opening the next.
+
+**Verify in the scene, not only in the suite.** RUN 8's two real defects were both invisible to
+unit tests and both obvious in the browser: a shader that never compiled, and a punch that
+could not touch 74–85% of the crowd. In each case the tests passed and the game was broken. If
+a test helper omits a flag, the suite is testing that flag's absence — check what the live
+simulation actually sets.
 
 ### The rules that are not negotiable
 
