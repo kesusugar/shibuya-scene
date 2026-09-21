@@ -120,7 +120,8 @@
  },
  "gaitDetail": {
   "samples": 120,
-  "measured": "2026-09-20",
+  "measured": "2026-09-21",
+  "ankleHeight": 0.1119,
   "clips": {
    "Walk": {
     "seconds": 1.333,

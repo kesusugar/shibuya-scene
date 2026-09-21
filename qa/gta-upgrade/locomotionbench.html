@@ -28,9 +28,20 @@ const SHEET=Number(P.get('sheet')??1);
 const COLUMNS=Number(P.get('columns')??8);
 const CELL=Number(P.get('cell')??200);
 
-// Flat ground, nothing solid, everything walkable: the point is the gait, not the city.
-const ctx={height:()=>0,solid:()=>false,safe:()=>true,onRoad:()=>false,
- solids:null,bounds:null};
+// Ground. Flat by default -- the point is the gait, not the city -- but the walk/run
+// scenarios can also be run across a kerb, because "foot IK does not break phase
+// synchronisation" is only worth asserting where the IK has something to correct.
+// `?ground=kerb` puts a 13 cm step (15 cm pavement against 2 cm road, Shibuya's real
+// numbers) across the path at z = -3, which every straight-line scenario walks over.
+const GROUND=P.get('ground')??'flat';
+const KERB_Z=-3;
+const groundAt=GROUND==='kerb'?(x,z)=>(z<KERB_Z?.15:.02):()=>0;
+const ctx={height:groundAt,heightExact:groundAt,solid:()=>false,safe:()=>true,
+ onRoad:()=>false,solids:null,bounds:null};
+// Foot IK is on unless it is switched off, so that the before/after of RUN 5 comes through
+// one harness rather than two.
+const IK=P.get('ik')!=='0';
+const figureOptions=IK?{ctx}:{};
 
 /**
  * Scenarios. `script` is a list of segments; each holds an input for `seconds`. `at` is the
@@ -92,7 +103,7 @@ const label=[];
 const DT=1/60;
 
 for(const [r,scenario] of rows.entries()){
- const figure=createPlayerFigure(asset);
+ const figure=createPlayerFigure(asset,undefined,figureOptions);
  scene.add(figure.root);
  const player=createPlayer(ctx,{start:[0,0],heading:0});
  player.place(0,0,0);
@@ -164,10 +175,15 @@ for(const [r,scenario] of rows.entries()){
  name.textContent=scenario.name;
  name.style.left='5px';name.style.top=(H-cy-CELL+4)+'px';
  document.body.appendChild(name);
- label.push(`${scenario.name}: ${scenario.at.length} frames`);
+ // The solver's own counters, so "flat ground is unchanged" is read as "the IK ran and
+ // declined to move anything" rather than "the IK was never switched on".
+ const fs=figure.footIK?.stats;
+ label.push(`${scenario.name}: ${scenario.at.length} frames`+
+  (fs?` [ik q${fs.queries??0} solved${fs.solved??0} pelvis${(1000*(fs.pelvisDrop??0)).toFixed(0)}mm]`:''));
  scene.remove(figure.root);figure.dispose();
 }
 document.getElementById('l').textContent=
- `locomotion sheet ${SHEET}   walk ${PLAYER.walk} m/s   run ${PLAYER.run} m/s   dt 1/60\n`+label.join('   ');
+ `locomotion sheet ${SHEET}   walk ${PLAYER.walk} m/s   run ${PLAYER.run} m/s   dt 1/60`+
+ `   ground ${GROUND}   foot IK ${IK?'on':'off'}\n`+label.join('   ');
 document.title='ready';
 </script>
