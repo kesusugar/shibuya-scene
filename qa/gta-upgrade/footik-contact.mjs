@@ -141,3 +141,52 @@ for(const [forward,running,label] of [[.33,false,'0.5 m/s'],[.66,false,'1.0 m/s'
    (r.step?(100*r.mean/r.step).toFixed(1):'--').padStart(14));
  }
 }
+
+// ---------------------------------------------------------------------------------------
+// Where the clips actually put their feet, against where `duty` says they do.
+//
+// Foot IK corrects the DIFFERENCE between the ground under a foot and the ground the body
+// stands on. On flat ground that difference is zero, so the solver correctly does nothing --
+// and whatever the clip does with its foot on flat ground is what you see. This table is that:
+// the clip's own contact quality, which RUN 5 does not touch and cannot touch by design.
+//
+// It also checks the stance window against the clip, because `duty` decides when the solver is
+// allowed to correct, and a window wider than the real contact lets it correct a swinging foot.
+console.log('\nwhat the clips do on flat ground, and how well duty describes it\n');
+console.log('gait    speed   sole lowest   real contact band   duty window   mean |error| in window');
+for(const [label,running] of [['walk',false],['run',true]]){
+ const surface=()=>ROAD;
+ const figure=createPlayerFigure(asset,undefined,{ctx:{heightExact:surface,height:surface,
+  solid:()=>false,safe:()=>true,onRoad:()=>true}});
+ const player=createPlayer({heightExact:surface,height:surface,solid:()=>false,
+  safe:()=>true,onRoad:()=>true},{start:[0,0],heading:0});
+ player.place(0,0,0);
+ const p=new Vector3();
+ const sole=()=>{const b=figure.root.getObjectByName('ball_l');b.updateWorldMatrix(true,false);
+  return (p.setFromMatrixPosition(b.matrixWorld).y-BALL_TO_SOLE-ROAD)*1000;};
+ const tick=()=>{player.setTouch({forward:1,strafe:0,running});player.step(1/60);
+  figure.update(player.state,1/60);figure.root.updateMatrixWorld(true);};
+ for(let i=0;i<400;i++)tick();
+ const rows=[];
+ for(let i=0;i<120;i++){tick();
+  const st=figure.gait.stance(),ph=((figure.gait.phase%1)+1)%1;
+  rows.push({ph,duty:st.duty,y:sole()});}
+ const lowest=Math.min(...rows.map(r=>r.y));
+ const near=rows.filter(r=>r.y<lowest+20).map(r=>r.ph);
+ const inWindow=rows.filter(r=>r.ph<=r.duty).map(r=>Math.abs(r.y));
+ console.log(label.padEnd(7),player.state.speed.toFixed(2).padStart(5),
+  mm(lowest),
+  `   ${Math.min(...near).toFixed(2)}..${Math.max(...near).toFixed(2)}`.padStart(20),
+  `0.00..${rows[0].duty.toFixed(2)}`.padStart(14),
+  mm(inWindow.reduce((a,b)=>a+b,0)/inWindow.length));
+ figure.dispose();
+}
+console.log(`
+The run clip's sole passes through the road. That is the clip, not the solver: on flat ground
+the surface under the foot and the surface under the body are the same, the correction is zero,
+and the animation is shown as authored. A foot IK that aimed the ankle at an absolute height
+would hide it, at the cost of the heel-to-toe roll -- which is the trade this run declined.
+The duty window is also wider than the clip's real contact, most of all for the run. On flat
+ground that is harmless, because a zero correction is zero however long it lasts. On a kerb it
+would let a swinging foot be corrected. Left alone here rather than retuned on one character;
+see the RUN 5 note.`);

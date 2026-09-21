@@ -32,9 +32,13 @@ const CELL=Number(P.get('cell')??200);
 // scenarios can also be run across a kerb, because "foot IK does not break phase
 // synchronisation" is only worth asserting where the IK has something to correct.
 // `?ground=kerb` puts a 13 cm step (15 cm pavement against 2 cm road, Shibuya's real
-// numbers) across the path at z = -3, which every straight-line scenario walks over.
+// numbers) across the path, which every straight-line scenario walks over.
+//
+// At z = +3, because the controller advances by (sin h, cos h) and these scenarios start at
+// heading 0 -- so they walk towards +z. A kerb at -3 is behind them and never reached, and
+// the sheets come out pixel-identical for the most boring possible reason.
 const GROUND=P.get('ground')??'flat';
-const KERB_Z=-3;
+const KERB_Z=3;
 const groundAt=GROUND==='kerb'?(x,z)=>(z<KERB_Z?.15:.02):()=>0;
 const ctx={height:groundAt,heightExact:groundAt,solid:()=>false,safe:()=>true,
  onRoad:()=>false,solids:null,bounds:null};
@@ -107,11 +111,13 @@ for(const [r,scenario] of rows.entries()){
  scene.add(figure.root);
  const player=createPlayer(ctx,{start:[0,0],heading:0});
  player.place(0,0,0);
- // Straight-line scenarios start walking down -Z so the side camera sees a full stride.
+ // Straight-line scenarios walk towards +Z (the controller advances by sin/cos of the
+ // heading), and the side camera stands off in +X so it sees a full stride square on.
  const shots=new Map(scenario.at.map(t=>[t,null]));
  let elapsed=0,segment=0,held=0;
  let turned=new Set();
  const frames=[];
+ const tally={queries:0,solved:0,pelvis:0};
  const total=scenario.script.reduce((n,[,s])=>n+s,0);
  while(elapsed<total-1e-6){
   const [input,seconds]=scenario.script[Math.min(segment,scenario.script.length-1)];
@@ -122,6 +128,9 @@ for(const [r,scenario] of rows.entries()){
   player.setTouch(input);
   player.step(DT);
   figure.update(player.state,DT);
+  if(figure.footIK){const k=figure.footIK.stats;
+   tally.queries+=k.queries??0;tally.solved+=k.solved??0;
+   tally.pelvis=Math.max(tally.pelvis,k.pelvisDrop??0);}
   elapsed+=DT;held+=DT;
   if(held>=seconds){segment++;held=0;}
   for(const t of shots.keys())
@@ -175,11 +184,13 @@ for(const [r,scenario] of rows.entries()){
  name.textContent=scenario.name;
  name.style.left='5px';name.style.top=(H-cy-CELL+4)+'px';
  document.body.appendChild(name);
- // The solver's own counters, so "flat ground is unchanged" is read as "the IK ran and
- // declined to move anything" rather than "the IK was never switched on".
- const fs=figure.footIK?.stats;
+ // The solver's own counters, totalled over the scenario rather than read off the last
+ // frame, so "flat ground is unchanged" is read as "the IK ran and declined to move anything"
+ // rather than "the IK was never switched on" -- and so a scenario that corrects a kerb in the
+ // middle and finishes on flat road does not report zero.
  label.push(`${scenario.name}: ${scenario.at.length} frames`+
-  (fs?` [ik q${fs.queries??0} solved${fs.solved??0} pelvis${(1000*(fs.pelvisDrop??0)).toFixed(0)}mm]`:''));
+  (figure.footIK?` [ik ${tally.queries} queries, ${tally.solved} solves, `+
+   `pelvis ${(1000*tally.pelvis).toFixed(0)}mm]`:''));
  scene.remove(figure.root);figure.dispose();
 }
 document.getElementById('l').textContent=
