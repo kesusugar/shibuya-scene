@@ -470,3 +470,81 @@ test('the extracted driver is findable in the crowd grid, not lost between cells
  assert.equal(crowd.audit().major,0,'the thrown driver broke the crowd audit');
  crowd.dispose?.();sim.dispose();
 });
+
+// ---------------------------------------------------------------- handing the car back
+
+test('a stolen car is released to traffic cleanly, with no duplicate and no leaked seat',()=>{
+ const sim=new TrafficSimulation(graph,{tier:'high',street});
+ sim.update(1/30);
+ const v=sim.pool.find(x=>x.active&&!x.parked&&sim.occupancy.hasDriver(x.id));
+ const id=v.id;
+ v.speed=0;
+ alertDriver(sim,v);beginExtraction(sim,v);
+ assert.ok(sim.occupancy.extract(id));
+ v.driverless=true;
+ assert.equal(sim.occupancy.takeSeat(id),true);
+ assert.equal(sim.occupancy.playerVehicle,id);
+
+ // The player gets out and walks away; the slot goes back to being ordinary traffic.
+ assert.equal(sim.occupancy.leaveSeat(id),true);
+ assert.equal(sim.occupancy.playerVehicle,-1);
+ v.controlled=false;v.parked=true;v.driverless=false;
+
+ // Exactly one slot carries this id -- the pool is fixed, so a "duplicate car" would be the
+ // same slot counted twice or a second slot at the same pose.
+ assert.equal(sim.pool.filter(x=>x.id===id).length,1);
+ const here=sim.pool.filter(x=>x.active&&x!==v&&Math.hypot(x.x-v.x,x.z-v.z)<.25);
+ assert.equal(here.length,0,'a second car was left standing inside the stolen one');
+
+ // Traffic reclaims it, and because it is parked it stays empty rather than gaining a driver.
+ for(let i=0;i<120;i++)sim.update(1/30);
+ assert.equal(sim.occupancy.hasDriver(id),false,'a parked car was given a driver');
+ assert.equal(sim.occupancy.playerVehicle,-1,'the player still holds a car they left');
+ sim.dispose();
+});
+
+test('a car taken from traffic holds no signal permits',()=>{
+ const sim=new TrafficSimulation(graph,{tier:'high',street});
+ for(let i=0;i<200;i++)sim.update(1/30);
+ const v=sim.pool.find(x=>x.active&&!x.parked&&x.locks.size>0)
+        ??sim.pool.find(x=>x.active&&!x.parked);
+ assert.ok(v);
+ sim.releasePermits(v);
+ assert.equal(v.locks.size,0,'a taken car kept a signal lock');
+ for(const owner of sim.reservations.values())
+  assert.notEqual(owner,v.id,'a taken car kept a junction reservation');
+ // A held group is what froze every signal on the map once before; the audit must stay clean.
+ for(let i=0;i<300;i++)sim.update(1/30);
+ assert.equal(sim.audit().major,0);
+ assert.equal(sim.stats.redViolations,0);
+ sim.dispose();
+});
+
+test('the occupancy model survives a thousand random transitions without a contradiction',()=>{
+ // Not a scenario -- a fuzz. The invariants are the point, and they must hold whatever order
+ // the calls arrive in, including the illegal ones.
+ const o=createOccupancy(16);
+ let seed=12345;
+ const rnd=n=>{seed=(seed*1103515245+12345)&0x7fffffff;return seed%n;};
+ for(let i=0;i<1000;i++){
+  const v=rnd(16);
+  switch(rnd(7)){
+   case 0:o.seat(v);break;
+   case 1:o.advance(v,DRIVER.ALERT);break;
+   case 2:o.advance(v,DRIVER.BEING_EXTRACTED);break;
+   case 3:o.extract(v);break;
+   case 4:o.takeSeat(v);break;
+   case 5:o.leaveSeat(v);break;
+   default:o.vacate(v);break;
+  }
+  // The player is in one car or none, and that car agrees that they are in it.
+  const pv=o.playerVehicle;
+  if(pv>=0)assert.equal(o.read(pv).type,OCCUPANT.PLAYER,`vehicle ${pv} disagrees about the player`);
+  let players=0;
+  for(let k=0;k<16;k++)if(o.read(k).type===OCCUPANT.PLAYER)players++;
+  assert.ok(players<=1,`${players} cars hold the player at once`);
+  assert.equal(players,pv>=0?1:0,'playerVehicle and the seats disagree');
+ }
+ const seen=o.inspect();
+ assert.equal(seen.none+seen.drivers+seen.player,seen.capacity,'the seats do not add up');
+});
