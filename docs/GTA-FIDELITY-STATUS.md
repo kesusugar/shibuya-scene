@@ -3,7 +3,7 @@
 The one document to read when resuming this work with no conversation history. Read
 `AGENTS.md` and `CLAUDE.md` first for the repository rules, then this.
 
-**Updated at the close of RUN 7B.** RUNs 0–6, 6.8, 7A and 7B are complete. RUN 7 proper —
+**Updated at the close of RUN 7C.** RUNs 0–6, 6.8, 7A, 7B and 7C are complete. RUN 7 proper —
 the NPC behaviour work — is still only an unverified WIP commit; see §10.
 
 ## 1. Goal
@@ -56,6 +56,7 @@ cdb6271  RUN 6.7: near-pool budgets on every tier
 | 6.8 | Near-humanoid clone break | **COMPLETE** |
 | 7A | Massive HQ reactive crowd POC | **COMPLETE (POC)** |
 | 7B | HQ crowd integrated into Shibuya | **COMPLETE** |
+| 7C | HQ crowd colour / lighting integration | **COMPLETE** |
 | 7 | NPC life / behaviour states | **WIP ONLY — NOT VERIFIED, NOT COMPLETE** |
 | 8 | Melee combat phases | not started |
 | 9 | Knockdown / death / recovery | not started |
@@ -565,6 +566,114 @@ pedestrian window.
 `HQ_TIER_BUDGET` is HIGH 1978, MEDIUM 512, LOW 0. LOW keeps the legacy crowd entirely, which
 is why the legacy renderer is worth keeping beyond this run.
 
+## 9d. RUN 7C — the HQ crowd's colour space
+
+RUN 7B put 1,978 high-fidelity bodies in the crossing and they looked washed out. RUN 7C is
+why, and the answer is one line of shader.
+
+### Root cause
+
+`ColorManagement` is enabled, so the renderer's working space is **linear**. The RUN 6.8 near
+characters pass their palette through `new THREE.Color(hex)`, which applies sRGB → linear for
+them — which is exactly why they were correct in the scene all along. The HQ crowd packs its
+palette as an 8-bit sRGB hex and divided it by 255, handing **sRGB values straight to
+`diffuseColor` in a linear pipeline**.
+
+The error is not uniform, and that is the entire symptom:
+
+| colour | correct (linear) | HQ used | error |
+| --- | ---: | ---: | ---: |
+| `#1c2028` dark navy trousers | 0.0116 | 0.1098 | **9.5×** |
+| `#2a2f38` | 0.0232 | 0.1647 | 7.1× |
+| `#3a414c` | 0.0423 | 0.2275 | 5.4× |
+| `#6b7280` mid grey | 0.1470 | 0.4196 | 2.9× |
+| `#e7e3da` cream top | 0.7991 | 0.9059 | 1.1× |
+
+Dark clothing was up to **9.5× too bright** while light clothing was nearly right. Dark
+trousers stopped reading as dark, every tone trended pale, and the crowd lost its separation.
+
+**Why the bench looked correct.** With dim lighting, no tone mapping and no environment, an
+over-bright albedo still lands low enough in the final image to read as clothing. Under the
+scene's exposure and environment it saturates toward white. The bench was not disproving the
+bug; it was hiding it.
+
+### The fix
+
+three's own `SRGBToLinear` applied inside `unpackRGB`, verified to deviate from `THREE.Color`
+by **0.000e+0 across the entire colour cube**.
+
+Done in the shader rather than at pack time on purpose: a linear value for a dark colour is
+about 0.012, and eight bits of that is three levels, which would band. Eight bits of sRGB
+expanded in the shader is what an sRGB texture does, and it puts the precision where the eye
+needs it.
+
+**Cost: none.** No extra draw call, no extra uniform, no extra texture — a few ALU operations
+in a shader that was already running.
+
+### Hypotheses tested and rejected
+
+- **Scene exposure / global tone mapping.** Rejected on principle before testing: the Shibuya
+  environment already works, and darkening the whole scene to hide a crowd bug would damage
+  buildings, signage and vehicles to fix pedestrians.
+- **Per-garment roughness.** A real mismatch — the crowd had one flat roughness where RUN 6.8
+  gives each garment its own — and worth correcting on its own, but it demonstrably did not
+  fix the wash-out. I said in a commit that it had; that was wrong and was withdrawn.
+- **Fog, environment intensity, bloom.** Never reached: the numeric comparison against
+  `THREE.Color` identified the cause outright.
+
+### Also found here: the knockdown chain never closed
+
+The full-signal-cycle harness (`qa/gta-upgrade/signalcycle.mjs`, 240 simulated seconds at
+30 Hz, covering all four phases of the 108-second cycle) found what a 30-second scene test
+could not: **132 bodies permanently DOWNED and permanently disowned from their own routes.**
+`DOWNED` was excluded from the state fall-through on the theory that it "waits to be
+recovered", and nothing recovered it.
+
+The chain now closes: **HIT → KNOCKDOWN → DOWNED → RECOVER → NORMAL.** Ownership is reconciled
+from `sync` as well as from `vehicle`, because a body stands up on its own timer and the
+player may have parked by then.
+
+Telling a steady state from a leak requires removing the cause, so the harness drives for half
+the run and parks for the rest. A car that never stops *should* hold a steady population on
+the ground; that is not a leak. With the car parked:
+
+```
+132 disowned -> 0 in 2.9 s      crowd returns to 1,978 NORMAL
+population steady at 1,978      non-finite values 0
+signal phases covered           NS, ALL, EW, PEDESTRIAN (full 108 s cycle)
+peak reacting 459               peak down 132
+```
+
+And a metric that lied: `inspect()` recomputed its reacting and down counts only inside
+`vehicle`, so the moment the player parked it kept returning the figures from the last
+drive-by. My own new test believed it and reported 67 citizens on the ground when none were.
+The counts are now recomputed on every sync.
+
+### Day and night
+
+| | HQ drawn | byLod | crowd draws | scene draws | skel / mix | sync | errors |
+| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: |
+| day | 1,974 | L0 23 / L2 1,951 | 8 | 359 | 0 / 0 | 1.5 ms | 0 |
+| night | 1,974 | L0 23 / L2 1,951 | 8 | 367 | 0 / 0 | 2.7 ms | 0 |
+
+**Day:** hair reads black, tops separate (white, navy, teal, red, cream), skin separates from
+clothing, archetypes are readable, and the RUN 6.8 near characters now blend in instead of
+being the only coloured bodies in frame.
+
+**Night:** the crowd is not white, dark clothing reads dark without crushing, skin stays warm
+rather than grey, and the bodies sit naturally in the billboard lighting. Day was not altered
+to achieve it — the fix is in the crowd's own shader, and nothing scene-wide was touched.
+
+**LOD colour consistency:** L0→L1 differs by a mean of 7.1/255 over the whole frame and L1→L2
+by 12.1/255, and those deltas are dominated by silhouette edges moving under decimation rather
+than tone. Structurally the colour cannot shift with detail: every lane shares one shader, and
+`moveLane` copies the per-instance palette across.
+
+### Scale preserved
+
+1,974–1,978 HQ pedestrians, 0 skeletons, 0 mixers, 4 crowd lanes (8 draw calls with two LODs
+in use), offline prebake unchanged, 295/295 tests, typecheck and build clean.
+
 ## 10–15. Not yet implemented
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
@@ -676,6 +785,7 @@ bone space. See §5 — this is the single most repeated mistake in this project
 | `src/life/hq-layer.mjs` | **RUN 7B** — the bridge: reads the simulation, draws the crowd |
 | `tests/hq-layer.test.mjs` | pins source-of-truth, no duplicates, identity, LOD, mass hits |
 | `qa/gta-upgrade/lodpop.mjs` | LOD popping QA |
+| `qa/gta-upgrade/signalcycle.mjs` | full signal cycle + drain test, headless |
 | `src/life/hq-threat.mjs` | **RUN 7A** — spatial grid + mass vehicle reaction |
 | `scripts/bake-crowd-hq.mjs` | **RUN 7A** — offline bake: LOD geometry + bone atlas |
 | `tests/hq-crowd.test.mjs` | pins no-skeleton, draw calls, identity, multi-hit, query bound |
@@ -719,11 +829,8 @@ bone space. See §5 — this is the single most repeated mistake in this project
   completing with nothing abandoned or stuck across 30 seconds.
 - **RUN 7 behaviour proper is still not done.** The awareness WIP at `f6aa8e8` remains
   unverified; RUN 7B connected the crowd, not the NPC minds.
-- **The HQ crowd looks washed out in the scene.** Functionally complete and visually wrong:
-  the bodies are pale against the RUN 6.8 near characters beside them. The same palette and
-  shader are correct in the bench, so the cause is the scene's environment / tone mapping /
-  exposure / fog, not the material. **This is the first thing RUN 7C should fix** — it is the
-  gap between "1,978 high-fidelity bodies" and "1,978 bodies that look right".
+- ~~The HQ crowd looks washed out in the scene.~~ **Fixed in RUN 7C** — it was a colour-space
+  bug in the crowd shader, not the scene. See §9d.
 - **The garment boundary softens at LOD2.** Decimation blurs the mask, so a sleeve fades into
   the arm over several centimetres. Acceptable at the distance L2 is used, visible if L2 is
   ever brought close.
