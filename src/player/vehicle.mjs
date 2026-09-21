@@ -16,6 +16,7 @@ import {DODGE_SPEED} from '../life/simulation.mjs';
 import {safePose} from '../traffic/graph.mjs';
 import {corners, boxOverlap} from '../traffic/path.mjs';
 import {bounds, inPolygon} from '../geo/core.mjs';
+import {worldAnchor} from '../traffic/vehicle-anchors.mjs';
 
 export const CAR = Object.freeze({
  type: 'sedan',
@@ -180,7 +181,31 @@ export function createPlayerVehicle(sim, ctx) {
    * van is a van for every box test from here on.
    */
   takeOver(slot) {
-   if (!slot || slot === state.slot) return false;
+   if (!api.reserve(slot)) return false;
+   api.commit();
+   return true;
+  },
+
+  /**
+   * Claim a car without being able to drive it yet.
+   *
+   * RUN 9 split `takeOver` in two. It used to be one call at the moment the button went
+   * down: the car became the player's, `active` went true, and the transition that followed
+   * was decoration over a change that had already happened. That is the instant takeover this
+   * run exists to remove.
+   *
+   * `reserve` does the half that has to happen FIRST, because the entry animation needs it:
+   * the car is frozen so traffic cannot pull away mid-carjack, permits are released so a held
+   * signal group does not stall the map while the player walks round the bonnet, and the slot
+   * becomes the one the player's renderer draws, so its door can swing.
+   *
+   * What it deliberately does NOT do is set `active`. Every driving path is gated on that, so
+   * a reserved car sits there: input does nothing, `step` returns immediately, and nothing is
+   * struck by it. Control is `commit`, and that happens when the body reaches the seat.
+   */
+  reserve(slot) {
+   if (!slot) return false;
+   if (slot === state.slot) return true;
    if (state.slot) {state.slot.playerVisual = false; state.slot.controlled = false; state.slot.parked = true; state.slot.speed = 0;}
    sim.releasePermits?.(slot);
    impactCooldown=0; state.slot = slot; state.type = slot.type; def = VEHICLES[slot.type]; resetDynamics(state);
@@ -190,7 +215,29 @@ export function createPlayerVehicle(sim, ctx) {
     speed: 0, brake: false, blinker: 0, lane: 0, transition: -1, next: -1, progress: 0,
     age: 0, stuck: 0, junction: null});
    slot.locks?.clear?.(); slot.passed?.clear?.(); slot.yellowStops?.clear?.();
+   state.active = false;
+   return true;
+  },
+
+  /**
+   * Take the wheel. The seat has to be free -- the occupancy model is asked, not assumed --
+   * so a car whose driver is still in it cannot be driven away by the player.
+   */
+  commit() {
+   const slot = state.slot;
+   if (!slot) return false;
+   if (sim.occupancy && !sim.occupancy.takeSeat(slot.id)) return false;
    state.active = true;
+   return true;
+  },
+
+  /** Give a reserved car back without ever having driven it. Used when an entry is aborted. */
+  unreserve() {
+   const slot = state.slot;
+   if (!slot || state.active) return false;
+   slot.playerVisual = false; slot.controlled = false; slot.parked = true; slot.speed = 0;
+   slot.doorPhase = 0;
+   state.slot = null;
    return true;
   },
 
@@ -223,6 +270,23 @@ export function createPlayerVehicle(sim, ctx) {
    let best=null;for(const side of [-1,1]){const out=d.width/2+.38,x=slot.x+c*side*out+s*back,z=slot.z-s*side*out+c*back;
     if(ctx.solid(x,z,.22))continue;const distance=Math.hypot(x-fromX,z-fromZ);if(!best||distance<best.distance)best={x,z,heading:slot.heading+side*Math.PI/2,distance,side};}
    return best;
+  },
+
+  /**
+   * The waypoints a staged entry or exit travels through, for one car and one side.
+   *
+   * RUN 9. These come from the vehicle's OWN anchors -- driverSeat, driverEntry, driverExit --
+   * rather than from offsets invented at the call site, which is what `doorPose` still does
+   * for the standing spot. `doorPose` earns that: it also tests the ground for solids, and
+   * picks whichever side is actually clear. So the side comes from there and the distances
+   * come from here.
+   */
+  anchors(slot=state.slot,side=-1){
+   if(!slot)return null;
+   return {seat:worldAnchor(slot,'seat',side),
+           entry:worldAnchor(slot,'entry',side),
+           exit:worldAnchor(slot,'exit',side),
+           door:worldAnchor(slot,'door',side)};
   },
 
   /** Where a person standing here could get in from. */
@@ -333,7 +397,10 @@ export function createPlayerVehicle(sim, ctx) {
 
   release() {
    const slot = state.slot;
-   if (slot) {slot.playerVisual = false; slot.controlled = false; slot.parked = true; slot.speed = 0;}
+   if (slot) {
+    sim.occupancy?.leaveSeat(slot.id);
+    slot.playerVisual = false; slot.controlled = false; slot.parked = true; slot.speed = 0;
+   }
    state.active = false; state.slot = null;
   }
  };

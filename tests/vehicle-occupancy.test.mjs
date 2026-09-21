@@ -9,6 +9,7 @@ import {buildTrafficGraph} from '../src/traffic/graph.mjs';
 import {TrafficSimulation} from '../src/traffic/simulation.mjs';
 import {createOccupancy,OCCUPANT,DRIVER} from '../src/traffic/occupancy.mjs';
 import {createSeatedDrivers} from '../src/traffic/drivers.mjs';
+import {createVehicleTransition,ENTER_STAGES,EXIT_STAGES,DOOR} from '../src/player/vehicle-transition.mjs';
 
 const data=JSON.parse(readFileSync('public/data/shibuya-scene-data.json'));
 const ground=buildGroundModel(data),generic=buildBuildingModel(data);
@@ -215,4 +216,100 @@ test('the driver layer disposes without leaving anything in the scene',()=>{
  drivers.dispose();                                   // a second dispose must be harmless
  assert.equal(drivers.update(sim,{x:0,z:0}),0,'a disposed layer still drew');
  sim.dispose();
+});
+
+// ---------------------------------------------------------------- staged enter and exit
+
+test('entry is a sequence of stages, not one move',()=>{
+ const m=createVehicleTransition();
+ assert.equal(m.begin('enter',{start:{x:0,z:0,heading:0},entry:{x:2,z:0,heading:Math.PI/2},
+  seat:{x:2.4,z:.4,heading:0}}),true);
+ const seen=[];
+ for(let i=0;i<400&&m.active;i++){const p=m.update(1/60);if(p&&seen.at(-1)!==p.stage)seen.push(p.stage);}
+ assert.deepEqual(seen,ENTER_STAGES.map(s=>s.name),
+  `entry ran ${seen.join(' -> ')} instead of the staged sequence`);
+});
+
+test('the door opens before the body moves and shuts after it has arrived',()=>{
+ const m=createVehicleTransition();
+ m.begin('enter',{start:{x:0,z:0,heading:0},entry:{x:2,z:0,heading:0},seat:{x:2.4,z:.4,heading:0}});
+ let openedAt=-1,movedThroughAt=-1,shutFrom=-1,clock=0,last=null;
+ for(let i=0;i<400&&m.active;i++){
+  const p=m.update(1/60);clock+=1/60;if(!p)break;
+  if(p.stage==='DOOR_OPEN'&&p.doorPhase>.9&&openedAt<0)openedAt=clock;
+  if(p.stage==='ENTRY')movedThroughAt=clock;
+  if(p.door===DOOR.CLOSING&&shutFrom<0)shutFrom=clock;
+  last=p;
+ }
+ assert.ok(openedAt>0,'the door never opened');
+ assert.ok(openedAt<=movedThroughAt,'the body went through a door that was still shut');
+ assert.ok(shutFrom>movedThroughAt,'the door started shutting while the body was in it');
+ assert.equal(last.doorPhase,0,'the door was left open at the end');
+ assert.equal(last.door,DOOR.CLOSED);
+});
+
+test('entry ends in the seat, not at the door',()=>{
+ const m=createVehicleTransition();
+ const seat={x:2.4,z:.4,heading:1};
+ m.begin('enter',{start:{x:0,z:0,heading:0},entry:{x:2,z:0,heading:0},seat});
+ let last=null;
+ for(let i=0;i<400&&m.active;i++)last=m.update(1/60)??last;
+ assert.ok(Math.hypot(last.x-seat.x,last.z-seat.z)<1e-6,
+  `entry finished at ${last.x.toFixed(2)},${last.z.toFixed(2)} rather than in the seat`);
+ assert.equal(last.seated,true);
+});
+
+test('the player is only reported seated once the body has arrived',()=>{
+ const m=createVehicleTransition();
+ m.begin('enter',{start:{x:0,z:0,heading:0},entry:{x:2,z:0,heading:0},seat:{x:2.4,z:.4,heading:0}});
+ for(let i=0;i<400&&m.active;i++){
+  const p=m.update(1/60);if(!p)break;
+  if(['ALIGN','DOOR_OPEN','ENTRY'].includes(p.stage))
+   assert.equal(p.seated,false,`seated was true during ${p.stage}`);
+ }
+});
+
+test('exit starts in the seat and finishes where the caller said it was safe to stand',()=>{
+ const m=createVehicleTransition();
+ const seat={x:0,z:0,heading:0},spot={x:-2.5,z:-.4,heading:Math.PI/2};
+ assert.equal(m.begin('exit',{seat,exit:spot}),true);
+ const first=m.update(1/600);
+ assert.ok(Math.hypot(first.x-seat.x,first.z-seat.z)<.05,'exit began outside the car');
+ let last=first;
+ for(let i=0;i<400&&m.active;i++)last=m.update(1/60)??last;
+ assert.ok(Math.hypot(last.x-spot.x,last.z-spot.z)<1e-6,'exit did not reach the safe spot');
+ assert.equal(last.doorPhase,0,'the door was left open after getting out');
+});
+
+test('a frame long enough to step over a whole stage does not skip it',()=>{
+ const m=createVehicleTransition();
+ m.begin('enter',{start:{x:0,z:0,heading:0},entry:{x:2,z:0,heading:0},seat:{x:2.4,z:.4,heading:0}});
+ // One enormous frame. The sequence must still finish cleanly rather than stall or produce
+ // a pose from a stage that no longer exists.
+ const p=m.update(10);
+ assert.equal(p.done,true);
+ assert.equal(p.seated,true);
+ assert.equal(p.doorPhase,0);
+ assert.ok(Number.isFinite(p.x)&&Number.isFinite(p.z)&&Number.isFinite(p.heading));
+ assert.equal(m.active,false);
+});
+
+test('a transition refuses to start on waypoints that are not numbers',()=>{
+ const m=createVehicleTransition();
+ assert.equal(m.begin('enter',{start:{x:NaN,z:0,heading:0},entry:{x:1,z:1,heading:0},
+  seat:{x:2,z:2,heading:0}}),false,'a NaN waypoint was accepted');
+ assert.equal(m.active,false);
+ assert.equal(m.begin('sideways',{start:{x:0,z:0,heading:0}}),false,'an unknown kind was accepted');
+});
+
+test('only one transition runs at a time',()=>{
+ const m=createVehicleTransition();
+ const points={start:{x:0,z:0,heading:0},entry:{x:1,z:0,heading:0},seat:{x:2,z:0,heading:0}};
+ assert.equal(m.begin('enter',points),true);
+ assert.equal(m.begin('enter',points),false,'a second entry started on top of the first');
+ assert.equal(m.begin('exit',{seat:{x:0,z:0,heading:0},exit:{x:3,z:0,heading:0}}),false);
+ const was=m.cancel();
+ assert.equal(was.kind,'enter');
+ assert.equal(m.active,false);
+ assert.equal(m.begin('enter',points),true,'cancelling did not free the transition');
 });

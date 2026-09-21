@@ -63,8 +63,15 @@ test('stopped traffic can be stolen without retaining signal locks and enter/exi
  let released=false;const sim={pool:[slot],graph:{ctx:{solid:{query:()=>[]}}},blocked:()=>false,releasePermits(v){released=v===slot;v.locks.clear();}},car=createPlayerVehicle(sim,flat),entry=car.nearestEntry(0,0);
  assert.equal(entry.kind,'steal');assert.equal(entry.inRange,true);assert.ok(car.doorPose(slot,0,0));
  const other={type:'sedan',x:0,z:0,heading:0,locks:new Set(),passed:new Set(),yellowStops:new Set()};assert.equal(car.takeOver(other),true);assert.equal(car.takeOver(slot),true);assert.equal(released,true);
- const motion=createVehicleTransition();assert.equal(motion.begin('enter',{x:0,z:0,heading:0},{x:1,z:1,heading:Math.PI/2},slot),true);
- const mid=motion.update(.39);assert.ok(mid.x>0&&mid.x<1&&!mid.done);const end=motion.update(1);assert.equal(end.done,true);assert.equal(end.slot,slot);assert.equal(motion.active,false);
+ // RUN 9: a transition is a list of stages with real waypoints, not two poses and a
+ // smoothstep, so `begin` takes named points. The claim under test -- that entry moves the
+ // body rather than snapping it, and reports the slot at the end -- is unchanged.
+ const motion=createVehicleTransition();
+ assert.equal(motion.begin('enter',{start:{x:0,z:0,heading:0},entry:{x:1,z:1,heading:Math.PI/2},
+  seat:{x:1.4,z:1.2,heading:0}},slot),true);
+ const mid=motion.update(.2);assert.ok(mid.x>0&&mid.x<1.4&&!mid.done);
+ let end=null;for(let i=0;i<60&&motion.active;i++)end=motion.update(.05);
+ assert.equal(end.done,true);assert.equal(end.slot,slot);assert.equal(motion.active,false);
 });
 test('melee selects a facing adult, provokes counterattacks, and either side can die',()=>{
  const p={id:7,active:true,controlled:false,choreographed:false,struck:undefined,combatDead:false,archetype:'casual',crossing:null,x:0,z:1,heading:Math.PI,state:'walking',speed:0};

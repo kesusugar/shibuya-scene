@@ -103,7 +103,7 @@ export default function Home(){
  const VIEW_LIMIT=180,VIEW_CEILING=60,EYE_FLOOR=1.6;
  // The player is created once the crowd network is up, since it walks on that context.
  let player:any=null,playerMarker:any=null,carMarker:any=null,playerFigure:any=null,playerShadow:any=null,deferredCharacter:any=null,playerCar:any=null,playerAudio:any=null,crowdVoices:any=null,touchPad:any=null,blood:any=null,driving=false,playerMode=false;const followPose:any={x:0,y:0,z:0,tx:0,ty:0,tz:0};const playerBox={x:0,z:0,heading:0};
- let seatedDrivers:any=null;let vehicleVisual:any=null,vehicleEffects:any=null,playUI:any=null,localCrowdClock=0,frameHits=0,combatDeathReported=false;const followCamera=createFollowCamera(),melee=createMeleeCombat({
+ let seatedDrivers:any=null;let seatedHidden=false;let vehicleVisual:any=null,vehicleEffects:any=null,playUI:any=null,localCrowdClock=0,frameHits=0,combatDeathReported=false;const followCamera=createFollowCamera(),melee=createMeleeCombat({
   // RUN 8: a punch is an event the crowd can see. The HQ layer bounds it by its own spatial
   // grid, so this costs the cells around the fight and not the population.
   onWitness:(event:any)=>lifeEntry.hooks.current?.witness?.(event)??0
@@ -130,19 +130,34 @@ export default function Home(){
  const toggleDrive=()=>{
   if(!player||!player.state.alive||vehicleTransition.active)return;
   if(!ensureCar())return;
-  if(driving){const spot=playerCar.doorstep();if(!spot)return;                 // no pavement beside it: stay in
+  if(driving){
+   // The safe-doorstep rule is unchanged and deliberate: with no pavement beside the car
+   // there is nowhere legal to put a body, so the request is refused and the player stays in.
+   const spot=playerCar.doorstep();if(!spot)return;
    const door=playerCar.doorPose(playerCar.state.slot,spot[0],spot[1]);if(!door)return;
-   driving=false;playerAudio?.silence();playerCar.state.speed=0;playerCar.state.doorSide=door.side;playerCar.state.doorPhase=0;playerCar.sync();player.transitionTo(door.x,door.z,door.heading,0);
-   playerFigure?.update(player.state,0);groundPlayerShadow();vehicleTransition.begin('exit',{x:door.x,z:door.z,heading:door.heading},{x:spot[0],z:spot[1],heading:playerCar.state.heading});
+   const a=playerCar.anchors(playerCar.state.slot,door.side);
+   driving=false;playerAudio?.silence();playerCar.state.speed=0;playerCar.state.doorSide=door.side;playerCar.state.doorPhase=0;playerCar.sync();
+   // Exit starts IN THE SEAT, not at the door. Starting at the door is what made getting out
+   // a teleport followed by a slide.
+   player.transitionTo(a.seat.x,a.seat.z,playerCar.state.heading,0);
+   playerFigure?.update(player.state,0);groundPlayerShadow();
+   vehicleTransition.begin('exit',{
+    seat:{x:a.seat.x,z:a.seat.z,heading:playerCar.state.heading},
+    exit:{x:spot[0],z:spot[1],heading:door.heading}},playerCar.state.slot);
    setDriving(false);touchPad?.setDriving(false);return;}
-  // Parked cars and traffic stopped at a light can be taken. The selected slot is frozen
-  // before the approach so traffic cannot pull away halfway through the visible carjacking.
   const entry=playerCar.nearestEntry(player.state.x,player.state.z);
   if(!entry||!entry.inRange)return;                                           // too far from any door
   const door=playerCar.doorPose(entry.slot,player.state.x,player.state.z);if(!door)return;
-  if(entry.slot&&entry.slot!==playerCar.state.slot)playerCar.takeOver(entry.slot);
+  // RESERVE, not take over. The car is frozen so traffic cannot pull away mid-sequence and
+  // its door can swing, but `active` stays false, so it cannot be driven and nothing is
+  // struck by it. Control transfers when the body reaches the seat -- see the frame loop.
+  if(entry.slot&&entry.slot!==playerCar.state.slot)playerCar.reserve(entry.slot);
   playerCar.state.doorSide=door.side;playerCar.state.doorPhase=0;
-  vehicleTransition.begin('enter',{x:player.state.x,z:player.state.z,heading:player.state.bodyHeading??player.state.heading},{x:door.x,z:door.z,heading:door.heading},entry.slot);
+  const a=playerCar.anchors(entry.slot,door.side);
+  vehicleTransition.begin('enter',{
+   start:{x:player.state.x,z:player.state.z,heading:player.state.bodyHeading??player.state.heading},
+   entry:{x:door.x,z:door.z,heading:door.heading},
+   seat:{x:a.seat.x,z:a.seat.z,heading:entry.slot.heading}},entry.slot);
  };
  const attack=()=>{if(playerMode&&!driving&&!vehicleTransition.active&&player?.state.alive)melee.request();};
  const crowdSlot=()=>lifeEntry.hooks.current?.sim?.pool?.[0]??null;
@@ -381,8 +396,27 @@ export default function Home(){
  const SHAKE_PER_HIT=.34,SHAKE_MAX=1,SHAKE_FALL=2.6,SHAKE_THROW=.42,IMPACT_BLEED=.06;
  let shake=0;
  let lastPlayTick=performance.now();let qaReadyRef=false;const frame=(now:number)=>{if(disposed)return;const dt=frameGate.step(now);if(dt===null){raf=requestAnimationFrame(frame);return;}const frameStart=performance.now(),updateStart=frameStart;const playElapsed=document.hidden?0:Math.max(0,(now-lastPlayTick)/1000);lastPlayTick=now;frameHits=0;if(playerMode&&player)player.updateInput(dt);if(playerMode&&player){
-  if(vehicleTransition.active){const pose=vehicleTransition.update(dt);if(pose){if(playerCar?.state)playerCar.state.doorPhase=Math.sin(pose.phase*Math.PI);player.state.vehicleKind=pose.kind;player.transitionTo(pose.x,pose.z,pose.heading,pose.phase);playerFigure?.update(player.state,dt);groundPlayerShadow();
-    if(pose.done&&pose.kind==='enter'){driving=true;player.state.vehiclePhase=0;playerCar.state.doorPhase=0;playerFigure?.hide();playerShadow?.begin();playerShadow?.end();carMarker?.hide();setDriving(true);touchPad?.setDriving(true);struckCountRef=0;setStruckCount(0);}
+  if(vehicleTransition.active){const pose=vehicleTransition.update(dt);if(pose){
+    // The DOOR comes from the stage, not from the overall phase. `sin(phase * PI)` opened the
+    // panel as the player started walking and had it shut again by the time they sat down,
+    // which is the wrong shape for a door however smooth it is.
+    if(playerCar?.state)playerCar.state.doorPhase=pose.doorPhase;
+    player.state.vehicleKind=pose.kind;player.transitionTo(pose.x,pose.z,pose.heading,pose.phase);
+    // The body is drawn on foot right up until it is in the seat, and the car draws it after.
+    // The old sequence hid the player only at the very end, so a figure stood in the doorway
+    // while the door shut through it.
+    if(pose.kind==='enter'&&pose.seated){if(!seatedHidden){seatedHidden=true;playerFigure?.hide();playerShadow?.begin();playerShadow?.end();carMarker?.hide();}}
+    else {seatedHidden=false;playerFigure?.update(player.state,dt);groundPlayerShadow();}
+    if(pose.done&&pose.kind==='enter'){
+     // CONTROL TRANSFERS HERE, at the end, with the door shut and the body in the seat --
+     // not at the button press. `commit` asks the occupancy model whether the seat is free
+     // and refuses if it is not, so a car whose driver is still in it cannot be driven away.
+     seatedHidden=false;
+     if(playerCar.commit()){driving=true;player.state.vehiclePhase=0;playerCar.state.doorPhase=0;
+      playerFigure?.hide();playerShadow?.begin();playerShadow?.end();carMarker?.hide();
+      setDriving(true);touchPad?.setDriving(true);struckCountRef=0;setStruckCount(0);}
+     else {playerCar.unreserve();playerFigure?.update(player.state,dt);groundPlayerShadow();}
+    }
     else if(pose.done){player.state.vehiclePhase=0;if(playerCar?.state)playerCar.state.doorPhase=0;}}}
   else if(driving&&playerCar){const drive=player.input();playerCar.step(dt,drive);const c=playerCar.state;player.rideTo(c.x,c.z,c.heading);playerMarker?.update(c,dt,playerCar.def.height);
    const crowdSim=lifeEntry.hooks.current?.sim;playerCar.alertPedestrians(crowdSim);lifeEntry.hooks.current?.hqCrowd?.vehicle(playerCar.state,dt);
