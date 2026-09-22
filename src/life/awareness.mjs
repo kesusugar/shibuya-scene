@@ -1,4 +1,8 @@
 /**
+ * DEPRECATED / NOT PRODUCTION. Historical RUN 7 experiment retained for its old tests;
+ * RUN 10 production awareness lives exclusively in hq-awareness.mjs.
+ * Do not import this module into the scene or start a second awareness authority.
+ *
  * What a pedestrian notices, and how long it stays noticed.
  *
  * RUN 7. The crowd already had one reaction: an oncoming car, computed in

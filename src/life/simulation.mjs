@@ -145,7 +145,7 @@ export class CrowdSimulation{
   if(leader)nodes=this.candidates.filter(n=>n.component===this.network.nodes[leader.node].component&&Math.hypot(n.x-leader.x,n.z-leader.z)<4);
   for(let attempt=0;attempt<100;attempt++){const n=nodes[Math.floor(this.rng()*nodes.length)];if(!n||this.network.landingNodes.has(n.id)||this.blocked(n.x,n.z,null,.9)||this.vehicleOverlap(n.x,n.z,.6)||this.time>0&&Math.hypot(n.x-this.camera.x,n.z-this.camera.z)<12)continue;
    const jitter=this.rng()*.5-.25,jitterZ=this.rng()*.5-.25,sx=n.x+jitter,sz=n.z+jitterZ,valid=this.network.ctx.safe(sx,sz)&&!this.blocked(sx,sz,null,.65)&&!this.vehicleOverlap(sx,sz,.6),px=valid?sx:n.x,pz=valid?sz:n.z;
-   Object.assign(p,{patrol:null,active:true,choreographed:false,x:px,z:pz,renderX:px,renderZ:pz,previousX:px,previousZ:pz,heading:this.rng()*Math.PI*2,height:this.network.ctx.height(n.x,n.z),archetype:type,mode,state:mode==='idle'?'idle':'walking',group:leader?.group??-1,leader:leader?.id??-1,route:[],routeIndex:0,edge:-1,progress:0,destination:n.id,node:n.id,speed:0,baseSpeed:leader?.baseSpeed??def.speed[0]+this.rng()*(def.speed[1]-def.speed[0]),age:0,stuck:0,pause:mode==='idle'?8+this.rng()*30:0,crossing:null,queueKey:null,lod:'near',elapsed:0,phase:this.rng()*Math.PI*2,color:Math.floor(this.rng()*def.colors.length),travelled:0,voiceUntil:0,voiceSaid:-99,voiceUrgency:0,combatHealth:100,combatTarget:null,combatUntil:0,combatNext:0,combatAction:0,combatDead:false,fatal:false,region:n.district});
+   Object.assign(p,{patrol:null,active:true,choreographed:false,x:px,z:pz,renderX:px,renderZ:pz,previousX:px,previousZ:pz,heading:this.rng()*Math.PI*2,height:this.network.ctx.height(n.x,n.z),archetype:type,mode,state:mode==='idle'?'idle':'walking',group:leader?.group??-1,leader:leader?.id??-1,route:[],routeIndex:0,edge:-1,progress:0,destination:n.id,node:n.id,speed:0,baseSpeed:leader?.baseSpeed??def.speed[0]+this.rng()*(def.speed[1]-def.speed[0]),age:0,stuck:0,pause:mode==='idle'?8+this.rng()*30:0,crossing:null,queueKey:null,lod:'near',elapsed:0,phase:this.rng()*Math.PI*2,color:Math.floor(this.rng()*def.colors.length),travelled:0,voiceUntil:0,voiceSaid:-99,voiceUrgency:0,combatHealth:100,combatTarget:null,combatUntil:0,combatNext:0,combatAction:0,combatDead:false,fatal:false,appearanceId:undefined,cameFromVehicle:undefined,reactionOwned:false,region:n.district});
    if(mode!=='idle'){
     if(cross){const approach=route(this.network,n.id,cross.from);if(n.id!==cross.from&&!approach.length){p.active=false;continue;}p.route=[...approach,cross.id];p.edge=p.route[0];p.destination=cross.to;}
     else if(!this.chooseDestination(p,n,mode==='milling')){p.active=false;continue;}
@@ -229,6 +229,30 @@ export class CrowdSimulation{
   // Rotate priority each fixed tick; ordering does not permanently privilege low IDs.
   const start=Math.floor(this.time*30)%this.pool.length;for(let j=0;j<this.pool.length;j++){const p=this.pool[(start+j)%this.pool.length];if(!p.active||p.controlled)continue;
    if(p.struck!==undefined){p.struck+=dt;p.speed=0;this.fly(p,dt);
+    // An extracted driver is a world pedestrian, not a disposable hit marker. Finish their
+    // fall as the HQ knockdown enters RECOVER, then give them a nearby walkable route. The
+    // carjack already called strike() and its formal leave(), so no crossing is released here.
+    if(p.cameFromVehicle!==undefined&&p.struck>=4.9){
+     p.struck=undefined;p.flyX=0;p.flyZ=0;p.flyY=0;p.flyHeight=0;
+     p.height=this.network.ctx.height(p.x,p.z);p.speed=0;p.pause=2;
+     p.mode='milling';p.state='milling';p.route=[];p.edge=-1;p.stuck=0;
+     let nearest=null,distance=Infinity;
+     for(const n of this.candidates){const d=(n.x-p.x)**2+(n.z-p.z)**2;
+      if(d<distance&&this.network.ctx.safe(n.x,n.z,RADIUS-.01)
+       &&!this.vehicleOverlap(n.x,n.z,RADIUS-.02)
+       &&!this.blocked(n.x,n.z,p,RADIUS*2-.03,false)){
+       nearest=n;distance=d;}}
+     if(nearest){
+      // The door can be in a traffic lane. Stand the recovering pedestrian at the nearest
+      // walkable node, and update the simulation grid as every out-of-route move must do.
+      const old=this.cell(p.x,p.z),bucket=this.grid.get(old),at=bucket?.indexOf(p);
+      if(at>=0)bucket.splice(at,1);
+      p.x=nearest.x;p.z=nearest.z;p.renderX=p.x;p.renderZ=p.z;
+      p.previousX=p.x;p.previousZ=p.z;p.height=this.network.ctx.height(p.x,p.z);
+      p.node=nearest.id;this.insert(p);
+     }
+     continue;
+    }
     if(p.struck>=FALL_SECONDS){p.struck=undefined;this.despawn(p,'struck');p.downUntil=this.time+RESPAWN_SECONDS;}continue;}
    p.elapsed+=dt;const interval=p.crossing||p.choreographed?1/30:p.mode==='idle'?.5:p.lod==='near'?1/30:p.lod==='mid'?1/15:.2;if(p.elapsed+1e-8<interval){this.stats.throttled++;continue;}const elapsed=p.elapsed;p.elapsed=0;this.move(p,elapsed);}
   if(this.refillClock>=2){this.refillClock=0;this.refill();}

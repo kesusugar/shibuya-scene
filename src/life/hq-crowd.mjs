@@ -24,9 +24,10 @@ import {InstancedMesh,InstancedBufferAttribute,BufferGeometry,BufferAttribute,
 
 /** The states a citizen can be in. Index into CLIP_FOR, and what the CPU writes. */
 /**
- * THE NUMBERS ARE A PRIORITY ORDER, not just labels. `setState` refuses to replace a state
- * with a lower-numbered one while its hold timer is running, so the enum IS the rule that a
- * glance can never overwrite a knockdown. Anything inserted has to go in the right place.
+ * The numeric order gives the priority of NORMAL through DOWNED. RECOVER is appended for
+ * compatibility with the existing atlas index, but `priority()` ranks it below fresh danger.
+ * `setState` refuses lower priority changes while a state is held: a glance cannot overwrite
+ * a knockdown, and an approaching car can interrupt recovery.
  *
  * RUN 10 added STARTLE between LOOK and AVOID: a brief surprise is more than noticing and
  * less than stepping out of the way. Nothing persists these numbers -- the bake addresses
@@ -35,6 +36,9 @@ import {InstancedMesh,InstancedBufferAttribute,BufferGeometry,BufferAttribute,
 export const STATE=Object.freeze({
  NORMAL:0,LOOK:1,STARTLE:2,AVOID:3,FLEE:4,HIT:5,KNOCKDOWN:6,DOWNED:7,RECOVER:8
 });
+// RECOVER is stored at index 8 for the atlas but is lower priority than fresh danger.
+// Damage still outranks every visual reaction; being wary cannot make a new impact harmless.
+const priority=b=>b===STATE.RECOVER?2:b;
 /** Which baked clip each state plays. Several states share one clip on purpose. */
 export const CLIP_FOR=Object.freeze({
  [STATE.NORMAL]:'Walk',[STATE.LOOK]:'Walk',[STATE.STARTLE]:'Startle',
@@ -292,7 +296,7 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
 
  const stats={population:0,drawCalls:0,triangles:0,vertices:0,
   stateChanges:0,transformWrites:0,lanes:lanes.length,lod,
-  byState:new Uint32Array(8),byArchetype:new Uint32Array(lanes.length)};
+  byState:new Uint32Array(Object.keys(STATE).length),byArchetype:new Uint32Array(lanes.length)};
 
  const clipOf=name=>clips.get(name)??clips.values().next().value;
 
@@ -447,7 +451,7 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
    */
   setState(i,behaviour,{impulseX=0,impulseZ=0,impulseY=0,force=false}={}){
    if(i<0||i>=population)return false;
-   if(!force&&state.timer[i]>0&&behaviour<state.behaviour[i])return false;
+   if(!force&&state.timer[i]>0&&priority(behaviour)<priority(state.behaviour[i]))return false;
    if(state.behaviour[i]===behaviour&&!force)return false;
    state.behaviour[i]=behaviour;
    state.timer[i]=STATE_HOLD[behaviour]??0;

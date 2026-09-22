@@ -4,6 +4,7 @@ import {readFileSync} from 'node:fs';
 import {createHQLayer,HQ_LOD} from '../src/life/hq-layer.mjs';
 import {STATE} from '../src/life/hq-crowd.mjs';
 import {appearanceOf} from '../src/life/appearance.mjs';
+import {AWARE} from '../src/life/hq-awareness.mjs';
 
 const manifest=JSON.parse(readFileSync('public/data/crowd/hq-crowd.json','utf8'));
 const raw=readFileSync('public/data/crowd/hq-crowd.bin');
@@ -20,6 +21,57 @@ function pool(count,spread=1.4){
  }
  return out;
 }
+
+test('player perception rebuilds the grid on bounded ticks and counts STARTLE as active',()=>{
+ const people=pool(600,1);
+ const layer=createHQLayer(manifest,bin,{budget:600});
+ layer.sync(people,{x:0,z:0},0,{time:0});
+ const rebuild=layer.grid.rebuild.bind(layer.grid);
+ let rebuilt=0;
+ layer.grid.rebuild=c=>{rebuilt++;return rebuild(c);};
+ const player={x:0,z:0,heading:0,course:0,speed:5,alive:true};
+ for(let i=0;i<60;i++){
+  layer.awareness(player,1/60);
+  layer.sync(people,{x:0,z:0},1/60,{time:i/60});
+ }
+ assert.ok(rebuilt>=8&&rebuilt<=15,`rebuilding the entire grid ${rebuilt} times per second`);
+ assert.ok(layer.perception.candidates<layer.crowd.population,
+  'local awareness queried the entire population');
+ const i=layer.crowd.indexOf(people[0].id);
+ layer.crowd.setState(i,STATE.STARTLE,{force:true});
+ layer.sync(people,{x:0,z:0},0,{time:1});
+ assert.ok(layer.inspect().reacting>=1,'STARTLE disappeared from active awareness metrics');
+ assert.ok(Number.isFinite(layer.perception.queryMs));
+ assert.ok(Number.isFinite(layer.inspect().awarenessGridMs));
+ assert.ok(AWARE.radius>0);
+ layer.dispose();
+});
+
+test('simulation damage overrides HQ recovery and requests formal movement handoff',()=>{
+ const people=pool(40,1);
+ const left=[];
+ const layer=createHQLayer(manifest,bin,{budget:40,onDisown:(id)=>left.push(id)});
+ layer.sync(people,{x:0,z:0},0,{time:0});
+ const victim=people[0],i=layer.crowd.indexOf(victim.id);
+ layer.crowd.setState(i,STATE.RECOVER,{force:true});
+ victim.crossing='scramble-group';victim.choreographed=true;victim.struck=.1;
+ layer.sync(people,{x:0,z:0},1/60,{time:1/60});
+ assert.equal(layer.crowd.state.behaviour[i],STATE.KNOCKDOWN);
+ assert.deepEqual(left,[victim.id],'a new strike did not ask the simulation to leave formally');
+ assert.equal(victim.crossing,'scramble-group','the visual layer changed crossing ownership');
+ layer.dispose();
+});
+
+test('recovery remains visible in the full state count',()=>{
+ const people=pool(20);
+ const layer=createHQLayer(manifest,bin,{budget:20});
+ layer.sync(people,{x:0,z:0},0,{time:0});
+ const i=layer.crowd.indexOf(people[0].id);
+ layer.crowd.setState(i,STATE.RECOVER,{force:true});
+ layer.sync(people,{x:0,z:0},1/60,{time:1/60});
+ assert.equal(layer.inspect().byState.RECOVER,1);
+ layer.dispose();
+});
 
 test('the layer draws no more than its budget, and holds no more than it draws',()=>{
  // The bug this pins: citizens that fall out of the budget were never released, so the crowd

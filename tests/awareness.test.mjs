@@ -31,6 +31,29 @@ function run(aware,crowd,p,seconds,dt=1/30){
 }
 const stateOf=(crowd,slot=0)=>crowd.state.behaviour[slot];
 
+test('a severe nearby punch interrupts recovery, a glance does not',()=>{
+ const id=Array.from({length:50},(_,i)=>i+10).find(i=>traitsOf(i).nerve<.4);
+ const crowd=crowdOf([{id,x:0,z:.3,heading:Math.PI}]);
+ crowd.setState(0,STATE.RECOVER,{force:true});
+ const aware=createAwareness(),grid=gridFor(crowd);
+ aware.witness(crowd,grid,{x:0,z:0,severity:.12,radius:11});
+ assert.equal(stateOf(crowd),STATE.RECOVER,'a harmless glance interrupted recovery');
+ aware.witness(crowd,grid,{x:0,z:0,severity:1,radius:11});
+ assert.ok(stateOf(crowd)>=STATE.AVOID&&stateOf(crowd)<=STATE.FLEE,
+  'a new violent event was ignored during recovery');
+ crowd.dispose();
+});
+
+test('an urgent vehicle approach interrupts recovery without waiting for player perception',()=>{
+ const crowd=crowdOf([{id:17,x:0,z:4,heading:Math.PI}]);
+ crowd.setState(0,STATE.RECOVER,{force:true});
+ const result=applyVehicleThreat(crowd,gridFor(crowd),
+  {x:0,z:0,heading:0,speed:11},1/60,[]);
+ assert.ok(result.fled>=1,'recovery hid an approaching vehicle');
+ assert.equal(stateOf(crowd),STATE.FLEE);
+ crowd.dispose();
+});
+
 // ------------------------------------------------------------------ perception
 
 test('a distant pedestrian is left alone',()=>{

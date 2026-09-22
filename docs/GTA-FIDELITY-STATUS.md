@@ -19,9 +19,11 @@ in use now is a placeholder for the pipeline, not the final visual asset.
 ## 2. Branch and HEAD
 
 - Working branch: **`claude/gta-fidelity-upgrade`**, pushed to `origin`. Stay on it.
-- HEAD: **`cd5c1bb`** (RUN 8.4) — working tree clean, no stashes.
-- The last **complete** RUN is **RUN 8**. `f6aa8e8`, well beneath it, is the RUN 7 WIP and is
-  still unverified — nothing since has changed that.
+- RUN 10.1 handoff HEAD: **`76dc411`**. RUN 10.2–10.5 follow it on this branch; use `git log -1`
+  for the current HEAD. Older HEAD lines and the old roadmap lower in this document are
+  historical snapshots and are superseded by §9g.
+- RUN 8 and RUN 9 are complete. The old RUN 7 WIP at `f6aa8e8` was found active in production
+  and replaced by the single HQ authority in RUN 10.1.
 - `master` is untouched by this work and must stay that way. It moved ahead independently
   (PRs #17 and #18 from `codex/prebaked-motion`); the local `master` here is `c538aa2`, a
   clean ancestor of the remote `39175bd`. Nothing has been merged into or pushed from it.
@@ -62,20 +64,18 @@ cdb6271  RUN 6.7: near-pool budgets on every tier
 | 7A | Massive HQ reactive crowd POC | **COMPLETE (POC)** |
 | 7B | HQ crowd integrated into Shibuya | **COMPLETE** |
 | 7C | HQ crowd colour / lighting integration | **COMPLETE** |
-| 7 | NPC life / behaviour states | **WIP ONLY — NOT VERIFIED, NOT COMPLETE** |
+| 7 | Historical NPC awareness WIP | superseded in RUN 10.1; never a second production authority |
 | 8 | Melee combat phases + mass crowd reaction | **COMPLETE** |
 | 9 | Vehicle occupancy / enter-exit / carjacking | **COMPLETE** |
-| 10 | Vehicle enter / exit state machine | folded into RUN 9 |
+| 10 | NPC life / awareness consolidation | code/headless validation complete; browser acceptance pending (§9g) |
 | 11 | Carjacking | folded into RUN 9 |
 | 12 | Lighting / PBR polish | not started |
 | 13 | Performance / stability | not started |
 | 14 | Final QA and handoff | not started |
 
-**RUN 7 is not done.** Commit `f6aa8e8` contains a working, unit-tested NPC awareness state
-machine that has **never been run in a browser**. It is not reverted and must not be deleted,
-but nothing about it has been verified against the live scene — in particular the signal,
-crossing and traffic regression check, which is the risk that change actually carries. Treat
-it as a starting point to verify, not as finished work. Do not build RUN 8 on top of it.
+**Current authority:** `src/life/hq-awareness.mjs` (RUN 10.1 onward). The old
+`src/life/awareness.mjs` is deprecated historical code with no production import. The RUN 7
+notes below describe the old state at that time, not a second running system.
 
 Each RUN has its own note under `docs/` (`RUN2-…`, `RUN3-…`, `RUN4-…`, `RUN5-…`,
 `RUN5-5-…`, `RUN5-6-…`, `RUN5-7-…`). They carry the measurements; this file carries the state.
@@ -1225,7 +1225,73 @@ the seated drivers coexist with 1,971 GPU crowd bodies for three extra draw call
 - **A full 108-second signal cycle with a carjack in it** — as before.
 
 
-## 10–15. Not yet implemented
+## 9g. RUN 10 — NPC life / awareness consolidation
+
+**RUN 10.1 (`76dc411`):** audit found that the old RUN 7 `awareness.mjs` really was
+imported by `render.mjs` and scanned every ~1,978-person simulation pool on every frame.
+It is now marked DEPRECATED / NOT PRODUCTION. The production import count is zero;
+`hq-awareness.mjs` is the single rule authority. Its HQ states and three additional clocks
+(`noticed`, `ready`, `attention`) are typed arrays. The near-character pool calls the same
+`playerThreat` function for its at most eight excluded bodies; there is no second rule system.
+The old module's stable ID-based nerve, 60–400 ms delay, thresholds, downward hysteresis and
+cooldown were ported. Per-person JS AI, full-population perception, cell-to-cell panic, and a
+second spatial alarm grid were rejected. The baked Startle clip needed no asset or mixer.
+
+**RUN 10.2:** player perception evaluates only cells within 13 m and now rebuilds the HQ
+spatial grid only on the 12 Hz perception tick rather than on every render frame. Distance,
+player pace, closing time-to-contact and orientation drive LOOK → STARTLE → AVOID; the close
+range bypasses FOV. The pass reports candidate count, accepted changes, query CPU and update
+CPU separately, and the HQ layer reports grid-rebuild CPU. A 60-frame test bounds rebuilds
+at 8–15 per second. A standing player is not a permanent attention magnet.
+
+**RUN 10.3 / 10.4:** RUN 8 witnesses enter through `hq-layer.witness()` into the same
+personality/priority rules. A fresh strong melee event interrupts RECOVER; a weak glance
+does not. A vehicle still uses the existing urgent `applyVehicleThreat` path: proximity
+contact forces HIT/KNOCKDOWN immediately, and a fast approach can override RECOVER. A new
+simulation strike also interrupts HQ recovery and requests movement handoff through the
+scene's formal `sim.leave()` callback. LOOK cannot interrupt physical states.
+
+**State priority:** the numeric enum orders NORMAL, LOOK, STARTLE, AVOID, FLEE, HIT,
+KNOCKDOWN and DOWNED. RECOVER is index 8 for its existing atlas lookup, but an explicit
+`priority()` ranks it below a new AVOID/FLEE or physical threat. Physical hits take precedence
+over visual attention. Each LOOK/STARTLE/AVOID drains to NORMAL; FLEE drains through RECOVER
+to NORMAL. The cooldown starts at the actual timer transition. `byState` has nine entries,
+including RECOVER, so QA cannot silently omit recovery.
+
+**RUN 10.5:** visual awareness never writes crossing, queue, route or signal ownership.
+Knockdowns call the scene's existing `onDisown → sim.leave()` path. Choreographed pedestrians
+can show LOOK and STARTLE while retaining their crossing membership. A driver extracted in
+RUN 9 retains `appearanceId` and `cameFromVehicle`; when their fall ends, they remain an
+ordinary pedestrian, get a nearby unoccupied walkable node and route, and can again be noticed
+or flee. The ejection landing point can be in a traffic lane, so the driver is placed at the
+nearest safe node at the end of their fall; this curb transition needs visual QA. Recycling
+the pedestrian slot clears both driver-only fields. The carjack/occupancy state machine is
+unchanged. There are no per-citizen mass Skeletons or AnimationMixers.
+
+**Headless HIGH QA:** `qa/gta-upgrade/awareness-cycle.mjs` runs the real traffic signals,
+choreography, pedestrian simulation and 1,978-budget HQ layer for 120 simulated seconds at
+30 Hz. Initial run: peak/end population 1,978; 12 HQ draws; 0 mass Skeletons and Mixers;
+maximum 233 local candidates, 113 accepted changes, 189 simultaneous active reactions;
+peak grid build 0.637 ms, candidate query 0.115 ms, awareness evaluation 0.891 ms on this
+host. Melee reactions spread across LOOK/STARTLE/AVOID/FLEE; urgent vehicle contact threw
+18 bodies. At the end FLEE/STARTLE/AVOID, physical ownership and disowned count returned to
+zero. Four signal phases appeared; 904 crossings completed, 0 abandoned and 0 signal
+violations, with 5 recorded stuck recoveries. These are diagnostic timings, not FPS or
+portable budgets. The mass HQ sync still ranks the crowd every frame for rendering; that
+existing O(N) render ranking is distinct from the local awareness query.
+
+**Browser evidence:** unavailable in this execution environment: no local Chrome/Chromium
+binary and no browser-control runtime. No visual A–L or console-error claim is made for this
+RUN here. Scene-wide draw calls and frame CPU need a real-browser capture. Existing RUN 8/9
+browser evidence predates these changes; their code regression tests are rerun here.
+
+**Final gates:** `npm test`: 388 total, 383 pass, 5 existing skips, 0 fail;
+`npm run typecheck`: clean; `npm run build`: successful. The RUN 8 combat/crossing and RUN 9
+occupancy/carjack suites are included. The headless signal cycle is integration evidence, not
+a screenshot or live console audit. **RUN 10 remains pending visual acceptance** until these
+scenarios and console errors are checked in a real browser. RUN 11 was not started.
+
+## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
 enter/exit (10), carjacking (11), lighting polish (12), performance pass (13), final QA (14).
@@ -1466,10 +1532,8 @@ seconds. Check the fresh case before blaming the harness.
 - **The layer ranks all ~1,978 pedestrians by distance every frame** to spend its budget
   nearest the camera — about 2.3 ms, and the clearest remaining CPU target. Re-ranking on a
   slower cadence would cut most of it.
-- **A full 108-second signal cycle has not been observed under load**, only that crossings keep
-  completing with nothing abandoned or stuck across 30 seconds.
-- **RUN 7 behaviour proper is still not done.** The awareness WIP at `f6aa8e8` remains
-  unverified; RUN 7B connected the crowd, not the NPC minds.
+- **A 120-second signal cycle was measured headlessly in RUN 10** (§9g); live browser
+  signal progression with the new awareness pass still needs capture.
 - ~~The HQ crowd looks washed out in the scene.~~ **Fixed in RUN 7C** — it was a colour-space
   bug in the crowd shader, not the scene. See §9d.
 - **The garment boundary softens at LOD2.** Decimation blurs the mask, so a sleeve fades into
@@ -1481,9 +1545,8 @@ seconds. Check the fresh case before blaming the harness.
 - The body is Quaternius' Superhero base. Proportions are stylised and the face is minimal.
   It is a pipeline placeholder and is deliberately not polished — but "not the final asset"
   is not a defence of the clone problem, which is a distribution problem, not a quality one.
-- **RUN 7 is unverified.** `src/life/awareness.mjs` is wired into the live crowd at HEAD and
-  has never been run in a browser. If the next session is not doing RUN 7, it should still be
-  aware that HEAD contains untested code on the crowd path. RUN 6.8 did not touch it.
+- **Old RUN 7 awareness is deprecated.** It was discovered running in production and
+  replaced in RUN 10.1; see §9g for the sole current authority and browser QA limitation.
 - `hit` is still a **C**: the current `Hit` clip barely moves. `Hit_Knockback` in Quaternius
   UAL2 (CC0, verified, identical 65-bone skeleton, 2.93 m of travel) is very likely the answer
   and needs no retargeting. Not implemented — RUN 5.5 was the Run slot only.
@@ -1558,9 +1621,9 @@ six real seconds and inputs during its recovery are dropped by design. Anything 
 wall-clock time will under-count. Shrink the viewport to raise the frame rate, or drive the
 check off state rather than off delays. **Never report a frame rate from it.**
 
-**Start at RUN 12, not RUN 7.** RUN 8 is complete (§9e) and RUN 9 is complete (§9f), which
-absorbed the old RUN 10 (enter/exit) and RUN 11 (carjacking) as well. The RUN 7 awareness WIP
-at `f6aa8e8` is still unverified and is not a prerequisite for anything that followed.
+**Use §9g for the current RUN 10 awareness authority.** Older RUN 7 and old numbering
+statements are historical; the next session should first obtain a real browser capture of
+the RUN 10 awareness scenarios if a browser becomes available.
 
 `window.__SHIBUYA_TRAFFIC__` is exposed under `?qa=1` as well, and
 `__SHIBUYA_QA__.metrics` now carries `occupancy`, `seatedDrivers`, `transition` and

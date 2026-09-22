@@ -156,7 +156,7 @@ const critical=b=>b===STATE.HIT||b===STATE.KNOCKDOWN||b===STATE.DOWNED||b===STAT
 
 export function createAwareness(){
  const scratch=[];
- const stats={candidates:0,evaluated:0,noticed:0,changed:0,updateMs:0,witnessMs:0,
+ const stats={candidates:0,evaluated:0,noticed:0,changed:0,queryMs:0,updateMs:0,witnessMs:0,
   witnessCandidates:0,witnessReacted:0,passes:0};
  // Awareness keeps its OWN clock. The HQ crowd has no wall time -- `update` is handed a
  // `time` for the shader and nothing stores it -- and cooldowns need a monotonic number that
@@ -225,13 +225,15 @@ export function createAwareness(){
    if(clock<AWARE.interval)return stats;
    const elapsed=clock;clock=0;
    const start=(typeof performance!=='undefined'?performance.now():0);
-   stats.passes++;stats.candidates=0;stats.evaluated=0;stats.changed=0;
+   stats.passes++;stats.candidates=0;stats.evaluated=0;stats.changed=0;stats.queryMs=0;
 
    if(!player||player.alive===false){
     stats.updateMs=(typeof performance!=='undefined'?performance.now():0)-start;
     return stats;
    }
+   const queryStart=(typeof performance!=='undefined'?performance.now():0);
    grid.near(player.x,player.z,AWARE.radius,scratch);
+   stats.queryMs=(typeof performance!=='undefined'?performance.now():0)-queryStart;
    stats.candidates=scratch.length;
 
    const s=crowd.state;
@@ -267,7 +269,8 @@ export function createAwareness(){
    const s=crowd.state;
    let reacted=0;
    for(const i of scratch){
-    if(critical(s.behaviour[i])||s.behaviour[i]===STATE.FLEE)continue;
+    if((critical(s.behaviour[i])&&s.behaviour[i]!==STATE.RECOVER)||
+       s.behaviour[i]===STATE.FLEE)continue;
     const dx=s.x[i]-x,dz=s.z[i]-z;
     const distance=Math.hypot(dx,dz);
     if(distance>radius)continue;
@@ -281,7 +284,8 @@ export function createAwareness(){
     const want=wantedFor(Math.min(1,threat));
     if(want===STATE.NORMAL)continue;
     // A witness reacts at once: they already heard it, so there is no noticing to do.
-    if(want>s.behaviour[i]&&crowd.setState(i,want)){
+    if((want>s.behaviour[i]||s.behaviour[i]===STATE.RECOVER&&want>=STATE.AVOID)
+       &&crowd.setState(i,want)){
      // A witness reacts through their cooldown: seeing violence is not the same as noticing
      // the same passer-by twice.
      s.attention[i]=Math.atan2(-dx,-dz);s.ready[i]=0;reacted++;
@@ -293,6 +297,7 @@ export function createAwareness(){
   },
 
   inspect(){return {...stats,
+   queryMs:Number(stats.queryMs.toFixed(3)),
    updateMs:Number(stats.updateMs.toFixed(3)),witnessMs:Number(stats.witnessMs.toFixed(3))};},
   get time(){return world;},
   reset(){clock=0;}

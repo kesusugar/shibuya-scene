@@ -447,6 +447,27 @@ test('the person thrown out of the car is the person who was sitting in it',()=>
  crowd.dispose?.();sim.dispose();
 });
 
+test('the extracted driver stays a pedestrian through recovery with a stable appearance',()=>{
+ const network=buildPedestrianNetwork(data,{ground,generic,street,core});
+ const crowd=new CrowdSimulation(network,{tier:'low'});
+ const p=crowd.pool.find(q=>q.active&&!q.choreographed);
+ assert.ok(p);
+ const appearance=4242;
+ p.appearanceId=appearance;p.cameFromVehicle=5;
+ assert.equal(crowd.strike(p,1,0,3.1),true);
+ for(let i=0;i<165;i++)crowd.update(1/30);
+ assert.equal(p.active,true,'the extracted driver vanished instead of recovering');
+ assert.equal(p.struck,undefined,'the extracted driver cannot resume ordinary perception');
+ assert.equal(p.appearanceId,appearance,'their appearance changed during recovery');
+ assert.ok(network.nodes[p.node],'the recovered driver was assigned no route origin');
+ crowd.despawn(p,'test');
+ const recycled=crowd.spawn('ambient');
+ assert.ok(recycled);
+ assert.equal(recycled.appearanceId,undefined,'another citizen inherited the driver face');
+ assert.equal(recycled.cameFromVehicle,undefined,'another citizen inherited the driver history');
+ crowd.dispose();
+});
+
 test('the extracted driver is findable in the crowd grid, not lost between cells',()=>{
  const sim=new TrafficSimulation(graph,{tier:'high',street});
  const network=buildPedestrianNetwork(data,{ground,generic,street,core});
@@ -467,7 +488,8 @@ test('the extracted driver is findable in the crowd grid, not lost between cells
  assert.equal(appearances,1,`the thrown driver is in ${appearances} grid cells at once`);
  // And the simulation carries them without complaint.
  for(let i=0;i<200;i++)crowd.update(1/30);
- assert.equal(crowd.audit().major,0,'the thrown driver broke the crowd audit');
+ assert.equal(crowd.audit().major,0,
+  `the thrown driver broke the crowd audit: ${JSON.stringify(crowd.audit().findings)}`);
  crowd.dispose?.();sim.dispose();
 });
 
@@ -599,6 +621,7 @@ test('a driver still gets out when the crowd pool is full',()=>{
   'making room changed the population');
  // And the retired pedestrian released whatever they were holding: the audit stays clean.
  for(let i=0;i<200;i++)crowd.update(1/30);
- assert.equal(crowd.audit().major,0,'retiring a pedestrian to make room broke the crowd');
+ assert.equal(crowd.audit().major,0,
+  `retiring a pedestrian to make room broke the crowd: ${JSON.stringify(crowd.audit().findings)}`);
  crowd.dispose?.();sim.dispose();
 });

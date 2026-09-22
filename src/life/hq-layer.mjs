@@ -19,7 +19,7 @@
  */
 import {createHQCrowd,STATE} from './hq-crowd.mjs';
 import {createCrowdGrid,applyVehicleThreat} from './hq-threat.mjs';
-import {createAwareness} from './hq-awareness.mjs';
+import {AWARE,createAwareness} from './hq-awareness.mjs';
 import {appearanceOf} from './appearance.mjs';
 
 /**
@@ -46,9 +46,10 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
  const rendered=new Set();          // pedestrian ids this layer is drawing
  const laneCache=new Map();         // `${archetypeId}|${lod}` -> lane index
  const disowned=new Set();          // ids whose movement the reaction system has taken
- let reviewClock=0;
+ let reviewClock=0,awarenessClock=0;
  const stats={hq:0,legacy:0,budget,moves:0,syncMs:0,threatMs:0,candidates:0,
-  reacting:0,down:0,byLod:{},witnessMs:0,witnessCandidates:0,witnessReacted:0};
+  reacting:0,down:0,byLod:{},witnessMs:0,witnessCandidates:0,witnessReacted:0,
+  awarenessGridMs:0};
 
  for(const a of manifest.archetypes)for(const l of lods)
   laneCache.set(`${a.id}|${l}`,crowd.laneFor(a.id,l));
@@ -67,7 +68,7 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
   for(let i=0;i<crowd.population;i++){
    const id=crowd.state.id[i],thrown=thrownNow(i);
    const b=crowd.state.behaviour[i];
-   if(b===STATE.LOOK||b===STATE.AVOID||b===STATE.FLEE)reacting++;
+   if(b===STATE.LOOK||b===STATE.STARTLE||b===STATE.AVOID||b===STATE.FLEE)reacting++;
    else if(thrown)down++;
    if(thrown&&!disowned.has(id)){
     disowned.add(id);
@@ -153,8 +154,13 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
     // The clip follows the pedestrian's own simulated state, not anything invented here.
     const want=behaviourFor(p);
     const now=crowd.state.behaviour[i];
+    // The simulation owns actual damage. A fresh strike must interrupt even an HQ recovery
+    // pose; otherwise the victim visually ignores a second punch until the guard clip ends.
+    // onDisown below performs the formal simulation.leave() through the scene callback.
+    if(want===STATE.KNOCKDOWN&&!disowned.has(p.id)&&now!==STATE.KNOCKDOWN)
+     crowd.setState(i,STATE.KNOCKDOWN,{force:true});
     const reacting=now===STATE.HIT||now===STATE.KNOCKDOWN||now===STATE.DOWNED
-     ||now===STATE.LOOK||now===STATE.AVOID||now===STATE.FLEE||now===STATE.RECOVER;
+     ||now===STATE.LOOK||now===STATE.STARTLE||now===STATE.AVOID||now===STATE.FLEE||now===STATE.RECOVER;
     if(!reacting&&now!==want)crowd.setState(i,want);
 
     if(review&&moves<HQ_LOD.movesPerFrame){
@@ -249,7 +255,15 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
    */
   awareness(player,dt){
    if(!crowd.population)return awareness.stats;
-   grid.rebuild(crowd);
+   // Build the grid on perception ticks, not on every render frame. The visual sync already
+   // updates all transforms; awareness itself only evaluates candidates in nearby cells.
+   awarenessClock+=Math.max(0,dt);
+   if(awarenessClock>=AWARE.interval){
+    const start=(typeof performance!=='undefined'?performance.now():0);
+    grid.rebuild(crowd);
+    stats.awarenessGridMs=(typeof performance!=='undefined'?performance.now():0)-start;
+    awarenessClock=0;
+   }
    const seen=awareness.update(crowd,grid,player,dt);
    reconcileOwnership();
    return seen;
@@ -270,6 +284,7 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
     candidates:stats.candidates,reacting:stats.reacting,down:stats.down,
     witnessMs:Number(stats.witnessMs.toFixed(3)),witnessCandidates:stats.witnessCandidates,
     witnessReacted:stats.witnessReacted,
+    awarenessGridMs:Number(stats.awarenessGridMs.toFixed(3)),
     disowned:disowned.size};
   },
 
