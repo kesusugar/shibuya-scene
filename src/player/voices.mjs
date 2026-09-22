@@ -191,6 +191,11 @@ export function createCrowdVoices(getContext) {
   say(kind, id, x, z, listener, urgency = .5) {
    const ctx = disposed ? null : getContext?.();
    if (!ctx || ctx.state === 'closed') return null;
+   // The contract above says this never throws, because a voice is decoration and the frame
+   // loop is not. It did: a caller with the arguments in the wrong order made `listener`
+   // undefined and took the rest of the frame down with it. A promise in a comment is worth
+   // what it costs to keep.
+   if (!listener || !Number.isFinite(x) || !Number.isFinite(z)) return null;
    const dx = x - listener.x, dz = z - listener.z, distance = Math.hypot(dx, dz);
    if (distance > VOICE.range) {stats.culled++; return null;}
    const now = ctx.currentTime;

@@ -434,8 +434,11 @@ export default function Home(){
       if(name==='GRAB')alertDriver(traffic,slot);
       else if(name==='PULL')beginExtraction(traffic,slot);
       else if(name==='THROW'){
+       // No scream is raised here on purpose: `crowd.strike` already says one, through the
+       // simulation's own voice path. The call that used to be here passed a pedestrian where
+       // `say` wanted a kind, and threw inside the frame loop every time a driver was pulled
+       // out -- which took the rest of that frame with it, so the player never reached the seat.
        lastCarjack=throwDriverOut(traffic,crowd,slot,carjackSide);
-       if(lastCarjack?.pedestrian)crowdVoices?.say?.(lastCarjack.pedestrian,'scream',1);
       }
      }
     }
