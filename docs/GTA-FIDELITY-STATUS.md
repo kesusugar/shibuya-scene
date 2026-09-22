@@ -1162,10 +1162,11 @@ seconds of wall clock.
 | I player takes the seat | **WORKS** | `playerVehicle=5`, door shut |
 | J drive the stolen car | **WORKS** | 3.9 m |
 | K exit the stolen car | **WORKS** | `playerVehicle` → −1, first car left `NONE` |
+| L a second carjack, another car | **WORKS** | driver 8 out of the sedan as pedestrian 1528, `playerVehicle=7`, first car still `NONE` |
 | console errors | **0** | |
 
 **Two of the three failures this QA reported were the QA's own fault**, and both were worth the
-time it took to prove it rather than assume it:
+time it took to prove it rather than assume it. With each corrected, L passes:
 
 - a second carjack "failed" because after getting out the player stands 1.4 m from the car they
   just left, and `nearestEntry` quite correctly offers the **nearer** car — their own.
