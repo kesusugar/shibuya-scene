@@ -1,5 +1,5 @@
 import {ARCHETYPES} from './config.mjs';
-import {LIFE} from './awareness.mjs';
+import {STATE} from './hq-crowd.mjs';
 import {ARCHETYPES as LOOKS,appearanceOf,paletteOf,deduplicate} from './appearance.mjs';
 import {Group} from 'three';
 import {createPlayerFigure,bakedAsset} from '../player/figure.mjs';
@@ -46,11 +46,13 @@ export const NEAR_IK_LIMITS={high:8,medium:4,low:0};
  * what they are running from instead of overriding the run with a flinch.
  */
 function lifeReaction(p){
- switch(p.lifeState){
-  case LIFE.STARTLE:return 'startle';
-  case LIFE.AVOID:return 'guard';
-  case LIFE.FLEE:case LIFE.LOOK:return 'look';
-  case LIFE.RECOVER:return 'recover';
+ // RUN 10: the same STATE enum the mass crowd uses. This used to switch on the RUN 7 WIP's
+ // own string states, which is how the project ended up with two vocabularies for one idea.
+ switch(p.awareState){
+  case STATE.STARTLE:return 'startle';
+  case STATE.AVOID:return 'guard';
+  case STATE.FLEE:case STATE.LOOK:return 'look';
+  case STATE.RECOVER:return 'recover';
   default:return null;
  }
 }

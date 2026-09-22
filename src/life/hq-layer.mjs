@@ -19,6 +19,7 @@
  */
 import {createHQCrowd,STATE} from './hq-crowd.mjs';
 import {createCrowdGrid,applyVehicleThreat} from './hq-threat.mjs';
+import {createAwareness} from './hq-awareness.mjs';
 import {appearanceOf} from './appearance.mjs';
 
 /**
@@ -40,6 +41,7 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
  const perLane=Math.ceil(budget*.55)+24;
  const crowd=createHQCrowd(manifest,bin,{capacity:perLane,lods,interpolate});
  const grid=createCrowdGrid();
+ const awareness=createAwareness();
  const scratch=[];
  const rendered=new Set();          // pedestrian ids this layer is drawing
  const laneCache=new Map();         // `${archetypeId}|${lod}` -> lane index
@@ -223,33 +225,38 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
    *
    * Nothing here decides damage. The simulation already did that.
    */
-  witness({x,z,severity=.7,radius=11}={}){
-   if(!crowd.population)return 0;
-   const start=(typeof performance!=='undefined'?performance.now():0);
-   grid.rebuild(crowd);
-   grid.near(x,z,radius,scratch);
-   let reacted=0;
-   for(const i of scratch){
-    const behaviour=crowd.state.behaviour[i];
-    // Anyone already off their feet, or already running, is not made to notice again.
-    if(behaviour===STATE.HIT||behaviour===STATE.KNOCKDOWN||behaviour===STATE.DOWNED
-     ||behaviour===STATE.FLEE)continue;
-    const d=Math.hypot(crowd.state.x[i]-x,crowd.state.z[i]-z);
-    if(d>radius)continue;
-    // Nerve, from the citizen's own id. High nerve needs a closer or nastier event.
-    let h=Math.imul((crowd.state.id[i]|0)^0x9e3779b9,0x85ebca6b);
-    h^=h>>>13;h=Math.imul(h,0xc2b2ae35);h^=h>>>16;
-    const nerve=.55+(((h>>>7)&255)/255)*.9;
-    const felt=severity*(1-d/radius)/nerve;
-    const want=felt>=.52?STATE.FLEE:felt>=.30?STATE.AVOID:felt>=.12?STATE.LOOK:null;
-    if(!want)continue;
-    if(crowd.setState(i,want))reacted++;
-   }
-   stats.witnessMs=(typeof performance!=='undefined'?performance.now():0)-start;
-   stats.witnessCandidates=scratch.length;
-   stats.witnessReacted=reacted;
-   return reacted;
+  witness(event={}){
+   // RUN 10: the decision moved to src/life/hq-awareness.mjs, which is now the one place
+   // that says what a crowd does about something. This used to carry its own copy of the
+   // nerve rule and its own distance bands, which meant a witness to a punch and a citizen
+   // noticing the player were answered by two different pieces of code with two different
+   // ideas about personality. The bounding is unchanged and still belongs to the caller.
+   const n=awareness.witness(crowd,grid,event);
+   reconcileOwnership();
+   stats.witnessMs=awareness.stats.witnessMs;
+   stats.witnessCandidates=awareness.stats.witnessCandidates;
+   stats.witnessReacted=n;
+   return n;
   },
+
+  /**
+   * Let the people around the player notice them.
+   *
+   * Separate from `sync` on purpose: sync is about which bodies are DRAWN, this is about what
+   * they are doing, and the second must not be hostage to the budget of the first. Bounded by
+   * the same grid the vehicle threat uses, so the cost follows the density around the player
+   * rather than the size of the crowd.
+   */
+  awareness(player,dt){
+   if(!crowd.population)return awareness.stats;
+   grid.rebuild(crowd);
+   const seen=awareness.update(crowd,grid,player,dt);
+   reconcileOwnership();
+   return seen;
+  },
+
+  /** What the awareness layer did last pass, for QA. */
+  get perception(){return awareness.inspect();},
 
   /** Ids whose movement the reaction system currently owns. */
   get disowned(){return disowned;},

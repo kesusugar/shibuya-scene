@@ -1,5 +1,5 @@
 import {createNearCharacters} from './near-characters.mjs';
-import {createAwareness} from './awareness.mjs';
+import {playerThreat,wantedFor} from './hq-awareness.mjs';
 import {createHQLayer} from './hq-layer.mjs';
 import {createContactShadows} from './shadows.mjs';
 import {tagLimb,addGait,installGait} from './gait.mjs';
@@ -77,7 +77,12 @@ export function buildCrowd(data,options={}){
  const material=new MeshStandardMaterial({color:0xffffff,roughness:.9}),headMaterial=new MeshStandardMaterial({color:0xffffff,roughness:.7}),hairMaterial=new MeshStandardMaterial({color:0xffffff,roughness:.8});
  installGait(material);
  let playerFocus=null;const nearCharacters=options.nearRigs===false?null:createNearCharacters(options.tier??'high',{ctx:network.ctx});if(nearCharacters)root.add(nearCharacters.root);
- const awareness=options.awareness===false?null:createAwareness();
+ // RUN 10: awareness is no longer a module of its own here. The one authority is the mass
+ // layer's typed-array pass (src/life/hq-awareness.mjs), which is bounded by the crowd grid.
+ // What used to sit on this line was the RUN 7 WIP, walking all ~1,978 pedestrians EVERY
+ // FRAME to decide who had noticed the player -- the exact scan the mass architecture was
+ // built to avoid, running in production the whole time.
+ const perceive=options.awareness!==false;
  // RUN 7B. The high-fidelity crowd is a RENDERER, switchable, with the legacy instanced
  // bodies kept as the fallback. Nothing about the simulation changes when it is on: the HQ
  // layer reads sim.pool and returns the ids it drew, and those ids are masked out of the
@@ -108,8 +113,20 @@ export function buildCrowd(data,options={}){
  function hasAccessory(p,key){return rank(p.id,{phone:211,bag:433,cane:677,suitcase:929,umbrella:1217}[key])<ACCESSORY_TARGETS[key];}
  function sync(dt=0){
   // Perception first: the figures below render whatever state it leaves behind.
-  if(playerFocus)awareness?.update(sim,playerFocus,playerFocus,dt);
+  if(perceive&&playerFocus)hq?.awareness(playerFocus,dt);
   const near=nearCharacters?.update(sim.pool,playerFocus,dt,sim.time)??new Set();
+  // The near pool is drawn with real skeletons and is therefore EXCLUDED from the mass crowd,
+  // so it has no typed-array state to read. It gets the same rule applied directly, over at
+  // most eight people -- one implementation of what counts as threatening, two storages. The
+  // thing RUN 10 exists to prevent is two RULES, not two places to put a number.
+  if(perceive&&playerFocus)for(const id of near){
+   const p=sim.pool[id]??null;
+   if(!p?.active)continue;
+   // No clocks here: the near pool is at most eight bodies a couple of metres from the
+   // camera, and a reaction delay on them is invisible next to the cost of getting it wrong
+   // when they swap in and out of the pool every second or so.
+   p.awareState=wantedFor(playerThreat(playerFocus,p.x,p.z,p.heading,p.id));
+  }
   // The HQ layer draws whoever it can afford, EXCLUDING anyone the near pool already has --
   // a citizen drawn twice is the failure this mask exists to prevent.
   const drawn=hq?hq.sync(sim.pool,hqCamera??playerFocus,dt,{time:sim.time,exclude:near}):null;
@@ -141,9 +158,9 @@ export function buildCrowd(data,options={}){
   stats.contactShadows={drawn:shadows.drawn,batches:shadows.drawn?1:0,geometries:1,materials:1};
   stats.nearCharacters=nearCharacters?.inspect()??null;
   stats.bodyCounts=Object.fromEntries(BODY_VARIANTS.map(v=>[v.key,counts[v.key]]));stats.hairCounts=Object.fromEntries(HAIR_VARIANTS.map(v=>[v.key,counts[v.key]]));stats.accessories=Object.fromEntries(Object.keys(ACCESSORY_TARGETS).map(k=>[k,counts[k]]));stats.instanceCounts={...counts};
-  reportClock+=dt;if(reportClock>=1||!dt){reportClock=0;Object.assign(stats,network.stats,sim.snapshot(options.debug));stats.awareness=awareness?.inspect()??null;stats.hqCrowd=hq?hq.inspect():null;}
+  reportClock+=dt;if(reportClock>=1||!dt){reportClock=0;Object.assign(stats,network.stats,sim.snapshot(options.debug));stats.awareness=hq?.perception??null;stats.hqCrowd=hq?hq.inspect():null;}
  }
- sync();return {root,network,sim,stats,meshes,setPlayerFocus(p){if(!p&&playerFocus)awareness?.clear(sim);playerFocus=p;},
+ sync();return {root,network,sim,stats,meshes,setPlayerFocus(p){playerFocus=p;},
   /**
    * Turn the RUN 7B high-fidelity crowd on, with its prebuilt pack. Off by default and
    * removable at any time, so legacy remains a one-call rollback for the whole run.

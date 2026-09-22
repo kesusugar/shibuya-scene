@@ -23,17 +23,37 @@ import {InstancedMesh,InstancedBufferAttribute,BufferGeometry,BufferAttribute,
         Object3D,Group,DynamicDrawUsage} from 'three';
 
 /** The states a citizen can be in. Index into CLIP_FOR, and what the CPU writes. */
+/**
+ * THE NUMBERS ARE A PRIORITY ORDER, not just labels. `setState` refuses to replace a state
+ * with a lower-numbered one while its hold timer is running, so the enum IS the rule that a
+ * glance can never overwrite a knockdown. Anything inserted has to go in the right place.
+ *
+ * RUN 10 added STARTLE between LOOK and AVOID: a brief surprise is more than noticing and
+ * less than stepping out of the way. Nothing persists these numbers -- the bake addresses
+ * clips by name -- so renumbering was safe.
+ */
 export const STATE=Object.freeze({
- NORMAL:0,LOOK:1,AVOID:2,FLEE:3,HIT:4,KNOCKDOWN:5,DOWNED:6,RECOVER:7
+ NORMAL:0,LOOK:1,STARTLE:2,AVOID:3,FLEE:4,HIT:5,KNOCKDOWN:6,DOWNED:7,RECOVER:8
 });
 /** Which baked clip each state plays. Several states share one clip on purpose. */
 export const CLIP_FOR=Object.freeze({
- [STATE.NORMAL]:'Walk',[STATE.LOOK]:'Walk',[STATE.AVOID]:'Run',[STATE.FLEE]:'Run',
+ [STATE.NORMAL]:'Walk',[STATE.LOOK]:'Walk',[STATE.STARTLE]:'Startle',
+ [STATE.AVOID]:'Run',[STATE.FLEE]:'Run',
  [STATE.HIT]:'Startle',[STATE.KNOCKDOWN]:'Fall',[STATE.DOWNED]:'Fall',[STATE.RECOVER]:'Guard'
 });
+/**
+ * How long after a reaction has fully drained before the same citizen may be alarmed again.
+ *
+ * RUN 10. Without it, somebody standing next to a lingering player cycles LOOK, NORMAL, LOOK
+ * forever: the hold timer drains the state, the threat is still there, and they notice it all
+ * over again on the next pass. The cooldown is set HERE, where the drain happens, because the
+ * awareness pass cannot see a transition it did not make.
+ */
+export const REACTION_COOLDOWN=1.15;
+
 /** How long a state lasts before it can give way, in seconds. 0 means "until told". */
 export const STATE_HOLD=Object.freeze({
- [STATE.NORMAL]:0,[STATE.LOOK]:.5,[STATE.AVOID]:.9,[STATE.FLEE]:1.5,
+ [STATE.NORMAL]:0,[STATE.LOOK]:.5,[STATE.STARTLE]:.55,[STATE.AVOID]:.9,[STATE.FLEE]:1.5,
  [STATE.HIT]:.45,[STATE.KNOCKDOWN]:1.4,[STATE.DOWNED]:2.5,[STATE.RECOVER]:1.2
 });
 
@@ -257,7 +277,12 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
   timer:new Float32Array(max),
   impulseX:new Float32Array(max),impulseZ:new Float32Array(max),impulseY:new Float32Array(max),
   fallen:new Float32Array(max),     // 0..1 how far into the ground pose
-  health:new Uint8Array(max)
+  health:new Uint8Array(max),
+  // RUN 10 awareness. Three numbers per citizen, in the same arrays as everything else,
+  // because a JS object per pedestrian is the thing this architecture exists to avoid.
+  noticed:new Float32Array(max),    // seconds a threat has been present but not yet acted on
+  ready:new Float32Array(max),      // crowd time before which this citizen will not re-alarm
+  attention:new Float32Array(max)   // heading toward whatever they last noticed
  };
  // The palette also lives here, not only in the instanced attribute, because moving a citizen
  // between LOD lanes has to rewrite it into the new lane and an attribute is write-mostly.
@@ -308,6 +333,7 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
    state.phase[i]=((h>>>8)&1023)/1023;
    state.rate[i]=.88+((h>>>18)&255)/255*.24;
    state.behaviour[i]=STATE.NORMAL;state.timer[i]=0;
+   state.noticed[i]=0;state.ready[i]=0;state.attention[i]=0;
    state.health[i]=100;state.fallen[i]=0;
    state.impulseX[i]=state.impulseZ[i]=state.impulseY[i]=0;
    palette[i*4]=PACK(look.skin);palette[i*4+1]=PACK(look.top);
@@ -462,16 +488,28 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
       // 132 bodies permanently DOWNED and permanently disowned from their own routes --
       // stale state that only grows, which is precisely what a long-running crossing must not
       // accumulate. A body now gets up.
+      //
+      // RUN 10 added one link: FLEE drains through RECOVER rather than straight to NORMAL.
+      // Somebody who has just run from something does not resume strolling on the same
+      // frame they stop, and RECOVER is the state that already means "wary, getting over
+      // it". Every awareness state still ends at NORMAL; none of them is terminal.
       const next=behaviour===STATE.HIT?STATE.KNOCKDOWN
        :behaviour===STATE.KNOCKDOWN?STATE.DOWNED
        :behaviour===STATE.DOWNED?STATE.RECOVER
+       :behaviour===STATE.FLEE?STATE.RECOVER
        :STATE.NORMAL;
       state.behaviour[i]=next;
       state.timer[i]=STATE_HOLD[next]??0;
-      if(next===STATE.NORMAL)state.fallen[i]=0;
+      if(next===STATE.NORMAL){
+       state.fallen[i]=0;state.noticed[i]=0;
+       // Coming down off a reaction starts the cooldown. Anything above NORMAL was a
+       // reaction to something, so the test is simply "was I doing something".
+       if(behaviour!==STATE.NORMAL)state.ready[i]=REACTION_COOLDOWN;
+      }
       writeClip(i);
      }
     }
+    if(state.ready[i]>0)state.ready[i]=Math.max(0,state.ready[i]-dt);
     // A body that has been hit carries its own impulse and slides to a halt. No rigid body,
     // no ragdoll: an impulse, a drag, and a ground clamp, which is all a crowd needs to show
     // that a car went through it.
