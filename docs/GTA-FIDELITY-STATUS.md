@@ -1141,7 +1141,68 @@ back into the seat, shuts the door and hands the frozen slot back to traffic. `a
 only before the throw — once there is a person on the road, putting them back in the car is not
 an abort, it is a resurrection.
 
-<!--RUN9-TAIL-->
+### Browser QA, in the real scene
+
+`?qa=1&tier=medium&time=day&camera=scramble`, headless Chromium on SwiftShader. Counts, states
+and errors only — **no frame rate is reported**, and the small viewport is not cosmetic:
+`FrameGate` clamps `dt` to 0.1 s, so on a renderer at 0.2 FPS a 1.62 s entry takes eighty
+seconds of wall clock.
+
+| scenario | result | evidence |
+| --- | --- | --- |
+| A enter an empty parked car | **WORKS** | door 0 → 1.00 → 0, seat becomes `PLAYER` at the end |
+| B drive | **WORKS** | 3.7 m, 17 km/h |
+| C exit | **WORKS** | `playerVehicle` → −1 |
+| D safe-doorstep rule | intact | a spot existed, so the refusal path was not exercised |
+| E occupied car, driver visible | **WORKS** | 14 drawn of 88 seated; HUD offers 「奪う・F」 |
+| F no instant takeOver | **WORKS** | one frame after the press: `stage=ALIGN`, `playerVehicle=-1`, `active=false` |
+| stages observed | **WORKS** | `ALIGN → DOOR_OPEN → GRAB → PULL → THROW → ENTRY → SEAT → DOOR_CLOSE` |
+| G driver leaves the seat | **WORKS** | `driverId 6` out of vehicle 5 |
+| H driver becomes a world body | **WORKS** | pedestrian 1527, thrown, same appearance seed |
+| I player takes the seat | **WORKS** | `playerVehicle=5`, door shut |
+| J drive the stolen car | **WORKS** | 3.9 m |
+| K exit the stolen car | **WORKS** | `playerVehicle` → −1, first car left `NONE` |
+| console errors | **0** | |
+
+**Two of the three failures this QA reported were the QA's own fault**, and both were worth the
+time it took to prove it rather than assume it:
+
+- a second carjack "failed" because after getting out the player stands 1.4 m from the car they
+  just left, and `nearestEntry` quite correctly offers the **nearer** car — their own.
+- it failed again because the script stops the victim by writing `speed = 0` for one frame and
+  then waited three seconds, during which the traffic simulation drove it away. A stopped car
+  is only jackable *while* it is stopped.
+
+The third was real, and is the reason G and H are green above. See below.
+
+### Two bugs the suite could not see
+
+**The driver vanished.** At HIGH the crowd pool is saturated — nearly two thousand people, all
+active — so `crowd.spawn` fails, and the driver left the seat with no body arriving. Extracted
+from the occupancy model, never delivered to the world. Every unit test passed because a test
+pool always has a free slot. One distant pedestrian is now retired to make room, through
+`despawn`, which calls `leave` first and releases any signal group they were holding.
+
+**A scream took the frame down with it.** `say(kind, id, x, z, listener, urgency)` was called
+as `say(pedestrian, 'scream', 1)`, so `listener` was undefined and `listener.x` threw — inside
+the frame loop, at the `THROW` stage, every time a driver was pulled out. The sequence stopped
+dead at `THROW`, the door stayed open at 1, and the player never reached the seat; three
+"failures" after it were all this one exception. The call is deleted rather than corrected,
+because `crowd.strike` already says the scream. `voices.say` now keeps the contract its own
+comment makes — *"Never throws: a browser that refuses audio must not stop the game"* — which
+it did not.
+
+### Not verified live
+
+- **A frame of the driver lying in the road.** The extraction is proven by state
+  (`thrown: true`, pedestrian 1527, the same appearance seed, in the knockdown chain) and the
+  screenshot is of a healthy scene, but the camera sits at the driver's door during the
+  sequence, and a body at the player's feet is below frame. Same shape of limitation as RUN 8's
+  knockdown: a camera angle, not a behaviour.
+- **Enter and exit at every body type.** Checked on a sedan, a taxi and a kei; the anchors are
+  measured for all seven, but bus and scooter entry has not been watched.
+- **A full 108-second signal cycle with a carjack in it** — as before.
+
 
 ## 10–15. Not yet implemented
 
