@@ -1280,10 +1280,36 @@ violations, with 5 recorded stuck recoveries. These are diagnostic timings, not 
 portable budgets. The mass HQ sync still ranks the crowd every frame for rendering; that
 existing O(N) render ranking is distinct from the local awareness query.
 
-**Browser evidence:** unavailable in this execution environment: no local Chrome/Chromium
-binary and no browser-control runtime. No visual A–L or console-error claim is made for this
-RUN here. Scene-wide draw calls and frame CPU need a real-browser capture. Existing RUN 8/9
-browser evidence predates these changes; their code regression tests are rerun here.
+**Local browser acceptance — partial, NOT COMPLETE (2026-09-23):** Chrome loaded the real
+HIGH/day scene. Local screenshots are under `qa/gta-upgrade/run10-browser/` (ignored local
+evidence, not included in Git). Idle and normal walking showed no obvious circular gap;
+direct running showed local STARTLE/AVOID, punches produced mixed local reactions, and
+LOOK/STARTLE/AVOID/FLEE subsequently drained to zero. Punch and PunchCross landed. A real
+carjack transferred occupancy to PLAYER for vehicle 0 and extracted driver 1 as pedestrian
+1527 with appearance seed 506952114; the stolen taxi was driven. These observations do not
+close all A–L scenarios.
+
+One live walking snapshot reported total population 1,978, HQ population 1,945 (near bodies
+are excluded), 12 HQ draws, 771 scene draws, zero mass Skeletons/Mixers and 0.3 ms grid
+rebuild CPU. Counts and timings are snapshots, not maxima or portable performance results.
+Console error checks returned zero; final fresh-page console/shader acceptance remains open.
+Do not substitute the headless candidate/query/update measurements above for browser data.
+
+**Provisional visual fix:** the working-tree change in `src/player/vehicle.mjs` increases
+static-solid body padding from 0.05 m to 0.55 m. The same taxi route stopped visibly clear
+of the station platform afterward (`vehicle-wall-before.png`, `vehicle-wall-after.png`).
+This changes clearance around all static solids, so tight-clearance driving still needs
+acceptance before this fix is finalized. Post-change `npm test` completed with 383 pass,
+5 existing skips and zero failures, including its successful build; typecheck also passed.
+
+**Still required:** close-pass judgement; frontal versus parallel/rear visual comparison;
+individual flicker and state readability; combat/vehicle knockdown visual confirmation;
+complete crossing/queue/signal measurements; extracted-driver curb transition judgement;
+and a final browser console/shader audit. A prior trace measured a 1.83 m driver relocation
+at fall completion, but its visual acceptability is unresolved. Browser automation later
+stopped on URL verification; the latest resume exposes no browser-control tool. Keep RUN 10
+pending until these checks can actually run. The reported mix of legacy/new character
+models remains a later-plan item; no character replacement or RUN 11 work was started.
 
 **Final gates:** `npm test`: 388 total, 383 pass, 5 existing skips, 0 fail;
 `npm run typecheck`: clean; `npm run build`: successful. The RUN 8 combat/crossing and RUN 9

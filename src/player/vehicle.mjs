@@ -84,7 +84,9 @@ export function createPlayerVehicle(sim, ctx) {
   */
  const clearOfSolids = (x, z, heading) => {
   probe.x = x; probe.z = z; probe.heading = heading;
-  const ring = corners(probe, def.width, def.length, .05);
+  // Station walls and raised platforms render slightly ahead of their map solids. Keep the
+  // driven body clear of the visible edge instead of allowing its bonnet into the facade.
+  const ring = corners(probe, def.width, def.length, .55);
   for (const {value: s} of sim.graph.ctx.solid.query(bounds(ring))) {
    const outer = s.outer ?? s.polygon?.outer; if (!outer) continue;
    const reject=()=>{contact=edgeContact(outer,state);return false;};
