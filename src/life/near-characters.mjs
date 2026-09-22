@@ -61,9 +61,15 @@ function lifeReaction(p){
 export function createNearCharacters(tier='high',{ctx=null}={}){
  const root=new Group(),slots=[],selected=new Set(),palette=[];root.name='near-character-pool';
  let asset=null,human=null,disposed=false,trianglesPerRig=0,humanTrianglesPerRig=0;
+ // RUN 10 (browser QA). Whether the high-fidelity crowd is drawing everyone this pool does
+ // not take. When it is, the pool keeps ONLY its humanoid slots -- see `setHQCovered`.
+ let hqCovered=false;
  const stats={humanoids:0,baked:0,ik:0,matched:0};
  let rebuilds=0;
- function clear(){selected.clear();for(const s of slots){s.id=null;s.figure.hide();}}
+ // Clearing also zeroes the per-frame counts: an early return that empties the pool must not
+ // leave `inspect()` reporting the bodies it just stopped drawing.
+ function clear(){selected.clear();for(const s of slots){s.id=null;s.figure.hide();}
+  stats.humanoids=0;stats.baked=0;stats.ik=0;stats.matched=0;}
  const limitFor=table=>table[tier]??0;
  // Count what one BODY draws, not what the asset holds. Since RUN 6.8 the humanoid template
  // carries every rig and every hairstyle, so measuring it would report a citizen as four
@@ -84,10 +90,39 @@ export function createNearCharacters(tier='high',{ctx=null}={}){
    for(const s of slots.splice(0))s.figure.dispose();
    selected.clear();rebuilds=0;
   },
+  /**
+   * Tell the pool that the HQ crowd is drawing everyone it does not take.
+   *
+   * RUN 10, found in the browser. This pool predates the HQ crowd: in RUN 6 its baked tier
+   * was an UPGRADE over the procedural legacy bodies, for the ranks just beyond the eight
+   * humanoids. Since RUN 7 the HQ crowd draws those same people with the Quaternius body, so
+   * the baked tier -- "the offline-baked original: eleven bones", where only the shirt varies
+   * -- became a DOWNGRADE, placed in exactly the 5-20 m ring the player looks at most. That is
+   * the "old-style character mixed into the crowd" the user reported: measured live, the
+   * legacy renderer drew zero people, and every old-looking body was a baked near slot.
+   *
+   * With HQ covering the rest, the pool is humanoid-only, and holds nothing at all until the
+   * humanoid asset has arrived -- until then HQ is the better body for everyone. Without HQ
+   * (a tier or session that never loads it) nothing changes, because there baked is still
+   * better than the procedural fallback.
+   */
+  setHQCovered(value){
+   value=!!value;
+   if(disposed||hqCovered===value)return;
+   hqCovered=value;
+   // Drop the baked slots now rather than letting them age out; they would otherwise keep
+   // drawing their holders for as long as those people stayed near.
+   if(value){
+    for(let k=slots.length-1;k>=0;k--)if(!slots[k].human){
+     const s=slots[k];if(s.id!==null)selected.delete(s.id);s.figure.dispose();slots.splice(k,1);}
+   }
+  },
+  get hqCovered(){return hqCovered;},
   update(people,focus,dt,clock=0){
    if(disposed)return selected;
    if(!focus){clear();return selected;}
-   const limit=NEAR_LIMITS[tier]??4;
+   const limit=hqCovered?(human?limitFor(HUMANOID_LIMITS):0):(NEAR_LIMITS[tier]??4);
+   if(!limit){clear();return selected;}
    const candidates=people.filter(p=>p.active&&!p.controlled&&p.archetype!=='kid'&&p.struck===undefined&&Math.hypot(p.x-focus.x,p.z-focus.z)<(selected.has(p.id)?30:25))
     .map(p=>({p,score:Math.hypot(p.x-focus.x,p.z-focus.z)-(selected.has(p.id)?3:0)-(p.combatTarget?40:0)-(p.reactionUntil>clock?20:0)})).sort((a,b)=>a.score-b.score||a.p.id-b.p.id).slice(0,limit);
    // The priority order is untouched by any of this: a combat target or a reacting pedestrian
@@ -119,7 +154,7 @@ export function createNearCharacters(tier='high',{ctx=null}={}){
    const humanSlotCount=slots.filter(s=>s.human).length;
    if(slots.length<limit&&slots.length<candidates.length){
     const wantHuman=!!human&&humanSlotCount<limitFor(HUMANOID_LIMITS);
-    if(!asset){asset=bakedAsset();palette.push(...new Set(Object.values(ARCHETYPES).flatMap(a=>a.colors)));
+    if(!asset&&!(hqCovered&&wantHuman)){asset=bakedAsset();palette.push(...new Set(Object.values(ARCHETYPES).flatMap(a=>a.colors)));
      trianglesPerRig=measure(asset.template);}
     const source=wantHuman?human:asset;
     // Which archetype to build. A slot's rig and hairstyle are geometry, fixed when the body

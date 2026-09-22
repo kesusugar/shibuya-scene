@@ -111,6 +111,9 @@ export function buildCrowd(data,options={}){
    lz+=y*Math.sin(a);y*=Math.cos(a);tilt+=a;}
   const heading=p.heading+(playerFocus&&p.speed<.05&&p.struck===undefined?Math.sin(p.id*2.39+sim.time*.22)*.15:0);const c=Math.cos(heading),s=Math.sin(heading);obj.position.set(p.renderX+c*lx+s*lz,p.height+y,p.renderZ-s*lx+c*lz);obj.rotation.set(tilt,heading,0);obj.scale.set(w,h,d);obj.updateMatrix();const i=counts[key]++,near=playerFocus&&p.struck===undefined&&Math.hypot(p.x-playerFocus.x,p.z-playerFocus.z)<24;geometry[key].attributes.gait.setX(i,near?Math.sin(p.travelled*4.1+p.phase)*Math.min(.6,p.speed*.3)+(p.speed<.05?Math.sin(sim.time*1.4+p.phase)*.025:0):0);geometry[key].attributes.action.setX(i,near?Math.max(p.combatAction??0,p.reactionUntil>sim.time&&['guard','startle'].includes(p.trafficReaction)?.5:0):0);meshes[key].setMatrixAt(i,obj.matrix);color.setHex(hex);meshes[key].setColorAt(i,color);}
  function hasAccessory(p,key){return rank(p.id,{phone:211,bag:433,cane:677,suitcase:929,umbrella:1217}[key])<ACCESSORY_TARGETS[key];}
+ // The last frame's ownership split, kept by reference only (no copy, no allocation) so QA
+ // can ask which renderer drew a given pedestrian. See `ownership()` below.
+ let lastNear=null,lastDrawn=null;
  function sync(dt=0){
   // Perception first: the figures below render whatever state it leaves behind.
   if(perceive&&playerFocus)hq?.awareness(playerFocus,dt);
@@ -130,7 +133,7 @@ export function buildCrowd(data,options={}){
   // The HQ layer draws whoever it can afford, EXCLUDING anyone the near pool already has --
   // a citizen drawn twice is the failure this mask exists to prevent.
   const drawn=hq?hq.sync(sim.pool,hqCamera??playerFocus,dt,{time:sim.time,exclude:near}):null;
-  const detailed=drawn?new Set([...near,...drawn]):near;for(const k of Object.keys(meshes))counts[k]=0;shadows.begin();for(const p of sim.pool){if(!p.active||p.controlled)continue;const def=ARCHETYPES[p.archetype],h=def.height*(.96+(p.id%5)*.02),w=def.width*(1.06+(p.id%7)*.015),walk=p.speed>.05,phase=p.animationTime*(walk?7:1)+p.phase,fidelity=p.lod==='near'?1:p.lod==='mid'?.65:.15,sway=walk?Math.sin(phase)*.035*fidelity:Math.sin(phase)*.012,bob=walk?Math.abs(Math.cos(phase))*.024*fidelity:Math.sin(phase)*.008;
+  const detailed=drawn?new Set([...near,...drawn]):near;lastNear=near;lastDrawn=drawn;for(const k of Object.keys(meshes))counts[k]=0;shadows.begin();for(const p of sim.pool){if(!p.active||p.controlled)continue;const def=ARCHETYPES[p.archetype],h=def.height*(.96+(p.id%5)*.02),w=def.width*(1.06+(p.id%7)*.015),walk=p.speed>.05,phase=p.animationTime*(walk?7:1)+p.phase,fidelity=p.lod==='near'?1:p.lod==='mid'?.65:.15,sway=walk?Math.sin(phase)*.035*fidelity:Math.sin(phase)*.012,bob=walk?Math.abs(Math.cos(phase))*.024*fidelity:Math.sin(phase)*.008;
    const blend=dt?Math.min(1,dt*(p.lod==='far'?10:25)):1;p.renderX+=(p.x-p.renderX)*blend;p.renderZ+=(p.z-p.renderZ)*blend;
    // A thrown body's shadow belongs to the road it is over, not to the body: `p.height`
    // follows the arc, so using it would send the shadow into the air with the person.
@@ -162,6 +165,17 @@ export function buildCrowd(data,options={}){
  }
  sync();return {root,network,sim,stats,meshes,setPlayerFocus(p){playerFocus=p;},
   /**
+   * Which renderer drew each active pedestrian on the last frame: 'hq', 'near' or 'legacy'.
+   * QA only -- it walks the pool, so nothing calls it per frame. It exists because "that one
+   * looks like an old model" is a claim about ownership, and ownership can be measured.
+   */
+  ownership(){const out=[];for(const p of sim.pool){if(!p.active||p.controlled)continue;
+   const near=!!lastNear?.has(p.id),hqd=!!lastDrawn?.has(p.id);
+   out.push({id:p.id,x:p.x,z:p.z,owner:near&&hqd?'both':near?'near':hqd?'hq':'legacy',
+    heldByHQ:hq?hq.crowd.indexOf(p.id)>=0:false,
+    struck:p.struck!==undefined,choreo:!!p.choreographed,driver:p.cameFromVehicle!=null});}
+   return out;},
+  /**
    * Turn the RUN 7B high-fidelity crowd on, with its prebuilt pack. Off by default and
    * removable at any time, so legacy remains a one-call rollback for the whole run.
    */
@@ -170,9 +184,12 @@ export function buildCrowd(data,options={}){
    hq=createHQLayer(manifest,bin,options);
    root.add(hq.root);
    hqStats.enabled=true;hqStats.budget=options.budget??0;
+   // The HQ crowd draws the nearest `budget` people the near pool does not take, so once it
+   // has any budget the near pool's baked tier is only ever a worse body in the same place.
+   nearCharacters?.setHQCovered(hqStats.budget>0);
    return hq;
   },
-  disableHQCrowd(){if(!hq)return;hq.dispose();hq=null;hqStats.enabled=false;hqStats.hq=0;},
+  disableHQCrowd(){if(!hq)return;hq.dispose();hq=null;hqStats.enabled=false;hqStats.hq=0;nearCharacters?.setHQCovered(false);},
   /**
    * Report a violent event to the crowd. Returns how many people reacted.
    *
@@ -182,7 +199,7 @@ export function buildCrowd(data,options={}){
   witness(event){return hq?hq.witness(event):0;},
   /** Where the HQ budget should be spent, when it is not the player. */
   setHQCamera(p){hqCamera=p;},
-  setHQBudget(n){hq?.setBudget(n);hqStats.budget=n;},
+  setHQBudget(n){hq?.setBudget(n);hqStats.budget=n;nearCharacters?.setHQCovered(!!hq&&n>0);},
   get hqCrowd(){return hq;},
   // The humanoid arrives late, exactly as it does for the player. Until it does the near
   // pool runs on baked figures, so nothing waits on it.

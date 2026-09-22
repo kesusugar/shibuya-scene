@@ -20,6 +20,7 @@ const files=[
  'tests/combat.test.mjs',
  'tests/vehicle-occupancy.test.mjs',
  'tests/awareness.test.mjs',
+ 'tests/crowd-ownership.test.mjs',
  'tests/shader-warmup.test.mjs',
  'tests/pedestrian-threat.test.mjs',
  'tests/npc-awareness.test.mjs',
