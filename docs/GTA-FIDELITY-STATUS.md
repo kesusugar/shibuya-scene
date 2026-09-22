@@ -1193,6 +1193,26 @@ because `crowd.strike` already says the scream. `voices.say` now keeps the contr
 comment makes — *"Never throws: a browser that refuses audio must not stop the game"* — which
 it did not.
 
+### Regression, at HIGH with the HQ crowd up
+
+Everything RUN 7 and RUN 8 established, re-checked with occupancy, drivers and the carjack in
+the scene. `?qa=1&tier=high&time=day&camera=scramble&hq=1`.
+
+| gate | result | evidence |
+| --- | --- | --- |
+| HQ crowd alive | **WORKS** | 1,971 bodies, 12 draw calls |
+| **no skeletons or mixers added** | **WORKS** | crowd 0/0, drivers 0/0 |
+| seated drivers alongside the HQ crowd | **WORKS** | 5 drawn of 88 seated |
+| RUN 8 melee still lands | **WORKS** | 2 swings, 1 hit, 0 misses |
+| witness reaction still fires | **WORKS** | 277 people reacted |
+| crossings still complete | **WORKS** | 0 → 7 |
+| nothing abandoned or stuck | **WORKS** | abandoned 0, stuck 0 |
+| no shader banner | **WORKS** | none |
+| console errors | **0** | |
+
+RUN 7's architecture is intact: **RUN 9 added no skeleton and no AnimationMixer anywhere**, and
+the seated drivers coexist with 1,971 GPU crowd bodies for three extra draw calls.
+
 ### Not verified live
 
 - **A frame of the driver lying in the road.** The extraction is proven by state
