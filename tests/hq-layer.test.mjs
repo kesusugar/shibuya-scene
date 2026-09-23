@@ -467,8 +467,8 @@ test('someone waiting at the kerb for the signal plays Idle, decided by state an
  const i=idx(waiting),lane=layer.crowd.lanes[layer.crowd.state.lane[i]];
  const idle=manifest.clips.find(c=>c.name==='Idle');
  assert.equal(lane.clipAttr.getX(layer.crowd.state.slot[i]),idle.row);
- // Awareness outranks waiting; physical outranks both.
- layer.crowd.setState(i,STATE.LOOK);assert.equal(clip(waiting),'Walk');
+ // A glance keeps the stance (RUN 11.0); a real reaction outranks waiting; physical outranks both.
+ layer.crowd.setState(i,STATE.LOOK);assert.equal(clip(waiting),'Idle','a waiting citizen who glanced walked on the spot');
  layer.crowd.setState(i,STATE.STARTLE);assert.equal(clip(waiting),'Startle');
  layer.crowd.setState(i,STATE.KNOCKDOWN,{force:true});assert.equal(clip(waiting),'Fall');
  layer.crowd.setState(i,STATE.NORMAL,{force:true});assert.equal(clip(waiting),'Idle',
@@ -477,5 +477,23 @@ test('someone waiting at the kerb for the signal plays Idle, decided by state an
  waiting.state='crossing';waiting.speed=1.3;
  layer.sync(people,{x:0,z:0},1/60,{time:1/60});
  assert.equal(clip(waiting),'Walk','still idling after starting to cross');
+ layer.dispose();
+});
+
+test('the queue behind the front row and the cast between crossings idle too',()=>{
+ const people=pool(12,1);
+ const layer=createHQLayer(manifest,bin,{budget:12});
+ const [queued,cast,held]=people;
+ queued.state='walking';queued.speed=0;queued.kerbQueue=true;
+ cast.state='exiting';cast.choreographed=true;cast.speed=0;
+ held.state='walking';held.speed=0;held.stuck=2;         // held up, not at a kerb
+ layer.sync(people,{x:0,z:0},1/60,{time:0});
+ const clip=p=>layer.crowd.clipName(layer.crowd.indexOf(p.id));
+ assert.equal(clip(queued),'Idle','the queue behind the front row walked on the spot');
+ assert.equal(clip(cast),'Idle','the scramble cast walked on the spot between crossings');
+ assert.equal(clip(held),'Walk');
+ queued.kerbQueue=false;queued.speed=1.3;                // the light changed and they moved
+ layer.sync(people,{x:0,z:0},1/60,{time:1/60});
+ assert.equal(clip(queued),'Walk');
  layer.dispose();
 });

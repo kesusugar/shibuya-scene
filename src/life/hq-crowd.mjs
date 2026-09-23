@@ -53,11 +53,14 @@ export const CLIP_FOR=Object.freeze({
  * the scramble cast at its kerb), not a speed: a body that is merely blocked for a moment, or
  * one of the frozen poses, must not turn into Idle because its speed reads zero. Priority is
  * physical (HIT..RECOVER) over awareness (LOOK..FLEE) over waiting/locomotion, and only
- * NORMAL -- the locomotion state -- is ever replaced, so a waiting citizen who notices the
- * player still reacts with exactly the clip awareness asked for.
+ * NORMAL and LOOK -- the states that borrow the locomotion clip -- are ever replaced, so a
+ * waiting citizen who STARTLEs, AVOIDs or FLEEs still plays exactly that reaction.
  */
 export function clipFor(behaviour,waiting){
- return behaviour===STATE.NORMAL&&waiting?'Idle':CLIP_FOR[behaviour];
+ // RUN 11.0: LOOK is not a whole-body reaction -- it has no clip of its own and borrows the
+ // locomotion one -- so it keeps the stance underneath. A waiting citizen who glanced at the
+ // player was playing Walk on the spot; 16-32 of the 1,455 at a red light, live.
+ return (behaviour===STATE.NORMAL||behaviour===STATE.LOOK)&&waiting?'Idle':CLIP_FOR[behaviour];
 }
 
 /**

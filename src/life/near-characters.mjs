@@ -297,6 +297,8 @@ export function createNearCharacters(tier='high',{ctx=null}={}){
   },
   /** Which body a citizen currently wears, or null if the pool is not holding them. */
   /** The reaction word a held citizen's body is showing this frame, or null. For QA. */
+  /** The clip a held citizen's body is playing (overlay first), or null. For QA. */
+  actionOf(id){return slots.find(x=>x.id===id)?.figure.action??null;},
   reactionOf(id){return slots.find(x=>x.id===id)?.reaction??null;},
   bodyOf(id){const s=slots.find(x=>x.id===id);return s?(s.human?'humanoid':'baked'):null;},
   /** Which appearance archetype a held citizen is wearing, or null. */

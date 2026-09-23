@@ -23,6 +23,8 @@ const files=[
  'tests/awareness.test.mjs',
  'tests/crowd-ownership.test.mjs',
  'tests/near-reaction.test.mjs',
+ 'tests/stance.test.mjs',
+ 'tests/crowd-legacy-props.test.mjs',
  'tests/shader-warmup.test.mjs',
  'tests/pedestrian-threat.test.mjs',
  'tests/npc-awareness.test.mjs',

@@ -140,18 +140,23 @@ export function buildCrowd(data,options={}){
    const struck=p.struck!==undefined;
    shadows.add(p.renderX,struck?p.flyGround:p.height,p.renderZ,def.width,struck?p.flyHeight:0);
    const body=pickVariant(p.id,BODY_VARIANTS),hair=pickVariant(p.id,HAIR_VARIANTS,307),shirt=BODY_COLORS[p.id%BODY_COLORS.length],skin=SKIN_COLORS[p.id%SKIN_COLORS.length],hairColor=def.gray?HAIR_COLORS[3]:HAIR_COLORS[p.id%3];
-   if(!detailed.has(p.id))part(body,p,0,h*.02+bob,0,w,h*.78,w*.58,shirt,sway);
+   // RUN 11.0. The props below were NOT masked with the body, so every HQ or near citizen
+   // carrying one still wore the legacy renderer's box phone, bag, suitcase, cane or cone
+   // umbrella, sized for a capsule and tumbling on the legacy arc after a hit. Live at HIGH
+   // with the HQ crowd up: 971 of them, which is what read as old blocky bodies in the crowd.
+   const legacyBody=!detailed.has(p.id);
+   if(legacyBody)part(body,p,0,h*.02+bob,0,w,h*.78,w*.58,shirt,sway);
    // About 26 cm across on a 1.7 m figure: roughly half the old 51 cm, and a little over
    // life-size rather than at it. Life-size was tried and is wrong here -- these bodies are
    // featureless capsules, so a correctly scaled head turns them into bowling pins. The crown
    // sits at 97% of the height with the chin just clear of the shoulders.
-   if(!detailed.has(p.id))part('head',p,0,h*.882+bob,0,h*.076,h*.088,h*.079,skin,sway*.5);
-   if(!detailed.has(p.id))part(hair,p,0,h*.882+bob,0,h*.076,h*.088,h*.079,def.hood?shirt:hairColor,sway*.5);
-   if(hasAccessory(p,'phone'))part('phone',p,w*.43,h*.59+bob,-w*.28,w*.15,h*.16,w*.05,0x303843);
-   if(hasAccessory(p,'bag'))part('bag',p,w*.55,h*.37+bob,.02,w*.36,h*.2,w*.4,p.id%2?0x9a7960:0x4e5557);
-   if(hasAccessory(p,'cane'))part('cane',p,w*.48,h*.19,0,w*.055,h*.38,w*.055,0x8c7354,-.16);
-   if(hasAccessory(p,'suitcase'))part('suitcase',p,-w*.64,h*.02,.08,w*.5,h*.38,w*.52,p.id%2?0x596579:0x6e4d45);
-   if(hasAccessory(p,'umbrella'))part('umbrella',p,.08,h*.99,0,.38,.62,.38,shirt);
+   if(legacyBody)part('head',p,0,h*.882+bob,0,h*.076,h*.088,h*.079,skin,sway*.5);
+   if(legacyBody)part(hair,p,0,h*.882+bob,0,h*.076,h*.088,h*.079,def.hood?shirt:hairColor,sway*.5);
+   if(legacyBody&&hasAccessory(p,'phone'))part('phone',p,w*.43,h*.59+bob,-w*.28,w*.15,h*.16,w*.05,0x303843);
+   if(legacyBody&&hasAccessory(p,'bag'))part('bag',p,w*.55,h*.37+bob,.02,w*.36,h*.2,w*.4,p.id%2?0x9a7960:0x4e5557);
+   if(legacyBody&&hasAccessory(p,'cane'))part('cane',p,w*.48,h*.19,0,w*.055,h*.38,w*.055,0x8c7354,-.16);
+   if(legacyBody&&hasAccessory(p,'suitcase'))part('suitcase',p,-w*.64,h*.02,.08,w*.5,h*.38,w*.52,p.id%2?0x596579:0x6e4d45);
+   if(legacyBody&&hasAccessory(p,'umbrella'))part('umbrella',p,.08,h*.99,0,.38,.62,.38,shirt);
   }
   shadows.end();
   stats.triangles=0;stats.batches=0;for(const [k,m] of Object.entries(meshes)){m.count=counts[k];if(m.count)stats.batches++;stats.triangles+=m.count*triangleCount(geometry[k]);geometry[k].attributes.gait.needsUpdate=true;geometry[k].attributes.action.needsUpdate=true;m.instanceMatrix.needsUpdate=true;if(m.instanceColor)m.instanceColor.needsUpdate=true;}

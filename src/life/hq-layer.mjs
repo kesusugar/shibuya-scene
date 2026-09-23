@@ -20,6 +20,7 @@
 import {createHQCrowd,STATE} from './hq-crowd.mjs';
 import {createCrowdGrid,applyVehicleThreat} from './hq-threat.mjs';
 import {AWARE,createAwareness} from './hq-awareness.mjs';
+import {isWaiting} from './stance.mjs';
 import {appearanceOf} from './appearance.mjs';
 
 /**
@@ -187,8 +188,9 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
     // the lying pose until the simulation lets go.
     if(p.struck!==undefined&&crowd.state.behaviour[i]===STATE.DOWNED)crowd.hold(i,.25);
     // Standing at the kerb for the signal plays Idle rather than walking on the spot. The
-    // simulation's own state decides it, never speed; see clipFor in hq-crowd.mjs.
-    crowd.setWaiting(i,p.state==='waiting');
+    // simulation's own state decides it, never speed; see clipFor in hq-crowd.mjs and, for
+    // what counts as waiting (the queue behind the front row too), stance.mjs.
+    crowd.setWaiting(i,isWaiting(p));
 
     // The clip follows the pedestrian's own simulated state, not anything invented here.
     const want=behaviourFor(p);
