@@ -31,6 +31,8 @@ export const CAR = Object.freeze({
  grip: 9,
  slipMax: .45,                           // rad the course may lag the nose by, about 26 deg
  carPad: .05,                            // m of clearance kept from other cars
+ // m of clearance kept from buildings, walls and platforms, by axis. See clearOfSolids.
+ solidEnd: .55, solidSide: .25,
  // Steering authority falls away as the car slows, so a stopped car does not spin on the
  // spot, and a fast one is not twitchy.
  steerLow: 1.2, steerFull: 7,
@@ -86,7 +88,14 @@ export function createPlayerVehicle(sim, ctx) {
   probe.x = x; probe.z = z; probe.heading = heading;
   // Station walls and raised platforms render slightly ahead of their map solids. Keep the
   // driven body clear of the visible edge instead of allowing its bonnet into the facade.
-  const ring = corners(probe, def.width, def.length, .55);
+  //
+  // The margin is split by axis. Codex's fix used .55 on all four sides, and measured over
+  // every sedan lane pose on the map (qa/gta-upgrade/clearance-cost.mjs) that made 35 of
+  // 2,467 undrivable -- a stretch of narrow unclassified street where the AI's own sedans
+  // drive, which reads as an invisible wall. All of that cost is LATERAL: the bonnet margin
+  // alone loses nothing. So the ends keep the .55 that stops the bonnet entering a facade,
+  // and the sides take .25, five times the original clearance and still zero lanes lost.
+  const ring = corners(probe, def.width + 2 * CAR.solidSide, def.length + 2 * CAR.solidEnd, 0);
   for (const {value: s} of sim.graph.ctx.solid.query(bounds(ring))) {
    const outer = s.outer ?? s.polygon?.outer; if (!outer) continue;
    const reject=()=>{contact=edgeContact(outer,state);return false;};

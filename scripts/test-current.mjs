@@ -6,6 +6,7 @@ const files=[
  'tests/player-experience.test.mjs',
  'tests/vehicle-dynamics.test.mjs',
  'tests/vehicle-shape.test.mjs',
+ 'tests/vehicle-clearance.test.mjs',
  'tests/vehicle-contact.test.mjs',
  'tests/deferred-vehicle-visual.test.mjs',
  'tests/character-animation.test.mjs',
