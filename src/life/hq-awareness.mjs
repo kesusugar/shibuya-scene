@@ -73,6 +73,16 @@ export const AWARE=Object.freeze({
  * them from the id costs one hash and means a given id is always the same person. The nervous
  * one is reliably the nervous one, in this frame and in the one an hour from now.
  */
+/** Witness reactions to a violent event: who reacts now, who reacts later, who only looks. */
+export const WITNESS=Object.freeze({
+ near:5,            // m: inside this, the whole reaction is immediate
+ lookOnly:.8,       // share of the radius beyond which a witness only looks
+ delayScale:1.6,    // their personal reaction delay, stretched: seeing, then understanding
+ perMetre:.035,     // s per metre of distance
+ facingAway:.3,     // s extra when the event was behind them
+ maxPending:256
+});
+
 export function traitsOf(id){
  let h=Math.imul((id|0)^0x9e3779b9,0x85ebca6b);
  h^=h>>>13;h=Math.imul(h,0xc2b2ae35);h=(h^(h>>>16))>>>0;
@@ -157,11 +167,14 @@ const critical=b=>b===STATE.HIT||b===STATE.KNOCKDOWN||b===STATE.DOWNED||b===STAT
 export function createAwareness(){
  const scratch=[];
  const stats={candidates:0,evaluated:0,noticed:0,changed:0,queryMs:0,updateMs:0,witnessMs:0,
-  witnessCandidates:0,witnessReacted:0,passes:0};
+  witnessCandidates:0,witnessReacted:0,witnessEscalated:0,passes:0};
  // Awareness keeps its OWN clock. The HQ crowd has no wall time -- `update` is handed a
  // `time` for the shader and nothing stores it -- and cooldowns need a monotonic number that
  // exists whether or not a pass ran this frame.
- let clock=0,world=0;
+ let clock=0,world=0,flushClock=0;
+ // Witness reactions scheduled for later (RUN 11.3). Bounded: one car through a crowd must not
+ // queue the whole population.
+ const pending=[];
 
  /**
   * Decide one citizen's reaction to one threat level, honouring delay, hysteresis, cooldown
@@ -263,7 +276,7 @@ export function createAwareness(){
    * The spread is the point: at one distance some people look, some startle, some step away
    * and the nervous ones run. A chorus would read as a script.
    */
-  witness(crowd,grid,{x,z,severity=.7,radius=AWARE.witnessRadius}={}){
+  witness(crowd,grid,{x,z,severity=.7,radius=AWARE.witnessRadius,kind='melee'}={}){
    if(!crowd?.population||!grid)return 0;
    const start=(typeof performance!=='undefined'?performance.now():0);
    grid.rebuild(crowd);
@@ -284,14 +297,24 @@ export function createAwareness(){
      ?Math.sin(s.heading[i])*(-dx/distance)+Math.cos(s.heading[i])*(-dz/distance):1;
     let threat=severity*(1-distance/radius)/t.nerve;
     if(distance>AWARE.close&&facing<AWARE.fov)threat*=.72;
-    const want=wantedFor(Math.min(1,threat));
+    let want=wantedFor(Math.min(1,threat));
     if(want===STATE.NORMAL)continue;
-    // A witness reacts at once: they already heard it, so there is no noticing to do.
-    if((want>s.behaviour[i]||s.behaviour[i]===STATE.RECOVER&&want>=STATE.AVOID)
-       &&crowd.setState(i,want)){
+    // RUN 11.3: close by, a witness reacts at once -- they were right there. Further out they
+    // LOOK first and the rest of the reaction arrives after their own reaction delay, later the
+    // further away and later again if they were facing away; so a street does not break into a
+    // run on one frame. The far edge only ever looks.
+    const escalate=want>STATE.LOOK&&distance>WITNESS.near;
+    if(escalate&&distance>radius*WITNESS.lookOnly)want=STATE.LOOK;
+    const now=escalate&&want>STATE.LOOK?STATE.LOOK:want;
+    if((now>s.behaviour[i]||s.behaviour[i]===STATE.RECOVER&&now>=STATE.AVOID)
+       &&crowd.setState(i,now)){
      // A witness reacts through their cooldown: seeing violence is not the same as noticing
      // the same passer-by twice.
      s.attention[i]=Math.atan2(-dx,-dz);s.ready[i]=0;reacted++;
+    }
+    if(escalate&&want>STATE.LOOK&&pending.length<WITNESS.maxPending){
+     const delay=t.reactionDelay*WITNESS.delayScale+distance*WITNESS.perMetre+(facing<AWARE.fov?WITNESS.facingAway:0);
+     pending.push({id:s.id[i],at:flushClock+delay,want,towards:Math.atan2(-dx,-dz),kind});
     }
    }
    stats.witnessReacted=reacted;
@@ -299,7 +322,28 @@ export function createAwareness(){
    return reacted;
   },
 
-  inspect(){return {...stats,
+  /**
+   * Deliver the witness reactions that were waiting on a reaction delay. Called every frame by
+   * the layer with its own dt, so it runs whether or not the player is being perceived.
+   */
+  flush(crowd,dt=0){
+   flushClock+=Math.max(0,dt);
+   if(!pending.length)return 0;
+   let n=0;
+   for(let k=pending.length-1;k>=0;k--){
+    const e=pending[k];if(e.at>flushClock)continue;
+    pending.splice(k,1);
+    const i=crowd.indexOf(e.id);if(i<0)continue;
+    const b=crowd.state.behaviour[i];
+    if(critical(b)&&b!==STATE.RECOVER)continue;
+    if(e.want>b&&crowd.setState(i,e.want)){crowd.state.attention[i]=e.towards;n++;}
+   }
+   stats.witnessEscalated+=n;
+   return n;
+  },
+  get pending(){return pending.length;},
+
+  inspect(){return {...stats,pending:pending.length,
    queryMs:Number(stats.queryMs.toFixed(3)),
    updateMs:Number(stats.updateMs.toFixed(3)),witnessMs:Number(stats.witnessMs.toFixed(3))};},
   get time(){return world;},

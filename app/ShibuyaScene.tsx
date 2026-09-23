@@ -418,8 +418,28 @@ export default function Home(){
  let carSpeedLast=0,damageLast=0,struckCountRef=0,meleeHitsLast=0,playerReach:any=null;
  // Impact feedback. The shake decays rather than being keyframed, so repeated hits stack
  // into a rattle instead of restarting a canned wobble.
- const SHAKE_PER_HIT=.34,SHAKE_MAX=1,SHAKE_FALL=2.6,SHAKE_THROW=.42;
- let shake=0;
+ // RUN 11.4: a person is not a wall. Per-person shake used to be multiplied by how many were hit
+ // in the frame, so a crowd pinned the camera at full shake (0.42 m of throw). Now one bounded
+ // knock per frame of contact, and a smaller, sharper one for a landed punch.
+ const SHAKE_PER_HIT=.12,SHAKE_PERSON_MAX=.45,SHAKE_PUNCH=.07,SHAKE_PUNCH_MAX=.25,SHAKE_FALL=2.6,SHAKE_THROW=.42;
+ let shake=0,lastAccidentWitness=-Infinity;
+ // RUN 11.3/11.4: everything the feedback bus delivers, turned into sound and a camera knock.
+ // Voices go through the simulation's own queue, so its per-person cooldown and the voices'
+ // concurrency cap and priorities apply to them like any other shout.
+ feedback.on((e:any)=>{
+  const sim=lifeEntry.hooks.current?.sim,who=e.id!=null?sim?.pool?.[e.id]:null;
+  switch(e.kind){
+   case 'punch_swing':playerAudio?.swing(e.intensity);break;
+   case 'punch_hit':playerAudio?.punchHit(e.intensity);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_PUNCH*(.6+.4*e.intensity));break;
+   case 'vehicle_impact':playerAudio?.bodyImpact(e.intensity);break;
+   case 'vehicle_runover':playerAudio?.runover(e.intensity);break;
+   case 'pain_voice':if(who)sim.say(who,'pain',e.intensity);break;
+   case 'crowd_gasp':if(who)sim.say(who,'gasp',.6);break;
+   case 'panic_voice':if(who)sim.say(who,'alert',Math.max(.6,e.intensity));break;
+   // pedestrian_scream: the simulation already screams on a strike; the event is for listeners
+   // that want to know, not a second voice.
+  }
+ });
  let lastPlayTick=performance.now();let qaReadyRef=false;const frame=(now:number)=>{if(disposed)return;const dt=frameGate.step(now);if(dt===null){raf=requestAnimationFrame(frame);return;}const frameStart=performance.now(),updateStart=frameStart;const playElapsed=document.hidden?0:Math.max(0,(now-lastPlayTick)/1000);lastPlayTick=now;frameHits=0;if(playerMode&&player)player.updateInput(dt);if(playerMode&&player){
   if(vehicleTransition.active){const pose=vehicleTransition.update(dt);if(pose){
     // The DOOR comes from the stage, not from the overall phase. `sin(phase * PI)` opened the
@@ -472,11 +492,23 @@ export default function Home(){
    const crowdSim=lifeEntry.hooks.current?.sim;playerCar.alertPedestrians(crowdSim);lifeEntry.hooks.current?.hqCrowd?.vehicle(playerCar.state,dt);
    const struck=playerCar.strikePedestrians(crowdSim);
    frameHits=struck;
-   if(struck){struckCountRef+=struck;setStruckCount(n=>n+struck);playerAudio?.strike();
+   // RUN 11.3/11.4: what this step's contacts mean to the rest of the street.
+   {const imps=playerCar.impacts,now=crowdSim?.time??0;let top:any=null;
+    for(const e of imps){feedback.emit(e.kind==='runover'?'vehicle_runover':'vehicle_impact',now,{x:e.x,z:e.z,intensity:Math.min(1,e.closing/12),id:e.id});
+     if(e.kind!=='runover'&&(!top||e.closing>top.closing))top=e;}
+    if(top){vehicleEffects?.dust?.(top.x,c.y??0,top.z,Math.min(1,top.closing/12));
+     if(top.kind!=='push'){feedback.emit('pedestrian_scream',now,{x:top.x,z:top.z,intensity:1,id:top.id});
+      // Witnesses to an accident: bounded to one pass every quarter second however many go over
+      // the bonnet, because each pass rebuilds the crowd grid.
+      if(now-lastAccidentWitness>=.25){lastAccidentWitness=now;
+       const n=lifeEntry.hooks.current?.witness?.({x:top.x,z:top.z,severity:Math.min(1,.55+top.closing/15),radius:16,kind:'vehicle'})??0;
+       if(n>=3){const near=crowdSim?.pool?.find((p:any)=>p.active&&p.id!==top.id&&p.struck===undefined&&Math.hypot(p.x-top.x,p.z-top.z)<8);
+        if(near)feedback.emit('crowd_gasp',now,{x:near.x,z:near.z,intensity:.7,id:near.id});}}}}}
+   if(struck){struckCountRef+=struck;setStruckCount(n=>n+struck);
     // A hit you can feel: the road is marked, the camera is shoved, and the car loses a
     // little of what it was carrying. All three scale with how fast it was taken.
     const force=Math.min(1,Math.abs(c.speed)/playerCar.def.speed);
-    shake=Math.min(SHAKE_MAX,shake+SHAKE_PER_HIT*(.4+force)*struck);
+    if(shake<SHAKE_PERSON_MAX)shake=Math.min(SHAKE_PERSON_MAX,shake+SHAKE_PER_HIT*(.4+force));
     // RUN 11.1: the car's speed loss is per contact now, inside strikePedestrians, where each
     // body's closing speed and the car's mass are known. A flat bleed here on top of it
     // counted every frame with a hit twice.
@@ -489,7 +521,7 @@ export default function Home(){
    carSpeedLast=Math.abs(c.speed);
    playerAudio?.engine(c.speed,playerCar.def.speed,Math.max(0,drive.forward),c.damage);
    if(playerCar.state.damage!==damageLast){damageLast=playerCar.state.damage;setCarDamage(damageLast);}}
-  else{player.step(dt);if(player.state.alive)combatDeathReported=false;reactToRunner(lifeEntry.hooks.current?.sim,player.state);const combat=melee.update(dt,lifeEntry.hooks.current?.sim,player);if(combat.hits>meleeHitsLast){meleeHitsLast=combat.hits;playerAudio?.strike();}playerFigure?.update(player.state,dt);groundPlayerShadow();
+  else{player.step(dt);if(player.state.alive)combatDeathReported=false;reactToRunner(lifeEntry.hooks.current?.sim,player.state);const combat=melee.update(dt,lifeEntry.hooks.current?.sim,player);if(combat.hits>meleeHitsLast){meleeHitsLast=combat.hits;}playerFigure?.update(player.state,dt);groundPlayerShadow();
    if(!player.state.alive&&!combatDeathReported){combatDeathReported=true;setPlayerHit(player.state.hitBy??'fight');}
    playerMarker?.update(player.state,dt,PLAYER_HEIGHT);
    // Nothing on screen said where the car was: the orange cone is over the player, so a
@@ -507,6 +539,7 @@ export default function Home(){
   localCrowdClock+=dt;if(localCrowdClock>=.1){settleNearbyWaiters(lifeEntry.hooks.current?.sim,player.state,localCrowdClock);localCrowdClock=0;}
  }blood?.update(dt);if(!qaBusyNow)system.update(dt);
  if(playerMode&&player){const crowdSim=lifeEntry.hooks.current?.sim;const queue=crowdSim?.splashes;if(queue?.length){for(const q of queue)blood?.splash(q.x,q.y,q.z,q.dx,q.dz,q.scale,q.life);queue.length=0;}
+  feedback.drain();
   const said=crowdSim?.voices;if(said?.length){const ear={x:view.position.x,z:view.position.z,fx:Math.sin(player.state.heading),fz:Math.cos(player.state.heading)};for(const v of prioritise(said,ear))crowdVoices?.say(v.kind,v.id,v.x,v.z,ear,v.urgency);said.length=0;}
   playUI?.update(playElapsed,player.state,playerCar?.state,driving,playerReach,frameHits);
  }

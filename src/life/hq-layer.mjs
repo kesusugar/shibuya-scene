@@ -237,6 +237,8 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
    }
 
    crowd.update(dt,{time});
+   // RUN 11.3: witnesses who were still taking in what they saw.
+   awareness.flush(crowd,dt);
    // Ownership is reconciled here as well as after a vehicle pass, because a body gets back
    // up on its own timer and the player may have stopped driving by then. Reconciling only
    // in `vehicle` left citizens disowned from their own routes for as long as nobody drove.

@@ -29,6 +29,7 @@ const files=[
  'tests/temperament.test.mjs',
  'tests/melee-feel.test.mjs',
  'tests/feedback-bus.test.mjs',
+ 'tests/player-audio.test.mjs',
  'tests/crowd-legacy-props.test.mjs',
  'tests/shader-warmup.test.mjs',
  'tests/pedestrian-threat.test.mjs',

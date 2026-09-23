@@ -402,3 +402,36 @@ test('there is one awareness authority, and the old one is not in it',async()=>{
   /from\s+['"][^'"]*\/awareness\.mjs['"]/.test(read(f,'utf8')));
  assert.deepEqual(offenders,[],`still importing the old awareness WIP: ${offenders.join(', ')}`);
 });
+
+test('an accident: close witnesses react at once, the middle distance looks and then reacts, the edge only looks',()=>{
+ // RUN 11.3. Everyone within reach of a car hit used to go straight to their final state on
+ // the same frame, so a street broke into a run in unison.
+ const ids=Array.from({length:400},(_,i)=>i+1000).filter(i=>traitsOf(i).nerve<.45).slice(0,30);
+ const people=ids.map((id,k)=>({id,x:0,z:k<10?2+k*.25:k<20?6+(k-10)*.5:13.5+(k-20)*.1,heading:Math.PI}));
+ const crowd=crowdOf(people),aware=createAwareness(),grid=gridFor(crowd);
+ aware.witness(crowd,grid,{x:0,z:0,severity:1,radius:16,kind:'vehicle'});
+ const at=k=>crowd.state.behaviour[k];
+ for(let k=0;k<10;k++)assert.ok(at(k)>=STATE.STARTLE,`close witness ${k} only reached ${at(k)}`);
+ for(let k=10;k<20;k++)assert.equal(at(k),STATE.LOOK,`middle witness ${k} did not look first`);
+ for(let k=20;k<30;k++)assert.ok(at(k)<=STATE.LOOK,`edge witness ${k} reacted beyond a look`);
+ // Now let time pass: the middle distance escalates, at different moments.
+ const when=new Map();
+ for(let t=0;t<3;t+=1/30){aware.flush(crowd,1/30);crowd.update(1/30,{time:t});
+  for(let k=10;k<20;k++)if(!when.has(k)&&at(k)>STATE.LOOK)when.set(k,t);}
+ assert.ok(when.size>=7,`only ${when.size} of 10 middle witnesses ever escalated`);
+ const times=[...when.values()];
+ assert.ok(Math.max(...times)-Math.min(...times)>.15,'the middle distance still reacted in unison');
+ for(let k=20;k<30;k++)assert.ok(at(k)<=STATE.LOOK);
+ crowd.dispose();
+});
+
+test('the witness queue is bounded, and a knocked-down witness is not dragged back up',()=>{
+ const people=Array.from({length:300},(_,k)=>({id:2000+k,x:(k%20-10)*.6,z:6+Math.floor(k/20)*.4,heading:Math.PI}));
+ const crowd=crowdOf(people),aware=createAwareness(),grid=gridFor(crowd);
+ aware.witness(crowd,grid,{x:0,z:0,severity:1,radius:16,kind:'vehicle'});
+ assert.ok(aware.pending<=256);
+ crowd.setState(0,STATE.KNOCKDOWN,{force:true});
+ for(let t=0;t<3;t+=1/30)aware.flush(crowd,1/30);
+ assert.ok(crowd.state.behaviour[0]===STATE.KNOCKDOWN||crowd.state.behaviour[0]===STATE.DOWNED);
+ crowd.dispose();
+});
