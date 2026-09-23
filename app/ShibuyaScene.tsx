@@ -11,6 +11,7 @@ import {SolarCycle} from '../src/environment/solar.mjs';
 import {DayNightSystem} from '../src/environment/day-night.mjs';
 import {buildTrains} from '../src/trains/render.mjs';
 import {buildCrowd} from '../src/life/render.mjs';
+import {createHQRequester} from '../src/app/hq-request.mjs';
 import {buildPedestrianNetworkAsync} from '../src/life/network.mjs';
 import {buildTraffic} from '../src/traffic/render.mjs';
 import {createSeatedDrivers} from '../src/traffic/drivers.mjs';
@@ -259,40 +260,37 @@ export default function Home(){
  system.setEnabled('traffic',(config.only===null||config.only.includes('traffic'))&&!config.skip.includes('traffic'));
  const lifeEntry=system.entries.get('life');lifeEntry.enabled=false;
  let lifeReportClock=0;
- lifeEntry.hooks=buildingLifecycle({timingKey:'life',timingName:'R1 / S10 Crowd / Life',appearance:'firstPersonVisible',parent:groups.dynamic,build:async(data:any,record:any)=>{const pack=await loadStaticModels(),network=pack?.life?.[currentTrafficTier]??await buildPedestrianNetworkAsync(data,{ground:ground?.model,generic:buildingsEntry.hooks.current?.model,core:stationEntry.hooks.current?.model,detail:detailEntry.hooks.current?.model,street:streetEntry.hooks.current?.model},record?.timing);const started=performance.now(),result=buildCrowd(data,{network,choreography:true,heroStart:currentTrafficTier==='high',tier:currentTrafficTier,traffic:trafficEntry.hooks.current?.sim,ground:ground?.model,generic:buildingsEntry.hooks.current?.model,core:stationEntry.hooks.current?.model,detail:detailEntry.hooks.current?.model,street:streetEntry.hooks.current?.model,debug:config.debug});if(record?.timing)record.timing.computeMs+=performance.now()-started;return result;},onReport:setLifeReport,onReady(result:any){registerSceneRoot(result.root);startup?.appearance('crowdBuildComplete','life');if(playerMode)exitPlayer();player=null;playUI?.dispose();playUI=null;lifeEntry.status='ready';console.info('[R1 Crowd Density]',result.stats);setModules(system.snapshot());},onError(e:any){lifeEntry.status='failed';console.error('[R1 Crowd Density]',e);setModules(system.snapshot());}});
- lifeEntry.hooks.update=(dt:number)=>{const result=lifeEntry.hooks.current;if(!result)return;result.setHQCamera?.(playerMode&&player?player.state:view.position);void requestHQCrowd();result.update(dt,playerMode&&player?{x:player.state.x,z:player.state.z}:view.position);lifeReportClock+=dt;if(lifeReportClock>=1){lifeReportClock=0;setLifeReport({...result.stats});}};
+ lifeEntry.hooks=buildingLifecycle({timingKey:'life',timingName:'R1 / S10 Crowd / Life',appearance:'firstPersonVisible',parent:groups.dynamic,build:async(data:any,record:any)=>{const pack=await loadStaticModels(),network=pack?.life?.[currentTrafficTier]??await buildPedestrianNetworkAsync(data,{ground:ground?.model,generic:buildingsEntry.hooks.current?.model,core:stationEntry.hooks.current?.model,detail:detailEntry.hooks.current?.model,street:streetEntry.hooks.current?.model},record?.timing);const started=performance.now(),result=buildCrowd(data,{network,choreography:true,heroStart:currentTrafficTier==='high',tier:currentTrafficTier,traffic:trafficEntry.hooks.current?.sim,ground:ground?.model,generic:buildingsEntry.hooks.current?.model,core:stationEntry.hooks.current?.model,detail:detailEntry.hooks.current?.model,street:streetEntry.hooks.current?.model,debug:config.debug});if(record?.timing)record.timing.computeMs+=performance.now()-started;return result;},onReport:setLifeReport,onReady(result:any){registerSceneRoot(result.root);startup?.appearance('crowdBuildComplete','life');
+  // A rebuilt crowd has a fresh near pool; hand it the humanoid the page already loaded, or it
+  // draws baked figures until the next asset event, which for a loaded asset never comes.
+  if(deferredCharacter?.asset)result.setNearCharacterAsset?.(deferredCharacter.asset);
+  if(playerMode)exitPlayer();player=null;playUI?.dispose();playUI=null;lifeEntry.status='ready';console.info('[R1 Crowd Density]',result.stats);setModules(system.snapshot());},onError(e:any){lifeEntry.status='failed';console.error('[R1 Crowd Density]',e);setModules(system.snapshot());}});
+ lifeEntry.hooks.update=(dt:number)=>{const result=lifeEntry.hooks.current;if(!result)return;result.setHQCamera?.(playerMode&&player?player.state:view.position);requestHQCrowd();result.update(dt,playerMode&&player?{x:player.state.x,z:player.state.z}:view.position);lifeReportClock+=dt;if(lifeReportClock>=1){lifeReportClock=0;setLifeReport({...result.stats});}};
  // RUN 7B. When `?hq=` asks for the high-fidelity crowd, its prebuilt pack is fetched and
  // handed to the crowd renderer AFTER the city is standing, exactly as the humanoid character
  // is: nothing about the scene waits on it, and a session that never loads it keeps the
  // legacy instanced bodies. Nothing is baked here -- the pack comes from npm run bake:crowd-hq.
- const HQ_TIER_BUDGET:Record<string,number>={high:1978,medium:512,low:0};
- let hqRequested=false;
- const requestHQCrowd=async()=>{
-  const asked=(config as any).hqCrowd as number|null;
-  if(hqRequested||asked===null||asked===0)return;
-  const hooks=lifeEntry.hooks.current;
-  if(!hooks?.enableHQCrowd)return;
-  hqRequested=true;
-  try{
-   const base=(import.meta as any).env?.BASE_URL??'/';
-   const [manifest,bin]=await Promise.all([
-    fetch(`${base}data/crowd/hq-crowd.json`).then(r=>{if(!r.ok)throw new Error(`hq manifest ${r.status}`);return r.json();}),
-    fetch(`${base}data/crowd/hq-crowd.bin`).then(r=>{if(!r.ok)throw new Error(`hq pack ${r.status}`);return r.arrayBuffer();})
-   ]);
-   const tierMax=HQ_TIER_BUDGET[currentTier]??0;
-   const budget=asked<0?tierMax:Math.min(asked,tierMax);
-   if(!budget)return;
-   const layer=hooks.enableHQCrowd(manifest,bin,{budget,
-    // A pedestrian the reaction system has thrown must stop being walked along a route by the
-    // simulation, or the two fight over the same body. `leave` is the simulation's own path
-    // out of a crossing, which is what keeps the signal group released.
-    onDisown:(id:number)=>{const p=hooks.sim?.pool?.[id];if(p&&p.active){hooks.sim.leave(p);p.reactionOwned=true;}},
-    onReclaim:(id:number)=>{const p=hooks.sim?.pool?.[id];if(p)p.reactionOwned=false;}});
+ // RUN 7B, reworked in claude/crowd-realism. The HQ crowd is the default (`?hq=0` is the legacy
+ // rollback). Its prebuilt pack is fetched once, AFTER the city is standing, and every crowd the
+ // life module builds gets its own layer: a single page-wide "already asked" flag left a rebuilt
+ // crowd on the legacy bodies for good. See src/app/hq-request.mjs.
+ const hqRequester=createHQRequester({
+  load:()=>{const base=(import.meta as any).env?.BASE_URL??'/';return Promise.all([
+   fetch(`${base}data/crowd/hq-crowd.json`).then(r=>{if(!r.ok)throw new Error(`hq manifest ${r.status}`);return r.json();}),
+   fetch(`${base}data/crowd/hq-crowd.bin`).then(r=>{if(!r.ok)throw new Error(`hq pack ${r.status}`);return r.arrayBuffer();})]);},
+  current:()=>lifeEntry.hooks.current,
+  // A pedestrian the reaction system has thrown must stop being walked along a route by the
+  // simulation, or the two fight over the same body. `leave` is the simulation's own path
+  // out of a crossing, which is what keeps the signal group released.
+  options:(hooks:any)=>({
+   onDisown:(id:number)=>{const p=hooks.sim?.pool?.[id];if(p&&p.active){hooks.sim.leave(p);p.reactionOwned=true;}},
+   onReclaim:(id:number)=>{const p=hooks.sim?.pool?.[id];if(p)p.reactionOwned=false;}}),
+  onEnabled:(hooks:any,layer:any,budget:number,[manifest,bin]:any)=>{
    hooks.setHQCamera(playerMode&&player?player.state:view.position);
    console.info('[HQ crowd] enabled',{budget,archetypes:manifest.archetypes.length,
-    bytes:bin.byteLength,lods:layer?.crowd?.inspect?.().lods});
-  }catch(e){console.warn('[HQ crowd] unavailable, staying on the legacy crowd',String(e));}
- };
+    bytes:bin.byteLength,lods:layer?.crowd?.inspect?.().lods});},
+  onError:(e:any)=>console.warn('[HQ crowd] unavailable, staying on the legacy crowd',String(e))});
+ const requestHQCrowd=()=>hqRequester.ensure(lifeEntry.hooks.current,{asked:(config as any).hqCrowd,tier:currentTier});
  system.setEnabled('life',(config.only===null||config.only.includes('life'))&&!config.skip.includes('life'));
  const trainsEntry=system.entries.get('trains');trainsEntry.enabled=false;let trainReportClock=0;
  trainsEntry.hooks=buildingLifecycle({timingKey:'trains',timingName:'S11 Trains',appearance:'firstTrainVisible',parent:groups.dynamic,build:(data:any,record:any)=>{const started=performance.now(),result=buildTrains(data,{tier:currentTrafficTier,core:stationEntry.hooks.current?.model,debug:config.debug});if(record?.timing)record.timing.computeMs+=performance.now()-started;return result;},onReport:setTrainReport,onReady(result:any){registerSceneRoot(result.root);trainsEntry.status='ready';console.info('[S11 Trains]',result.stats);setModules(system.snapshot());},onError(e:any){trainsEntry.status='failed';console.error('[S11 Trains]',e);setModules(system.snapshot());}});

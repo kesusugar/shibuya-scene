@@ -351,6 +351,10 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
     disowned:disowned.size};
   },
 
-  dispose(){crowd.dispose();rendered.clear();disowned.clear();rising.clear();}
+  dispose(){
+   // Turned off (a tier with no HQ budget) with bodies still mid-fall: hand them back, or the
+   // simulation keeps them `reactionOwned` with nobody left to release them.
+   for(const id of disowned)onReclaim?.(id,null);
+   crowd.dispose();rendered.clear();disowned.clear();rising.clear();}
  };
 }
