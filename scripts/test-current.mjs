@@ -26,6 +26,7 @@ const files=[
  'tests/crowd-ownership.test.mjs',
  'tests/near-reaction.test.mjs',
  'tests/stance.test.mjs',
+ 'tests/pace.test.mjs',
  'tests/temperament.test.mjs',
  'tests/melee-feel.test.mjs',
  'tests/feedback-bus.test.mjs',
