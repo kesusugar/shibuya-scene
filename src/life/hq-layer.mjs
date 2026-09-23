@@ -72,6 +72,9 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
  /** A body is owned by the reaction system exactly while it is off its feet. */
  const thrownNow=i=>{
   const b=crowd.state.behaviour[i];
+  // A LIGHT hit is a flinch on the feet (RUN 11.1/11.2): the simulation keeps the body, and its
+  // stagger or shove is what moves it, so the two never disagree about where it is.
+  if(b===STATE.HIT&&crowd.state.light[i])return false;
   return b===STATE.HIT||b===STATE.KNOCKDOWN||b===STATE.DOWNED;
  };
  function reconcileOwnership(){
@@ -278,6 +281,17 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
    *
    * Nothing here decides damage. The simulation already did that.
    */
+  /**
+   * A blow landed on one citizen (RUN 11.2): flinch or stagger now, then the answer their
+   * temperament chose -- run, step back, or (for a fighter) nothing here, because fighting is
+   * the simulation's job. A fatal blow is left to `struck`, which already knocks them down.
+   */
+  blow({victim,blow,response}={}){
+   const i=crowd.indexOf(victim);if(i<0||!blow||blow.fatal)return false;
+   const then=response==='flee'?STATE.FLEE:response==='backoff'?STATE.AVOID:STATE.NORMAL;
+   return crowd.setState(i,STATE.HIT,{light:true,hold:blow.hold,then,force:true});
+  },
+
   witness(event={}){
    // RUN 10: the decision moved to src/life/hq-awareness.mjs, which is now the one place
    // that says what a crowd does about something. This used to carry its own copy of the

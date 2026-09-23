@@ -74,7 +74,7 @@ test('stopped traffic can be stolen without retaining signal locks and enter/exi
  assert.equal(end.done,true);assert.equal(end.slot,slot);assert.equal(motion.active,false);
 });
 test('melee selects a facing adult, provokes counterattacks, and either side can die',()=>{
- const p={id:7,active:true,controlled:false,choreographed:false,struck:undefined,combatDead:false,archetype:'casual',crossing:null,x:0,z:1,heading:Math.PI,state:'walking',speed:0};
+ const p={id:9,active:true,controlled:false,choreographed:false,struck:undefined,combatDead:false,archetype:'casual',crossing:null,x:0,z:1,heading:Math.PI,state:'walking',speed:0};
  const grid=new Map([['0,0',[p]]]),crowd={grid,time:0,network:{ctx:flat},cell:(x,z)=>Math.floor(x/2)+','+Math.floor(z/2),insert(q){const k=this.cell(q.x,q.z);if(!this.grid.has(k))this.grid.set(k,[]);this.grid.get(k).push(q);},leave(){},say(){},vehicleOverlap:()=>false,strike(q){q.struck=0;return true;}};
  const player=createPlayer(flat,{start:[0,0],heading:0}),fight=createMeleeCombat();
  // RUN 8: damage lands inside the clip's active window, not on the tick of the input. This

@@ -2,6 +2,7 @@ import {AnimationMixer,LoopOnce,LoopRepeat} from 'three';
 import {bakedCitizen} from './character-asset.mjs';
 import {buildGaitSpace,createGaitBlend,createBodyFacing,LOCOMOTION} from './locomotion.mjs';
 import {createFootIK} from './foot-ik.mjs';
+import {attackOf} from './attack-timing.mjs';
 import pack from './generated/character.mjs';
 
 export const FIGURE=Object.freeze({height:1.76,shirt:0xc94d38,trousers:0x263443,skin:0xdfb994,hair:0x25282a,cycle:1.55});
@@ -17,13 +18,26 @@ const GAIT=new Set(['Idle','Walk','Run','Sprint']);
  * This used to also pick which locomotion clip to play, by speed thresholds; it does not any
  * more, because a threshold is what put three clips inside a third of a second.
  */
+/**
+ * The punch envelope, -0.35..1 over the swing: a wind-up away, a drive through that peaks when
+ * the fist is out, and a settle. Timing comes from the measured clip, not a fraction chosen by
+ * eye. Pure, for the test.
+ */
+export function punchEmphasis(name,progress){
+ const a=attackOf(name),w=a.windup/a.duration,p=a.peak/a.duration,u=Math.max(0,Math.min(1,progress));
+ const ease=x=>x*x*(3-2*x);
+ if(u<w)return -.35*Math.sin(Math.PI*.5*u/w);
+ if(u<p)return -.35+1.35*ease((u-w)/Math.max(1e-6,p-w));
+ return 1-ease((u-p)/Math.max(1e-6,1-p));
+}
+
 export function characterAction(state){
  if(state.alive===false)return (state.runOver??0)<.6?'Fall':'Death';
  if(state.vehiclePhase>0)return state.vehicleKind==='exit'?'Exit':'Enter';
  if(state.hurtTime>0)return 'Hit';
  if(state.trafficReaction==='guard')return 'Guard';
  if(state.trafficReaction==='startle')return 'Startle';
- if(state.attackTime>0)return 'Punch';
+ if(state.attackTime>0)return state.attackName==='PunchCross'?'PunchCross':'Punch';
  return null;
 }
 
@@ -66,6 +80,9 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
   action.clampWhenFinished=!loop;actions[clip.name]=action;
  }
  const head=root.getObjectByName(asset.bones.head);
+ // RUN 11.2: what a punch leans on. Present on the humanoid rig, absent on the baked figure,
+ // which simply goes without the emphasis.
+ const spine=root.getObjectByName('spine_02'),chest=root.getObjectByName('spine_03');
  const gait=createGaitBlend(buildGaitSpace(instance.clips,asset.gait,asset.gaitDetail));
  const facing=createBodyFacing(0);
  // Foot IK only exists where the skeleton names the joints it needs; the offline-baked figure
@@ -89,7 +106,7 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
 
  /** Play a one-shot or a held pose over the legs, or hand the body back to the gait. */
  function setOverlay(next,state){
-  const restart=next==='Punch'&&(state.attackTime??0)>previousAttack+.01;
+  const restart=(next==='Punch'||next==='PunchCross')&&(state.attackTime??0)>previousAttack+.01;
   if(next===overlay&&!restart)return;
   if(overlay&&actions[overlay])actions[overlay].fadeOut(next==='Fall'?.06:.14);
   if(next&&actions[next]){
@@ -132,8 +149,15 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
    if(overlay){
     const action=actions[overlay],duration=action.getClip().duration;
     let time=null;
-    if(overlay==='Punch')time=duration-state.attackTime*(duration/.42);
-    if(overlay==='Hit')time=state.hurtTime>0?duration-state.hurtTime*(duration/.34):duration/2;
+    if(overlay==='Punch'||overlay==='PunchCross'){
+     // The player's swing carries its real length: play the clip at its own speed, so the
+     // frame the fist is out is the frame the hit test runs (attack-timing.mjs measured both).
+     // NPC swings come in as the old 0.42 s pulse and keep that mapping.
+     const total=state.attackDuration>0?state.attackDuration:.42;
+     time=state.attackDuration>0?duration*(1-state.attackTime/total):duration-state.attackTime*(duration/.42);
+    }
+    if(overlay==='Hit'){const total=state.hurtDuration>0?state.hurtDuration:.34;
+     time=state.hurtTime>0?duration*(1-state.hurtTime/total):duration/2;}
     if(overlay==='Enter'||overlay==='Exit')time=state.vehiclePhase*duration;
     if(overlay==='Fall')time=state.runOver??0;
     if(time!==null){action.time=Math.max(0,Math.min(duration,time));mixer.update(0);}
@@ -153,6 +177,17 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
    root.rotation.set(0,facing.heading,facing.lean,'YXZ');
    if(state.trafficReaction==='look'&&Number.isFinite(state.threatHeading)&&head)
     head.rotation.y=Math.max(-.8,Math.min(.8,Math.atan2(Math.sin(state.threatHeading-facing.heading),Math.cos(state.threatHeading-facing.heading))));
+   // RUN 11.2: weight behind a punch. The clip is authored small; on top of it the torso winds
+   // up away from the punching side, then drives through with the shoulder, leans in, and the
+   // body steps a hand's width forward at the moment the fist is out. Additive and bounded,
+   // and only for a swing that carries its timing (the player's).
+   if((overlay==='Punch'||overlay==='PunchCross')&&state.attackDuration>0&&spine){
+    const k=punchEmphasis(overlay,1-state.attackTime/state.attackDuration);
+    const side=overlay==='Punch'?1:-1;       // left jab turns the left shoulder in; cross the right
+    spine.rotateY(side*.24*k);chest?.rotateY(side*.2*k);
+    const lean=Math.max(0,k);spine.rotateX(.12*lean);
+    root.position.x+=Math.sin(facing.heading)*.11*lean;root.position.z+=Math.cos(facing.heading)*.11*lean;
+   }
    root.updateMatrixWorld(true);
 
    // Feet last, on top of the finished pose, because it corrects what the animation produced

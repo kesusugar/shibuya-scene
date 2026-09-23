@@ -1,10 +1,18 @@
 import test from 'node:test';
+import {responseOf,RESPONSE} from '../src/life/temperament.mjs';
 import assert from 'node:assert/strict';
 import {createMeleeCombat,COMBAT,PHASE} from '../src/player/combat.mjs';
 import {ATTACKS,attackOf,activeWindow} from '../src/player/attack-timing.mjs';
 import {createPlayer,PLAYER} from '../src/player/controller.mjs';
 
 /** The parts of the crowd simulation combat actually touches. */
+// RUN 11.2: only some people fight back now -- by temperament, deterministic by id. The tests
+// of the retaliation MECHANICS use someone who would; see the temperament tests below for the
+// people who would not.
+const FIGHTER=Array.from({length:64},(_,i)=>i).find(i=>responseOf(i)===RESPONSE.FIGHT);
+const FLEER=Array.from({length:64},(_,i)=>i).find(i=>responseOf(i)===RESPONSE.FLEE);
+const BACKER=Array.from({length:64},(_,i)=>i).find(i=>responseOf(i)===RESPONSE.BACK_OFF);
+
 function crowd(people=[]){
  const log={left:[],struck:[],said:[]};
  const c={
@@ -259,7 +267,7 @@ test('even a miss is witnessed, but more weakly',()=>{
 
 test('the NPC swings on the same model the player does',()=>{
  // A player who must respect a hit window while the crowd lands instantly is not fighting.
- const attacker=npc(1,0,1.0);
+ const attacker=npc(FIGHTER,0,1.0);
  const c=crowd([attacker]),p=player(),melee=createMeleeCombat();
  melee.request();
  run(melee,c,p,2);                                   // provoke them
@@ -354,7 +362,7 @@ test('an NPC fight can kill the player, and restarting puts them back',()=>{
 // either. `combatUntil` is set when they are hit, and the moment they are off the crossing --
 // still inside the 14 s window -- the retaliation loop picks them up.
 test('a pedestrian punched on a crossing fights back once they are off it',()=>{
- const target=npc(1,0,1.0,{crossing:{id:'north'},queueKey:'north'});
+ const target=npc(FIGHTER,0,1.0,{crossing:{id:'north'},queueKey:'north'});
  const c=crowd([target]),p=player(),melee=createMeleeCombat();
  melee.request();run(melee,c,p,1.2);
 
@@ -397,7 +405,7 @@ test('the choreographed Scramble cast CAN be punched',()=>{
 });
 
 test('a cast member is not taken off their track to fight',()=>{
- const target=cast(1,0,1.0);
+ const target=cast(FIGHTER,0,1.0);
  const c=crowd([target]),p=player(),melee=createMeleeCombat();
  melee.request();run(melee,c,p,1.2);
  // `choreography.move` owns state and speed every tick; stopping them here would have the
@@ -427,7 +435,7 @@ test('a fatal hit on a cast member goes through strike, not around it',()=>{
 });
 
 test('a cast member fights back once they are no longer cast',()=>{
- const target=cast(1,0,1.0);
+ const target=cast(FIGHTER,0,1.0);
  const c=crowd([target]),p=player(),melee=createMeleeCombat();
  melee.request();run(melee,c,p,1.2);
  assert.ok(target.combatHealth<100);
@@ -438,4 +446,43 @@ test('a cast member fights back once they are no longer cast',()=>{
  const before=p.state.health;
  run(melee,c,p,3);
  assert.ok(p.state.health<before,'the ex-cast pedestrian never landed a punch');
+});
+
+test('only people with the temper for it fight back; the rest run or step away',()=>{
+ for(const [id,expect] of [[FIGHTER,'fight'],[FLEER,'flee'],[BACKER,'backoff']]){
+  const target=npc(id,0,1.0);
+  const c=crowd([target]);const shoved=[];c.scatter=(q,dx,dz,u)=>{shoved.push({dx,dz,u});return true;};
+  const p=player(),melee=createMeleeCombat();
+  melee.request();run(melee,c,p,1.2);
+  const snap=melee.snapshot();
+  assert.equal(snap.byResponse[expect],1,`id ${id} did not answer ${expect}`);
+  if(expect==='fight')assert.equal(target.combatTarget,'player');
+  else{
+   assert.notEqual(target.combatTarget,'player',`a ${expect} temperament squared up anyway`);
+   assert.equal(shoved.length,1,'they were not sent away from the attacker');
+   assert.ok(shoved[0].dz>0,'sent towards the attacker instead of away');
+   assert.ok(expect==='flee'?shoved[0].u>shoved.length*.9:shoved[0].u<.6);
+  }
+ }
+});
+
+test('a blow shows on the victim as a hit, with the hold of that blow, and never as a punch',()=>{
+ const target=npc(BACKER,0,1.0);const c=crowd([target]),p=player();
+ const blows=[];const melee=createMeleeCombat({onBlow:e=>blows.push(e)});
+ melee.request();run(melee,c,p,.5);
+ assert.equal(blows.length,1);
+ assert.ok(target.hurtUntil>0&&target.hurtDuration>0);
+ assert.ok(!(target.combatAction>0),'the victim was given a punch to play on being hit');
+ assert.equal(blows[0].blow.strength,'light');
+ // the second swing is the cross: a stronger blow
+ run(melee,c,p,1.5);melee.request();run(melee,c,p,1.2);
+ assert.equal(blows.at(-1).blow.strength,'strong');
+ assert.ok(blows.at(-1).blow.hold>blows[0].blow.hold);
+});
+
+test('events are announced for audio and camera: swing, hit, pain',()=>{
+ const target=npc(BACKER,0,1.0);const c=crowd([target]),p=player();
+ const kinds=[];const melee=createMeleeCombat({onEvent:k=>kinds.push(k)});
+ melee.request();run(melee,c,p,1.2);
+ for(const k of ['punch_swing','punch_hit','pain_voice'])assert.ok(kinds.includes(k),`no ${k}`);
 });

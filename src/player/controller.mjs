@@ -304,7 +304,10 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    if (!state.alive) return false;
    state.alive = false; state.runOver = 0; state.hitBy = vehicle?.type ?? 'vehicle'; return true;
   },
-  startAttack(seconds=.42){if(!state.alive)return false;state.attackTime=Math.max(state.attackTime,seconds);return true;},
+  // RUN 11.2: the name and length go with the swing, so the figure plays THIS clip at its own
+  // speed. Before, every swing played `Punch` squeezed into the last 0.42 s of the attack --
+  // double speed, after the hit had already landed, and never the cross.
+  startAttack(seconds=.42,name='Punch'){if(!state.alive)return false;state.attackTime=Math.max(state.attackTime,seconds);state.attackDuration=seconds;state.attackName=name;return true;},
   hurt(amount=0,source='fight'){
    if(!state.alive||state.hurtTime>0)return false;state.health=Math.max(0,state.health-Math.max(0,amount));state.hurtTime=.34;
    if(state.health<=0){state.alive=false;state.runOver=0;state.hitBy=source;}return true;

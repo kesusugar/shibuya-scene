@@ -15,6 +15,8 @@
 // crowd, and the HQ crowd never decides combat -- it reads `struck` and `combatDead` off the
 // pedestrian, exactly as it already reads them for a car.
 import {ATTACKS,attackOf} from './attack-timing.mjs';
+import {blowOn,responseOf,RESPONSE} from '../life/temperament.mjs';
+import {ARCHETYPES} from '../life/config.mjs';
 
 export const COMBAT=Object.freeze({range:1.75,notice:4.5,playerDamage:34,npcDamage:14,
  attackSeconds:.42,npcWindup:.55,npcCooldown:1.05,hostileSeconds:14,
@@ -40,11 +42,16 @@ const turn=(a,b)=>Math.atan2(Math.sin(b-a),Math.cos(b-a));
  *   attacker:string,victim:number|null,time:number})=>number)} [options.onWitness]
  *   Called when a punch is thrown, with where and how bad. Returns how many people reacted.
  *   The listener owns the bounding; this module does not scan the crowd itself.
+ * @param {null|((event:{victim:number,blow:object,response:string,time:number})=>any)} [options.onBlow]
+ *   RUN 11.2: one blow on one victim, so the body drawing them can flinch and follow it up.
+ * @param {null|((kind:string,event:{x:number,z:number,intensity:number,id?:number})=>any)} [options.onEvent]
+ *   RUN 11.3: swings, hits and pain, for the feedback bus (audio, camera).
  */
-export function createMeleeCombat({onWitness=null}={}){
+export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null}={}){
  let pending=false,target=null,disposed=false,swingIndex=0;
  let swing=null;                       // the attack in flight, or null
- const stats={swings:0,hits:0,misses:0,npcHits:0,npcDeaths:0,witnessEvents:0,witnesses:0};
+ const stats={swings:0,hits:0,misses:0,npcHits:0,npcDeaths:0,witnessEvents:0,witnesses:0,
+  byResponse:{fight:0,flee:0,backoff:0}};
 
  /**
   * Someone whose movement belongs to something other than their own will: the Scramble
@@ -126,6 +133,17 @@ export function createMeleeCombat({onWitness=null}={}){
   crowd.strike(p,dx,dz,2.4);p.fatal=true;
  }
 
+ /**
+  * Someone who will not fight: they get away from the attacker, at a run or a few steps.
+  * The simulation's own scatter moves them, so the route, crossing and signal stay theirs.
+  */
+ function answer(crowd,p,state,response){
+  let dx=p.x-state.x,dz=p.z-state.z;const d=Math.hypot(dx,dz)||1;dx/=d;dz/=d;
+  if(p.combatTarget==='player'){p.combatTarget=null;p.combatUntil=0;}
+  crowd.scatter?.(p,dx,dz,response===RESPONSE.FLEE?1:.45);
+  if(response===RESPONSE.FLEE)crowd.say?.(p,'scream',.9);
+ }
+
  /** Tell whoever is listening that a punch was thrown here. Bounded by the listener. */
  function witness(crowd,state,victim,severity){
   if(!onWitness)return;
@@ -162,7 +180,19 @@ export function createMeleeCombat({onWitness=null}={}){
    // stack punches, and a press during recovery is dropped rather than queued.
    if(pending){
     pending=false;
-    if(state.alive&&!swing)start(player);
+    if(state.alive&&!swing){start(player);onEvent?.('punch_swing',{x:state.x,z:state.z,intensity:.6});}
+   }
+   // Staggers: a blown-back step, a fraction of a second long, only where the walkable context
+   // allows it and never for anyone on a crossing or on the choreographed track.
+   for(const p of nearby(crowd,state.x,state.z,COMBAT.notice+2)){
+    // Counted down by the frame, not by the clock, so it always ends.
+    if(!(p.staggerLeft>0)||p.struck!==undefined||onRails(p))continue;
+    const left=p.staggerLeft/Math.max(.05,p.hurtDuration??.34);p.staggerLeft-=dt;
+    const nx=p.x+p.staggerX*left*dt,nz=p.z+p.staggerZ*left*dt;
+    if(crowd.network.ctx.safe(nx,nz,.28)&&!crowd.vehicleOverlap?.(nx,nz,.35)&&!crowd.blocked?.(nx,nz,p,.4,false)){
+     const old=crowd.cell(p.x,p.z);p.x=nx;p.z=nz;
+     if(crowd.cell(nx,nz)!==old){const b=crowd.grid.get(old),i=b?.indexOf(p);if(i>=0)b.splice(i,1);crowd.insert(p);}
+    }
    }
 
    if(swing){
@@ -187,12 +217,26 @@ export function createMeleeCombat({onWitness=null}={}){
      const p=choose(crowd,state);
      if(p){
       swing.hitConsumed=true;
-      engage(crowd,p,state);
-      p.combatAction=1;
-      p.combatHealth-=COMBAT.playerDamage;
-      p.hurtUntil=crowd.time+.34;
-      stats.hits++;
-      if(p.combatHealth<=0)kill(crowd,p,state);
+      // RUN 11.2. How this blow lands (a jab flinches, a cross staggers, both away from the
+      // fist) and how this person answers it (fight, flee or back off -- by who they are, not
+      // at random). Setting `combatAction` on the victim here made a near body play its own
+      // PUNCH on being hit; the victim's swing sets that when they actually throw one.
+      p.combatHealth=(p.combatHealth??100)-COMBAT.playerDamage;
+      const fatal=p.combatHealth<=0;
+      const blow=blowOn(state,p,{attack:swing.name,fatal});
+      const response=responseOf(p.id,{archetype:p.archetype,gray:!!ARCHETYPES[p.archetype]?.gray});
+      p.hurtUntil=crowd.time+blow.hold;p.hurtDuration=blow.hold;
+      stats.hits++;stats.byResponse[response]++;
+      if(fatal)kill(crowd,p,state);
+      else{
+       if(response===RESPONSE.FIGHT)engage(crowd,p,state);
+       else answer(crowd,p,state,response);
+       // A stagger the simulation owns, so every renderer shows the same step back.
+       if(!onRails(p)){p.staggerX=blow.impulse.x;p.staggerZ=blow.impulse.z;p.staggerLeft=blow.hold;}
+      }
+      onBlow?.({victim:p.id,blow,response,time:crowd.time});
+      onEvent?.('punch_hit',{x:p.x,z:p.z,intensity:blow.strength==='strong'?1:.7,id:p.id});
+      onEvent?.(fatal?'pedestrian_scream':'pain_voice',{x:p.x,z:p.z,intensity:fatal?1:.6,id:p.id});
       witness(crowd,state,p,COMBAT.witnessSeverity);
      }
     }

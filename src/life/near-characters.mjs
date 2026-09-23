@@ -289,7 +289,9 @@ export function createNearCharacters(tier='high',{ctx=null}={}){
     if(slot.ik)stats.ik++;
     const distance=Math.hypot(p.x-focus.x,p.z-focus.z),interval=distance<12?0:1/30;
     const reaction=nearReaction(p,clock);slot.reaction=reaction;
-    const state={trafficReaction:reaction,threatHeading:p.lifeThreatHeading??p.threatHeading,x:p.renderX??p.x,y:p.height??0,z:p.renderZ??p.z,heading:p.heading,speed:p.speed,alive:true,animationPhase:Math.abs(p.id)*.137,attackTime:p.combatAction>0?Math.min(.42,p.combatAction*.42):0};
+    const state={trafficReaction:reaction,threatHeading:p.lifeThreatHeading??p.threatHeading,x:p.renderX??p.x,y:p.height??0,z:p.renderZ??p.z,heading:p.heading,speed:p.speed,alive:true,animationPhase:Math.abs(p.id)*.137,attackTime:p.combatAction>0?Math.min(.42,p.combatAction*.42):0,
+     // RUN 11.2: being hit shows as a hit, for as long as the blow holds them.
+     hurtTime:p.hurtUntil>clock?p.hurtUntil-clock:0,hurtDuration:p.hurtDuration??.34};
     if(slot.elapsed>=interval){slot.figure.update(state,Math.min(.1,slot.elapsed));slot.elapsed=0;}
     else slot.figure.root.position.set(state.x,state.y,state.z);
    }

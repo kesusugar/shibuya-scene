@@ -202,6 +202,8 @@ export function buildCrowd(data,options={}){
    * change, so it reports nobody rather than throwing.
    */
   witness(event){return hq?hq.witness(event):0;},
+  /** RUN 11.2: one blow on one citizen, for the HQ body's flinch and follow-up. */
+  blow(event){return hq?hq.blow(event):false;},
   /** Where the HQ budget should be spent, when it is not the player. */
   setHQCamera(p){hqCamera=p;},
   setHQBudget(n){hq?.setBudget(n);hqStats.budget=n;nearCharacters?.setHQCovered(!!hq&&n>0);},
