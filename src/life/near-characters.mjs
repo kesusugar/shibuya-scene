@@ -3,6 +3,7 @@ import {STATE} from './hq-crowd.mjs';
 import {ARCHETYPES as LOOKS,appearanceOf,paletteOf,deduplicate} from './appearance.mjs';
 import {Group} from 'three';
 import {createPlayerFigure,bakedAsset} from '../player/figure.mjs';
+import {paceStep} from './pace.mjs';
 
 export const NEAR_LIMITS={high:32,medium:12,low:4};
 
@@ -283,13 +284,24 @@ export function createNearCharacters(tier='high',{ctx=null}={}){
      }else slot.figure.recolour({top:look.top});
      slot.figure.setHeight(look.height);
      slot.elapsed=.1;
+     // A new holder starts from where they are drawn, at the simulation's own idea of their
+     // pace; the measured pace takes over within a few frames.
+     slot.lastX=p.renderX??p.x;slot.lastZ=p.renderZ??p.z;
+     slot.pace=Math.abs(p.speed??0);slot.moving=slot.pace>.14;
+     slot.paceX=Math.sin(p.heading??0)*slot.pace;slot.paceZ=Math.cos(p.heading??0)*slot.pace;
     }else if(slot.human&&slot.variant?.id===look.archetype.id)stats.matched++;
     selected.add(p.id);slot.elapsed+=Math.max(0,dt);
     if(slot.human)stats.humanoids++;else stats.baked++;
     if(slot.ik)stats.ik++;
     const distance=Math.hypot(p.x-focus.x,p.z-focus.z),interval=distance<12?0:1/30;
+    // claude/crowd-realism: the legs follow the MEASURED pace of the drawn body, with the same
+    // hysteresis as the mass crowd (src/life/pace.mjs). `p.speed` is intent: a blocked cast
+    // member reported walking speed on a frame they did not move, which is a walk on the spot.
+    const drawnX=p.renderX??p.x,drawnZ=p.renderZ??p.z;
+    const paced=paceStep(slot.paceX??0,slot.paceZ??0,!!slot.moving,drawnX-(slot.lastX??drawnX),drawnZ-(slot.lastZ??drawnZ),dt);
+    slot.paceX=paced.vx;slot.paceZ=paced.vz;slot.pace=paced.speed;slot.moving=paced.moving;slot.lastX=drawnX;slot.lastZ=drawnZ;
     const reaction=nearReaction(p,clock);slot.reaction=reaction;
-    const state={trafficReaction:reaction,threatHeading:p.lifeThreatHeading??p.threatHeading,x:p.renderX??p.x,y:p.height??0,z:p.renderZ??p.z,heading:p.heading,speed:p.speed,alive:true,animationPhase:Math.abs(p.id)*.137,attackTime:p.combatAction>0?Math.min(.42,p.combatAction*.42):0,
+    const state={trafficReaction:reaction,threatHeading:p.lifeThreatHeading??p.threatHeading,x:p.renderX??p.x,y:p.height??0,z:p.renderZ??p.z,heading:p.heading,speed:slot.moving?slot.pace:0,alive:true,animationPhase:Math.abs(p.id)*.137,attackTime:p.combatAction>0?Math.min(.42,p.combatAction*.42):0,
      // RUN 11.2: being hit shows as a hit, for as long as the blow holds them.
      hurtTime:p.hurtUntil>clock?p.hurtUntil-clock:0,hurtDuration:p.hurtDuration??.34};
     if(slot.elapsed>=interval){slot.figure.update(state,Math.min(.1,slot.elapsed));slot.elapsed=0;}
@@ -302,6 +314,8 @@ export function createNearCharacters(tier='high',{ctx=null}={}){
   /** The clip a held citizen's body is playing (overlay first), or null. For QA. */
   actionOf(id){return slots.find(x=>x.id===id)?.figure.action??null;},
   reactionOf(id){return slots.find(x=>x.id===id)?.reaction??null;},
+  /** The measured pace a held citizen's legs are driven by, for QA: {speed, moving}. */
+  paceOf(id){const s=slots.find(x=>x.id===id);return s?{speed:s.pace??0,moving:!!s.moving}:null;},
   bodyOf(id){const s=slots.find(x=>x.id===id);return s?(s.human?'humanoid':'baked'):null;},
   /** Which appearance archetype a held citizen is wearing, or null. */
   lookOf(id){const s=slots.find(x=>x.id===id);return s?.human?(s.variant?.id??null):null;},

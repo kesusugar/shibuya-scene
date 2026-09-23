@@ -21,6 +21,7 @@
 import {InstancedMesh,InstancedBufferAttribute,BufferGeometry,BufferAttribute,
         MeshStandardMaterial,DataTexture,RGBAFormat,FloatType,NearestFilter,
         Object3D,Group,DynamicDrawUsage} from 'three';
+import {PACE,paceStep,cadence} from './pace.mjs';
 
 /** The states a citizen can be in. Index into CLIP_FOR, and what the CPU writes. */
 /**
@@ -56,11 +57,22 @@ export const CLIP_FOR=Object.freeze({
  * NORMAL and LOOK -- the states that borrow the locomotion clip -- are ever replaced, so a
  * waiting citizen who STARTLEs, AVOIDs or FLEEs still plays exactly that reaction.
  */
-export function clipFor(behaviour,waiting){
+export function clipFor(behaviour,waiting,moving=true,fast){
  // RUN 11.0: LOOK is not a whole-body reaction -- it has no clip of its own and borrows the
  // locomotion one -- so it keeps the stance underneath. A waiting citizen who glanced at the
  // player was playing Walk on the spot; 16-32 of the 1,455 at a red light, live.
- return (behaviour===STATE.NORMAL||behaviour===STATE.LOOK)&&waiting?'Idle':CLIP_FOR[behaviour];
+ //
+ // claude/crowd-realism: `moving` is the body's MEASURED pace (src/life/pace.mjs), with
+ // hysteresis. Anyone the simulation is not actually moving stands, whatever the reason --
+ // a jam, a queue, a blocked cast member -- and a reaction that is not carrying the body
+ // anywhere holds a wary Guard instead of running on the spot. `fast` picks Run over Walk from
+ // the same measured pace; left undefined it keeps each state's own clip.
+ const locomotion=behaviour===STATE.NORMAL||behaviour===STATE.LOOK;
+ const escaping=behaviour===STATE.AVOID||behaviour===STATE.FLEE;
+ if(locomotion&&(waiting||!moving))return 'Idle';
+ if(escaping&&!moving)return 'Guard';
+ if(locomotion||escaping)return (fast??escaping)?'Run':'Walk';
+ return CLIP_FOR[behaviour];
 }
 
 /**
@@ -308,7 +320,14 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
   calmed:new Uint8Array(max),       // the reaction `ready` is cooling off from
   waiting:new Uint8Array(max),      // standing at a kerb for the signal: Idle, not Walk
   light:new Uint8Array(max),        // this HIT is a flinch that ends standing, not a knockdown
-  after:new Uint8Array(max)         // the state a light HIT gives way to
+  after:new Uint8Array(max),        // the state a light HIT gives way to
+  // claude/crowd-realism: the measured pace (src/life/pace.mjs) and the playback rate last
+  // written, so a rate change can keep the pose continuous instead of jumping in the cycle.
+  pace:new Float32Array(max),       // smoothed drawn ground speed, m/s
+  paceX:new Float32Array(max),paceZ:new Float32Array(max), // ...and the smoothed velocity it comes from
+  moving:new Uint8Array(max),       // hysteresis on `pace`: stepping, or standing
+  fast:new Uint8Array(max),         // hysteresis on `pace`: Run rather than Walk
+  animRate:new Float32Array(max)    // cycles per second currently in the attribute
  };
  // The palette also lives here, not only in the instanced attribute, because moving a citizen
  // between LOD lanes has to rewrite it into the new lane and an attribute is write-mostly.
@@ -316,21 +335,34 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
  let population=0;
  const byId=new Map();
 
+ let clock=0;                       // the crowd time the GPU is animating against
  const stats={population:0,drawCalls:0,triangles:0,vertices:0,
   stateChanges:0,transformWrites:0,lanes:lanes.length,lod,
   byState:new Uint32Array(Object.keys(STATE).length),byArchetype:new Uint32Array(lanes.length)};
 
  const clipOf=name=>clips.get(name)??clips.values().next().value;
+ const nameOf=i=>clipFor(state.behaviour[i],state.waiting[i],!!state.moving[i],!!state.fast[i]);
+ /** Cycles per second citizen `i` should play `clip` at. */
+ function rateOf(i,name,clip){
+  if(state.behaviour[i]===STATE.DOWNED)return 0;      // frozen states hold a single pose
+  // Walk and Run: stride / measured ground speed, so the planted foot stays planted. Everything
+  // else plays at its authored rate with the citizen's own small offset, so a row of idlers is
+  // not a chorus line.
+  return cadence(name,clip.duration,state.pace[i])??state.rate[i]/Math.max(.01,clip.duration);
+ }
 
- function writeClip(i){
+ function writeClip(i,{continuous=true}={}){
   const lane=lanes[state.lane[i]],slot=state.slot[i];
-  const clip=clipOf(clipFor(state.behaviour[i],state.waiting[i]));
+  const name=nameOf(i),clip=clipOf(name);
   lane.clipAttr.setXY(slot,clip.row,clip.frames);
-  // A clip's playback rate is its own duration, scaled by how fast this citizen moves, so a
-  // walk cycle matches the ground rather than sliding. Frozen states hold a single pose.
-  const behaviour=state.behaviour[i];
-  const frozen=behaviour===STATE.DOWNED;
-  const rate=frozen?0:state.rate[i]/Math.max(.01,clip.duration);
+  let rate=rateOf(i,name,clip);
+  // A rewrite that does not change the rate noticeably (an LOD move, a waiting flag) keeps the
+  // exact rate, so it cannot nudge the cycle at all.
+  if(continuous&&Math.abs(rate-state.animRate[i])<=Math.max(.02,state.animRate[i]*.05))rate=state.animRate[i];
+  // The shader plays fract(phase + time * rate). Changing the rate alone would jump the pose
+  // to wherever the new rate would have been by now; shifting the phase keeps it where it is.
+  if(continuous){const p=state.phase[i]+clock*(state.animRate[i]-rate);state.phase[i]=p-Math.floor(p);}
+  state.animRate[i]=rate;
   lane.animAttr.setXY(slot,state.phase[i],rate);
   lane.clipAttr.needsUpdate=true;lane.animAttr.needsUpdate=true;
  }
@@ -358,6 +390,8 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
    const h=Math.abs(Math.imul(id|0,0x9e3779b1))>>>0;
    state.phase[i]=((h>>>8)&1023)/1023;
    state.rate[i]=.88+((h>>>18)&255)/255*.24;
+   state.pace[i]=Math.max(0,speed);state.paceX[i]=Math.sin(heading)*state.pace[i];state.paceZ[i]=Math.cos(heading)*state.pace[i];state.moving[i]=speed>PACE.stopBelow?1:0;
+   state.fast[i]=speed>PACE.strollTop?1:0;state.animRate[i]=0;
    state.behaviour[i]=STATE.NORMAL;state.timer[i]=0;
    state.noticed[i]=0;state.ready[i]=0;state.attention[i]=0;state.calmed[i]=0;state.waiting[i]=0;state.light[i]=0;state.after[i]=0;
    state.health[i]=100;state.fallen[i]=0;
@@ -368,7 +402,7 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
    lane.palAttr.setXYZW(slot,palette[i*4],palette[i*4+1],palette[i*4+2],palette[i*4+3]);
    lane.shoeAttr.setX(slot,shoe[i]);
    lane.palAttr.needsUpdate=true;lane.shoeAttr.needsUpdate=true;
-   writeClip(i);
+   writeClip(i,{continuous:false});
    byId.set(id,i);
    return i;
   },
@@ -480,7 +514,27 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
    return true;
   },
   /** The clip a held citizen is playing, by name. For QA and tests. */
-  clipName(i){return i<0||i>=population?null:clipFor(state.behaviour[i],state.waiting[i]);},
+  clipName(i){return i<0||i>=population?null:nameOf(i);},
+  /** Cycles per second the GPU is playing citizen `i` at. For QA and tests. */
+  animRate(i){return i<0||i>=population?null:state.animRate[i];},
+
+  /**
+   * Feed the body's drawn displacement (dx, dz) this frame (src/life/pace.mjs). Switches Idle / Walk /
+   * Run on the measured pace with hysteresis, and keeps a locomotion clip's cadence on the
+   * ground speed. Only touches the attribute when something visible changes.
+   */
+  pace(i,dx,dz,dt){
+   if(i<0||i>=population||!(dt>0))return false;
+   const got=paceStep(state.paceX[i],state.paceZ[i],!!state.moving[i],dx,dz,dt);
+   state.paceX[i]=got.vx;state.paceZ[i]=got.vz;state.pace[i]=got.speed;
+   const moving=got.moving?1:0;
+   const b=state.behaviour[i],top=b===STATE.NORMAL||b===STATE.LOOK?PACE.strollTop:PACE.walkTop;
+   const fast=state.fast[i]?(got.speed>top-.25?1:0):(got.speed>top+.25?1:0);
+   if(moving!==state.moving[i]||fast!==state.fast[i]){state.moving[i]=moving;state.fast[i]=fast;writeClip(i);return true;}
+   const name=nameOf(i),clip=clipOf(name),rate=rateOf(i,name,clip),old=state.animRate[i];
+   if(Math.abs(rate-old)>Math.max(.02,old*.05)){writeClip(i);return true;}
+   return false;
+  },
 
   /**
    * Put a thrown body where the simulation's flight has it, arc height included, and drop
@@ -531,6 +585,7 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
    */
   update(dt,{time=0}={}){
    const start=(typeof performance!=='undefined'?performance.now():0);
+   clock=time;
    stats.byState.fill(0);stats.byArchetype.fill(0);
    let writes=0;
    for(const lane of lanes){

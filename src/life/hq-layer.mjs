@@ -152,8 +152,8 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
 
    for(let k=0;k<take;k++){
     const {p,d}=candidates[k];
-    let i=crowd.indexOf(p.id);
-    if(i<0){
+    let i=crowd.indexOf(p.id),born=false;
+    if(i<0){born=true;
      // RUN 9: `appearanceId` lets a pedestrian wear a face that is not their pool id's. It
      // exists for one case -- someone dragged out of a car was already drawn sitting in it,
      // and arriving on the pavement as a different person would undo the whole point of the
@@ -183,6 +183,10 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
        else{x=cx+(x-cx)*step/gap;z=cz+(z-cz)*step/gap;}
       }
      }
+     // How far the drawn body actually moved this frame decides Idle/Walk/Run and the cadence
+     // (src/life/pace.mjs). `p.speed` is the simulation's intent, not the body's motion.
+     // A body spawned this frame has no previous position to measure from.
+     if(!born)crowd.pace(i,x-crowd.state.x[i],z-crowd.state.z[i],dt);
      crowd.place(i,x,p.height??0,z,p.heading??0,p.speed??0);
     }else if(p.struck!==undefined){
      // RUN 11.1: a body the SIMULATION threw is where its flight says, arc included. The crowd
