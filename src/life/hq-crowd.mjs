@@ -450,6 +450,16 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
    * floats of instanced attribute. It is what makes "thirty people react at once" cost the
    * same as thirty writes rather than thirty skeletons.
    */
+  /**
+   * Keep the current state from draining for at least `seconds` more. For a body whose end the
+   * simulation decides rather than this timer -- someone it is still holding on the ground.
+   */
+  hold(i,seconds){
+   if(i<0||i>=population)return false;
+   if(state.timer[i]<seconds)state.timer[i]=seconds;
+   return true;
+  },
+
   setState(i,behaviour,{impulseX=0,impulseZ=0,impulseY=0,force=false}={}){
    if(i<0||i>=population)return false;
    if(!force&&state.timer[i]>0&&priority(behaviour)<priority(state.behaviour[i]))return false;

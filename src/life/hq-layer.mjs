@@ -34,6 +34,19 @@ export const HQ_LOD=Object.freeze({
  reviewInterval:.25     // seconds between LOD reviews; the camera does not move that fast
 });
 
+/**
+ * Getting up where the simulation says you are.
+ *
+ * RUN 10, browser scenario L. The HQ body falls where it was hit; the simulation carries its
+ * own pedestrian through the throw and, for an extracted driver, then stands them at the
+ * nearest safe node. When the body is handed back, those two positions can be metres apart,
+ * and placing it straight on the simulation's point was a one-frame jump of 2-6.6 m. From the
+ * moment the body is handed back -- not from RECOVER, which a nearby car can replace with
+ * AVOID on the very next frame -- the gap closes at a bounded rate, always within `seconds`:
+ * a short visual transition, never a different destination.
+ */
+export const HQ_RISE=Object.freeze({gap:.5,speed:3.2,seconds:1.2});
+
 export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
                                             interpolate=true,onDisown=null,onReclaim=null}={}){
  // Capacity is per lane, and a lane is one archetype at one LOD. The worst case is everyone
@@ -46,6 +59,7 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
  const rendered=new Set();          // pedestrian ids this layer is drawing
  const laneCache=new Map();         // `${archetypeId}|${lod}` -> lane index
  const disowned=new Set();          // ids whose movement the reaction system has taken
+ const rising=new Map();            // id -> m/s, for a body closing on its simulation position
  let reviewClock=0,awarenessClock=0;
  const stats={hq:0,legacy:0,budget,moves:0,syncMs:0,threatMs:0,candidates:0,
   reacting:0,down:0,byLod:{},witnessMs:0,witnessCandidates:0,witnessReacted:0,
@@ -76,6 +90,7 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
      impulseX:crowd.state.impulseX[i],impulseZ:crowd.state.impulseZ[i]});
    }else if(!thrown&&disowned.has(id)){
     disowned.delete(id);
+    rising.set(id,0);
     onReclaim?.(id,{x:crowd.state.x[i],z:crowd.state.z[i]});
    }
   }
@@ -144,12 +159,33 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
      i=crowd.spawn(p.id,look,lane??0,
       {x:p.renderX??p.x,y:p.height??0,z:p.renderZ??p.z,heading:p.heading??0,speed:p.speed??0});
      if(i<0)continue;                            // a lane is full; they stay legacy this frame
+     rising.delete(p.id);                        // a new body starts where it is drawn
     }
     rendered.add(p.id);
 
     // A body the reaction system owns is NOT repositioned from the route: it is mid-flight.
-    if(!disowned.has(p.id))
-     crowd.place(i,p.renderX??p.x,p.height??0,p.renderZ??p.z,p.heading??0,p.speed??0);
+    if(!disowned.has(p.id)){
+     let x=p.renderX??p.x,z=p.renderZ??p.z;
+     if(crowd.state.behaviour[i]===STATE.RECOVER||rising.has(p.id)){
+      const cx=crowd.state.x[i],cz=crowd.state.z[i],gap=Math.hypot(x-cx,z-cz);
+      let rate=rising.get(p.id);            // 0: handed back, not yet measured
+      if(!rate){
+       if(gap>HQ_RISE.gap)rising.set(p.id,rate=Math.max(HQ_RISE.speed,gap/HQ_RISE.seconds));
+       else rising.delete(p.id);
+      }
+      if(rate){
+       const step=rate*Math.max(0,dt);
+       if(gap<=step)rising.delete(p.id);
+       else{x=cx+(x-cx)*step/gap;z=cz+(z-cz)*step/gap;}
+      }
+     }
+     crowd.place(i,x,p.height??0,z,p.heading??0,p.speed??0);
+    }
+    // The simulation decides how long a thrown body stays down (`struck`): 4.9 s for a driver
+    // dragged out of a car, longer for anyone else. The HQ chain reached RECOVER at 3.9 s,
+    // was handed back while `struck` was still set, and was knocked down a second time. Hold
+    // the lying pose until the simulation lets go.
+    if(p.struck!==undefined&&crowd.state.behaviour[i]===STATE.DOWNED)crowd.hold(i,.25);
 
     // The clip follows the pedestrian's own simulated state, not anything invented here.
     const want=behaviourFor(p);
@@ -183,7 +219,7 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
      const id=crowd.state.id[i];
      if(!rendered.has(id)&&!disowned.has(id))stale.push(id);
     }
-    for(const id of stale)crowd.release(id);
+    for(const id of stale){crowd.release(id);rising.delete(id);}
    }
 
    crowd.update(dt,{time});
@@ -288,6 +324,6 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
     disowned:disowned.size};
   },
 
-  dispose(){crowd.dispose();rendered.clear();disowned.clear();}
+  dispose(){crowd.dispose();rendered.clear();disowned.clear();rising.clear();}
  };
 }

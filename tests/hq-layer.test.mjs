@@ -382,3 +382,72 @@ test('a punch in a dense crowd is seen by a useful number of people',()=>{
  assert.ok(reacted>=20,`only ${reacted} people reacted to a punch in a dense crowd`);
  layer.dispose();
 });
+
+test('a thrown body stays down while the simulation holds it, gets up once, and does not snap',()=>{
+ // RUN 10 browser QA, scenario L. An extracted driver is held down by the simulation for 4.9 s
+ // (`struck`); the HQ chain reached RECOVER at 3.9 s, was handed back, and was knocked down a
+ // SECOND time because `struck` was still set. When the simulation then stood them at the
+ // nearest safe node 4.4 m away and let them walk, the HQ body was still lying down, disowned,
+ // at the old spot. A person walking away from their own body.
+ const people=pool(12,1);
+ const layer=createHQLayer(manifest,bin,{budget:12});
+ const victim=people[0],dt=1/30;
+ layer.sync(people,{x:0,z:0},dt,{time:0});
+ victim.struck=0;victim.speed=0;victim.state='walking';
+ const states=[],steps=[];let t=0,lastX=null,lastZ=null,relocatedAt=null,recoverAt=null;
+ const safe={x:victim.x+4.4,z:victim.z};
+ for(let f=0;f<300;f++){
+  t+=dt;
+  if(victim.struck!==undefined){
+   victim.struck+=dt;
+   if(victim.struck>=4.9){           // the simulation's own release, as in simulation.step
+    victim.struck=undefined;relocatedAt=t;
+    victim.x=victim.renderX=safe.x;victim.z=victim.renderZ=safe.z;
+   }
+  }
+  layer.sync(people,{x:0,z:0},dt,{time:t});
+  const i=layer.crowd.indexOf(victim.id),b=layer.crowd.state.behaviour[i];
+  if(states.at(-1)!==b)states.push(b);
+  if(b===STATE.RECOVER&&recoverAt===null)recoverAt=t;
+  const x=layer.crowd.state.x[i],z=layer.crowd.state.z[i];
+  if(lastX!==null)steps.push(Math.hypot(x-lastX,z-lastZ));
+  lastX=x;lastZ=z;
+ }
+ const K=STATE.KNOCKDOWN;
+ assert.equal(states.filter(s=>s===K).length,1,`knocked down more than once: ${states.join(' -> ')}`);
+ assert.deepEqual(states.slice(0,4),[K,STATE.DOWNED,STATE.RECOVER,STATE.NORMAL],states.join(' -> '));
+ assert.ok(recoverAt>=relocatedAt-1e-9,
+  `got up at ${recoverAt?.toFixed(2)} s while the simulation held the body until ${relocatedAt?.toFixed(2)} s`);
+ const worst=Math.max(...steps);
+ assert.ok(worst<.4,`the body jumped ${worst.toFixed(2)} m in one frame`);
+ const i=layer.crowd.indexOf(victim.id);
+ assert.ok(Math.hypot(layer.crowd.state.x[i]-safe.x,layer.crowd.state.z[i]-safe.z)<.01,
+  'the body never reached the safe destination');
+ layer.dispose();
+});
+
+test('a body handed back closes the gap even if a car makes it step aside at once',()=>{
+ // The same scenario live: RECOVER lasted one frame before the player's stationary car asked
+ // for AVOID, and the body jumped 6.6 m in one frame, from where it had lain to the safe node.
+ const people=pool(12,1);
+ const layer=createHQLayer(manifest,bin,{budget:12});
+ const victim=people[0],dt=1/30;
+ layer.sync(people,{x:0,z:0},dt,{time:0});
+ victim.struck=0;victim.speed=0;
+ const safe={x:victim.x+6.5,z:victim.z};
+ let t=0,last=null,worst=0,overridden=false;
+ for(let f=0;f<300;f++){
+  t+=dt;
+  if(victim.struck!==undefined){victim.struck+=dt;
+   if(victim.struck>=4.9){victim.struck=undefined;victim.x=victim.renderX=safe.x;victim.z=victim.renderZ=safe.z;}}
+  layer.sync(people,{x:0,z:0},dt,{time:t});
+  const i=layer.crowd.indexOf(victim.id);
+  if(!overridden&&layer.crowd.state.behaviour[i]===STATE.RECOVER){layer.crowd.setState(i,STATE.AVOID);overridden=true;}
+  const p=[layer.crowd.state.x[i],layer.crowd.state.z[i]];
+  if(last)worst=Math.max(worst,Math.hypot(p[0]-last[0],p[1]-last[1]));last=p;
+ }
+ assert.ok(overridden,'the test never reached RECOVER');
+ assert.ok(worst<.4,`the body jumped ${worst.toFixed(2)} m in one frame`);
+ assert.ok(Math.hypot(last[0]-safe.x,last[1]-safe.z)<.01,'the body never reached the safe destination');
+ layer.dispose();
+});
