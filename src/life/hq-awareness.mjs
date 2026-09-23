@@ -194,7 +194,10 @@ export function createAwareness(){
 
   // Cooling off. `ready` is seconds remaining, counted down by the crowd and set by it when
   // a reaction drains -- this pass never sees that transition, so it cannot own the clock.
-  if(want>STATE.NORMAL&&s.ready[i]>0)return false;
+  // It stops the SAME reaction coming straight back, which is what a lingering player does.
+  // A threat asking for more than the reaction that just drained is new information and
+  // gets through: blocking it had a person stroll on while a runner closed six metres.
+  if(want>STATE.NORMAL&&s.ready[i]>0&&want<=s.calmed[i])return false;
 
   if(want===current)return false;
   if(want>STATE.NORMAL)s.attention[i]=towards;

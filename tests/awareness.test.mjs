@@ -179,6 +179,34 @@ test('a citizen on a threshold does not flicker between animations',()=>{
  crowd.dispose();
 });
 
+test('a cooldown stops a repeated glance, not a threat that is getting worse',()=>{
+ // RUN 10 browser QA, direct approach: a runner was noticed at 8 m (LOOK), the LOOK hold ran
+ // out, the drain started the cooldown, and for the next 1.15 s nothing got through -- the
+ // person went back to strolling while the runner closed six metres, and fled at 2.3 m. The
+ // cooldown exists to stop a LINGERING player re-triggering the same glance; it must not hide
+ // a threat that now asks for more than the reaction that just ended.
+ const id=Array.from({length:200},(_,i)=>i+300).find(i=>Math.abs(traitsOf(i).nerve-.5)<.08);
+ const drained=()=>{
+  const crowd=crowdOf([{id,x:0,z:10,heading:Math.PI}]);
+  crowd.setState(0,STATE.LOOK);crowd.state.timer[0]=1e-4;crowd.update(1/30,{time:0});
+  assert.equal(stateOf(crowd),STATE.NORMAL);
+  assert.ok(crowd.state.ready[0]>1,'the drain did not start the cooldown');
+  return crowd;
+ };
+ // Worse: running straight at them from three metres.
+ let crowd=drained();
+ run(createAwareness(),crowd,player({x:0,z:7,speed:4.2,course:0,heading:0}),.5);
+ assert.ok(stateOf(crowd)>STATE.LOOK,
+  `a runner three metres away was ignored for the cooldown (state ${stateOf(crowd)})`);
+ assert.ok(crowd.state.ready[0]>0,'the test must have run inside the cooldown');
+ crowd.dispose();
+ // The same again: a standing player two metres away asks only for another glance.
+ crowd=drained();
+ run(createAwareness(),crowd,player({x:0,z:8,speed:0}),.5);
+ assert.equal(stateOf(crowd),STATE.NORMAL,'the cooldown no longer stops a repeated glance');
+ crowd.dispose();
+});
+
 // ------------------------------------------------------------------ priority
 
 test('a glance can never overwrite being hit, knocked down, or getting up',()=>{

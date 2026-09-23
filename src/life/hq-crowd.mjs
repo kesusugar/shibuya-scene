@@ -286,7 +286,8 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
   // because a JS object per pedestrian is the thing this architecture exists to avoid.
   noticed:new Float32Array(max),    // seconds a threat has been present but not yet acted on
   ready:new Float32Array(max),      // crowd time before which this citizen will not re-alarm
-  attention:new Float32Array(max)   // heading toward whatever they last noticed
+  attention:new Float32Array(max),  // heading toward whatever they last noticed
+  calmed:new Uint8Array(max)        // the reaction `ready` is cooling off from
  };
  // The palette also lives here, not only in the instanced attribute, because moving a citizen
  // between LOD lanes has to rewrite it into the new lane and an attribute is write-mostly.
@@ -337,7 +338,7 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
    state.phase[i]=((h>>>8)&1023)/1023;
    state.rate[i]=.88+((h>>>18)&255)/255*.24;
    state.behaviour[i]=STATE.NORMAL;state.timer[i]=0;
-   state.noticed[i]=0;state.ready[i]=0;state.attention[i]=0;
+   state.noticed[i]=0;state.ready[i]=0;state.attention[i]=0;state.calmed[i]=0;
    state.health[i]=100;state.fallen[i]=0;
    state.impulseX[i]=state.impulseZ[i]=state.impulseY[i]=0;
    palette[i*4]=PACK(look.skin);palette[i*4+1]=PACK(look.top);
@@ -508,7 +509,12 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
        state.fallen[i]=0;state.noticed[i]=0;
        // Coming down off a reaction starts the cooldown. Anything above NORMAL was a
        // reaction to something, so the test is simply "was I doing something".
-       if(behaviour!==STATE.NORMAL)state.ready[i]=REACTION_COOLDOWN;
+       if(behaviour!==STATE.NORMAL){
+        state.ready[i]=REACTION_COOLDOWN;
+        // ...for THIS reaction. RECOVER is the tail of a flight or a fall, so it counts as
+        // the strongest thing awareness can ask for.
+        state.calmed[i]=Math.min(behaviour,STATE.FLEE);
+       }
       }
       writeClip(i);
      }
