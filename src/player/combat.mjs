@@ -50,6 +50,7 @@ const turn=(a,b)=>Math.atan2(Math.sin(b-a),Math.cos(b-a));
 export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null}={}){
  let pending=false,target=null,disposed=false,swingIndex=0;
  let swing=null;                       // the attack in flight, or null
+ let lastBlow=null;                    // the most recent landed blow, for QA
  const stats={swings:0,hits:0,misses:0,npcHits:0,npcDeaths:0,witnessEvents:0,witnesses:0,
   byResponse:{fight:0,flee:0,backoff:0}};
 
@@ -235,6 +236,7 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null}={}){
        if(!onRails(p)){p.staggerX=blow.impulse.x;p.staggerZ=blow.impulse.z;p.staggerLeft=blow.hold;}
       }
       onBlow?.({victim:p.id,blow,response,time:crowd.time});
+      lastBlow={victim:p.id,response,strength:blow.strength,quarter:blow.quarter,fatal,time:crowd.time};
       onEvent?.('punch_hit',{x:p.x,z:p.z,intensity:blow.strength==='strong'?1:.7,id:p.id});
       onEvent?.(fatal?'pedestrian_scream':'pain_voice',{x:p.x,z:p.z,intensity:fatal?1:.6,id:p.id});
       witness(crowd,state,p,COMBAT.witnessSeverity);
@@ -292,7 +294,7 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null}={}){
    if(target&&(!target.active||target.combatDead||target.combatUntil<=crowd.time))target=null;
    return stats;
   },
-  snapshot(){return {...stats,target:target?.id??null,
+  snapshot(){return {...stats,byResponse:{...stats.byResponse},lastBlow,target:target?.id??null,
    phase:swing?swing.phase:PHASE.IDLE,clip:swing?swing.name:null};},
   reset(){pending=false;target=null;swing=null;},
   dispose(){disposed=true;pending=false;target=null;swing=null;}
