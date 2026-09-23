@@ -67,7 +67,7 @@ cdb6271  RUN 6.7: near-pool budgets on every tier
 | 7 | Historical NPC awareness WIP | superseded in RUN 10.1; never a second production authority |
 | 8 | Melee combat phases + mass crowd reaction | **COMPLETE** |
 | 9 | Vehicle occupancy / enter-exit / carjacking | **COMPLETE** |
-| 10 | NPC life / awareness consolidation | code/headless validation complete; browser acceptance pending (§9g) |
+| 10 | NPC life / awareness consolidation | complete: browser acceptance closed 2026-09-23 (§9g) |
 | 11 | Carjacking | folded into RUN 9 |
 | 12 | Lighting / PBR polish | not started |
 | 13 | Performance / stability | not started |
@@ -1317,6 +1317,168 @@ occupancy/carjack suites are included. The headless signal cycle is integration 
 a screenshot or live console audit. **RUN 10 remains pending visual acceptance** until these
 scenarios and console errors are checked in a real browser. RUN 11 was not started.
 
+### RUN 10 — browser acceptance closed (Claude, 2026-09-23)
+
+This follows Codex's partial QA above and does not replace it. Codex's patch `f6fe7bb` is
+preserved as `6fee7d2` (identical content, different committer). All of it ran in the real
+HIGH/day scene with `?qa=1&hq=1`, driven over the DevTools protocol in headless Chromium on
+SwiftShader. At that frame rate the scene runs at about 0.2–1.5 fps and `FrameGate` clamps each
+frame to 0.1 s, so every check waits on *simulated* progress, not wall time. No FPS here is a
+performance result. Screenshots and traces are local QA evidence and are not committed.
+
+**Legacy / old-style characters (`b87ca60`).** Measured per pedestrian from the renderer's own
+ownership split (a new QA `ownership()`): the procedural legacy renderer drew **0** people. Every
+old-looking body was a *baked* near-pool slot, the eleven-bone offline figure, in the ring
+around the player where the HQ crowd would have drawn the same person better. While the HQ crowd
+covers the scene, the near pool now keeps only its humanoid slots (`setHQCovered`). Live: 8
+humanoids, 0 baked, 0 drawn twice. Without HQ, the baked fallback is unchanged.
+
+**Player vehicle transparency (`1ee9e3f`).** Not a material problem. `loft()` in
+`src/traffic/vehicle-shape.mjs` wound its side quads and caps inside-out, so every lofted body
+had negative signed volume. With back-face culling the far inner walls were drawn and the car
+read as hollow. The winding is fixed at the generator and the pack rebaked; all seven bodies now
+have positive paint and glass volume, which two tests pin. Checked in the browser, day and night.
+Traffic cars use a different builder and were never affected.
+
+**Collision clearance (`f767029`).** Codex's .55 m on every side was measured against every
+sedan lane pose on the map (`qa/gta-upgrade/clearance-cost.mjs`). It made **35 of 2,467**
+undrivable, a narrow street near (−200, 55) that the AI's own sedans use. All of the cost was
+lateral. The margin is now .55 m at the ends and .25 m at the sides, which loses **0** lane poses.
+Browser: that street drives through at 35 km/h. Head-on into a station-area pillar the car stops
+with its nose **0.61 m** clear and the bonnet visibly outside the structure. The car-to-car pad
+is unchanged. `tests/vehicle-clearance.test.mjs` drives the real player vehicle onto every lane
+pose; with the uniform .55 restored it fails on exactly the 35.
+
+**E — parallel versus direct (4 people, after the cooldown fix below).** The player runs at
+4.2 m/s from 12.5 m: straight at them, or past them 2.5 m to the side.
+
+| person | direct: first / max | parallel: first / max |
+| --- | --- | --- |
+| 1913 | LOOK @ 9.05 m / AVOID | LOOK @ 9.09 m / STARTLE |
+| 1890 | LOOK @ 7.27 m / AVOID | LOOK @ 7.30 m / STARTLE |
+| 1516 | LOOK @ 8.37 m / AVOID | LOOK @ 8.75 m / STARTLE |
+| 1637 | LOOK @ 9.17 m / FLEE | LOOK @ 11.02 m (near-held) / STARTLE |
+
+Parallel is weaker every time. First notice is at about the same distance, as it should be: the
+collision term only applies inside the 1.25 s time-to-contact, and the difference shows up
+there. Per awareness pass there were 7–22 candidates and 3–17 evaluated inside 13 m.
+
+**F — rear versus frontal.** Rear first notice / max: 1913 LOOK @ 6.63 m / LOOK; 1516 LOOK @
+4.73 m / LOOK; 1637 LOOK @ 6.58 m / LOOK; and before the fix, 1654 LOOK @ 7.49 m / AVOID against
+8.11 m / FLEE frontal. So rear is later and weaker in 4 of 5. The exception is **1890**: LOOK @
+8.51 m, max AVOID, while held by the near pool. By the rule itself (`playerThreat`,
+behindScale .35, nerve .73), a rear approach at 8.5 m scores 0.03, far below LOOK, and cannot
+reach LOOK beyond about 4 m. So this person was almost certainly facing the player, having
+turned on their route. That was not instrumented in that trial.
+
+**A bug E found (`7fc1d69`).** Direct approach, before: NORMAL → LOOK → **NORMAL** → FLEE at
+2.3 m. The LOOK hold (0.5 s) drained, the drain started the 1.15 s `REACTION_COOLDOWN`, and
+`settle()` refused everything above NORMAL. The person strolled on while the runner closed about
+six metres. The crowd now records the level the cooldown is for (`calmed`), and awareness blocks
+only re-entry at or below it; a stronger reaction gets through. The threshold-wobble flicker
+test is unchanged and passes. A LOOK → NORMAL blip of one reaction delay (60–400 ms) remains
+before an escalation. It is invisible, because on the HQ crowd LOOK plays the same `Walk` clip
+as NORMAL and `attention` is not rendered (see known limitations).
+
+**I — real vehicle contact (2 runs, player's own car).** At 10.3 and 9.5 m/s: target
+KNOCKDOWN + disowned + `reactionOwned` → DOWNED + disowned. 64 and 15 bystanders went
+AVOID/FLEE from the car. Across 912 recorded transitions (every person within 14 m of the path,
+each frame, with the hold timer), awareness downgraded a vehicle or damage state **0** times.
+Closing layer snapshot: population 1,970, 12 HQ draws, 0 Skeletons, 0 Mixers, 0 console
+errors. Screenshots show the thrown bodies with the blood decal in front of the car.
+
+**A bug I found (`a6eb2c0`).** The eight near humanoids picked
+`lifeReaction(p) ?? trafficReaction`, so player awareness always won. While driving, awareness
+sees the rider in the car as a standing player, and people a few metres from the bonnet sat at
+LOOK. Live: in **8 of 32** frames where the car's own warning asked for guard/startle, the body
+showed a head turn instead, for example with a car 2.8 m away at 5.8 m/s. `nearReaction()` now
+puts a live guard/startle/escape first and keeps the old order otherwise. The same
+deterministic run afterwards has the same 8 input conflicts and **0** wrong reactions, read from
+the body (`reactionOf`).
+
+**L — extracted driver (`a7eb2c0`).** Carjack of taxi 5; the driver is pedestrian 1527 (seed
+894229037), the same as Codex's run. Before: KNOCKDOWN → DOWNED → RECOVER → **KNOCKDOWN** → DOWNED.
+The sim holds a thrown body for `struck` 4.9 s, but the HQ chain reached RECOVER at 3.9 s, was
+handed back, and was knocked down again because `struck` was still set. Then the sim stood the
+driver at the nearest safe node, **4.41 m** away this run, and walked them off at 1.91 m/s,
+while the HQ body lay disowned at the old spot. On hand-back it jumped 2.2–6.57 m in one frame.
+Fixed in the render layer only (sim, occupancy, carjack, identity and destination untouched).
+While `struck` is set the layer holds DOWNED. From hand-back, a gap above 0.5 m closes at a
+bounded rate, finishing within 1.2 s (`HQ_RISE`). Keying it on RECOVER was not enough: the parked
+player car replaced RECOVER with AVOID on the next frame. After: KNOCKDOWN → DOWNED (until the sim
+lets go) → RECOVER → AVOID → NORMAL → walking, one knockdown, largest move 0.55 m per clamped
+0.1 s frame (the bounded 5.5 m/s glide, about 9 cm a frame at 60 fps), arriving at the safe node.
+A side effect worth knowing: any body the sim holds down (car and punch victims, 14 s) now lies
+for that long instead of standing up at 3.9 s and falling again.
+
+**K — signal phases, live (`cd4ba03`).** SwiftShader renders this scene at 0.2–0.3 fps, so one
+108 s signal cycle took about 90 minutes of wall time. K therefore ran in the live page with
+the page's own traffic and pedestrian simulations stepped from inside the page, at their own
+1/30 s fixed step, while the renderer kept drawing on its own frames. `hq=128` kept the HQ layer
+live at a smaller draw budget; the simulated crowd is the full 1,978.
+
+The first two attempts found the real problem. **In player mode the signals froze.** Entering
+player mode parks the player's car beside the player, and from the start (12, 24) the first
+legal road pose was *on* the scramble, at (9.2, 25.1). The scramble cast stops for any vehicle
+on its track, so 24 of them stood on the crossing for good. The controller holds its cycle
+until a crossing clears, so every signal on the map stayed at the end of the first pedestrian
+phase for 850 simulated seconds. Moving the car off the crossing parked it in the lane the
+central stream leaves by, and an 8-car platoon (ids 83–90) stopped behind it inside the scramble
+holding the crossing's locks: signals cycled, but nobody was ever given WALK. The parking search
+now skips crossings and the plaza, and prefers a pose whose whole body is at least 1.9 m from
+every lane and junction centreline, falling back to the old rule only when there is none within
+40 m. From the start the car now parks at (−13.5, 49.5).
+
+After the fix, two complete live pedestrian phases (deltas from phase start to end; each end
+includes the controller's hold while the crossing clears, 37.1 s at most):
+
+| phase (signal time) | entries | completed | abandoned | violations | stuck recoveries (cumulative Δ) | currently stuck: all / on a crossing (start → peak → end) | on crossing (peak → end) | queues |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 196 | 1,301 | 1,455 | 0 | 0 | 14 | 60 → 65 → 26 / 0 | 1,463 → 0 | 0 |
+| 304 | 1,301 | 1,450 | 0 | 0 | 13 | 37 → 67 → 33 / 0 | 1,463 → 0 | 0 |
+
+"Stuck recoveries" is the cumulative count of ambient walkers despawned after being blocked for
+35 s. "Currently stuck" is the live number with `stuck > 1 s` at that moment: ambient walkers
+held up by others, and never anyone on a crossing. The queue map was empty throughout: the
+waiting crowd at the scramble is the choreographed cast, which waits at its kerb rather than in
+a crossing queue. 0 console errors.
+
+**Not fixed, recorded:** the *third* live phase (signal time 412) admitted nobody. A route-2
+central-stream taxi (id 80) stood inside the scramble area holding its lock. Route 2's 18-car
+ring was jammed: its 6 downstream cars waited at the path end, because recycling to the start
+needs the start clear and the route's own upstream tail occupied it, and that upstream queue was
+stopped mid-route. The same scene headless (traffic + choreography + pedestrian simulation, HIGH,
+hero start), with or without the player car parked at the same pose, runs five consecutive
+healthy phases (1,301 entries each). So this is a browser-only central-stream spillback that was
+not isolated here. It is traffic-stream behaviour outside RUN 10's scope, left for a later plan
+rather than widened into this RUN.
+
+**Console.** Fresh pages, HIGH, `hq=1`, day then night, on the RUN 10 code. Day covered walking, running,
+a punch and a boarding request; night covered load and idle. Result: **0 errors, 0 uncaught
+exceptions, 0 shader-compile messages, no `[role="alert"]` banner** at any checkpoint.
+0 Skeletons, 0 Mixers, 1,969–1,971 HQ. The only warnings were 3 per page of Chrome's "AudioContext
+was not allowed to start" (autoplay policy without a user gesture), which is not an app error.
+No X4122 appears (that is a Windows D3D warning; SwiftShader does not produce it). At 0.1 fps
+the boarding sequence may not have finished inside that script's wait, but driving ran in the
+I, near-reaction and L sessions, all with 0 console errors.
+
+**Known limitations found here, not fixed (no RUN 11 work):**
+- On the HQ crowd LOOK is invisible: it plays `Walk` like NORMAL, and `attention` is not
+  rendered.
+- The near pool applies the threat rule with no reaction delay or hysteresis ("no clocks"), so
+  its eight bodies notice earlier than the mass crowd and can cross thresholds faster.
+- A stationary player car still makes people within 8 m ahead AVOID (`THREAT.avoid` ignores
+  speed).
+- The HQ body falls where it is hit; the simulation carries its own pedestrian through the
+  throw. The gap is now closed smoothly on hand-back but the throw itself is not drawn on the HQ
+  body.
+- Without `hq=1` the scene draws the legacy crowd by design (the RUN 7B rollback).
+- A player can still park the car across a crossing themselves, and the signal hold then waits
+  for them. Only the automatic parking was fixed.
+- Third-cycle central-stream spillback in the browser (see K above).
+
+**RUN 10 is COMPLETE.** RUN 11 was not started.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
@@ -1488,6 +1650,22 @@ is being drawn behind something.
 **Reading a browser symptom as environment before testing it.** The first diagnosis of the
 banner above was "the browser has been open for an hour". A clean browser reproduced it in 35
 seconds. Check the fresh case before blaming the harness.
+
+**RUN 10 closing bugs (§9g).** Do not reintroduce any of these:
+- **Baked eleven-bone figures in the near ring while the HQ crowd covers the scene.** The near
+  pool keeps humanoids only (`setHQCovered`).
+- **An inside-out `loft()`.** Keep the signed-volume tests; a hollow-looking car is a winding
+  bug, not an opacity bug.
+- **A uniform .55 m solid margin.** It closes 35 lane poses; the ends need it and the sides do
+  not.
+- **A reaction cooldown that blocks escalation.** It blocks repeats only, at or below `calmed`.
+- **Near bodies choosing awareness over a live car warning.** Use `nearReaction()`.
+- **Handing back a body the simulation still holds down** (double fall), or snapping it to the
+  simulation position on hand-back.
+- **Auto-parking the player car on a crossing or in a traffic lane.** One parked car can
+  freeze every signal on the map through the crossing-clear hold.
+- **Timing a live check on wall time under SwiftShader.** `FrameGate` clamps each frame to
+  0.1 s, and at 0.2 fps a 14 s wall window is about 0.3 s of simulation.
 
 ## 17. Files that matter
 
