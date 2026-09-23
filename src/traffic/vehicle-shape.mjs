@@ -115,7 +115,12 @@ function loft(stations,{capFront=true,capBack=true}={}){
   const a=s*ringSize,b=(s+1)*ringSize;
   for(let i=0;i<ringSize;i++){
    const j=(i+1)%ringSize;
-   indices.push(a+i,b+i,b+j, a+i,b+j,a+j);
+   // Wound so the face normal points OUT of the ring. RUN 10 found this the other way round:
+   // every lofted part -- body, glasshouse, roof, beltline -- had negative signed volume, i.e.
+   // was built inside-out, so back-face culling hid the near outer skin and drew the far
+   // inner wall instead. The player's car read as a hollow shell you could see into: the
+   // boot showed the wheels from inside, and the flanks looked like glass.
+   indices.push(a+i,b+j,b+i, a+i,a+j,b+j);
   }
  }
  // Caps are a fan to the ring's centroid, which is convex enough for these outlines.
@@ -125,7 +130,7 @@ function loft(stations,{capFront=true,capBack=true}={}){
   const centre=positions.length/3;positions.push(cx/n,cy/n,station.z);
   for(let i=0;i<ringSize;i++){
    const j=(i+1)%ringSize;
-   if(flip)indices.push(centre,offset+j,offset+i);else indices.push(centre,offset+i,offset+j);
+   if(flip)indices.push(centre,offset+i,offset+j);else indices.push(centre,offset+j,offset+i);
   }
  };
  // The ring is authored in one rotational sense, which is the outward sense at one end and the

@@ -202,3 +202,39 @@ test('the vehicle shadow shader does not redeclare what three.js injects',()=>{
  assert.ok(/vShape\s*=\s*instanceColor/.test(vertex),'the instance colour is no longer read');
  shadows.dispose();
 });
+
+// RUN 10, found in the browser: the player's car looked hollow and see-through. Every lofted
+// part -- body, glasshouse, roof, beltline -- was wound inside-out, so back-face culling hid the
+// near outer skin and drew the far inner wall; the boot showed the wheels from inside. Signed
+// volume is the invariant: a closed mesh wound outward has positive volume, and one built
+// inside-out has negative. Checked on the generator AND on the baked pack the browser loads,
+// because the pack is what is drawn and a stale bake would pass a source-only test.
+{
+ const {Vector3,ObjectLoader}=await import('three');
+ const signedVolume=g=>{const p=g.attributes.position,ix=g.index,n=ix?ix.count/3:p.count/3;
+  const a=new Vector3(),b=new Vector3(),c=new Vector3(),t=new Vector3();let v=0;
+  for(let k=0;k<n;k++){const i=j=>ix?ix.getX(k*3+j):k*3+j;
+   a.fromBufferAttribute(p,i(0));b.fromBufferAttribute(p,i(1));c.fromBufferAttribute(p,i(2));
+   v+=a.dot(t.copy(b).cross(c))/6;}return v;};
+ const {buildVehicleShape}=await import('../src/traffic/vehicle-shape.mjs');
+ test('every generated vehicle body is wound outward, not inside-out',()=>{
+  for(const type of Object.keys(VEHICLES)){
+   const shape=buildVehicleShape(type,{detail:1});
+   for(const part of ['paint','glass'])
+    assert.ok(signedVolume(shape.geometry[part])>0,
+     `${type} ${part} has negative signed volume -- it is built inside-out and will render hollow`);
+  }
+ });
+ test('the baked playable vehicles the browser loads are wound outward too',async()=>{
+  const pack=(await import('../src/player/generated/vehicles.mjs')).default;
+  for(const [type,json] of Object.entries(pack.models)){
+   const root=new ObjectLoader().parse(json);
+   const volume={};
+   root.traverse(o=>{if(o.isMesh&&(o.name==='vehicle-paint'||o.name==='vehicle-glass'))
+    volume[o.name]=(volume[o.name]??0)+signedVolume(o.geometry);});
+   for(const [name,v] of Object.entries(volume))
+    assert.ok(v>0,`baked ${type} ${name} is inside-out (${v.toFixed(3)}): rerun npm run bake:playable`);
+   assert.ok(volume['vehicle-paint']!==undefined,`baked ${type} has no paint mesh to check`);
+  }
+ });
+}
