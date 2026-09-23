@@ -1,32 +1,227 @@
-import {ObjectLoader,AnimationMixer,LoopOnce,LoopRepeat} from 'three';
-import {clone} from 'three/addons/utils/SkeletonUtils.js';
+import {AnimationMixer,LoopOnce,LoopRepeat} from 'three';
+import {bakedCitizen} from './character-asset.mjs';
+import {buildGaitSpace,createGaitBlend,createBodyFacing,LOCOMOTION} from './locomotion.mjs';
+import {createFootIK} from './foot-ik.mjs';
+import {attackOf} from './attack-timing.mjs';
 import pack from './generated/character.mjs';
+
 export const FIGURE=Object.freeze({height:1.76,shirt:0xc94d38,trousers:0x263443,skin:0xdfb994,hair:0x25282a,cycle:1.55});
-const looping=new Set(['Idle','Walk','Run','Sprint','Death','Guard']);
+
+const looping=new Set(['Idle','Walk','Run','Sprint','Death','Guard','Drive']);
+/** Clips the gait blend owns. Anything else is a one-shot the state machine plays over it. */
+const GAIT=new Set(['Idle','Walk','Run','Sprint']);
+
+/**
+ * What the body is doing, other than walking.
+ *
+ * Returns null when nothing is happening and the gait blend should have the body to itself.
+ * This used to also pick which locomotion clip to play, by speed thresholds; it does not any
+ * more, because a threshold is what put three clips inside a third of a second.
+ */
+/**
+ * The punch envelope, -0.35..1 over the swing: a wind-up away, a drive through that peaks when
+ * the fist is out, and a settle. Timing comes from the measured clip, not a fraction chosen by
+ * eye. Pure, for the test.
+ */
+export function punchEmphasis(name,progress){
+ const a=attackOf(name),w=a.windup/a.duration,p=a.peak/a.duration,u=Math.max(0,Math.min(1,progress));
+ const ease=x=>x*x*(3-2*x);
+ if(u<w)return -.35*Math.sin(Math.PI*.5*u/w);
+ if(u<p)return -.35+1.35*ease((u-w)/Math.max(1e-6,p-w));
+ return 1-ease((u-p)/Math.max(1e-6,1-p));
+}
+
 export function characterAction(state){
  if(state.alive===false)return (state.runOver??0)<.6?'Fall':'Death';
  if(state.vehiclePhase>0)return state.vehicleKind==='exit'?'Exit':'Enter';
  if(state.hurtTime>0)return 'Hit';
  if(state.trafficReaction==='guard')return 'Guard';
  if(state.trafficReaction==='startle')return 'Startle';
- if(state.attackTime>0)return 'Punch';
- const speed=Math.abs(state.speed??0);return speed<.12?'Idle':speed<2.1?'Walk':speed<3.7?'Run':'Sprint';
+ if(state.attackTime>0)return state.attackName==='PunchCross'?'PunchCross':'Punch';
+ return null;
 }
-// Buffers, skin weights, skeleton and clips are authored offline, loaded without geometry generation.
-export function createPlayerFigure(template=null){
- const root=template?clone(template):new ObjectLoader().parse(pack.scene),mixer=new AnimationMixer(root),actions={};
- for(const clip of root.animations){const action=mixer.clipAction(clip);action.setLoop(looping.has(clip.name)?LoopRepeat:LoopOnce,looping.has(clip.name)?Infinity:1);action.clampWhenFinished=!looping.has(clip.name);actions[clip.name]=action;}
- let current='Idle',heading=null,disposed=false,previousAttack=0;actions.Idle.play();mixer.update(0);
- return {root,update(state,dt=0){if(disposed)return;dt=Math.max(0,Math.min(.1,Number(dt)||0));root.visible=true;
-  const next=characterAction(state),restart=next==='Punch'&&(state.attackTime??0)>previousAttack+.01;
-  if(next!==current||restart){const old=actions[current],action=actions[next];action.reset().play();if(pack.gait[next])action.time=(state.animationPhase??0)%action.getClip().duration;if(next!==current)old.crossFadeTo(action,next==='Fall'?.06:.16,false);current=next;}
-  const action=actions[current];action.timeScale=pack.gait[current]?Math.max(.15,Math.min(2,Math.abs(state.speed)/pack.gait[current])):1;
-  mixer.update(dt);
-  let time=null;if(current==='Punch')time=.42-state.attackTime;if(current==='Hit')time=state.hurtTime>0?.34-state.hurtTime:.17;if(current==='Enter'||current==='Exit')time=state.vehiclePhase*action.getClip().duration;if(current==='Fall')time=state.runOver??0;
-  if(time!==null){action.time=Math.max(0,Math.min(action.getClip().duration,time));mixer.update(0);}
-  previousAttack=state.attackTime??0;
-  const desired=state.bodyHeading??state.heading??0;heading=heading===null?desired:heading+Math.atan2(Math.sin(desired-heading),Math.cos(desired-heading))*(1-Math.exp(-14*dt));
-  root.position.set(state.x,state.y,state.z);root.rotation.set(0,heading,0);if(state.trafficReaction==='look'&&Number.isFinite(state.threatHeading)){const head=root.getObjectByName('Head');head.rotation.y=Math.max(-.8,Math.min(.8,Math.atan2(Math.sin(state.threatHeading-heading),Math.cos(state.threatHeading-heading))));}
-  root.updateMatrixWorld(true);
- },reset(){mixer.stopAllAction();for(const action of Object.values(actions))action.reset();current='Idle';heading=null;previousAttack=0;actions.Idle.play();mixer.update(0);},get action(){return current;},hide(){root.visible=false;},dispose(){if(disposed)return;disposed=true;mixer.stopAllAction();mixer.uncacheRoot(root);const geometries=new Set(),materials=new Set(),skeletons=new Set();root.traverse(o=>{if(o.isMesh){geometries.add(o.geometry);for(const m of Array.isArray(o.material)?o.material:[o.material])materials.add(m);}if(o.isSkinnedMesh)skeletons.add(o.skeleton);});if(!template){geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());}skeletons.forEach(s=>s.dispose());root.removeFromParent();root.clear();}};
+
+/** The old discrete mapping, kept for anything that still asks which clip a speed looks like. */
+export function gaitAction(speed=0){
+ const v=Math.abs(speed);
+ return v<LOCOMOTION.idleSpeed?'Idle':v<2.1?'Walk':v<3.7?'Run':'Sprint';
+}
+
+// The offline-baked figure, shared by every instance that does not name another asset. It is
+// parsed once: its buffers, skin weights, skeleton and clips are authored at build time, so
+// constructing a body allocates a skeleton and a mixer and nothing else.
+let baked=null;
+export function bakedAsset(){return baked??=bakedCitizen(pack);}
+
+/**
+ * One animated body.
+ *
+ * `asset` is a CharacterAsset (see character-asset.mjs) and decides what the body is made of;
+ * everything below decides what it is doing. The two are kept apart because the humanoid
+ * asset is loaded over the network and the baked one is not, so the same figure has to be
+ * able to start on one and continue on the other.
+ */
+/**
+ * States in which the feet are not walking on anything, and the solver stands down.
+ *
+ * Correcting a foot towards the ground during a knock-down, a vehicle transition or a death
+ * is worse than not correcting it: the animation is deliberately not grounded, and forcing it
+ * there folds the leg. Cheaper to believe the animation.
+ */
+const UNGROUNDED=new Set(['Fall','Death','Enter','Exit','Drive']);
+
+export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=null,variant=null}={}){
+ // `variant` names an appearance archetype (RUN 6.8). Assets with one look ignore it.
+ const instance=asset.instance(palette,variant),root=instance.root;
+ const mixer=new AnimationMixer(root),actions={};
+ for(const clip of instance.clips){
+  const action=mixer.clipAction(clip),loop=looping.has(clip.name);
+  action.setLoop(loop?LoopRepeat:LoopOnce,loop?Infinity:1);
+  action.clampWhenFinished=!loop;actions[clip.name]=action;
+ }
+ const head=root.getObjectByName(asset.bones.head);
+ // RUN 11.2: what a punch leans on. Present on the humanoid rig, absent on the baked figure,
+ // which simply goes without the emphasis.
+ const spine=root.getObjectByName('spine_02'),chest=root.getObjectByName('spine_03');
+ const gait=createGaitBlend(buildGaitSpace(instance.clips,asset.gait,asset.gaitDetail));
+ const facing=createBodyFacing(0);
+ // Foot IK only exists where the skeleton names the joints it needs; the offline-baked figure
+ // has eleven bones and none of these names, so it simply goes without.
+ const footIK=asset.legBones?createFootIK(root,{bones:asset.legBones,ctx}):null;
+ let overlay=null,previousAttack=0,disposed=false,seeded=false,dominant='Idle';
+ // A jump in world position is a teleport, not a stride. Locked feet have to be forgotten or
+ // one gets dragged across the city on the next frame.
+ let lastX=null,lastZ=null;
+ const teleported=state=>{
+  const jumped=lastX!==null&&Math.hypot(state.x-lastX,state.z-lastZ)>1.2;
+  lastX=state.x;lastZ=state.z;return jumped;
+ };
+
+ // The gait clips are driven by hand: weight and time are set every frame from the blend, and
+ // the mixer is only asked to evaluate. Crossfades are what a blend exists to avoid.
+ for(const name of GAIT)actions[name]?.play().setEffectiveWeight(0);
+ for(const name of GAIT)if(actions[name])actions[name].paused=true;
+ if(actions.Idle){actions.Idle.paused=false;actions.Idle.setEffectiveWeight(1);}
+ mixer.update(0);
+
+ /** Play a one-shot or a held pose over the legs, or hand the body back to the gait. */
+ function setOverlay(next,state){
+  const restart=(next==='Punch'||next==='PunchCross')&&(state.attackTime??0)>previousAttack+.01;
+  if(next===overlay&&!restart)return;
+  if(overlay&&actions[overlay])actions[overlay].fadeOut(next==='Fall'?.06:.14);
+  if(next&&actions[next]){
+   const action=actions[next];
+   action.reset().setEffectiveWeight(1).fadeIn(overlay?.14:.1).play();
+  }
+  overlay=next&&actions[next]?next:null;
+ }
+
+ return {
+  root,asset,
+  get gait(){return gait;},
+  update(state,dt=0){
+   if(disposed)return;
+   dt=Math.max(0,Math.min(.1,Number(dt)||0));root.visible=true;
+   const speed=Math.abs(state.speed??0);
+
+   // Legs first, always: an overlay covers them rather than replacing them, so a punch thrown
+   // while walking does not stop the walk and a hit taken at speed does not freeze the feet.
+   const weights=gait.update(speed,dt);
+   for(const name of GAIT){
+    const action=actions[name];if(!action)continue;
+    const weight=weights.get(name)??0;
+    action.setEffectiveWeight(weight);
+    if(name==='Idle'){action.paused=false;action.timeScale=1;continue;}
+    const time=gait.timeFor(name);
+    if(time!==null)action.time=time;
+   }
+   // A phase offset from outside: the near-NPC pool gives every pedestrian its own, so a
+   // crowd walks out of step with itself rather than marching.
+   if(!seeded&&Number.isFinite(state.animationPhase)){seeded=true;gait.seed(state.animationPhase);}
+   dominant='Idle';
+   {let best=-1;for(const [name,weight] of weights)if(weight>best){best=weight;dominant=name;}}
+
+   const requested=characterAction(state);
+   setOverlay(requested&&actions[requested]?requested:null,state);
+   mixer.update(dt);
+
+   // Clips the game scrubs rather than plays: their progress is a game quantity, not a clock.
+   if(overlay){
+    const action=actions[overlay],duration=action.getClip().duration;
+    let time=null;
+    if(overlay==='Punch'||overlay==='PunchCross'){
+     // The player's swing carries its real length: play the clip at its own speed, so the
+     // frame the fist is out is the frame the hit test runs (attack-timing.mjs measured both).
+     // NPC swings come in as the old 0.42 s pulse and keep that mapping.
+     const total=state.attackDuration>0?state.attackDuration:.42;
+     time=state.attackDuration>0?duration*(1-state.attackTime/total):duration-state.attackTime*(duration/.42);
+    }
+    if(overlay==='Hit'){const total=state.hurtDuration>0?state.hurtDuration:.34;
+     time=state.hurtTime>0?duration*(1-state.hurtTime/total):duration/2;}
+    if(overlay==='Enter'||overlay==='Exit')time=state.vehiclePhase*duration;
+    if(overlay==='Fall')time=state.runOver??0;
+    if(time!==null){action.time=Math.max(0,Math.min(duration,time));mixer.update(0);}
+   }
+   previousAttack=state.attackTime??0;
+
+   // Moving, the body faces where it is going. Standing, it faces where the camera is
+   // looking -- but only once the camera has swung far enough to be worth turning for, which
+   // is createBodyFacing's job. Feeding it the body heading in both cases, as this did, meant
+   // a standing character never learned the view had moved at all and stood facing a wall
+   // while the camera orbited it.
+   const desired=speed>LOCOMOTION.idleSpeed
+    ?(state.bodyHeading??state.heading??0)
+    :(state.heading??state.bodyHeading??0);
+   facing.update(desired,speed,dt);
+   root.position.set(state.x,state.y,state.z);
+   root.rotation.set(0,facing.heading,facing.lean,'YXZ');
+   if(state.trafficReaction==='look'&&Number.isFinite(state.threatHeading)&&head)
+    head.rotation.y=Math.max(-.8,Math.min(.8,Math.atan2(Math.sin(state.threatHeading-facing.heading),Math.cos(state.threatHeading-facing.heading))));
+   // RUN 11.2: weight behind a punch. The clip is authored small; on top of it the torso winds
+   // up away from the punching side, then drives through with the shoulder, leans in, and the
+   // body steps a hand's width forward at the moment the fist is out. Additive and bounded,
+   // and only for a swing that carries its timing (the player's).
+   if((overlay==='Punch'||overlay==='PunchCross')&&state.attackDuration>0&&spine){
+    const k=punchEmphasis(overlay,1-state.attackTime/state.attackDuration);
+    const side=overlay==='Punch'?1:-1;       // left jab turns the left shoulder in; cross the right
+    spine.rotateY(side*.24*k);chest?.rotateY(side*.2*k);
+    const lean=Math.max(0,k);spine.rotateX(.12*lean);
+    root.position.x+=Math.sin(facing.heading)*.11*lean;root.position.z+=Math.cos(facing.heading)*.11*lean;
+   }
+   root.updateMatrixWorld(true);
+
+   // Feet last, on top of the finished pose, because it corrects what the animation produced
+   // rather than producing it. A teleport or a state where the feet are not on anything drops
+   // every lock instead of dragging one across the city.
+   if(footIK){
+    const grounded=state.alive!==false&&!UNGROUNDED.has(overlay)&&!state.riding;
+    if(!grounded||teleported(state))footIK.reset();
+    else footIK.update({phase:gait.phase,...gait.stance()},dt);
+   }
+  },
+  get footIK(){return footIK;},
+  reset(){
+   footIK?.reset();
+   mixer.stopAllAction();
+   for(const action of Object.values(actions))action.reset();
+   overlay=null;previousAttack=0;seeded=false;dominant='Idle';
+   gait.reset();facing.reset(0);
+   for(const name of GAIT)actions[name]?.play().setEffectiveWeight(0);
+   for(const name of GAIT)if(actions[name])actions[name].paused=true;
+   if(actions.Idle){actions.Idle.paused=false;actions.Idle.setEffectiveWeight(1);}
+   mixer.update(0);
+  },
+  recolour(palette){instance.recolour(palette);},
+  setHeight(metres){instance.setHeight(metres);},
+  /** RUN 6.8: how broad this body is. A no-op on an asset that has one build. */
+  setBuild(width){instance.setBuild?.(width);},
+  /** What the body is mostly doing, for diagnostics and for the capture harness. */
+  get action(){return overlay??dominant;},
+  hide(){root.visible=false;},
+  dispose(){
+   if(disposed)return;disposed=true;
+   mixer.stopAllAction();mixer.uncacheRoot(root);
+   instance.dispose();
+  }
+ };
 }

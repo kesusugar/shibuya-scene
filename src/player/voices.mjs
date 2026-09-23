@@ -66,7 +66,16 @@ export const LINES = Object.freeze([
   bend: [1.38, 1.62, .7]},
  {tag: 'うわあああ！', kind: 'scream', urgency: [0, 1], level: 1.1,
   segs: [{v: 'u', ms: 44, glide: 'a'}, {v: 'a', ms: 640}],
-  bend: [1.3, 1.5, .74]}
+  bend: [1.3, 1.5, .74]},
+ // RUN 11.4: being hit, and a crowd taking a breath.
+ {tag: 'うっ！', kind: 'pain', urgency: [0, .6], level: .85,
+  segs: [{v: 'u', ms: 160}], bend: [1.05, 1.1, .8]},
+ {tag: 'いたっ！', kind: 'pain', urgency: [.3, 1], level: .95,
+  segs: [{v: 'i', ms: 90}, {v: 'a', ms: 110, on: 't'}], bend: [1.12, 1.25, .9]},
+ {tag: 'ぐっ', kind: 'pain', urgency: [.5, 1], level: .9,
+  segs: [{v: 'u', ms: 160, on: 'g'}], bend: [.95, 1, .78]},
+ {tag: 'えっ', kind: 'gasp', urgency: [0, 1], level: .7,
+  segs: [{v: 'e', ms: 150, on: 'h'}], bend: [1.08, 1.18, 1.1]}
 ]);
 
 export const VOICE = Object.freeze({
@@ -191,6 +200,11 @@ export function createCrowdVoices(getContext) {
   say(kind, id, x, z, listener, urgency = .5) {
    const ctx = disposed ? null : getContext?.();
    if (!ctx || ctx.state === 'closed') return null;
+   // The contract above says this never throws, because a voice is decoration and the frame
+   // loop is not. It did: a caller with the arguments in the wrong order made `listener`
+   // undefined and took the rest of the frame down with it. A promise in a comment is worth
+   // what it costs to keep.
+   if (!listener || !Number.isFinite(x) || !Number.isFinite(z)) return null;
    const dx = x - listener.x, dz = z - listener.z, distance = Math.hypot(dx, dz);
    if (distance > VOICE.range) {stats.culled++; return null;}
    const now = ctx.currentTime;

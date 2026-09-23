@@ -14,8 +14,10 @@ import {clipCameraArm} from './camera.mjs';
 import {VEHICLES} from '../traffic/config.mjs';
 import {DODGE_SPEED} from '../life/simulation.mjs';
 import {safePose} from '../traffic/graph.mjs';
-import {corners, boxOverlap} from '../traffic/path.mjs';
+import {corners, boxOverlap, pose} from '../traffic/path.mjs';
 import {bounds, inPolygon} from '../geo/core.mjs';
+import {worldAnchor} from '../traffic/vehicle-anchors.mjs';
+import {vehicleImpact, slowBy} from './vehicle-impact.mjs';
 
 export const CAR = Object.freeze({
  type: 'sedan',
@@ -30,6 +32,12 @@ export const CAR = Object.freeze({
  grip: 9,
  slipMax: .45,                           // rad the course may lag the nose by, about 26 deg
  carPad: .05,                            // m of clearance kept from other cars
+ // m of clearance kept from buildings, walls and platforms, by axis. See clearOfSolids.
+ solidEnd: .55, solidSide: .25,
+ // m a parked car keeps its whole body from every lane and junction centreline.
+ parkClear: 1.9,
+ // shoves a downed body can take from the car before it is left behind (RUN 11.1).
+ runOverHits: 3,
  // Steering authority falls away as the car slows, so a stopped car does not spin on the
  // spot, and a fast one is not twitchy.
  steerLow: 1.2, steerFull: 7,
@@ -70,6 +78,7 @@ export function createPlayerVehicle(sim, ctx) {
  resetDynamics(state);
  const warnPedestrians=createPedestrianWarnings();
  const probe = {x: 0, z: 0, heading: 0};
+ const impacts = [];        // this step's pedestrian contacts; see strikePedestrians
  let contact=null, impactCooldown=0;
 
  /**
@@ -83,7 +92,16 @@ export function createPlayerVehicle(sim, ctx) {
   */
  const clearOfSolids = (x, z, heading) => {
   probe.x = x; probe.z = z; probe.heading = heading;
-  const ring = corners(probe, def.width, def.length, .05);
+  // Station walls and raised platforms render slightly ahead of their map solids. Keep the
+  // driven body clear of the visible edge instead of allowing its bonnet into the facade.
+  //
+  // The margin is split by axis. Codex's fix used .55 on all four sides, and measured over
+  // every sedan lane pose on the map (qa/gta-upgrade/clearance-cost.mjs) that made 35 of
+  // 2,467 undrivable -- a stretch of narrow unclassified street where the AI's own sedans
+  // drive, which reads as an invisible wall. All of that cost is LATERAL: the bonnet margin
+  // alone loses nothing. So the ends keep the .55 that stops the bonnet entering a facade,
+  // and the sides take .25, five times the original clearance and still zero lanes lost.
+  const ring = corners(probe, def.width + 2 * CAR.solidSide, def.length + 2 * CAR.solidEnd, 0);
   for (const {value: s} of sim.graph.ctx.solid.query(bounds(ring))) {
    const outer = s.outer ?? s.polygon?.outer; if (!outer) continue;
    const reject=()=>{contact=edgeContact(outer,state);return false;};
@@ -120,6 +138,56 @@ export function createPlayerVehicle(sim, ctx) {
   }
   return false;
  };
+ /**
+  * Is this spot on a pedestrian crossing? RUN 10 browser QA, scenario K: from the player start
+  * the first legal road pose was ON the scramble. Its cast stops for any vehicle on its track,
+  * so two dozen of them stood on the crossing for good, and because the signal controller
+  * holds the cycle until a crossing clears, every signal on the map froze. The car still parks
+  * on the carriageway, just never across a crossing or inside the scramble plaza.
+  */
+ const onCrossing = (x, z) => {
+  const signals = sim.signals;
+  if (!signals) return false;
+  if (signals.area?.contains(x, z)) return true;     // pads by a vehicle footprint itself
+  for (const c of signals.crossings?.values() ?? []) {
+   const reach = c.width / 2 + def.length / 2 + .5;
+   for (let i = 1; i < c.points.length; i++) {
+    const a = c.points[i - 1], b = c.points[i], dx = b[0] - a[0], dz = b[1] - a[1];
+    const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz || 1)));
+    if (Math.hypot(x - a[0] - t * dx, z - a[1] - t * dz) < reach) return true;
+   }
+  }
+  return false;
+ };
+ /**
+  * How far a point is from the nearest traffic lane or junction path, up to ~4 m. Moving the
+  * car off the scramble was not enough: the next legal pose, beside it, sat in the lane the
+  * central stream leaves by, and an eight-car platoon stopped behind it INSIDE the scramble
+  * holding the crossing's locks -- no WALK for anyone, ever. Sampled once, on first use.
+  */
+ let laneCells = null;
+ const laneClearance = (x, z) => {
+  if (!laneCells) {
+   laneCells = new Map(); const p = {};
+   for (const l of [...sim.graph.lanes, ...(sim.graph.transitions ?? [])]) {
+    if (!l.path) continue;
+    for (let d = 0; d <= l.path.length; d += 1) {
+     pose(l.path, d, p); const k = Math.floor(p.x / 4) + ',' + Math.floor(p.z / 4);
+     let c = laneCells.get(k); if (!c) laneCells.set(k, c = []); c.push(p.x, p.z);
+    }
+   }
+  }
+  let m = Infinity; const ix = Math.floor(x / 4), iz = Math.floor(z / 4);
+  for (let i = ix - 1; i <= ix + 1; i++) for (let j = iz - 1; j <= iz + 1; j++) {
+   const c = laneCells.get(i + ',' + j);
+   if (c) for (let n = 0; n < c.length; n += 2) m = Math.min(m, Math.hypot(c[n] - x, c[n + 1] - z));
+  }
+  return m;
+ };
+ const offLanes = (x, z, heading) => {
+  probe.x = x; probe.z = z; probe.heading = heading;
+  return [[x, z], ...corners(probe, def.width, def.length, 0)].every(([px, pz]) => laneClearance(px, pz) > CAR.parkClear);
+ };
  /** Road-only test, still used when parking the car so it starts on the carriageway. */
  const onRoadPose = (x, z, heading) => {
   probe.x = x; probe.z = z; probe.heading = heading;
@@ -136,12 +204,16 @@ export function createPlayerVehicle(sim, ctx) {
    // and the car needs road under all four corners. The heading has to have road *ahead* of
    // it too: picking the first of eight that merely fits parks the car facing a kerb, and it
    // then cannot pull away.
+   // First out of every traffic lane; only if there is no such room nearby, anywhere legal.
+   for (const clearOfTraffic of [true, false])
    for (let r = 3; r <= 40; r += 1.5) for (let i = 0; i < 16; i++) {
     const a = i * Math.PI / 8, px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r;
+    if (onCrossing(px, pz)) continue;
     for (let h = 0; h < 16; h++) {
      const ph = h * Math.PI / 8;
      if (!onRoadPose(px, pz, ph)) continue;
      if (!onRoadPose(px + Math.sin(ph) * 6, pz + Math.cos(ph) * 6, ph)) continue;   // road ahead
+     if (clearOfTraffic && !offLanes(px, pz, ph)) continue;
      state.slot = slot; state.x = px; state.z = pz; state.heading = ph; state.course = ph;
      impactCooldown=0; resetDynamics(state); state.speed = 0; state.steering = 0; state.type = CAR.type; state.damage = 0; state.stalled = false;
      def = VEHICLES[CAR.type];
@@ -180,7 +252,31 @@ export function createPlayerVehicle(sim, ctx) {
    * van is a van for every box test from here on.
    */
   takeOver(slot) {
-   if (!slot || slot === state.slot) return false;
+   if (!api.reserve(slot)) return false;
+   api.commit();
+   return true;
+  },
+
+  /**
+   * Claim a car without being able to drive it yet.
+   *
+   * RUN 9 split `takeOver` in two. It used to be one call at the moment the button went
+   * down: the car became the player's, `active` went true, and the transition that followed
+   * was decoration over a change that had already happened. That is the instant takeover this
+   * run exists to remove.
+   *
+   * `reserve` does the half that has to happen FIRST, because the entry animation needs it:
+   * the car is frozen so traffic cannot pull away mid-carjack, permits are released so a held
+   * signal group does not stall the map while the player walks round the bonnet, and the slot
+   * becomes the one the player's renderer draws, so its door can swing.
+   *
+   * What it deliberately does NOT do is set `active`. Every driving path is gated on that, so
+   * a reserved car sits there: input does nothing, `step` returns immediately, and nothing is
+   * struck by it. Control is `commit`, and that happens when the body reaches the seat.
+   */
+  reserve(slot) {
+   if (!slot) return false;
+   if (slot === state.slot) return true;
    if (state.slot) {state.slot.playerVisual = false; state.slot.controlled = false; state.slot.parked = true; state.slot.speed = 0;}
    sim.releasePermits?.(slot);
    impactCooldown=0; state.slot = slot; state.type = slot.type; def = VEHICLES[slot.type]; resetDynamics(state);
@@ -190,7 +286,43 @@ export function createPlayerVehicle(sim, ctx) {
     speed: 0, brake: false, blinker: 0, lane: 0, transition: -1, next: -1, progress: 0,
     age: 0, stuck: 0, junction: null});
    slot.locks?.clear?.(); slot.passed?.clear?.(); slot.yellowStops?.clear?.();
+   state.active = false;
+   return true;
+  },
+
+  /**
+   * Take the wheel. The seat has to be free -- the occupancy model is asked, not assumed --
+   * so a car whose driver is still in it cannot be driven away by the player.
+   */
+  commit() {
+   const slot = state.slot;
+   if (!slot) return false;
+   if (sim.occupancy && !sim.occupancy.takeSeat(slot.id)) return false;
    state.active = true;
+   return true;
+  },
+
+  /**
+   * Get out of the seat while keeping the car.
+   *
+   * Stepping out is not the same as giving the car up: the player still owns it, it is still
+   * the slot the renderer draws, and `nearestEntry` still offers it back as 'own'. What ends
+   * is the OCCUPANCY -- the seat is empty the moment the body is standing on the pavement, and
+   * a car the player is not sitting in must not report them as its occupant.
+   */
+  vacateSeat() {
+   const slot = state.slot;
+   if (!slot) return false;
+   return !!sim.occupancy?.leaveSeat(slot.id);
+  },
+
+  /** Give a reserved car back without ever having driven it. Used when an entry is aborted. */
+  unreserve() {
+   const slot = state.slot;
+   if (!slot || state.active) return false;
+   slot.playerVisual = false; slot.controlled = false; slot.parked = true; slot.speed = 0;
+   slot.doorPhase = 0;
+   state.slot = null;
    return true;
   },
 
@@ -223,6 +355,23 @@ export function createPlayerVehicle(sim, ctx) {
    let best=null;for(const side of [-1,1]){const out=d.width/2+.38,x=slot.x+c*side*out+s*back,z=slot.z-s*side*out+c*back;
     if(ctx.solid(x,z,.22))continue;const distance=Math.hypot(x-fromX,z-fromZ);if(!best||distance<best.distance)best={x,z,heading:slot.heading+side*Math.PI/2,distance,side};}
    return best;
+  },
+
+  /**
+   * The waypoints a staged entry or exit travels through, for one car and one side.
+   *
+   * RUN 9. These come from the vehicle's OWN anchors -- driverSeat, driverEntry, driverExit --
+   * rather than from offsets invented at the call site, which is what `doorPose` still does
+   * for the standing spot. `doorPose` earns that: it also tests the ground for solids, and
+   * picks whichever side is actually clear. So the side comes from there and the distances
+   * come from here.
+   */
+  anchors(slot=state.slot,side=-1){
+   if(!slot)return null;
+   return {seat:worldAnchor(slot,'seat',side),
+           entry:worldAnchor(slot,'entry',side),
+           exit:worldAnchor(slot,'exit',side),
+           door:worldAnchor(slot,'door',side)};
   },
 
   /** Where a person standing here could get in from. */
@@ -300,23 +449,56 @@ export function createPlayerVehicle(sim, ctx) {
    * into a queue, or braking to a stop in one, would scatter bodies at walking pace.
    */
   strikePedestrians(crowd) {
+   impacts.length = 0;
    if (!state.active || !crowd || Math.abs(state.speed) < DODGE_SPEED) return 0;
    const reach = Math.hypot(def.width, def.length) / 2 + 1;
-   const dir = Math.sign(state.speed) || 1;
    const x0 = Math.floor((state.x - reach) / 2), x1 = Math.floor((state.x + reach) / 2);
    const z0 = Math.floor((state.z - reach) / 2), z1 = Math.floor((state.z + reach) / 2);
    const body = {width: CAR.bodyWidth, length: CAR.bodyLength};
+   const now = crowd.time ?? 0;
    let hit = 0;
    for (let i = x0; i <= x1; i++) for (let j = z0; j <= z1; j++) {
     for (const p of crowd.grid.get(i + ',' + j) ?? []) {
-     if (!p.active || p.controlled || p.struck !== undefined) continue;
-     // Thrown along the car's course, at the speed that hit them.
-     if (boxOverlap(state, def, p, body, 0) &&
-         crowd.strike(p, Math.sin(state.course) * dir, Math.cos(state.course) * dir, Math.abs(state.speed))) hit++;
+     if (!p.active || p.controlled || !boxOverlap(state, def, p, body, 0)) continue;
+     // RUN 11.1: someone already down in front of the car is shoved along the road for a
+     // moment and the car feels them, instead of the car passing through. Bounded: a body is
+     // pushed at most CAR.runOverHits times, a third of a second apart, so nobody is carried for good.
+     if (p.struck !== undefined) {
+      // Only a body lying on the road: one still in its throw is not hit twice, and the car
+      // catching up with a body it just threw must not rewrite where the throw sent it.
+      if (Math.abs(state.speed) < 1 || p.struck < .6 || (p.flyHeight ?? 0) > .05) continue;
+      if ((p.runOverAt ?? -9) > now - .35 || (p.runOverCount ?? 0) >= CAR.runOverHits) continue;
+      p.runOverAt = now; p.runOverCount = (p.runOverCount ?? 0) + 1;
+      // Raise the body's speed ALONG the car to a share of the car's; keep what it has across.
+      const dirSign = Math.sign(state.speed) || 1, fx = Math.sin(state.course) * dirSign, fz = Math.cos(state.course) * dirSign;
+      const along = (p.flyX ?? 0) * fx + (p.flyZ ?? 0) * fz, want = Math.abs(state.speed) * .45;
+      if (along < want) { p.flyX = (p.flyX ?? 0) + fx * (want - along); p.flyZ = (p.flyZ ?? 0) + fz * (want - along); }
+      state.speed = slowBy(state.speed, .03 * Math.abs(state.speed) + .08);
+      impacts.push({id: p.id, kind: 'runover', x: p.x, z: p.z, closing: Math.abs(state.speed)});
+      continue;
+     }
+     // Direction, strength and state from the contact itself: which face hit, where on it,
+     // how fast they closed, and which way the person was already moving. See vehicle-impact.
+     const r = vehicleImpact(state, def, p, {type: state.type});
+     if (!r) continue;
+     let landed = false;
+     if (r.kind === 'push') {
+      // Too slow to knock anyone down: a shove, and the person steps out of the way.
+      const l = Math.hypot(r.impulse.x, r.impulse.z) || 1;
+      landed = crowd.scatter?.(p, r.impulse.x / l, r.impulse.z / l, .9) ?? false;
+     } else landed = crowd.strike(p, 0, 0, r.closing, r.impulse);
+     if (!landed) continue;
+     hit++;
+     // Every body the car goes through costs it speed; a crowd costs it a lot.
+     state.speed = slowBy(state.speed, r.speedLoss);
+     impacts.push({id: p.id, kind: r.kind, contact: r.contact, x: p.x, z: p.z, closing: r.closing,
+      ix: r.impulse.x, iz: r.impulse.z, iy: r.impulse.y});
     }
    }
    return hit;
   },
+  /** This step's contacts, for QA, audio and camera: {id, kind, contact, closing, impulse}. */
+  get impacts() {return impacts;},
 
   /**
    * Warn everyone the car is about to reach.
@@ -333,7 +515,10 @@ export function createPlayerVehicle(sim, ctx) {
 
   release() {
    const slot = state.slot;
-   if (slot) {slot.playerVisual = false; slot.controlled = false; slot.parked = true; slot.speed = 0;}
+   if (slot) {
+    sim.occupancy?.leaveSeat(slot.id);
+    slot.playerVisual = false; slot.controlled = false; slot.parked = true; slot.speed = 0;
+   }
    state.active = false; state.slot = null;
   }
  };

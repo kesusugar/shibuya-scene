@@ -2,6 +2,11 @@
 
 Read `AGENTS.md` first; it is the authoritative shared rule set. Then read `docs/IMPLEMENTATION-STATUS.md` and the focused design note for the area being changed.
 
+For the GTA Fidelity Master Plan work on `claude/gta-fidelity-upgrade`, read
+`docs/GTA-FIDELITY-STATUS.md` — it carries the RUN state, the architecture decisions that are
+closed, and the bugs already solved. `docs/CHATGPT-WORK-RESUME.md` is the short starting
+instruction for a session picking that work up cold.
+
 ## Windows setup
 
 Requirements: Git, Node.js 22.13 or newer, npm, and Chrome or Edge.

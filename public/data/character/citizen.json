@@ -1,0 +1,225 @@
+{
+ "generated": "2026-09-21",
+ "source": "Quaternius Universal Base Characters [Standard] + Universal Animation Library [Standard], CC0-1.0",
+ "body": {
+  "meshes": 3,
+  "vertices": 17327,
+  "triangles": 29378,
+  "attributesDropped": 28,
+  "garmentMaskVertices": 23263,
+  "hairVertices": 4303,
+  "hairstyle": "Hair_SimpleParted",
+  "bones": 65,
+  "animatedBones": 25,
+  "height": 1.8196,
+  "scaleToGame": 0.96725
+ },
+ "rigs": [
+  {
+   "id": "m",
+   "source": "Superhero_Male_FullBody",
+   "body": "SuperHero_Male",
+   "height": 1.8196,
+   "scaleToGame": 0.96725,
+   "bones": 65
+  },
+  {
+   "id": "f",
+   "source": "Superhero_Female_FullBody",
+   "body": "Superhero_Female",
+   "height": 1.7751,
+   "scaleToGame": 0.99152,
+   "bones": 65
+  }
+ ],
+ "hairstyles": [
+  {
+   "name": "Hair_Buzzed",
+   "vertices": 466,
+   "triangles": 830
+  },
+  {
+   "name": "Hair_SimpleParted",
+   "vertices": 757,
+   "triangles": 1301
+  },
+  {
+   "name": "Hair_Long",
+   "vertices": 3080,
+   "triangles": 2906
+  }
+ ],
+ "clips": [
+  {
+   "name": "Idle",
+   "upstream": "Idle_Loop",
+   "seconds": 2.5,
+   "tracks": 50
+  },
+  {
+   "name": "Walk",
+   "upstream": "Walk_Loop",
+   "seconds": 1.333,
+   "tracks": 50
+  },
+  {
+   "name": "Run",
+   "upstream": "hybrid (CMU 16_45 legs + Quaternius upper)",
+   "seconds": 0.708,
+   "tracks": 23
+  },
+  {
+   "name": "Sprint",
+   "upstream": "Sprint_Loop",
+   "seconds": 0.667,
+   "tracks": 50
+  },
+  {
+   "name": "Punch",
+   "upstream": "Punch_Jab",
+   "seconds": 0.867,
+   "tracks": 50
+  },
+  {
+   "name": "PunchCross",
+   "upstream": "Punch_Cross",
+   "seconds": 1,
+   "tracks": 50
+  },
+  {
+   "name": "Hit",
+   "upstream": "Hit_Chest",
+   "seconds": 0.333,
+   "tracks": 50
+  },
+  {
+   "name": "Startle",
+   "upstream": "Hit_Head",
+   "seconds": 0.433,
+   "tracks": 50
+  },
+  {
+   "name": "Guard",
+   "upstream": "Crouch_Idle_Loop",
+   "seconds": 2.933,
+   "tracks": 50
+  },
+  {
+   "name": "Enter",
+   "upstream": "Sitting_Enter",
+   "seconds": 1.3,
+   "tracks": 50
+  },
+  {
+   "name": "Exit",
+   "upstream": "Sitting_Exit",
+   "seconds": 1.033,
+   "tracks": 50
+  },
+  {
+   "name": "Drive",
+   "upstream": "Driving_Loop",
+   "seconds": 1.667,
+   "tracks": 50
+  },
+  {
+   "name": "Interact",
+   "upstream": "Interact",
+   "seconds": 2,
+   "tracks": 50
+  },
+  {
+   "name": "Fall",
+   "upstream": "Death01",
+   "seconds": 2.4,
+   "tracks": 50
+  },
+  {
+   "name": "Death",
+   "upstream": "Death01",
+   "seconds": 2.4,
+   "tracks": 50
+  }
+ ],
+ "gait": {
+  "Walk": 0.975,
+  "Run": 3.7929,
+  "Sprint": 8.25,
+  "Fall": 0.2708,
+  "Death": 0.2708
+ },
+ "hybridRun": {
+  "stride": 2.6866,
+  "speed": 3.7929,
+  "lowerBody": "CMU Graphics Lab Motion Capture Database, trial 16_45",
+  "upperBody": "Quaternius Universal Animation Library [Standard], Jog_Fwd_Loop, CC0-1.0",
+  "boundary": "spine_01"
+ },
+ "output": {
+  "file": "public/data/character/citizen.glb",
+  "bytes": 2260380,
+  "sha256": "5872c91bfedfa7fb3a1c2978b0ffbb66fd9dbccb6a3a2064d544578ab0777592"
+ },
+ "gaitDetail": {
+  "samples": 120,
+  "measured": "2026-09-21",
+  "ankleHeight": 0.1119,
+  "clips": {
+   "Walk": {
+    "seconds": 1.333,
+    "speed": 0.975,
+    "stride": 1.3,
+    "step": 0.65,
+    "cadence": 90,
+    "duty": 0.404,
+    "airborne": 0.192,
+    "contactOffset": 0.5,
+    "leftContact": 0.108
+   },
+   "Run": {
+    "seconds": 0.708,
+    "speed": 3.7929,
+    "stride": 2.687,
+    "step": 1.343,
+    "cadence": 169.4,
+    "duty": 0.4,
+    "airborne": 0.2,
+    "contactOffset": 0.5,
+    "leftContact": 0.917
+   },
+   "Sprint": {
+    "seconds": 0.667,
+    "speed": 8.25,
+    "stride": 5.5,
+    "step": 2.75,
+    "cadence": 180,
+    "duty": 0.292,
+    "airborne": 0.417,
+    "contactOffset": 0.692,
+    "leftContact": 0.917
+   },
+   "Fall": {
+    "seconds": 2.4,
+    "speed": 0.2708,
+    "stride": 0.65,
+    "step": 0.325,
+    "cadence": 50,
+    "duty": 0.129,
+    "airborne": 0.742,
+    "contactOffset": 0,
+    "leftContact": 0.058
+   },
+   "Death": {
+    "seconds": 2.4,
+    "speed": 0.2708,
+    "stride": 0.65,
+    "step": 0.325,
+    "cadence": 50,
+    "duty": 0.129,
+    "airborne": 0.742,
+    "contactOffset": 0,
+    "leftContact": 0.058
+   }
+  }
+ }
+}

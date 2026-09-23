@@ -4,6 +4,7 @@ import {seededRandom} from '../geo/core.mjs';
 import {VEHICLES} from '../traffic/config.mjs';
 import {QUALITY,ARCHETYPES,POOL_SIZE,RADIUS,district} from './config.mjs';
 import {route,edgePose,inCrossing} from './network.mjs';
+import {kerbQueued} from './stance.mjs';
 
 // Fixed actor objects and spatial buckets. Routes allocate only on destination changes.
 // Below this the player's car is treated as an obstacle and walked around; at or above it
@@ -22,6 +23,7 @@ export const FALL_TILT=.85;
 // at roughly ten metres and well overhead, with air time long enough for the tumble to read,
 // while a nudge at the dodge threshold stays a shove: the floor is low enough not to launch it.
 export const LAUNCH=.92,LAUNCH_MIN=2.2,LIFT=.62,GRAVITY=16,GROUND_DRAG=1.6,AIR_DRAG=.14,SPIN=3.4;
+export const GROUND_FRICTION=3.5;   // m/s^2 of sliding friction on a thrown body (RUN 11.1)
 // How long a body stays on the street, and so how long the marks it leaves last: long
 // enough to be something you drove past and can come back to, rather than something that
 // blinks out while you are still braking.
@@ -98,10 +100,17 @@ export class CrowdSimulation{
   * mid-crossing still occupies their signal group, and a group that never reports clear
   * never gives the cars their window.
   */
- strike(p,dx=0,dz=0,speed=0){if(!p.active||p.struck!==undefined)return false;this.leave(p);
+ strike(p,dx=0,dz=0,speed=0,impulse=null){if(!p.active||p.struck!==undefined)return false;this.leave(p);
   p.struck=0;p.speed=0;
-  const carry=Math.max(LAUNCH_MIN,speed*LAUNCH),len=Math.hypot(dx,dz)||1;
-  p.flyX=dx/len*carry;p.flyZ=dz/len*carry;p.flyY=carry*LIFT;
+  // RUN 11.1: a vehicle hands over the whole impulse it computed from the contact (direction,
+  // side, closing speed, the victim's own motion). Anything else keeps the old throw.
+  let carry;
+  if(impulse&&Number.isFinite(impulse.x)&&Number.isFinite(impulse.z)){
+   p.flyX=impulse.x;p.flyZ=impulse.z;p.flyY=Math.max(0,impulse.y||0);carry=Math.hypot(impulse.x,impulse.z);
+  }else{
+   carry=Math.max(LAUNCH_MIN,speed*LAUNCH);const len=Math.hypot(dx,dz)||1;
+   p.flyX=dx/len*carry;p.flyZ=dz/len*carry;p.flyY=carry*LIFT;
+  }
   p.flyGround=this.network.ctx.height(p.x,p.z);p.flyHeight=0;p.flySettled=0;
   // Tumble about the axis across the throw, faster the harder the hit, and in a direction
   // that depends on which way the body was facing when it was caught.
@@ -122,6 +131,10 @@ export class CrowdSimulation{
   if(!airborne){p.flyHeight=0;if(p.flyY<0)p.flyY=-p.flyY*.22;if(p.flyY<1.2)p.flyY=0;}
   const drag=Math.max(0,1-(airborne?AIR_DRAG:GROUND_DRAG)*dt);
   p.flyX*=drag;p.flyZ*=drag;
+  // RUN 11.1: a body sliding on tarmac also loses a fixed amount every second, so it comes to
+  // a definite stop instead of creeping on for metres at walking pace. That is most of what
+  // makes a person read as heavy.
+  if(!airborne){const v=Math.hypot(p.flyX,p.flyZ);if(v>0){const k=Math.max(0,v-GROUND_FRICTION*dt)/v;p.flyX*=k;p.flyZ*=k;}}
   const nx=p.x+p.flyX*dt,nz=p.z+p.flyZ*dt;
   if(this.network.ctx.solid(nx,nz,RADIUS)){p.flyX=0;p.flyZ=0;}
   else{p.x=nx;p.z=nz;p.flyGround=this.network.ctx.height(nx,nz);}
@@ -145,7 +158,7 @@ export class CrowdSimulation{
   if(leader)nodes=this.candidates.filter(n=>n.component===this.network.nodes[leader.node].component&&Math.hypot(n.x-leader.x,n.z-leader.z)<4);
   for(let attempt=0;attempt<100;attempt++){const n=nodes[Math.floor(this.rng()*nodes.length)];if(!n||this.network.landingNodes.has(n.id)||this.blocked(n.x,n.z,null,.9)||this.vehicleOverlap(n.x,n.z,.6)||this.time>0&&Math.hypot(n.x-this.camera.x,n.z-this.camera.z)<12)continue;
    const jitter=this.rng()*.5-.25,jitterZ=this.rng()*.5-.25,sx=n.x+jitter,sz=n.z+jitterZ,valid=this.network.ctx.safe(sx,sz)&&!this.blocked(sx,sz,null,.65)&&!this.vehicleOverlap(sx,sz,.6),px=valid?sx:n.x,pz=valid?sz:n.z;
-   Object.assign(p,{patrol:null,active:true,choreographed:false,x:px,z:pz,renderX:px,renderZ:pz,previousX:px,previousZ:pz,heading:this.rng()*Math.PI*2,height:this.network.ctx.height(n.x,n.z),archetype:type,mode,state:mode==='idle'?'idle':'walking',group:leader?.group??-1,leader:leader?.id??-1,route:[],routeIndex:0,edge:-1,progress:0,destination:n.id,node:n.id,speed:0,baseSpeed:leader?.baseSpeed??def.speed[0]+this.rng()*(def.speed[1]-def.speed[0]),age:0,stuck:0,pause:mode==='idle'?8+this.rng()*30:0,crossing:null,queueKey:null,lod:'near',elapsed:0,phase:this.rng()*Math.PI*2,color:Math.floor(this.rng()*def.colors.length),travelled:0,voiceUntil:0,voiceSaid:-99,voiceUrgency:0,combatHealth:100,combatTarget:null,combatUntil:0,combatNext:0,combatAction:0,combatDead:false,fatal:false,region:n.district});
+   Object.assign(p,{patrol:null,active:true,choreographed:false,kerbQueue:false,x:px,z:pz,renderX:px,renderZ:pz,previousX:px,previousZ:pz,heading:this.rng()*Math.PI*2,height:this.network.ctx.height(n.x,n.z),archetype:type,mode,state:mode==='idle'?'idle':'walking',group:leader?.group??-1,leader:leader?.id??-1,route:[],routeIndex:0,edge:-1,progress:0,destination:n.id,node:n.id,speed:0,baseSpeed:leader?.baseSpeed??def.speed[0]+this.rng()*(def.speed[1]-def.speed[0]),age:0,stuck:0,pause:mode==='idle'?8+this.rng()*30:0,crossing:null,queueKey:null,lod:'near',elapsed:0,phase:this.rng()*Math.PI*2,color:Math.floor(this.rng()*def.colors.length),travelled:0,voiceUntil:0,voiceSaid:-99,voiceUrgency:0,combatHealth:100,combatTarget:null,combatUntil:0,combatNext:0,combatAction:0,combatDead:false,fatal:false,appearanceId:undefined,cameFromVehicle:undefined,reactionOwned:false,region:n.district});
    if(mode!=='idle'){
     if(cross){const approach=route(this.network,n.id,cross.from);if(n.id!==cross.from&&!approach.length){p.active=false;continue;}p.route=[...approach,cross.id];p.edge=p.route[0];p.destination=cross.to;}
     else if(!this.chooseDestination(p,n,mode==='milling')){p.active=false;continue;}
@@ -191,7 +204,7 @@ export class CrowdSimulation{
   if(p.mode==='idle'&&!fleeing){p.state='idle';p.speed=0;if(p.age>240)this.despawn(p,'ttl');return;}
   if(p.pause>0&&!fleeing){p.pause-=dt;p.state='milling';p.speed=0;return;}
   if(p.edge<0){if(!this.chooseDestination(p,n.nodes[p.node],p.mode==='milling'))this.despawn(p,'invalid-route');return;}
-  const e=n.edges[p.edge];if(p.crossing&&p.progress<1&&n.ctx.safe(p.x,p.z)&&this.signals.phase()[0]!=='PEDESTRIAN'){this.leave(p);this.stats.cancelledCurbAdmissions=(this.stats.cancelledCurbAdmissions??0)+1;}if(e.crossingId&&!p.crossing){if(!this.beginCrossing(p,e)){p.state='waiting';p.speed=0;p.stuck=0;const key=e.crossingId+':'+e.direction;if(!this.queue.has(key))this.queue.set(key,new Set());this.queue.get(key).add(p.id);p.queueKey=key;return;}}
+  const e=n.edges[p.edge];if(p.crossing&&p.progress<1&&n.ctx.safe(p.x,p.z)&&this.signals.phase()[0]!=='PEDESTRIAN'){this.leave(p);this.stats.cancelledCurbAdmissions=(this.stats.cancelledCurbAdmissions??0)+1;}if(e.crossingId&&!p.crossing){if(!this.beginCrossing(p,e)){p.state='waiting';p.speed=0;p.stuck=0;p.kerbQueue=false;const key=e.crossingId+':'+e.direction;if(!this.queue.has(key))this.queue.set(key,new Set());this.queue.get(key).add(p.id);p.queueKey=key;return;}}
   p.state=p.crossing?'crossing':p.mode==='milling'?'milling':'walking';
   let speed=p.baseSpeed;
   if(p.group>=0&&!p.crossing){const g=this.groups[p.group],lead=this.pool[g?.leader];if(lead?.active){if(p.id===lead.id&&g.members.some(id=>this.pool[id].active&&Math.hypot(this.pool[id].x-p.x,this.pool[id].z-p.z)>5))speed*=.45;else if(p.id!==lead.id&&Math.hypot(lead.x-p.x,lead.z-p.z)>4)speed*=1.15;}}
@@ -209,7 +222,13 @@ export class CrowdSimulation{
   if(moved){const travelled=Math.hypot(nx-p.x,nz-p.z);p.previousX=p.x;p.previousZ=p.z;p.x=nx;p.z=nz;p.speed=travelled/dt;p.travelled+=travelled;p.stuck=0;const target=Math.atan2(nx-p.previousX,nz-p.previousZ),diff=Math.atan2(Math.sin(target-p.heading),Math.cos(target-p.heading));p.heading+=Math.max(-3*dt,Math.min(3*dt,diff));
    // Project onto the local edge polyline. Steering never advances route distance for lateral motion.
    if(!e.points){const a=n.nodes[e.from],b=n.nodes[e.to];p.progress=Math.max(0,Math.min(e.length,((p.x-a.x)*(b.x-a.x)+(p.z-a.z)*(b.z-a.z))/e.length));}else{let best=Infinity,progress=p.progress;const f=Math.floor(p.progress/e.length*(e.points.length-1));for(let i=Math.max(0,f-8);i<Math.min(e.points.length-1,f+9);i++){const a=e.points[i],b=e.points[i+1],x=b[0]-a[0],z=b[1]-a[1],t=Math.max(0,Math.min(1,((p.x-a[0])*x+(p.z-a[1])*z)/(x*x+z*z||1))),dist=(p.x-a[0]-t*x)**2+(p.z-a[1]-t*z)**2;if(dist<best){best=dist;progress=(i+t)/(e.points.length-1)*e.length;}}p.progress=progress;}
-  }else{p.speed=0;p.stuck+=dt;}
+  }else{p.speed=0;p.stuck+=dt;
+   // RUN 11.0: held up behind the people waiting at a kerb, which a viewer reads as waiting.
+   const next=p.route[p.routeIndex+1],ne=next!==undefined?n.edges[next]:null,end=n.nodes[e.to];
+   p.kerbQueue=kerbQueued({moved:false,nextIsCrossing:!!ne?.crossingId,
+    walk:!!ne?.crossingId&&this.signals?.getCrossingTrafficState(ne.crossingId).pedestrian==='WALK',
+    toKerb:Math.hypot(p.x-end.x,p.z-end.z)});}
+  if(moved)p.kerbQueue=false;
   const end=n.nodes[e.to];if(p.progress>=e.length-.65&&Math.hypot(p.x-end.x,p.z-end.z)<.5&&n.ctx.safe(p.x,p.z)){p.node=e.to;p.progress=0;p.routeIndex++;
    if(e.crossingId){const key=e.crossingId+':'+e.direction;this.stats.completed[key]=(this.stats.completed[key]??0)+1;this.leave(p);}
    if(p.routeIndex<p.route.length)p.edge=p.route[p.routeIndex];else{this.stats.routeCompletions++;p.edge=-1;if(p.mode==='milling')p.pause=2+this.rng()*6;}
@@ -229,6 +248,30 @@ export class CrowdSimulation{
   // Rotate priority each fixed tick; ordering does not permanently privilege low IDs.
   const start=Math.floor(this.time*30)%this.pool.length;for(let j=0;j<this.pool.length;j++){const p=this.pool[(start+j)%this.pool.length];if(!p.active||p.controlled)continue;
    if(p.struck!==undefined){p.struck+=dt;p.speed=0;this.fly(p,dt);
+    // An extracted driver is a world pedestrian, not a disposable hit marker. Finish their
+    // fall as the HQ knockdown enters RECOVER, then give them a nearby walkable route. The
+    // carjack already called strike() and its formal leave(), so no crossing is released here.
+    if(p.cameFromVehicle!==undefined&&p.struck>=4.9){
+     p.struck=undefined;p.flyX=0;p.flyZ=0;p.flyY=0;p.flyHeight=0;
+     p.height=this.network.ctx.height(p.x,p.z);p.speed=0;p.pause=2;
+     p.mode='milling';p.state='milling';p.route=[];p.edge=-1;p.stuck=0;
+     let nearest=null,distance=Infinity;
+     for(const n of this.candidates){const d=(n.x-p.x)**2+(n.z-p.z)**2;
+      if(d<distance&&this.network.ctx.safe(n.x,n.z,RADIUS-.01)
+       &&!this.vehicleOverlap(n.x,n.z,RADIUS-.02)
+       &&!this.blocked(n.x,n.z,p,RADIUS*2-.03,false)){
+       nearest=n;distance=d;}}
+     if(nearest){
+      // The door can be in a traffic lane. Stand the recovering pedestrian at the nearest
+      // walkable node, and update the simulation grid as every out-of-route move must do.
+      const old=this.cell(p.x,p.z),bucket=this.grid.get(old),at=bucket?.indexOf(p);
+      if(at>=0)bucket.splice(at,1);
+      p.x=nearest.x;p.z=nearest.z;p.renderX=p.x;p.renderZ=p.z;
+      p.previousX=p.x;p.previousZ=p.z;p.height=this.network.ctx.height(p.x,p.z);
+      p.node=nearest.id;this.insert(p);
+     }
+     continue;
+    }
     if(p.struck>=FALL_SECONDS){p.struck=undefined;this.despawn(p,'struck');p.downUntil=this.time+RESPAWN_SECONDS;}continue;}
    p.elapsed+=dt;const interval=p.crossing||p.choreographed?1/30:p.mode==='idle'?.5:p.lod==='near'?1/30:p.lod==='mid'?1/15:.2;if(p.elapsed+1e-8<interval){this.stats.throttled++;continue;}const elapsed=p.elapsed;p.elapsed=0;this.move(p,elapsed);}
   if(this.refillClock>=2){this.refillClock=0;this.refill();}

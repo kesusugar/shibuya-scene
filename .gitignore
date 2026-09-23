@@ -42,4 +42,36 @@ next-env.d.ts
 /.sites-runtime/
 /outputs/
 /work/
-/qa/
+/qa/*
+# ...except the cost benches, which are where the RUN 2 and RUN 3 measurements come from.
+!/qa/gta-upgrade/
+/qa/gta-upgrade/*
+!/qa/gta-upgrade/charbench.html
+!/qa/gta-upgrade/vehiclebench.html
+!/qa/gta-upgrade/locomotionbench.html
+!/qa/gta-upgrade/footikbench.html
+!/qa/gta-upgrade/footik-contact.mjs
+!/qa/gta-upgrade/clip-audit.mjs
+!/qa/gta-upgrade/clipbench.html
+!/qa/gta-upgrade/runbench.html
+!/qa/gta-upgrade/runcompare.html
+!/qa/gta-upgrade/penetration-definitions.mjs
+!/qa/gta-upgrade/poolprobe.mjs
+!/qa/gta-upgrade/tierprobe.mjs
+!/qa/gta-upgrade/asset-audit.mjs
+!/qa/gta-upgrade/bindcheck.mjs
+!/qa/gta-upgrade/lineup.html
+!/qa/gta-upgrade/hqcrowd.html
+!/qa/gta-upgrade/lodpop.mjs
+!/qa/gta-upgrade/signalcycle.mjs
+!/qa/gta-upgrade/punch-timing.mjs
+!/qa/gta-upgrade/clearance-cost.mjs
+!/qa/gta-upgrade/combat-cost.mjs
+!/qa/gta-upgrade/occupancy-cost.mjs
+!/qa/gta-upgrade/hq-vehicle.mjs
+!/qa/gta-upgrade/hq-ladder.mjs
+!/qa/gta-upgrade/feet-compare.mjs
+!/qa/gta-upgrade/archetype-feet.mjs
+
+# character pipeline: upstream downloads are verified, never committed
+/assets/character/upstream/

@@ -24,7 +24,11 @@
     "lint": "bash scripts/sites-env.sh -- eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "bash scripts/sites-env.sh -- drizzle-kit generate",
     "measure:playable": "node scripts/measure-playable-loading.mjs",
-    "qa:capture": "node scripts/run-visual-qa.mjs"
+    "qa:capture": "node scripts/run-visual-qa.mjs",
+    "fetch:character": "node scripts/fetch-character-upstream.mjs",
+    "convert:character": "node scripts/convert-character.mjs",
+    "analyse:gait": "node scripts/analyse-gait.mjs",
+    "bake:crowd-hq": "node scripts/bake-crowd-hq.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

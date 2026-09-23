@@ -18,6 +18,13 @@ export const AUDIO = Object.freeze({
  cutoffLow: 320, cutoffHigh: 2400,
  impactGain: .28, impactMs: 220,
  strikeGain: .16, strikeMs: 140,
+ // RUN 11.4. Melee and body contact, all synthesised like the rest. `maxVoices` bounds how many
+ // of these one-shots can ring at once; the feedback bus already caps how many start a frame.
+ swingGain: .07, swingMs: 170,
+ hitGain: .22, hitMs: 120,
+ bodyGain: .26, bodyMs: 260,
+ runoverGain: .16, runoverMs: 180,
+ maxVoices: 6,
  rampMs: 60             // parameter smoothing, so speed changes glide instead of stepping
 });
 
@@ -44,20 +51,47 @@ export function createPlayerAudio() {
   return ctx;
  };
 
- /** One burst of filtered noise, used for both a collision and a body going over a wing. */
- const burst = (level, ms, cutoff) => {
-  if (!ctx || !engine) return;
+ // RUN 11.4: noise is generated once per length and shared. It was a fresh buffer of fresh
+ // random samples for every hit, which is an allocation per body on a crowd pass.
+ const noise = new Map();
+ const noiseOf = ms => {
+  let buffer = noise.get(ms);
+  if (buffer) return buffer;
   const frames = Math.max(1, Math.floor(ctx.sampleRate * ms / 1000));
-  const buffer = ctx.createBuffer(1, frames, ctx.sampleRate);
+  buffer = ctx.createBuffer(1, frames, ctx.sampleRate);
   const data = buffer.getChannelData(0);
   // White noise under a decaying envelope: a thud is an attack and a tail, nothing more.
-  for (let i = 0; i < frames; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / frames) ** 2;
-  const src = ctx.createBufferSource(); src.buffer = buffer;
-  const filter = ctx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = cutoff;
+  let seed = 1234567;
+  for (let i = 0; i < frames; i++) {seed = (Math.imul(seed, 1103515245) + 12345) >>> 0;
+   data[i] = (seed / 2147483648 - 1) * (1 - i / frames) ** 2;}
+  noise.set(ms, buffer); return buffer;
+ };
+ let ringing = 0;
+ /** One burst of filtered noise: a collision, a body, a fist, a swing. */
+ const burst = (level, ms, cutoff, {type = 'lowpass', sweepTo = null, q = .7} = {}) => {
+  // A suspended context never ends a source, which would pin `ringing` at the cap for good.
+  if (!ctx || !engine || ctx.state !== 'running' || ringing >= AUDIO.maxVoices) return false;
+  const src = ctx.createBufferSource(); src.buffer = noiseOf(ms);
+  const filter = ctx.createBiquadFilter(); filter.type = type; filter.frequency.value = cutoff; filter.Q.value = q;
+  if (sweepTo) filter.frequency.exponentialRampToValueAtTime(sweepTo, ctx.currentTime + ms / 1000);
   const gain = ctx.createGain(); gain.gain.value = level;
   src.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
-  src.start();
-  src.onended = () => {try {src.disconnect(); filter.disconnect(); gain.disconnect();} catch {}};
+  ringing++; src.start();
+  src.onended = () => {ringing--; try {src.disconnect(); filter.disconnect(); gain.disconnect();} catch {}};
+  return true;
+ };
+ /** A short, falling sine for the body of a thump, under the noise. */
+ const thump = (level, hz, ms) => {
+  // A suspended context never ends a source, which would pin `ringing` at the cap for good.
+  if (!ctx || !engine || ctx.state !== 'running' || ringing >= AUDIO.maxVoices) return false;
+  const osc = ctx.createOscillator(); osc.type = 'sine'; osc.frequency.value = hz;
+  const t = ctx.currentTime, gain = ctx.createGain();
+  osc.frequency.exponentialRampToValueAtTime(Math.max(30, hz * .45), t + ms / 1000);
+  gain.gain.setValueAtTime(level, t); gain.gain.exponentialRampToValueAtTime(.0005, t + ms / 1000);
+  osc.connect(gain); gain.connect(ctx.destination);
+  ringing++; osc.start(); osc.stop(t + ms / 1000 + .02);
+  osc.onended = () => {ringing--; try {osc.disconnect(); gain.disconnect();} catch {}};
+  return true;
  };
 
  return {
@@ -91,6 +125,21 @@ export function createPlayerAudio() {
   },
   /** Somebody going over the wing. Softer and shorter than hitting a wall. */
   strike() {burst(AUDIO.strikeGain, AUDIO.strikeMs, 1500);},
+  /** RUN 11.4: the air a fist moves -- a band of noise sweeping up. */
+  swing(intensity = .6) {burst(AUDIO.swingGain * (.6 + .4 * intensity), AUDIO.swingMs, 700, {type: 'bandpass', sweepTo: 2600, q: 1.4});},
+  /** A fist landing: a dull body thump with a short slap on top. */
+  punchHit(intensity = .7) {
+   thump(AUDIO.hitGain * (.5 + .5 * intensity), 150, AUDIO.hitMs);
+   burst(AUDIO.hitGain * .55 * intensity, 50, 2400, {type: 'highpass'});
+  },
+  /** A car meeting a person: heavier and lower than a punch, not as sharp as a wall. */
+  bodyImpact(intensity = .8) {
+   thump(AUDIO.bodyGain * (.4 + .6 * intensity), 95, AUDIO.bodyMs);
+   burst(AUDIO.bodyGain * .6 * intensity, AUDIO.bodyMs, 800);
+  },
+  /** Going over something lying in the road. */
+  runover(intensity = .6) {thump(AUDIO.runoverGain * intensity, 70, AUDIO.runoverMs);},
+  get ringing() {return ringing;},
   dispose() {
    try {engine?.a.stop(); engine?.b.stop(); ctx?.close?.();} catch {}
    ctx = null; engine = null;

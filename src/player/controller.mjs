@@ -18,6 +18,12 @@ export const CAMERA = Object.freeze({samples: 12, pad: .5, minBack: .9});
 export const PLAYER = Object.freeze({
  radius: .35,          // body radius used against solids, matching the crowd's own footprint
  walk: 1.5, run: 4.2,  // m/s; the crowd walks 0.85-2.0, so walking blends into it
+ // How quickly the body reaches the speed it is asked for, in m/s^2. Separate numbers for
+ // getting going and for stopping, because they are not the same movement: a person leans
+ // into a start over a couple of steps and plants a foot to stop. The old code damped both
+ // with one exponential, which reached 1.5 m/s in a tenth of a second from standing -- the
+ // feet could not keep up with it, and the stop was worse.
+ accelerate: 7.5, brake: 11, turnDrag: .55,
  eye: 1.55,            // height the camera frames the player from
  archetype: 'hoodie',  // fixed, so the player is the same person every session
  look: .0022,          // radians per pixel of mouse travel
@@ -36,9 +42,28 @@ export const PLAYER = Object.freeze({
 /** Furthest the player may stand from the middle, matching the modelled extent. */
 const LIMIT = 244;
 
+/**
+ * Rotate `from` toward `to` at a bounded rate.
+ *
+ * The figure does its own, slower turn for what you see; this is the simulation's copy, and it
+ * exists so that the direction of travel cannot get further ahead of the body than the body
+ * could plausibly have turned. Sharing the limit is what keeps the feet pointing where the
+ * character is actually going.
+ */
+const TURN_RATE = 7.0;   // rad/s, matching LOCOMOTION.turnRate
+function turnToward(from, to, dt) {
+ const error = Math.atan2(Math.sin(to - from), Math.cos(to - from));
+ const step = Math.max(-TURN_RATE * dt, Math.min(TURN_RATE * dt, error));
+ return from + step;
+}
+
 export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startHeading} = {}) {
  const state = {
   x: start[0], z: start[1], y: 0, heading, pitch: -.12,
+  // `heading` is where the camera looks, `course` where the input asks the body to go, and
+  // `bodyHeading` where the body has actually turned to. Keeping the three apart is what lets
+  // a character walk diagonally without sliding and turn the view without spinning on a heel.
+  course: heading, bodyHeading: heading, targetSpeed: 0,
   speed: 0, running: false, moving: false, alive: true,
   runOver: 0, hitBy: null, health: 100, attackTime: 0, hurtTime: 0, vehiclePhase: 0
  };
@@ -158,7 +183,7 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    */
   place(x = PLAYER.start[0], z = PLAYER.start[1], heading = PLAYER.startHeading) {
    const land = (px, pz) => {
-    Object.assign(state, {x: px, z: pz, heading, bodyHeading: heading, speed: 0, alive: true, runOver: 0, hitBy: null, health:100, attackTime:0, hurtTime:0, vehiclePhase:0});
+    Object.assign(state, {x: px, z: pz, heading, bodyHeading: heading, course: heading, targetSpeed: 0, speed: 0, alive: true, runOver: 0, hitBy: null, health:100, attackTime:0, hurtTime:0, vehiclePhase:0});
     state.y = ctx.height(px, pz); return true;
    };
    for (const test of [ctx.safe, standable]) {
@@ -234,17 +259,40 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    const len = Math.hypot(fx, fz);
    state.running = running;
    state.moving = len > 0;
-   if (len > 0) {
-    const target = (state.running ? PLAYER.run : PLAYER.walk) * Math.min(1,len);
-    state.speed += (target - state.speed) * Math.min(1, dt * 10);
-    // Forward is where the player is looking; strafing is perpendicular to it.
-    const s = Math.sin(state.heading), c = Math.cos(state.heading);
-    const step = state.speed * dt / len;
+   const wanted=len>0?(state.running?PLAYER.run:PLAYER.walk)*Math.min(1,len):0;
+   // Where the body is being asked to go, in world terms. Forward is where the camera looks;
+   // strafing is perpendicular to it, so a diagonal input walks diagonally rather than
+   // sidestepping, and the figure turns to face it.
+   const s=Math.sin(state.heading),c=Math.cos(state.heading);
+   let course=state.course??state.heading;
+   if(len>0)course=Math.atan2((fz*s+fx*c)/len,(fz*c-fx*s)/len);
+   state.course=course;
+
+   // Turning costs speed. Without this a hard reversal happens at full pace and the feet are
+   // pointing one way while the body travels the other for as long as the turn takes.
+   const swing=len>0?Math.abs(Math.atan2(Math.sin(course-(state.bodyHeading??course)),
+    Math.cos(course-(state.bodyHeading??course)))):0;
+   const target=wanted*(1-PLAYER.turnDrag*Math.min(1,swing/Math.PI));
+
+   const rate=target>state.speed?PLAYER.accelerate:PLAYER.brake;
+   state.speed+=Math.max(-rate*dt,Math.min(rate*dt,target-state.speed));
+   state.speed=Math.max(0,state.speed);
+   state.targetSpeed=target;
+
+   if(state.speed>1e-4){
+    const step=state.speed*dt;
     const ox=state.x,oz=state.z;
-    advance((fz * s + fx * c) * step, (fz * c - fx * s) * step);
-    state.speed=dt>0?Math.hypot(state.x-ox,state.z-oz)/dt:0;
-    if(state.speed>.02)state.bodyHeading=Math.atan2(state.x-ox,state.z-oz);
-   } else state.speed += (0 - state.speed) * Math.min(1, dt * 12);
+    // Travel along the body's own heading once it exists, so the character goes where it is
+    // pointing rather than sliding sideways while it turns.
+    const along=state.bodyHeading??course;
+    advance(Math.sin(along)*step,Math.cos(along)*step);
+    const moved=dt>0?Math.hypot(state.x-ox,state.z-oz)/dt:0;
+    // Walking into a wall must not leave the legs running: the speed the legs see is the
+    // speed the body actually made, not the speed it wanted.
+    state.speed=Math.min(state.speed,moved);
+   }
+   // The figure turns the body; this is only what it is turning towards.
+   if(len>0)state.bodyHeading=turnToward(state.bodyHeading??course,course,dt);
    state.y = ctx.height(state.x, state.z);
   },
 
@@ -256,7 +304,10 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    if (!state.alive) return false;
    state.alive = false; state.runOver = 0; state.hitBy = vehicle?.type ?? 'vehicle'; return true;
   },
-  startAttack(seconds=.42){if(!state.alive)return false;state.attackTime=Math.max(state.attackTime,seconds);return true;},
+  // RUN 11.2: the name and length go with the swing, so the figure plays THIS clip at its own
+  // speed. Before, every swing played `Punch` squeezed into the last 0.42 s of the attack --
+  // double speed, after the hit had already landed, and never the cross.
+  startAttack(seconds=.42,name='Punch'){if(!state.alive)return false;state.attackTime=Math.max(state.attackTime,seconds);state.attackDuration=seconds;state.attackName=name;return true;},
   hurt(amount=0,source='fight'){
    if(!state.alive||state.hurtTime>0)return false;state.health=Math.max(0,state.health-Math.max(0,amount));state.hurtTime=.34;
    if(state.health<=0){state.alive=false;state.runOver=0;state.hitBy=source;}return true;

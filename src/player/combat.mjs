@@ -1,8 +1,33 @@
-// Small, local melee state machine. It reuses pooled pedestrians and never allocates a
-// second NPC population. Combat is intentionally restricted to nearby adults on safe
-// pavement so it cannot steal a pedestrian crossing reservation or deadlock traffic.
+// Melee that happens when the fist arrives, not when the button is pressed.
+//
+// RUN 8. The previous version applied damage in the same tick as the input: `request()` set a
+// flag, the next `update` chose a target and subtracted health immediately, and `attackTime`
+// was only a countdown for the renderer. A punch could therefore land before the arm moved,
+// and could not miss -- if anyone was in range at the press, they were hit.
+//
+// Now a swing is an object with a clock, and the hit test runs inside the clip's own active
+// window. That makes three things true that were not before: you can miss, you can start a
+// swing at nobody and connect because they walked into it, and the damage lands when the hand
+// is out.
+//
+// AUTHORITY. The simulation decides who was hit, how much health they lost, and whether they
+// go down. The high-fidelity crowd renderer only shows it. Nothing here reaches into the HQ
+// crowd, and the HQ crowd never decides combat -- it reads `struck` and `combatDead` off the
+// pedestrian, exactly as it already reads them for a car.
+import {ATTACKS,attackOf} from './attack-timing.mjs';
+import {blowOn,responseOf,RESPONSE} from '../life/temperament.mjs';
+import {ARCHETYPES} from '../life/config.mjs';
+
 export const COMBAT=Object.freeze({range:1.75,notice:4.5,playerDamage:34,npcDamage:14,
- attackSeconds:.42,npcWindup:.55,npcCooldown:1.05,hostileSeconds:14});
+ attackSeconds:.42,npcWindup:.55,npcCooldown:1.05,hostileSeconds:14,
+ // How wide a swing reaches, in radians either side of where the body is facing. A punch is
+ // not a radius: something directly behind you cannot be hit.
+ arc:1.05,
+ // What a punch does to the people who see it, and how far that carries. Bounded on purpose:
+ // one punch must not empty the crossing.
+ witnessRadius:11,witnessSeverity:.72});
+
+export const PHASE=Object.freeze({IDLE:'idle',WINDUP:'windup',ACTIVE:'active',RECOVERY:'recovery'});
 
 const nearby=(crowd,x,z,r)=>{const out=[],ix=Math.floor(x/2),iz=Math.floor(z/2),cells=Math.ceil(r/2);
  for(let i=ix-cells;i<=ix+cells;i++)for(let j=iz-cells;j<=iz+cells;j++)
@@ -11,43 +36,267 @@ const nearby=(crowd,x,z,r)=>{const out=[],ix=Math.floor(x/2),iz=Math.floor(z/2),
 const angleTo=(a,b)=>Math.atan2(b.x-a.x,b.z-a.z);
 const turn=(a,b)=>Math.atan2(Math.sin(b-a),Math.cos(b-a));
 
-export function createMeleeCombat(){
- let pending=false,target=null,disposed=false,stats={swings:0,hits:0,npcHits:0,npcDeaths:0};
- const eligible=(p,crowd)=>p.active&&!p.controlled&&!p.choreographed&&p.struck===undefined&&!p.combatDead&&
-  p.archetype!=='kid'&&!p.crossing&&crowd.network.ctx.safe(p.x,p.z,.28);
- function choose(crowd,state){let best=null,score=Infinity;
+/**
+ * @param {object} [options]
+ * @param {null|((event:{x:number,z:number,severity:number,radius:number,
+ *   attacker:string,victim:number|null,time:number})=>number)} [options.onWitness]
+ *   Called when a punch is thrown, with where and how bad. Returns how many people reacted.
+ *   The listener owns the bounding; this module does not scan the crowd itself.
+ * @param {null|((event:{victim:number,blow:object,response:string,time:number})=>any)} [options.onBlow]
+ *   RUN 11.2: one blow on one victim, so the body drawing them can flinch and follow it up.
+ * @param {null|((kind:string,event:{x:number,z:number,intensity:number,id?:number})=>any)} [options.onEvent]
+ *   RUN 11.3: swings, hits and pain, for the feedback bus (audio, camera).
+ */
+export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null}={}){
+ let pending=false,target=null,disposed=false,swingIndex=0;
+ let swing=null;                       // the attack in flight, or null
+ let lastBlow=null;                    // the most recent landed blow, for QA
+ const stats={swings:0,hits:0,misses:0,npcHits:0,npcDeaths:0,witnessEvents:0,witnesses:0,
+  byResponse:{fight:0,flee:0,backoff:0}};
+
+ /**
+  * Someone whose movement belongs to something other than their own will: the Scramble
+  * choreography's fixed track, or an in-progress crossing.
+  *
+  * They can be HIT. They cannot be STOPPED. Taking either off their route mid-stride is what
+  * holds a signal group, and a held group stops the clock for every signal on the map.
+  */
+ const onRails=p=>!!(p.crossing||p.choreographed);
+
+ /**
+  * Who may be punched.
+  *
+  * A pedestrian on a crossing, and a member of the choreographed Scramble cast, are BOTH
+  * valid targets. Excluding either made the middle of a scramble crossing -- most of this
+  * map, and 74-85% of the population -- a place where combat silently did nothing: the live
+  * QA threw punches at a crowd 8 cm away and every one of them missed, because every body
+  * near the player was cast.
+  *
+  * Being hit is safe for them because `simulation.step` tests `struck` BEFORE it hands a
+  * choreographed pedestrian to `choreography.move`, so a falling body is carried by the
+  * knock-down path and not by its track. This is the same route a car already takes through
+  * `strike`. What protects the signals is not refusing to hit them; it is refusing to take
+  * them off their route for anything short of going down. See `engage`.
+  */
+ const eligible=(p,crowd)=>p.active&&!p.controlled&&p.struck===undefined&&
+  !p.combatDead&&p.archetype!=='kid'&&crowd.network.ctx.safe(p.x,p.z,.28);
+
+ /** The best target for a swing landing right now, or null. Range and arc, not nearest. */
+ function choose(crowd,state){
+  let best=null,score=Infinity;
   for(const p of nearby(crowd,state.x,state.z,COMBAT.range)){
-   if(!eligible(p,crowd))continue;const d=Math.hypot(p.x-state.x,p.z-state.z),a=Math.abs(turn(state.heading,angleTo(state,p)));
-   if(a>1.25)continue;const s=d+a*.65;if(s<score){score=s;best=p;}
-  }return best;}
+   if(!eligible(p,crowd))continue;
+   const d=Math.hypot(p.x-state.x,p.z-state.z);
+   if(d>COMBAT.range)continue;
+   const facing=state.bodyHeading??state.heading;
+   const a=Math.abs(turn(facing,angleTo(state,p)));
+   if(a>COMBAT.arc)continue;                       // behind, or off to the side
+   const s=d+a*.65;
+   if(s<score){score=s;best=p;}
+  }
+  return best;
+ }
+
+ /**
+  * Make a pedestrian hostile.
+  *
+  * A pedestrian who is mid-crossing, or who is part of the choreographed Scramble cast, is
+  * NOT pulled off their route to fight. Stopping one where they stand would hold their signal
+  * group while the controller waits for the crossing to clear, and eight of those is what
+  * froze every signal on the map once before; a cast member would in any case be moved back
+  * onto their track by `choreography.move` on the very next tick, so the two would fight over
+  * the body every frame. They take the damage and the reaction and keep walking.
+  *
+  * Only going down takes them off the route, and that happens through `crowd.strike`, which
+  * releases the group properly and is handled ahead of the choreography in `simulation.step`.
+  *
+  * The hostility window is still opened, so a cast member who is punched and then reaches the
+  * far kerb turns and fights -- see the retaliation filter below.
+  */
  function engage(crowd,p,state){
-  crowd.leave(p);p.combatHealth??=100;p.combatTarget='player';p.combatUntil=crowd.time+COMBAT.hostileSeconds;
-  p.combatNext=Math.max(p.combatNext??0,crowd.time+COMBAT.npcWindup);p.state='fighting';p.speed=0;
-  p.heading=angleTo(p,state);crowd.say?.(p,'alert',.75);target=p;
+  p.combatHealth??=100;
+  p.combatTarget='player';
+  p.combatUntil=crowd.time+COMBAT.hostileSeconds;
+  if(!onRails(p)){
+   crowd.leave(p);
+   p.combatNext=Math.max(p.combatNext??0,crowd.time+COMBAT.npcWindup);
+   p.state='fighting';p.speed=0;p.heading=angleTo(p,state);
+   target=p;
+  }
+  crowd.say?.(p,'alert',.75);
  }
- function kill(crowd,p,state){p.combatDead=true;p.combatTarget=null;p.combatAction=-1;stats.npcDeaths++;
-  const dx=p.x-state.x,dz=p.z-state.z;crowd.strike(p,dx,dz,2.4);p.fatal=true;
+
+ function kill(crowd,p,state){
+  p.combatDead=true;p.combatTarget=null;p.combatAction=-1;stats.npcDeaths++;
+  const dx=p.x-state.x,dz=p.z-state.z;
+  // `strike` is the simulation's own knock-down: it calls `leave` first, so a crossing is
+  // released rather than abandoned, and the HQ crowd picks the body up from `struck`.
+  crowd.strike(p,dx,dz,2.4);p.fatal=true;
  }
+
+ /**
+  * Someone who will not fight: they get away from the attacker, at a run or a few steps.
+  * The simulation's own scatter moves them, so the route, crossing and signal stay theirs.
+  */
+ function answer(crowd,p,state,response){
+  let dx=p.x-state.x,dz=p.z-state.z;const d=Math.hypot(dx,dz)||1;dx/=d;dz/=d;
+  if(p.combatTarget==='player'){p.combatTarget=null;p.combatUntil=0;}
+  crowd.scatter?.(p,dx,dz,response===RESPONSE.FLEE?1:.45);
+  if(response===RESPONSE.FLEE)crowd.say?.(p,'scream',.9);
+ }
+
+ /** Tell whoever is listening that a punch was thrown here. Bounded by the listener. */
+ function witness(crowd,state,victim,severity){
+  if(!onWitness)return;
+  const n=onWitness({x:state.x,z:state.z,severity,radius:COMBAT.witnessRadius,
+   attacker:'player',victim:victim?.id??null,time:crowd.time??0})|0;
+  stats.witnessEvents++;stats.witnesses+=n;
+ }
+
+ /** One swing's worth of state. The clip decides its own timing; see attack-timing.mjs. */
+ function start(player){
+  const name=ATTACKS[swingIndex%ATTACKS.length].name;
+  swingIndex++;
+  const timing=attackOf(name);
+  swing={id:swingIndex,name,timing,elapsed:0,phase:PHASE.WINDUP,hitConsumed:false};
+  stats.swings++;
+  // The renderer plays the clip for as long as the clip lasts, not for a fixed 0.42 s.
+  player.startAttack?.(timing.duration,name);
+  return swing;
+ }
+
  return {
   request(){if(!disposed)pending=true;},
-  update(dt,crowd,player){if(disposed||!crowd||!player?.state)return stats;const state=player.state;
-   state.attackTime=Math.max(0,(state.attackTime??0)-dt);state.hurtTime=Math.max(0,(state.hurtTime??0)-dt);
-   if(pending){pending=false;if(!state.alive)return stats;stats.swings++;player.startAttack?.(COMBAT.attackSeconds);
-    const p=choose(crowd,state);if(p){engage(crowd,p,state);p.combatAction=1;p.combatHealth-=COMBAT.playerDamage;
-     stats.hits++;if(p.combatHealth<=0)kill(crowd,p,state);}}
-   const hostiles=nearby(crowd,state.x,state.z,COMBAT.notice).filter(p=>eligible(p,crowd)&&p.combatTarget==='player'&&p.combatUntil>crowd.time);
-   for(const p of hostiles){const d=Math.hypot(state.x-p.x,state.z-p.z);p.heading=angleTo(p,state);p.state='fighting';p.speed=0;
+  get phase(){return swing?swing.phase:PHASE.IDLE;},
+  get swing(){return swing&&{id:swing.id,name:swing.name,phase:swing.phase,
+   elapsed:Number(swing.elapsed.toFixed(3)),hitConsumed:swing.hitConsumed};},
+
+  update(dt,crowd,player){
+   if(disposed||!crowd||!player?.state)return stats;
+   const state=player.state;
+   state.attackTime=Math.max(0,(state.attackTime??0)-dt);
+   state.hurtTime=Math.max(0,(state.hurtTime??0)-dt);
+
+   // A new swing only starts when the last one has finished. Holding the button does not
+   // stack punches, and a press during recovery is dropped rather than queued.
+   if(pending){
+    pending=false;
+    if(state.alive&&!swing){start(player);onEvent?.('punch_swing',{x:state.x,z:state.z,intensity:.6});}
+   }
+   // Staggers: a blown-back step, a fraction of a second long, only where the walkable context
+   // allows it and never for anyone on a crossing or on the choreographed track.
+   for(const p of nearby(crowd,state.x,state.z,COMBAT.notice+2)){
+    // Counted down by the frame, not by the clock, so it always ends.
+    if(!(p.staggerLeft>0)||p.struck!==undefined||onRails(p))continue;
+    const left=p.staggerLeft/Math.max(.05,p.hurtDuration??.34);p.staggerLeft-=dt;
+    const nx=p.x+p.staggerX*left*dt,nz=p.z+p.staggerZ*left*dt;
+    if(crowd.network.ctx.safe(nx,nz,.28)&&!crowd.vehicleOverlap?.(nx,nz,.35)&&!crowd.blocked?.(nx,nz,p,.4,false)){
+     const old=crowd.cell(p.x,p.z);p.x=nx;p.z=nz;
+     if(crowd.cell(nx,nz)!==old){const b=crowd.grid.get(old),i=b?.indexOf(p);if(i>=0)b.splice(i,1);crowd.insert(p);}
+    }
+   }
+
+   if(swing){
+    const before=swing.elapsed;
+    swing.elapsed+=Math.max(0,dt);
+    const {windup,activeEnd,duration}=swing.timing;
+    const was=swing.phase;
+    swing.phase=swing.elapsed<windup?PHASE.WINDUP
+     :swing.elapsed<activeEnd?PHASE.ACTIVE
+     :swing.elapsed<duration?PHASE.RECOVERY:PHASE.IDLE;
+
+    // THE HIT TEST RUNS HERE, inside the active window, and at most once per swing. Choosing
+    // the target at input time is what made a miss impossible.
+    //
+    // The test is whether this STEP crossed the window, not whether it landed inside it. A
+    // frame long enough to step over a 180 ms window would otherwise skip the punch
+    // entirely -- at 60 Hz that never happens, but a stall, a background tab or a test using
+    // coarse steps all produce it, and a punch that silently does nothing when the frame
+    // rate dips is worse than one that lands a frame late.
+    const crossed=swing.elapsed>=windup&&before<activeEnd;
+    if(crossed&&!swing.hitConsumed&&state.alive){
+     const p=choose(crowd,state);
+     if(p){
+      swing.hitConsumed=true;
+      // RUN 11.2. How this blow lands (a jab flinches, a cross staggers, both away from the
+      // fist) and how this person answers it (fight, flee or back off -- by who they are, not
+      // at random). Setting `combatAction` on the victim here made a near body play its own
+      // PUNCH on being hit; the victim's swing sets that when they actually throw one.
+      p.combatHealth=(p.combatHealth??100)-COMBAT.playerDamage;
+      const fatal=p.combatHealth<=0;
+      const blow=blowOn(state,p,{attack:swing.name,fatal});
+      const response=responseOf(p.id,{archetype:p.archetype,gray:!!ARCHETYPES[p.archetype]?.gray});
+      p.hurtUntil=crowd.time+blow.hold;p.hurtDuration=blow.hold;
+      stats.hits++;stats.byResponse[response]++;
+      if(fatal)kill(crowd,p,state);
+      else{
+       if(response===RESPONSE.FIGHT)engage(crowd,p,state);
+       else answer(crowd,p,state,response);
+       // A stagger the simulation owns, so every renderer shows the same step back.
+       if(!onRails(p)){p.staggerX=blow.impulse.x;p.staggerZ=blow.impulse.z;p.staggerLeft=blow.hold;}
+      }
+      onBlow?.({victim:p.id,blow,response,time:crowd.time});
+      lastBlow={victim:p.id,response,strength:blow.strength,quarter:blow.quarter,fatal,time:crowd.time};
+      onEvent?.('punch_hit',{x:p.x,z:p.z,intensity:blow.strength==='strong'?1:.7,id:p.id});
+      onEvent?.(fatal?'pedestrian_scream':'pain_voice',{x:p.x,z:p.z,intensity:fatal?1:.6,id:p.id});
+      witness(crowd,state,p,COMBAT.witnessSeverity);
+     }
+    }
+    if(was!==PHASE.IDLE&&swing.phase===PHASE.IDLE){
+     if(!swing.hitConsumed){stats.misses++;witness(crowd,state,null,COMBAT.witnessSeverity*.55);}
+     swing=null;
+    }
+   }
+
+   // Only pedestrians whose movement is their own may be walked toward the player and
+   // stopped to fight. Someone on a track or a crossing keeps going, and picks the fight up
+   // when they are off it, while the hostility window lasts.
+   const hostiles=nearby(crowd,state.x,state.z,COMBAT.notice)
+    .filter(p=>eligible(p,crowd)&&p.combatTarget==='player'&&p.combatUntil>crowd.time&&!onRails(p));
+   for(const p of hostiles){
+    const d=Math.hypot(state.x-p.x,state.z-p.z);
+    p.heading=angleTo(p,state);p.state='fighting';p.speed=0;
     p.combatAction=Math.max(0,(p.combatAction??0)-dt*4);
-    if(d>COMBAT.range*.82){const step=Math.min(.95*dt,d-COMBAT.range*.72),dx=(state.x-p.x)/d,dz=(state.z-p.z)/d,nx=p.x+dx*step,nz=p.z+dz*step;
-     if(crowd.network.ctx.safe(nx,nz,.28)&&!crowd.vehicleOverlap(nx,nz,.35)&&!crowd.blocked?.(nx,nz,p,.52,false)){const old=crowd.cell(p.x,p.z);p.x=nx;p.z=nz;p.renderX=nx;p.renderZ=nz;
-      if(crowd.cell(nx,nz)!==old){const b=crowd.grid.get(old),i=b?.indexOf(p);if(i>=0)b.splice(i,1);crowd.insert(p);}}}
-    else if(crowd.time>=(p.combatNext??0)&&state.alive){p.combatNext=crowd.time+COMBAT.npcCooldown+(p.id%4)*.12;p.combatAction=1;
-     if(player.hurt?.(COMBAT.npcDamage+(p.id%3)*2,'fight'))stats.npcHits++;}
+    if(d>COMBAT.range*.82){
+     const step=Math.min(.95*dt,d-COMBAT.range*.72),dx=(state.x-p.x)/d,dz=(state.z-p.z)/d,
+      nx=p.x+dx*step,nz=p.z+dz*step;
+     if(crowd.network.ctx.safe(nx,nz,.28)&&!crowd.vehicleOverlap(nx,nz,.35)&&!crowd.blocked?.(nx,nz,p,.52,false)){
+      const old=crowd.cell(p.x,p.z);p.x=nx;p.z=nz;p.renderX=nx;p.renderZ=nz;
+      if(crowd.cell(nx,nz)!==old){const b=crowd.grid.get(old),i=b?.indexOf(p);if(i>=0)b.splice(i,1);crowd.insert(p);}
+     }
+     p.npcSwing=null;
+    }else if(state.alive){
+     // The NPC swings on the same model the player does: a wind-up, then damage when the arm
+     // is out. A player who has to respect a hit window while the crowd lands instantly is
+     // not fighting, they are being audited.
+     if(!p.npcSwing&&crowd.time>=(p.combatNext??0)){
+      p.npcSwing={elapsed:0,timing:attackOf(ATTACKS[p.id%ATTACKS.length].name),hitConsumed:false};
+      p.combatAction=1;
+     }
+     if(p.npcSwing){
+      const before=p.npcSwing.elapsed;
+      p.npcSwing.elapsed+=dt;
+      const {windup,activeEnd,duration}=p.npcSwing.timing;
+      // Crossing the window, not landing inside it -- the same rule the player's swing uses.
+      // Having one and not the other meant a long frame silently disarmed the crowd while
+      // the player kept punching, which is a difficulty setting nobody asked for.
+      if(p.npcSwing.elapsed>=windup&&before<activeEnd&&!p.npcSwing.hitConsumed){
+       p.npcSwing.hitConsumed=true;
+       if(Math.hypot(state.x-p.x,state.z-p.z)<=COMBAT.range&&
+          player.hurt?.(COMBAT.npcDamage+(p.id%3)*2,'fight'))stats.npcHits++;
+      }
+      if(p.npcSwing.elapsed>=duration){
+       p.npcSwing=null;p.combatNext=crowd.time+COMBAT.npcCooldown+(p.id%4)*.12;
+      }
+     }
+    }
    }
    if(target&&(!target.active||target.combatDead||target.combatUntil<=crowd.time))target=null;
    return stats;
   },
-  snapshot(){return {...stats,target:target?.id??null};},
-  reset(){pending=false;target=null;},dispose(){disposed=true;pending=false;target=null;}
+  snapshot(){return {...stats,byResponse:{...stats.byResponse},lastBlow,target:target?.id??null,
+   phase:swing?swing.phase:PHASE.IDLE,clip:swing?swing.name:null};},
+  reset(){pending=false;target=null;swing=null;},
+  dispose(){disposed=true;pending=false;target=null;swing=null;}
  };
 }

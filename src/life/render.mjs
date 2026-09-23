@@ -1,4 +1,6 @@
 import {createNearCharacters} from './near-characters.mjs';
+import {playerThreat,wantedFor} from './hq-awareness.mjs';
+import {createHQLayer} from './hq-layer.mjs';
 import {createContactShadows} from './shadows.mjs';
 import {tagLimb,addGait,installGait} from './gait.mjs';
 import {Group,BoxGeometry,CapsuleGeometry,SphereGeometry,ConeGeometry,CylinderGeometry,TorusGeometry,InstancedMesh,MeshStandardMaterial,Object3D,Color,DynamicDrawUsage,BufferGeometry,Float32BufferAttribute,LineSegments,LineBasicMaterial} from 'three';
@@ -74,7 +76,19 @@ export function buildCrowd(data,options={}){
  const network=options.network??buildPedestrianNetwork(data,{ground,generic,core,street,detail}),sim=options.sim??new CrowdSimulation(network,options),root=new Group();root.name='r1-crowd';
  const material=new MeshStandardMaterial({color:0xffffff,roughness:.9}),headMaterial=new MeshStandardMaterial({color:0xffffff,roughness:.7}),hairMaterial=new MeshStandardMaterial({color:0xffffff,roughness:.8});
  installGait(material);
- let playerFocus=null;const nearCharacters=options.nearRigs===false?null:createNearCharacters(options.tier??'high');if(nearCharacters)root.add(nearCharacters.root);
+ let playerFocus=null;const nearCharacters=options.nearRigs===false?null:createNearCharacters(options.tier??'high',{ctx:network.ctx});if(nearCharacters)root.add(nearCharacters.root);
+ // RUN 10: awareness is no longer a module of its own here. The one authority is the mass
+ // layer's typed-array pass (src/life/hq-awareness.mjs), which is bounded by the crowd grid.
+ // What used to sit on this line was the RUN 7 WIP, walking all ~1,978 pedestrians EVERY
+ // FRAME to decide who had noticed the player -- the exact scan the mass architecture was
+ // built to avoid, running in production the whole time.
+ const perceive=options.awareness!==false;
+ // RUN 7B. The high-fidelity crowd is a RENDERER, switchable, with the legacy instanced
+ // bodies kept as the fallback. Nothing about the simulation changes when it is on: the HQ
+ // layer reads sim.pool and returns the ids it drew, and those ids are masked out of the
+ // legacy meshes below so nobody is drawn twice.
+ let hq=null,hqCamera=null;
+ const hqStats={enabled:false,hq:0,budget:0};
  const geometry={};for(let i=0;i<BODY_VARIANTS.length;i++)geometry[BODY_VARIANTS[i].key]=bodyGeometry(i);geometry.head=new SphereGeometry(1,10,7);for(let i=0;i<HAIR_VARIANTS.length;i++)geometry[HAIR_VARIANTS[i].key]=hairGeometry(i);
  Object.assign(geometry,{phone:new BoxGeometry(1,1,1),bag:new BoxGeometry(1,1,1),cane:new CylinderGeometry(1,1,1,6),suitcase:suitcaseGeometry(),umbrella:new ConeGeometry(1,.35,8)});
  const capacities={...Object.fromEntries(BODY_VARIANTS.map(v=>[v.key,v.count])),head:POOL_SIZE,...Object.fromEntries(HAIR_VARIANTS.map(v=>[v.key,v.count])),...ACCESSORY_TARGETS};
@@ -97,25 +111,52 @@ export function buildCrowd(data,options={}){
    lz+=y*Math.sin(a);y*=Math.cos(a);tilt+=a;}
   const heading=p.heading+(playerFocus&&p.speed<.05&&p.struck===undefined?Math.sin(p.id*2.39+sim.time*.22)*.15:0);const c=Math.cos(heading),s=Math.sin(heading);obj.position.set(p.renderX+c*lx+s*lz,p.height+y,p.renderZ-s*lx+c*lz);obj.rotation.set(tilt,heading,0);obj.scale.set(w,h,d);obj.updateMatrix();const i=counts[key]++,near=playerFocus&&p.struck===undefined&&Math.hypot(p.x-playerFocus.x,p.z-playerFocus.z)<24;geometry[key].attributes.gait.setX(i,near?Math.sin(p.travelled*4.1+p.phase)*Math.min(.6,p.speed*.3)+(p.speed<.05?Math.sin(sim.time*1.4+p.phase)*.025:0):0);geometry[key].attributes.action.setX(i,near?Math.max(p.combatAction??0,p.reactionUntil>sim.time&&['guard','startle'].includes(p.trafficReaction)?.5:0):0);meshes[key].setMatrixAt(i,obj.matrix);color.setHex(hex);meshes[key].setColorAt(i,color);}
  function hasAccessory(p,key){return rank(p.id,{phone:211,bag:433,cane:677,suitcase:929,umbrella:1217}[key])<ACCESSORY_TARGETS[key];}
- function sync(dt=0){const detailed=nearCharacters?.update(sim.pool,playerFocus,dt,sim.time)??new Set();for(const k of Object.keys(meshes))counts[k]=0;shadows.begin();for(const p of sim.pool){if(!p.active||p.controlled)continue;const def=ARCHETYPES[p.archetype],h=def.height*(.96+(p.id%5)*.02),w=def.width*(1.06+(p.id%7)*.015),walk=p.speed>.05,phase=p.animationTime*(walk?7:1)+p.phase,fidelity=p.lod==='near'?1:p.lod==='mid'?.65:.15,sway=walk?Math.sin(phase)*.035*fidelity:Math.sin(phase)*.012,bob=walk?Math.abs(Math.cos(phase))*.024*fidelity:Math.sin(phase)*.008;
+ // The last frame's ownership split, kept by reference only (no copy, no allocation) so QA
+ // can ask which renderer drew a given pedestrian. See `ownership()` below.
+ let lastNear=null,lastDrawn=null;
+ function sync(dt=0){
+  // Perception first: the figures below render whatever state it leaves behind.
+  if(perceive&&playerFocus)hq?.awareness(playerFocus,dt);
+  const near=nearCharacters?.update(sim.pool,playerFocus,dt,sim.time)??new Set();
+  // The near pool is drawn with real skeletons and is therefore EXCLUDED from the mass crowd,
+  // so it has no typed-array state to read. It gets the same rule applied directly, over at
+  // most eight people -- one implementation of what counts as threatening, two storages. The
+  // thing RUN 10 exists to prevent is two RULES, not two places to put a number.
+  if(perceive&&playerFocus)for(const id of near){
+   const p=sim.pool[id]??null;
+   if(!p?.active)continue;
+   // No clocks here: the near pool is at most eight bodies a couple of metres from the
+   // camera, and a reaction delay on them is invisible next to the cost of getting it wrong
+   // when they swap in and out of the pool every second or so.
+   p.awareState=wantedFor(playerThreat(playerFocus,p.x,p.z,p.heading,p.id));
+  }
+  // The HQ layer draws whoever it can afford, EXCLUDING anyone the near pool already has --
+  // a citizen drawn twice is the failure this mask exists to prevent.
+  const drawn=hq?hq.sync(sim.pool,hqCamera??playerFocus,dt,{time:sim.time,exclude:near}):null;
+  const detailed=drawn?new Set([...near,...drawn]):near;lastNear=near;lastDrawn=drawn;for(const k of Object.keys(meshes))counts[k]=0;shadows.begin();for(const p of sim.pool){if(!p.active||p.controlled)continue;const def=ARCHETYPES[p.archetype],h=def.height*(.96+(p.id%5)*.02),w=def.width*(1.06+(p.id%7)*.015),walk=p.speed>.05,phase=p.animationTime*(walk?7:1)+p.phase,fidelity=p.lod==='near'?1:p.lod==='mid'?.65:.15,sway=walk?Math.sin(phase)*.035*fidelity:Math.sin(phase)*.012,bob=walk?Math.abs(Math.cos(phase))*.024*fidelity:Math.sin(phase)*.008;
    const blend=dt?Math.min(1,dt*(p.lod==='far'?10:25)):1;p.renderX+=(p.x-p.renderX)*blend;p.renderZ+=(p.z-p.renderZ)*blend;
    // A thrown body's shadow belongs to the road it is over, not to the body: `p.height`
    // follows the arc, so using it would send the shadow into the air with the person.
    const struck=p.struck!==undefined;
    shadows.add(p.renderX,struck?p.flyGround:p.height,p.renderZ,def.width,struck?p.flyHeight:0);
    const body=pickVariant(p.id,BODY_VARIANTS),hair=pickVariant(p.id,HAIR_VARIANTS,307),shirt=BODY_COLORS[p.id%BODY_COLORS.length],skin=SKIN_COLORS[p.id%SKIN_COLORS.length],hairColor=def.gray?HAIR_COLORS[3]:HAIR_COLORS[p.id%3];
-   if(!detailed.has(p.id))part(body,p,0,h*.02+bob,0,w,h*.78,w*.58,shirt,sway);
+   // RUN 11.0. The props below were NOT masked with the body, so every HQ or near citizen
+   // carrying one still wore the legacy renderer's box phone, bag, suitcase, cane or cone
+   // umbrella, sized for a capsule and tumbling on the legacy arc after a hit. Live at HIGH
+   // with the HQ crowd up: 971 of them, which is what read as old blocky bodies in the crowd.
+   const legacyBody=!detailed.has(p.id);
+   if(legacyBody)part(body,p,0,h*.02+bob,0,w,h*.78,w*.58,shirt,sway);
    // About 26 cm across on a 1.7 m figure: roughly half the old 51 cm, and a little over
    // life-size rather than at it. Life-size was tried and is wrong here -- these bodies are
    // featureless capsules, so a correctly scaled head turns them into bowling pins. The crown
    // sits at 97% of the height with the chin just clear of the shoulders.
-   if(!detailed.has(p.id))part('head',p,0,h*.882+bob,0,h*.076,h*.088,h*.079,skin,sway*.5);
-   if(!detailed.has(p.id))part(hair,p,0,h*.882+bob,0,h*.076,h*.088,h*.079,def.hood?shirt:hairColor,sway*.5);
-   if(hasAccessory(p,'phone'))part('phone',p,w*.43,h*.59+bob,-w*.28,w*.15,h*.16,w*.05,0x303843);
-   if(hasAccessory(p,'bag'))part('bag',p,w*.55,h*.37+bob,.02,w*.36,h*.2,w*.4,p.id%2?0x9a7960:0x4e5557);
-   if(hasAccessory(p,'cane'))part('cane',p,w*.48,h*.19,0,w*.055,h*.38,w*.055,0x8c7354,-.16);
-   if(hasAccessory(p,'suitcase'))part('suitcase',p,-w*.64,h*.02,.08,w*.5,h*.38,w*.52,p.id%2?0x596579:0x6e4d45);
-   if(hasAccessory(p,'umbrella'))part('umbrella',p,.08,h*.99,0,.38,.62,.38,shirt);
+   if(legacyBody)part('head',p,0,h*.882+bob,0,h*.076,h*.088,h*.079,skin,sway*.5);
+   if(legacyBody)part(hair,p,0,h*.882+bob,0,h*.076,h*.088,h*.079,def.hood?shirt:hairColor,sway*.5);
+   if(legacyBody&&hasAccessory(p,'phone'))part('phone',p,w*.43,h*.59+bob,-w*.28,w*.15,h*.16,w*.05,0x303843);
+   if(legacyBody&&hasAccessory(p,'bag'))part('bag',p,w*.55,h*.37+bob,.02,w*.36,h*.2,w*.4,p.id%2?0x9a7960:0x4e5557);
+   if(legacyBody&&hasAccessory(p,'cane'))part('cane',p,w*.48,h*.19,0,w*.055,h*.38,w*.055,0x8c7354,-.16);
+   if(legacyBody&&hasAccessory(p,'suitcase'))part('suitcase',p,-w*.64,h*.02,.08,w*.5,h*.38,w*.52,p.id%2?0x596579:0x6e4d45);
+   if(legacyBody&&hasAccessory(p,'umbrella'))part('umbrella',p,.08,h*.99,0,.38,.62,.38,shirt);
   }
   shadows.end();
   stats.triangles=0;stats.batches=0;for(const [k,m] of Object.entries(meshes)){m.count=counts[k];if(m.count)stats.batches++;stats.triangles+=m.count*triangleCount(geometry[k]);geometry[k].attributes.gait.needsUpdate=true;geometry[k].attributes.action.needsUpdate=true;m.instanceMatrix.needsUpdate=true;if(m.instanceColor)m.instanceColor.needsUpdate=true;}
@@ -125,7 +166,51 @@ export function buildCrowd(data,options={}){
   stats.contactShadows={drawn:shadows.drawn,batches:shadows.drawn?1:0,geometries:1,materials:1};
   stats.nearCharacters=nearCharacters?.inspect()??null;
   stats.bodyCounts=Object.fromEntries(BODY_VARIANTS.map(v=>[v.key,counts[v.key]]));stats.hairCounts=Object.fromEntries(HAIR_VARIANTS.map(v=>[v.key,counts[v.key]]));stats.accessories=Object.fromEntries(Object.keys(ACCESSORY_TARGETS).map(k=>[k,counts[k]]));stats.instanceCounts={...counts};
-  reportClock+=dt;if(reportClock>=1||!dt){reportClock=0;Object.assign(stats,network.stats,sim.snapshot(options.debug));}
+  reportClock+=dt;if(reportClock>=1||!dt){reportClock=0;Object.assign(stats,network.stats,sim.snapshot(options.debug));stats.awareness=hq?.perception??null;stats.hqCrowd=hq?hq.inspect():null;}
  }
- sync();return {root,network,sim,stats,meshes,setPlayerFocus(p){playerFocus=p;},update(dt,camera){if(disposed)return;if(camera)sim.setCamera(camera.x,camera.z);sim.update(dt);sync(dt);},setTier(t){sim.setTier(t);nearCharacters?.setTier(t);sync();},dispose(){if(disposed)return;disposed=true;nearCharacters?.dispose();shadows.dispose();sim.dispose();for(const m of Object.values(meshes))m.dispose();for(const g of Object.values(geometry))g.dispose();material.dispose();headMaterial.dispose();hairMaterial.dispose();debug?.geometry.dispose();debug?.material.dispose();root.removeFromParent();root.clear();}};
+ sync();return {root,network,sim,stats,meshes,setPlayerFocus(p){playerFocus=p;},
+  /**
+   * Which renderer drew each active pedestrian on the last frame: 'hq', 'near' or 'legacy'.
+   * QA only -- it walks the pool, so nothing calls it per frame. It exists because "that one
+   * looks like an old model" is a claim about ownership, and ownership can be measured.
+   */
+  ownership(){const out=[];for(const p of sim.pool){if(!p.active||p.controlled)continue;
+   const near=!!lastNear?.has(p.id),hqd=!!lastDrawn?.has(p.id);
+   out.push({id:p.id,x:p.x,z:p.z,owner:near&&hqd?'both':near?'near':hqd?'hq':'legacy',
+    heldByHQ:hq?hq.crowd.indexOf(p.id)>=0:false,
+    struck:p.struck!==undefined,choreo:!!p.choreographed,driver:p.cameFromVehicle!=null});}
+   return out;},
+  /**
+   * Turn the RUN 7B high-fidelity crowd on, with its prebuilt pack. Off by default and
+   * removable at any time, so legacy remains a one-call rollback for the whole run.
+   */
+  enableHQCrowd(manifest,bin,options={}){
+   if(hq)return hq;
+   hq=createHQLayer(manifest,bin,options);
+   root.add(hq.root);
+   hqStats.enabled=true;hqStats.budget=options.budget??0;
+   // The HQ crowd draws the nearest `budget` people the near pool does not take, so once it
+   // has any budget the near pool's baked tier is only ever a worse body in the same place.
+   nearCharacters?.setHQCovered(hqStats.budget>0);
+   return hq;
+  },
+  disableHQCrowd(){if(!hq)return;hq.dispose();hq=null;hqStats.enabled=false;hqStats.hq=0;nearCharacters?.setHQCovered(false);},
+  /**
+   * Report a violent event to the crowd. Returns how many people reacted.
+   *
+   * RUN 8. Safe to call when the HQ crowd is off: the legacy renderer has no mass state to
+   * change, so it reports nobody rather than throwing.
+   */
+  witness(event){return hq?hq.witness(event):0;},
+  /** RUN 11.2: one blow on one citizen, for the HQ body's flinch and follow-up. */
+  blow(event){return hq?hq.blow(event):false;},
+  /** Where the HQ budget should be spent, when it is not the player. */
+  setHQCamera(p){hqCamera=p;},
+  setHQBudget(n){hq?.setBudget(n);hqStats.budget=n;nearCharacters?.setHQCovered(!!hq&&n>0);},
+  get hqCrowd(){return hq;},
+  /** The near pool, for QA: which body and which reaction a held citizen shows. */
+  get nearCharacters(){return nearCharacters;},
+  // The humanoid arrives late, exactly as it does for the player. Until it does the near
+  // pool runs on baked figures, so nothing waits on it.
+  setNearCharacterAsset(a){nearCharacters?.setHumanAsset(a);},update(dt,camera){if(disposed)return;if(camera)sim.setCamera(camera.x,camera.z);sim.update(dt);sync(dt);},setTier(t){sim.setTier(t);nearCharacters?.setTier(t);sync();},dispose(){if(disposed)return;disposed=true;hq?.dispose();hq=null;nearCharacters?.dispose();shadows.dispose();sim.dispose();for(const m of Object.values(meshes))m.dispose();for(const g of Object.values(geometry))g.dispose();material.dispose();headMaterial.dispose();hairMaterial.dispose();debug?.geometry.dispose();debug?.material.dispose();root.removeFromParent();root.clear();}};
 }
