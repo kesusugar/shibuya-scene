@@ -567,3 +567,23 @@ test('a cadence change keeps the pose where it is (no jump in the cycle)',()=>{
  assert.ok(worst<.02,`the walk cycle jumped by ${worst.toFixed(3)} of a cycle on a rate change`);
  layer.dispose();
 });
+
+test('a pedestrian the simulation is carrying away from a car runs; walking back afterwards walks',()=>{
+ const people=pool(4,3);
+ const layer=createHQLayer(manifest,bin,{budget:4});
+ const [a]=people;
+ layer.sync(people,{x:0,z:0},1/60,{time:0});
+ const i=()=>layer.crowd.indexOf(a.id),clip=()=>layer.crowd.clipName(i());
+ // A glance first: a real flight must override it.
+ layer.crowd.setState(i(),STATE.LOOK);
+ a.flee={x:0,z:1};a.speed=4.2;
+ let t=walkFor(layer,people,.8,{moving:[a]});
+ assert.equal(layer.crowd.state.behaviour[i()],STATE.FLEE);
+ assert.equal(clip(),'Run');
+ // The flight is over; FLEE drains through RECOVER while they walk back.
+ a.flee=null;a.speed=1.25;
+ t=walkFor(layer,people,1.8,{t0:t,moving:[a]});
+ assert.equal(layer.crowd.state.behaviour[i()],STATE.RECOVER);
+ assert.equal(clip(),'Walk','a recovering body walking back played a standing Guard and slid');
+ layer.dispose();
+});
