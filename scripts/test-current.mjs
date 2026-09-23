@@ -20,6 +20,7 @@ const files=[
  'tests/appearance.test.mjs',
  'tests/hq-crowd.test.mjs',
  'tests/hq-layer.test.mjs',
+ 'tests/hq-sync-cost.test.mjs',
  'tests/combat.test.mjs',
  'tests/vehicle-occupancy.test.mjs',
  'tests/awareness.test.mjs',
