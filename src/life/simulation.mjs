@@ -55,6 +55,29 @@ export const VOICE_REPRISE=1.1,VOICE_ESCALATION=.3;
 // The queue is drained every frame by whoever is listening. The cap is only there so that a
 // mode with nobody draining it cannot grow a list forever.
 export const VOICE_QUEUE_MAX=24;
+// claude/crowd-realism. Getting away from a car, for real.
+//
+// The HQ crowd already showed AVOID/FLEE and played Run, but nothing moved the pedestrian: the
+// choreographed cast (74-85% of the crowd) never ran `move()`, so `scatter` could not reach
+// them, and ambient walkers only bent their route a little. Live, a car driven into a kerb
+// crowd of 125 left 323 of 347 reacting people within 30 cm of where they stood two seconds
+// later: running on the spot. The published recipe every crowd game uses is the one here --
+// take the direction away from the threat, spread it per person so the crowd fans out rather
+// than moving as a block, dodge sideways out of the path, run at 3-5 m/s for a bounded time or
+// distance, then settle and go back to what you were doing.
+export const FLEE=Object.freeze({
+ speed:[3,5],          // m/s, a person running away, not sprinting
+ seconds:[1,1.8],      // how long they run before easing off
+ distance:[2.4,5.5],   // ...or how far, whichever comes first
+ spread:.62,           // rad each side: how widely a crowd fans out from one threat
+ dodgeSpread:.22,      // rad each side for a sideways dodge, which has to stay sideways
+ accel:10,decel:7,     // m/s^2: a person gets going fast and pulls up a little slower
+ personal:.44,         // m: personal space; a step may not add overlap inside it (fleeCrowded)
+ back:1.25,            // m/s: walking back onto a crossing track afterwards
+ cooldown:.35          // s: a live flight is not restarted by the next warning
+});
+const hash01=(id,salt)=>((Math.imul((id|0)+salt*7919,0x9e3779b1)>>>0)%100003)/100002;
+const FLEE_TURNS=[0,.35,-.35,.7,-.7,1.05,-1.05,1.45,-1.45];
 
 export class CrowdSimulation{
  constructor(network,{traffic=null,tier='medium',seed='shibuya-s10',choreography=false,heroStart=false}={}){
@@ -85,6 +108,140 @@ export class CrowdSimulation{
   * the queue. A scream ignores the cooldown entirely: being hit is never a repeat of a
   * warning, and the shout that goes with it must never be eaten.
   */
+ /**
+  * Run from something. `awayX, awayZ` is the way out (need not be normalised); `urgency` 0..1
+  * sets how hard; `dodge` narrows the spread for a sideways jump out of a car's path. Works for
+  * everyone, the choreographed cast included, and never releases a crossing or a queue: the
+  * flight is a few seconds, and holding a signal group that long is what the controller's hold
+  * is for. Deterministic per person (angle, speed, how far), so the same crowd fans out the
+  * same way and the same person is always the quick one.
+  */
+ flee(p,awayX,awayZ,{urgency=.7,dodge=false,from=null,speed=null,distance=null}={}){
+  if(!p?.active||p.struck!==undefined||p.combatDead||p.controlled||p.combatTarget)return false;
+  const f=p.flee;if(f&&!dodge&&f.until-this.time>FLEE.cooldown)return false;
+  let len=Math.hypot(awayX,awayZ);if(!(len>1e-6)){awayX=p.id%2?1:-1;awayZ=0;len=1;}
+  const u=Math.max(0,Math.min(1,urgency)),j=(hash01(p.id,1)*2-1)*(dodge?FLEE.dodgeSpread:FLEE.spread);
+  const c=Math.cos(j),s=Math.sin(j),dx=awayX/len,dz=awayZ/len;
+  const lerp=(r,k)=>r[0]+(r[1]-r[0])*k;
+  p.flee={x:dx*c+dz*s,z:-dx*s+dz*c,speed:speed??lerp(FLEE.speed,Math.min(1,.3*hash01(p.id,2)+.7*u)),
+   until:this.time+lerp(FLEE.seconds,hash01(p.id,3))*(dodge?.8:1),left:distance??lerp(FLEE.distance,hash01(p.id,4)),
+   v:f?.v??Math.max(0,p.speed??0)*.5,dodge,started:f?.started??this.time,
+   // Where the danger is, so a crowd can be unpacked from the far side first (see step).
+   ox:from?.x??p.x-dx*6,oz:from?.z??p.z-dz*6};
+  if(p.pause>0)p.pause=0;
+  p.fleeOffX??=0;p.fleeOffZ??=0;
+  this.stats.fled=(this.stats.fled??0)+1;if(dodge)this.stats.dodged=(this.stats.dodged??0)+1;
+  this.say(p,'alert',.5+.5*u);return true;}
+ /** Somewhere a fleeing person may put a foot: walkable ground, or their own crossing. */
+ fleeAllowed(p,x,z){const n=this.network,ctx=n.ctx;
+  // Someone already inside a car's footprint may always step, or they could never get out.
+  if(ctx.solid(x,z,RADIUS)||this.vehicleOverlap(x,z,RADIUS+.15)&&!this.vehicleOverlap(p.x,p.z,RADIUS+.15))return false;
+  if(ctx.safe(x,z,.27))return true;
+  const e=n.edges[p.edge]??p.track?.e;
+  if(e?.crossingId&&inCrossing(x,z,e,.29))return true;
+  // Already off the pavement and not on a crossing (thrown, or a driver out of a car): any
+  // open ground is better than freezing in the lane.
+  return !ctx.safe(p.x,p.z,.27)&&!(e?.crossingId&&inCrossing(p.x,p.z,e,.29));}
+ /**
+  * Would standing at x,z crowd this person into others more than they already are? The measure
+  * is total overlap with everyone within the personal radius, so moving apart is always allowed
+  * and a packed kerb (the cast stands on a 0.32 m slot grid, already inside each other's space)
+  * unpacks from its edge inwards instead of being frozen by a strict never-closer rule.
+  */
+ fleeCrowded(p,x,z){const cx=Math.floor(x/2),cz=Math.floor(z/2),r=FLEE.personal;let now=0,next=0;
+  for(let i=cx-1;i<=cx+1;i++)for(let j=cz-1;j<=cz+1;j++)for(const q of this.grid.get(i+','+j)??[]){
+   if(q===p||!q.active||q.struck!==undefined)continue;
+   next+=Math.max(0,r-Math.hypot(q.x-x,q.z-z));now+=Math.max(0,r-Math.hypot(q.x-p.x,q.z-p.z));}
+  return next>now+.03;}
+ /** One tick of a flight: speed up, steer round what is in the way, ease off, stop. */
+ fleeStep(p,dt){const f=p.flee,oldCell=this.cell(p.x,p.z);
+  const going=f.left>0&&this.time<f.until,target=going?f.speed:0;
+  f.v+=Math.max(-FLEE.decel*dt,Math.min(FLEE.accel*dt,target-f.v));
+  if(!going&&f.v<=.05){p.flee=null;p.speed=0;this.stats.fleeEnded=(this.stats.fleeEnded??0)+1;return;}
+  const step=Math.max(0,f.v)*dt,base=Math.atan2(f.x,f.z),side=p.id%2?1:-1;let moved=false,nx=p.x,nz=p.z;
+  if(step>1e-5)for(const t of FLEE_TURNS){const a=base+t*side,x=p.x+Math.sin(a)*step,z=p.z+Math.cos(a)*step;
+   if(!this.fleeAllowed(p,x,z)||this.fleeCrowded(p,x,z))continue;
+   nx=x;nz=z;moved=true;
+   // Keep going round the obstacle rather than straight back into it next tick.
+   if(t){const k=.5;f.x=f.x*(1-k)+Math.sin(a)*k;f.z=f.z*(1-k)+Math.cos(a)*k;const l=Math.hypot(f.x,f.z)||1;f.x/=l;f.z/=l;}
+   break;}
+  if(!moved){f.v*=.5;p.speed=0;return;}
+  const d=Math.hypot(nx-p.x,nz-p.z);
+  p.previousX=p.x;p.previousZ=p.z;p.x=nx;p.z=nz;p.speed=d/dt;p.travelled+=d;f.left-=d;
+  if(p.choreographed){p.fleeOffX+=nx-p.previousX;p.fleeOffZ+=nz-p.previousZ;}
+  const want=Math.atan2(nx-p.previousX,nz-p.previousZ),diff=Math.atan2(Math.sin(want-p.heading),Math.cos(want-p.heading));
+  p.heading+=Math.max(-9*dt,Math.min(9*dt,diff));
+  p.height=this.network.ctx.height(p.x,p.z);
+  if(this.cell(p.x,p.z)!==oldCell){const b=this.grid.get(oldCell),i=b?.indexOf(p);if(i>=0)b.splice(i,1);this.insert(p);}}
+ /**
+  * A cast member walks back onto their track after a flight. Moves the offset still to close
+  * one step towards zero and returns what is left. Each step is checked like a flight step
+  * (walkable ground or their crossing, no solids, no cars) and slides round what is in the way,
+  * because the flight may have bent round a pole that a straight line back would clip.
+  * `baseX, baseZ` is where the track has them without the offset.
+  */
+ fleeReturn(p,dt,baseX=p.x-(p.fleeOffX??0),baseZ=p.z-(p.fleeOffZ??0)){const ox=p.fleeOffX??0,oz=p.fleeOffZ??0,l=Math.hypot(ox,oz);
+  if(l<.01){p.fleeOffX=0;p.fleeOffZ=0;return 0;}
+  const step=Math.min(l,FLEE.back*dt),a=Math.atan2(-ox,-oz);
+  for(const t of [0,.6,-.6,1.2,-1.2]){const nx=ox+Math.sin(a+t)*step,nz=oz+Math.cos(a+t)*step;
+   if(Math.hypot(nx,nz)>=l&&t)continue;                        // a detour must still close the gap
+   // Held up for a second (a car parked across the way, a kerb-edge margin the flight squeezed
+   // past): then any step that is not into a solid will do, so nobody is left off their track.
+   // Never into a car: a spot the player's car now stands on is waited for, beside it.
+   const ok=(p.returnHeld??0)>1?!this.network.ctx.solid(baseX+nx,baseZ+nz,RADIUS*.6)&&!this.vehicleOverlap(baseX+nx,baseZ+nz,RADIUS+.15)
+    :this.fleeAllowed(p,baseX+nx,baseZ+nz);
+   if(!ok)continue;
+   p.returnHeld=0;p.fleeOffX=nx;p.fleeOffZ=nz;return Math.hypot(nx,nz);}
+  p.returnHeld=(p.returnHeld??0)+dt;
+  return l;}
+ /**
+  * The player's car, from the crowd's side: whoever is in its path dodges sideways, whoever
+  * is close runs away from it. Bounded by the simulation's own grid cells around the car.
+  */
+ vehicleThreat(car,def){
+  const speed=Math.abs(car?.speed??0);if(!car?.active)return 0;
+  if(this.time<(this.threatClock??-1))return 0;this.threatClock=this.time+.1;
+  const dir=Math.sign(car.speed)||1,h=car.course??car.heading,fx=Math.sin(h)*dir,fz=Math.cos(h)*dir,rx=fz,rz=-fx;
+  const halfW=def.width/2,halfL=def.length/2,reach=Math.min(22,halfL+speed*1.6+3);
+  let n=0;
+  // Nobody stands inside a car. Below the knock-down speed the car nudges into a crowd (or
+  // stops in one) and used to leave bodies overlapping its panels; they step out sideways now,
+  // at walking pace, whatever the car is doing.
+  if(speed<DODGE_SPEED){const hx=Math.sin(car.heading),hz=Math.cos(car.heading),r=halfL+1.2;
+   for(let i=Math.floor((car.x-r)/2);i<=Math.floor((car.x+r)/2);i++)for(let j=Math.floor((car.z-r)/2);j<=Math.floor((car.z+r)/2);j++)for(const p of this.grid.get(i+','+j)??[]){
+    if(!p.active||p.controlled||p.struck!==undefined||p.flee)continue;
+    const dx=p.x-car.x,dz=p.z-car.z,along=dx*hx+dz*hz,across=dx*hz-dz*hx;
+    if(Math.abs(along)>halfL+.3||Math.abs(across)>halfW+.3)continue;
+    const side=Math.abs(across)>.1?Math.sign(across):(p.id%2?1:-1);
+    if(this.flee(p,hz*side,-hx*side,{urgency:0,dodge:true,from:car,speed:1.5,distance:halfW+.75-Math.abs(across)}))n++;}
+   return n;}const x0=Math.floor((car.x-reach)/2),x1=Math.floor((car.x+reach)/2),z0=Math.floor((car.z-reach)/2),z1=Math.floor((car.z+reach)/2);
+  for(let i=x0;i<=x1;i++)for(let j=z0;j<=z1;j++)for(const p of this.grid.get(i+','+j)??[]){
+   if(!p.active||p.controlled||p.struck!==undefined||p.combatDead)continue;
+   const dx=p.x-car.x,dz=p.z-car.z,along=dx*fx+dz*fz,across=dx*rx+dz*rz,dist=Math.hypot(dx,dz);
+   if(along<-halfL-.5||dist>reach)continue;
+   const ttc=Math.max(0,along-halfL)/speed,inPath=Math.abs(across)<halfW+1.1;
+   if(inPath&&ttc<1.5){
+    // Out of the path, sideways, towards the side they are already on, and a little away.
+    const side=Math.abs(across)>.15?Math.sign(across):(p.id%2?1:-1);
+    const ax=dx/(dist||1),az=dz/(dist||1);
+    if(this.flee(p,rx*side+ax*.25,rz*side+az*.25,{urgency:1-ttc/1.5,dodge:true,from:car}))n++;
+   }else if(dist<3.5+speed*.5&&Math.abs(across)<halfW+5&&ttc<2.6){
+    // Close to it: away from the car, but not straight ahead of it where it is going.
+    let ax=dx/(dist||1),az=dz/(dist||1);const ahead=Math.max(0,ax*fx+az*fz)*.75;ax-=fx*ahead;az-=fz*ahead;
+    if(this.flee(p,ax,az,{urgency:.45+.4*Math.min(1,speed/10),from:car}))n++;
+   }
+  }
+  return n;}
+ /**
+  * Something violent happened at x,z (a body went over a bonnet). The people nearest scatter
+  * away from it; further out fewer of them do. Deterministic per person, like everything here.
+  */
+ panic(x,z,{radius=9,severity=.8}={}){let n=0;const r=radius;
+  for(let i=Math.floor((x-r)/2);i<=Math.floor((x+r)/2);i++)for(let j=Math.floor((z-r)/2);j<=Math.floor((z+r)/2);j++)for(const p of this.grid.get(i+','+j)??[]){
+   if(!p.active||p.controlled||p.struck!==undefined)continue;const dx=p.x-x,dz=p.z-z,d=Math.hypot(dx,dz);if(d>r)continue;
+   if(hash01(p.id,5)>.25+.7*severity*(1-d/r))continue;
+   if(this.flee(p,dx,dz,{urgency:severity*(1-.5*d/r),from:{x,z}}))n++;}
+  return n;}
  say(p,kind,urgency=.5){
   urgency=Math.max(0,Math.min(1,urgency));
   if(kind!=='scream'&&this.time<p.voiceUntil&&
@@ -100,7 +257,7 @@ export class CrowdSimulation{
   * mid-crossing still occupies their signal group, and a group that never reports clear
   * never gives the cars their window.
   */
- strike(p,dx=0,dz=0,speed=0,impulse=null){if(!p.active||p.struck!==undefined)return false;this.leave(p);
+ strike(p,dx=0,dz=0,speed=0,impulse=null){if(!p.active||p.struck!==undefined)return false;this.leave(p);p.flee=null;
   p.struck=0;p.speed=0;
   // RUN 11.1: a vehicle hands over the whole impulse it computed from the contact (direction,
   // side, closing speed, the victim's own motion). Anything else keeps the old throw.
@@ -158,7 +315,7 @@ export class CrowdSimulation{
   if(leader)nodes=this.candidates.filter(n=>n.component===this.network.nodes[leader.node].component&&Math.hypot(n.x-leader.x,n.z-leader.z)<4);
   for(let attempt=0;attempt<100;attempt++){const n=nodes[Math.floor(this.rng()*nodes.length)];if(!n||this.network.landingNodes.has(n.id)||this.blocked(n.x,n.z,null,.9)||this.vehicleOverlap(n.x,n.z,.6)||this.time>0&&Math.hypot(n.x-this.camera.x,n.z-this.camera.z)<12)continue;
    const jitter=this.rng()*.5-.25,jitterZ=this.rng()*.5-.25,sx=n.x+jitter,sz=n.z+jitterZ,valid=this.network.ctx.safe(sx,sz)&&!this.blocked(sx,sz,null,.65)&&!this.vehicleOverlap(sx,sz,.6),px=valid?sx:n.x,pz=valid?sz:n.z;
-   Object.assign(p,{patrol:null,active:true,choreographed:false,kerbQueue:false,x:px,z:pz,renderX:px,renderZ:pz,previousX:px,previousZ:pz,heading:this.rng()*Math.PI*2,height:this.network.ctx.height(n.x,n.z),archetype:type,mode,state:mode==='idle'?'idle':'walking',group:leader?.group??-1,leader:leader?.id??-1,route:[],routeIndex:0,edge:-1,progress:0,destination:n.id,node:n.id,speed:0,baseSpeed:leader?.baseSpeed??def.speed[0]+this.rng()*(def.speed[1]-def.speed[0]),age:0,stuck:0,pause:mode==='idle'?8+this.rng()*30:0,crossing:null,queueKey:null,lod:'near',elapsed:0,phase:this.rng()*Math.PI*2,color:Math.floor(this.rng()*def.colors.length),travelled:0,voiceUntil:0,voiceSaid:-99,voiceUrgency:0,combatHealth:100,combatTarget:null,combatUntil:0,combatNext:0,combatAction:0,combatDead:false,fatal:false,appearanceId:undefined,cameFromVehicle:undefined,reactionOwned:false,region:n.district});
+   Object.assign(p,{patrol:null,active:true,choreographed:false,kerbQueue:false,flee:null,fleeOffX:0,fleeOffZ:0,x:px,z:pz,renderX:px,renderZ:pz,previousX:px,previousZ:pz,heading:this.rng()*Math.PI*2,height:this.network.ctx.height(n.x,n.z),archetype:type,mode,state:mode==='idle'?'idle':'walking',group:leader?.group??-1,leader:leader?.id??-1,route:[],routeIndex:0,edge:-1,progress:0,destination:n.id,node:n.id,speed:0,baseSpeed:leader?.baseSpeed??def.speed[0]+this.rng()*(def.speed[1]-def.speed[0]),age:0,stuck:0,pause:mode==='idle'?8+this.rng()*30:0,crossing:null,queueKey:null,lod:'near',elapsed:0,phase:this.rng()*Math.PI*2,color:Math.floor(this.rng()*def.colors.length),travelled:0,voiceUntil:0,voiceSaid:-99,voiceUrgency:0,combatHealth:100,combatTarget:null,combatUntil:0,combatNext:0,combatAction:0,combatDead:false,fatal:false,appearanceId:undefined,cameFromVehicle:undefined,reactionOwned:false,region:n.district});
    if(mode!=='idle'){
     if(cross){const approach=route(this.network,n.id,cross.from);if(n.id!==cross.from&&!approach.length){p.active=false;continue;}p.route=[...approach,cross.id];p.edge=p.route[0];p.destination=cross.to;}
     else if(!this.chooseDestination(p,n,mode==='milling')){p.active=false;continue;}
@@ -245,6 +402,11 @@ export class CrowdSimulation{
   else if(p.age>240&&!p.crossing)this.despawn(p,'ttl');
  }
  step(dt){this.time+=dt;this.lodClock+=dt;this.refillClock+=dt;this.rebuild();if(this.lodClock>=1){this.lodClock=0;for(const p of this.pool)if(p.active){const d=Math.hypot(p.x-this.camera.x,p.z-this.camera.z);p.lod=d<65?'near':d<140?'mid':'far';}}
+  // claude/crowd-realism: flights first, furthest from their danger first. A packed crowd can
+  // only open from its far edge; moving the near side first just presses it into the rest.
+  const flights=this.flights??=[];flights.length=0;
+  for(const p of this.pool)if(p.active&&p.flee&&!p.controlled&&p.struck===undefined){p.fleeRank=-Math.hypot(p.x-p.flee.ox,p.z-p.flee.oz);flights.push(p);}
+  if(flights.length){flights.sort((a,b)=>a.fleeRank-b.fleeRank);for(const p of flights)this.fleeStep(p,dt);}
   // Rotate priority each fixed tick; ordering does not permanently privilege low IDs.
   const start=Math.floor(this.time*30)%this.pool.length;for(let j=0;j<this.pool.length;j++){const p=this.pool[(start+j)%this.pool.length];if(!p.active||p.controlled)continue;
    if(p.struck!==undefined){p.struck+=dt;p.speed=0;this.fly(p,dt);
@@ -273,6 +435,7 @@ export class CrowdSimulation{
      continue;
     }
     if(p.struck>=FALL_SECONDS){p.struck=undefined;this.despawn(p,'struck');p.downUntil=this.time+RESPAWN_SECONDS;}continue;}
+   if(p.flee){p.elapsed=0;continue;}   // moved in the flight pass above
    p.elapsed+=dt;const interval=p.crossing||p.choreographed?1/30:p.mode==='idle'?.5:p.lod==='near'?1/30:p.lod==='mid'?1/15:.2;if(p.elapsed+1e-8<interval){this.stats.throttled++;continue;}const elapsed=p.elapsed;p.elapsed=0;this.move(p,elapsed);}
   if(this.refillClock>=2){this.refillClock=0;this.refill();}
  }

@@ -487,7 +487,9 @@ export default function Home(){
      // car nobody is sitting in must not report an occupant.
      if(pose.kind==='exit')playerCar?.vacateSeat();}}}
   else if(driving&&playerCar){const drive=player.input();playerCar.step(dt,drive);const c=playerCar.state;player.rideTo(c.x,c.z,c.heading);playerMarker?.update(c,dt,playerCar.def.height);
-   const crowdSim=lifeEntry.hooks.current?.sim;playerCar.alertPedestrians(crowdSim);lifeEntry.hooks.current?.hqCrowd?.vehicle(playerCar.state,dt);
+   const crowdSim=lifeEntry.hooks.current?.sim;playerCar.alertPedestrians(crowdSim);
+   // claude/crowd-realism: the people in front of the car really get out of its way (sim.flee).
+   crowdSim?.vehicleThreat?.(playerCar.state,playerCar.def);lifeEntry.hooks.current?.hqCrowd?.vehicle(playerCar.state,dt);
    const struck=playerCar.strikePedestrians(crowdSim);
    frameHits=struck;
    // RUN 11.3/11.4: what this step's contacts mean to the rest of the street.
@@ -500,6 +502,8 @@ export default function Home(){
       // the bonnet, because each pass rebuilds the crowd grid.
       if(now-lastAccidentWitness>=.25){lastAccidentWitness=now;
        const n=lifeEntry.hooks.current?.witness?.({x:top.x,z:top.z,severity:Math.min(1,.55+top.closing/15),radius:16,kind:'vehicle'})??0;
+       // ...and the ones nearest it actually scatter, rather than only looking scared.
+       crowdSim?.panic?.(top.x,top.z,{radius:9,severity:Math.min(1,.55+top.closing/15)});
        if(n>=3){const near=crowdSim?.pool?.find((p:any)=>p.active&&p.id!==top.id&&p.struck===undefined&&Math.hypot(p.x-top.x,p.z-top.z)<8);
         if(near)feedback.emit('crowd_gasp',now,{x:near.x,z:near.z,intensity:.7,id:near.id});}}}}}
    if(struck){struckCountRef+=struck;setStruckCount(n=>n+struck);

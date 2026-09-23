@@ -115,6 +115,8 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
  /** Which clip a pedestrian's own simulated state calls for. */
  const behaviourFor=p=>{
   if(p.struck!==undefined||p.combatDead)return STATE.KNOCKDOWN;
+  // The simulation is really moving them away from something (sim.flee): the body runs.
+  if(p.flee)return STATE.FLEE;
   const speed=Math.abs(p.speed??0);
   if(p.state==='waiting'||p.state==='idle'||speed<.12)return STATE.NORMAL;
   return speed>2.6?STATE.FLEE:STATE.NORMAL;
@@ -216,6 +218,8 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
     const reacting=now===STATE.HIT||now===STATE.KNOCKDOWN||now===STATE.DOWNED
      ||now===STATE.LOOK||now===STATE.STARTLE||now===STATE.AVOID||now===STATE.FLEE||now===STATE.RECOVER;
     if(!reacting&&now!==want)crowd.setState(i,want);
+    // A person the simulation is carrying away from a car is running, whatever a glance said.
+    else if(want===STATE.FLEE&&(now===STATE.LOOK||now===STATE.STARTLE||now===STATE.RECOVER))crowd.setState(i,STATE.FLEE,{force:true});
 
     if(review&&moves<HQ_LOD.movesPerFrame){
      const lane=crowd.state.lane[i];

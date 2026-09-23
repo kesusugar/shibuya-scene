@@ -70,6 +70,9 @@ export function clipFor(behaviour,waiting,moving=true,fast){
  const locomotion=behaviour===STATE.NORMAL||behaviour===STATE.LOOK;
  const escaping=behaviour===STATE.AVOID||behaviour===STATE.FLEE;
  if(locomotion&&(waiting||!moving))return 'Idle';
+ // Getting over a fright while walking back to where they were: the legs walk. Guard is a
+ // standing pose, and playing it on a moving body slides it.
+ if(behaviour===STATE.RECOVER&&moving)return fast?'Run':'Walk';
  if(escaping&&!moving)return 'Guard';
  if(locomotion||escaping)return (fast??escaping)?'Run':'Walk';
  return CLIP_FOR[behaviour];
