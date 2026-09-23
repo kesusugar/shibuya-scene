@@ -50,6 +50,25 @@ export const HQ_RISE=Object.freeze({gap:.5,speed:3.2,seconds:1.2});
 /** rad/s a thrown body turns to fall along its flight (the baked Fall goes over backwards). */
 export const HQ_THROW_TURN=12;
 
+/**
+ * Partition `list[0..count)` so its first `k` entries are the `k` smallest by `.d`
+ * (Hoare-style quickselect, in place). Order inside either side is unspecified.
+ */
+export function selectNearest(list,count,k){
+ let lo=0,hi=count-1;
+ while(lo<hi){
+  const pivot=list[(lo+hi)>>1].d;
+  let i=lo,j=hi;
+  while(i<=j){
+   while(list[i].d<pivot)i++;
+   while(list[j].d>pivot)j--;
+   if(i<=j){const t=list[i];list[i]=list[j];list[j]=t;i++;j--;}
+  }
+  if(k-1<=j)hi=j;else if(k-1>=i)lo=i;else break;
+ }
+ return list;
+}
+
 export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
                                             interpolate=true,onDisown=null,onReclaim=null}={}){
  // Capacity is per lane, and a lane is one archetype at one LOD. The worst case is everyone
@@ -60,12 +79,19 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
  const awareness=createAwareness();
  const scratch=[];
  const rendered=new Set();          // pedestrian ids this layer is drawing
+ const candidates=[];               // pooled {p,d} records, reused every frame
  const laneCache=new Map();         // `${archetypeId}|${lod}` -> lane index
  const disowned=new Set();          // ids whose movement the reaction system has taken
  const rising=new Map();            // id -> m/s, for a body closing on its simulation position
  let reviewClock=0,awarenessClock=0;
+ // RUN 12.0. The crowd grid is O(population) to build, and a frame used to build it up to three
+ // times: the vehicle threat, every witness event (a crash raises several) and the perception
+ // tick. Positions only change in `crowd.update`, at the end of `sync`, so one build per synced
+ // frame serves every query in it.
+ let syncFrame=0,gridFrame=-1;
+ const ensureGrid=()=>{if(gridFrame!==syncFrame){grid.rebuild(crowd);gridFrame=syncFrame;stats.gridBuilds++;}};
  const stats={hq:0,legacy:0,budget,moves:0,syncMs:0,threatMs:0,candidates:0,
-  reacting:0,down:0,byLod:{},witnessMs:0,witnessCandidates:0,witnessReacted:0,
+  reacting:0,down:0,byLod:{},witnessMs:0,gridBuilds:0,witnessCandidates:0,witnessReacted:0,
   awarenessGridMs:0};
 
  for(const a of manifest.archetypes)for(const l of lods)
@@ -138,16 +164,20 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
    rendered.clear();
    if(!camera){stats.hq=0;return rendered;}
 
-   // Nearest first, so the budget is spent where the camera is looking.
-   const candidates=[];
+   // The budget is spent on the nearest citizens. RUN 12.0: that needs the nearest `budget`,
+   // never a full ordering -- the loop below treats every taken citizen alike -- so the
+   // records are pooled (no 1,978 allocations a frame), nothing is ordered when everyone fits
+   // (HIGH), and a smaller budget is an O(n) selection instead of an O(n log n) sort.
+   let count=0;
    for(const p of pool){
     if(!p.active||p.controlled)continue;
     if(exclude&&exclude.has(p.id))continue;     // the near-character pool already has them
     const d=Math.hypot((p.renderX??p.x)-camera.x,(p.renderZ??p.z)-camera.z);
-    candidates.push({p,d});
+    const slot=candidates[count]??(candidates[count]={p:null,d:0});
+    slot.p=p;slot.d=d;count++;
    }
-   candidates.sort((a,b)=>a.d-b.d);
-   const take=Math.min(stats.budget,candidates.length);
+   const take=Math.min(stats.budget,count);
+   if(take<count)selectNearest(candidates,count,take);
 
    reviewClock+=dt;
    const review=reviewClock>=HQ_LOD.reviewInterval;
@@ -255,6 +285,7 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
    }
 
    crowd.update(dt,{time});
+   syncFrame++;                                 // positions moved: the grid is stale
    // RUN 11.3: witnesses who were still taking in what they saw.
    awareness.flush(crowd,dt);
    // Ownership is reconciled here as well as after a vehicle pass, because a body gets back
@@ -262,7 +293,8 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
    // in `vehicle` left citizens disowned from their own routes for as long as nobody drove.
    reconcileOwnership();
    const got=crowd.inspect();
-   stats.hq=rendered.size;stats.legacy=candidates.length-rendered.size;
+   stats.hq=rendered.size;stats.legacy=count-rendered.size;
+   for(let k=0;k<count;k++)candidates[k].p=null;   // do not pin recycled pedestrians
    stats.byLod=got.byLod;
    stats.syncMs=(typeof performance!=='undefined'?performance.now():0)-start;
    return rendered;
@@ -277,7 +309,7 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
   vehicle(car,dt){
    if(!car||!crowd.population)return null;
    const start=(typeof performance!=='undefined'?performance.now():0);
-   grid.rebuild(crowd);
+   ensureGrid();
    const result=applyVehicleThreat(crowd,grid,car,dt,scratch);
    reconcileOwnership();
    stats.candidates=result.candidates;
@@ -318,7 +350,8 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
    // nerve rule and its own distance bands, which meant a witness to a punch and a citizen
    // noticing the player were answered by two different pieces of code with two different
    // ideas about personality. The bounding is unchanged and still belongs to the caller.
-   const n=awareness.witness(crowd,grid,event);
+   ensureGrid();
+   const n=awareness.witness(crowd,grid,event,{rebuilt:true});
    reconcileOwnership();
    stats.witnessMs=awareness.stats.witnessMs;
    stats.witnessCandidates=awareness.stats.witnessCandidates;
@@ -341,7 +374,7 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
    awarenessClock+=Math.max(0,dt);
    if(awarenessClock>=AWARE.interval){
     const start=(typeof performance!=='undefined'?performance.now():0);
-    grid.rebuild(crowd);
+    ensureGrid();
     stats.awarenessGridMs=(typeof performance!=='undefined'?performance.now():0)-start;
     awarenessClock=0;
    }
