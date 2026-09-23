@@ -46,6 +46,21 @@ export const CLIP_FOR=Object.freeze({
  [STATE.HIT]:'Startle',[STATE.KNOCKDOWN]:'Fall',[STATE.DOWNED]:'Fall',[STATE.RECOVER]:'Guard'
 });
 /**
+ * The clip a citizen actually plays: `CLIP_FOR`, except that someone standing at a kerb for
+ * the signal plays Idle instead of walking on the spot.
+ *
+ * Signal waiting is a STATE the simulation sets (`p.state === 'waiting'`, a crossing queue or
+ * the scramble cast at its kerb), not a speed: a body that is merely blocked for a moment, or
+ * one of the frozen poses, must not turn into Idle because its speed reads zero. Priority is
+ * physical (HIT..RECOVER) over awareness (LOOK..FLEE) over waiting/locomotion, and only
+ * NORMAL -- the locomotion state -- is ever replaced, so a waiting citizen who notices the
+ * player still reacts with exactly the clip awareness asked for.
+ */
+export function clipFor(behaviour,waiting){
+ return behaviour===STATE.NORMAL&&waiting?'Idle':CLIP_FOR[behaviour];
+}
+
+/**
  * How long after a reaction has fully drained before the same citizen may be alarmed again.
  *
  * RUN 10. Without it, somebody standing next to a lingering player cycles LOOK, NORMAL, LOOK
@@ -287,7 +302,8 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
   noticed:new Float32Array(max),    // seconds a threat has been present but not yet acted on
   ready:new Float32Array(max),      // crowd time before which this citizen will not re-alarm
   attention:new Float32Array(max),  // heading toward whatever they last noticed
-  calmed:new Uint8Array(max)        // the reaction `ready` is cooling off from
+  calmed:new Uint8Array(max),       // the reaction `ready` is cooling off from
+  waiting:new Uint8Array(max)       // standing at a kerb for the signal: Idle, not Walk
  };
  // The palette also lives here, not only in the instanced attribute, because moving a citizen
  // between LOD lanes has to rewrite it into the new lane and an attribute is write-mostly.
@@ -303,7 +319,7 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
 
  function writeClip(i){
   const lane=lanes[state.lane[i]],slot=state.slot[i];
-  const clip=clipOf(CLIP_FOR[state.behaviour[i]]);
+  const clip=clipOf(clipFor(state.behaviour[i],state.waiting[i]));
   lane.clipAttr.setXY(slot,clip.row,clip.frames);
   // A clip's playback rate is its own duration, scaled by how fast this citizen moves, so a
   // walk cycle matches the ground rather than sliding. Frozen states hold a single pose.
@@ -338,7 +354,7 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
    state.phase[i]=((h>>>8)&1023)/1023;
    state.rate[i]=.88+((h>>>18)&255)/255*.24;
    state.behaviour[i]=STATE.NORMAL;state.timer[i]=0;
-   state.noticed[i]=0;state.ready[i]=0;state.attention[i]=0;state.calmed[i]=0;
+   state.noticed[i]=0;state.ready[i]=0;state.attention[i]=0;state.calmed[i]=0;state.waiting[i]=0;
    state.health[i]=100;state.fallen[i]=0;
    state.impulseX[i]=state.impulseZ[i]=state.impulseY[i]=0;
    palette[i*4]=PACK(look.skin);palette[i*4+1]=PACK(look.top);
@@ -450,6 +466,17 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
    * floats of instanced attribute. It is what makes "thirty people react at once" cost the
    * same as thirty writes rather than thirty skeletons.
    */
+  /** Waiting at a kerb for the signal, or not. Rewrites the clip only when it changes. */
+  setWaiting(i,on){
+   if(i<0||i>=population)return false;
+   const v=on?1:0;
+   if(state.waiting[i]===v)return false;
+   state.waiting[i]=v;writeClip(i);
+   return true;
+  },
+  /** The clip a held citizen is playing, by name. For QA and tests. */
+  clipName(i){return i<0||i>=population?null:clipFor(state.behaviour[i],state.waiting[i]);},
+
   /**
    * Keep the current state from draining for at least `seconds` more. For a body whose end the
    * simulation decides rather than this timer -- someone it is still holding on the ground.

@@ -451,3 +451,31 @@ test('a body handed back closes the gap even if a car makes it step aside at onc
  assert.ok(Math.hypot(last[0]-safe.x,last[1]-safe.z)<.01,'the body never reached the safe destination');
  layer.dispose();
 });
+
+test('someone waiting at the kerb for the signal plays Idle, decided by state and not by speed',()=>{
+ const people=pool(12,1);
+ const layer=createHQLayer(manifest,bin,{budget:12});
+ const [waiting,blocked,walker]=people;
+ waiting.state='waiting';waiting.speed=0;
+ blocked.state='walking';blocked.speed=0;       // stopped for a moment, not waiting
+ layer.sync(people,{x:0,z:0},1/60,{time:0});
+ const idx=p=>layer.crowd.indexOf(p.id),clip=p=>layer.crowd.clipName(idx(p));
+ assert.equal(clip(waiting),'Idle','a waiting citizen walked on the spot');
+ assert.equal(clip(blocked),'Walk','a zero speed alone turned into Idle');
+ assert.equal(clip(walker),'Walk');
+ // The instanced attribute really carries the Idle row, not just the name.
+ const i=idx(waiting),lane=layer.crowd.lanes[layer.crowd.state.lane[i]];
+ const idle=manifest.clips.find(c=>c.name==='Idle');
+ assert.equal(lane.clipAttr.getX(layer.crowd.state.slot[i]),idle.row);
+ // Awareness outranks waiting; physical outranks both.
+ layer.crowd.setState(i,STATE.LOOK);assert.equal(clip(waiting),'Walk');
+ layer.crowd.setState(i,STATE.STARTLE);assert.equal(clip(waiting),'Startle');
+ layer.crowd.setState(i,STATE.KNOCKDOWN,{force:true});assert.equal(clip(waiting),'Fall');
+ layer.crowd.setState(i,STATE.NORMAL,{force:true});assert.equal(clip(waiting),'Idle',
+  'back to NORMAL at the kerb did not return to Idle');
+ // The light changes: they step off and walk.
+ waiting.state='crossing';waiting.speed=1.3;
+ layer.sync(people,{x:0,z:0},1/60,{time:1/60});
+ assert.equal(clip(waiting),'Walk','still idling after starting to cross');
+ layer.dispose();
+});

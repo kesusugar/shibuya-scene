@@ -186,6 +186,9 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
     // was handed back while `struck` was still set, and was knocked down a second time. Hold
     // the lying pose until the simulation lets go.
     if(p.struck!==undefined&&crowd.state.behaviour[i]===STATE.DOWNED)crowd.hold(i,.25);
+    // Standing at the kerb for the signal plays Idle rather than walking on the spot. The
+    // simulation's own state decides it, never speed; see clipFor in hq-crowd.mjs.
+    crowd.setWaiting(i,p.state==='waiting');
 
     // The clip follows the pedestrian's own simulated state, not anything invented here.
     const want=behaviourFor(p);
