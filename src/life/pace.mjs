@@ -15,8 +15,8 @@
 // And the stride arithmetic every clip-based locomotion needs: a cycle takes stride / speed.
 
 export const PACE=Object.freeze({
- stopBelow:.14,      // m/s: a moving body at or below this is standing
- moveAbove:.38,      // m/s: a standing body above this is walking
+ stopBelow:.12,      // m/s: a moving body at or below this is standing
+ moveAbove:.3,       // m/s: a standing body above this is walking (a jam creeps at .15-.3)
  response:7,         // 1/s: smoothing rate of the measured speed
  maxMeasured:9,      // m/s: anything faster in one frame is a jump, not a stride
  // Ground covered by one full cycle of each baked clip, from public/data/character/citizen.json
@@ -24,7 +24,7 @@ export const PACE=Object.freeze({
  stride:Object.freeze({Walk:1.3,Run:2.687}),
  // A clip played far off its authored rate reads as wrong whatever the feet do, so the
  // playback scale is bounded; outside it the feet slide a little, which is the cheaper error.
- minScale:.6,maxScale:1.75,
+ minScale:.5,maxScale:1.75,
  // Above this a body that is getting out of the way (AVOID/FLEE) runs rather than walks. m/s.
  walkTop:2.2,
  // ...and a body that is just going somewhere (NORMAL/LOOK). Higher, because nobody strolls

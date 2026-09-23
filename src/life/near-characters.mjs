@@ -3,7 +3,7 @@ import {STATE} from './hq-crowd.mjs';
 import {ARCHETYPES as LOOKS,appearanceOf,paletteOf,deduplicate} from './appearance.mjs';
 import {Group} from 'three';
 import {createPlayerFigure,bakedAsset} from '../player/figure.mjs';
-import {paceStep} from './pace.mjs';
+import {paceStep,PACE} from './pace.mjs';
 
 export const NEAR_LIMITS={high:32,medium:12,low:4};
 
@@ -287,7 +287,7 @@ export function createNearCharacters(tier='high',{ctx=null}={}){
      // A new holder starts from where they are drawn, at the simulation's own idea of their
      // pace; the measured pace takes over within a few frames.
      slot.lastX=p.renderX??p.x;slot.lastZ=p.renderZ??p.z;
-     slot.pace=Math.abs(p.speed??0);slot.moving=slot.pace>.14;
+     slot.pace=Math.abs(p.speed??0);slot.moving=slot.pace>PACE.stopBelow;
      slot.paceX=Math.sin(p.heading??0)*slot.pace;slot.paceZ=Math.cos(p.heading??0)*slot.pace;
     }else if(slot.human&&slot.variant?.id===look.archetype.id)stats.matched++;
     selected.add(p.id);slot.elapsed+=Math.max(0,dt);
@@ -303,7 +303,8 @@ export function createNearCharacters(tier='high',{ctx=null}={}){
     const reaction=nearReaction(p,clock);slot.reaction=reaction;
     const state={trafficReaction:reaction,threatHeading:p.lifeThreatHeading??p.threatHeading,x:p.renderX??p.x,y:p.height??0,z:p.renderZ??p.z,heading:p.heading,speed:slot.moving?slot.pace:0,alive:true,animationPhase:Math.abs(p.id)*.137,attackTime:p.combatAction>0?Math.min(.42,p.combatAction*.42):0,
      // RUN 11.2: being hit shows as a hit, for as long as the blow holds them.
-     hurtTime:p.hurtUntil>clock?p.hurtUntil-clock:0,hurtDuration:p.hurtDuration??.34};
+     hurtTime:p.hurtUntil>clock?p.hurtUntil-clock:0,hurtDuration:p.hurtDuration??.34,
+     hurtX:p.hurtX??0,hurtZ:p.hurtZ??0,hurtStrong:!!p.hurtStrong};
     if(slot.elapsed>=interval){slot.figure.update(state,Math.min(.1,slot.elapsed));slot.elapsed=0;}
     else slot.figure.root.position.set(state.x,state.y,state.z);
    }

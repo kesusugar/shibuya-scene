@@ -22,8 +22,13 @@ export const FALL_TILT=.85;
 // ground, which at a glance is indistinguishable from falling over. These put an 11 m/s hit
 // at roughly ten metres and well overhead, with air time long enough for the tumble to read,
 // while a nudge at the dodge threshold stays a shove: the floor is low enough not to launch it.
-export const LAUNCH=.92,LAUNCH_MIN=2.2,LIFT=.62,GRAVITY=16,GROUND_DRAG=1.6,AIR_DRAG=.14,SPIN=3.4;
-export const GROUND_FRICTION=3.5;   // m/s^2 of sliding friction on a thrown body (RUN 11.1)
+export const LAUNCH=.92,LAUNCH_MIN=2.2,LIFT=.62,GRAVITY=9.81,GROUND_DRAG=.5,AIR_DRAG=.14,SPIN=3.4;
+// claude/crowd-realism: real gravity (it was 16 m/s^2, which squashed every arc to under 0.3 m)
+// and a mostly Coulomb slide (about mu 0.56 on tarmac) instead of a mostly viscous one, which
+// braked a fast body at over 20 m/s^2. Checked against forward-projection reconstruction fits
+// for pedestrian impacts (throw ~ v^2 / 2 mu g): 4 / 10 / 18 m/s now carry 1.3 / 8.0 / 17.8 m,
+// against 1.4 / 5.7 / 10.9 m before; the published bands are about 6.5-8.5 m and 17-25 m.
+export const GROUND_FRICTION=5.5;   // m/s^2 of sliding friction on a thrown body (RUN 11.1; see above)
 // How long a body stays on the street, and so how long the marks it leaves last: long
 // enough to be something you drove past and can come back to, rather than something that
 // blinks out while you are still braking.

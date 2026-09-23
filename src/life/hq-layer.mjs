@@ -47,6 +47,8 @@ export const HQ_LOD=Object.freeze({
  * a short visual transition, never a different destination.
  */
 export const HQ_RISE=Object.freeze({gap:.5,speed:3.2,seconds:1.2});
+/** rad/s a thrown body turns to fall along its flight (the baked Fall goes over backwards). */
+export const HQ_THROW_TURN=12;
 
 export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
                                             interpolate=true,onDisown=null,onReclaim=null}={}){
@@ -196,6 +198,14 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
      // place while the pedestrian it stood for slid metres down the road.
      crowd.follow(i,p.x,p.height??0,p.z);
      rising.delete(p.id);
+     // claude/crowd-realism: the baked Fall goes over BACKWARDS (head 1.24 m behind the feet
+     // by its last frame). A body thrown the way it was facing therefore fell back towards the
+     // car while sliding away from it. Turn it, fast, to face against its own flight, so the
+     // clip and the travel agree.
+     const fx=p.flyX??0,fz=p.flyZ??0;
+     if(Math.hypot(fx,fz)>.6&&dt>0){const want=Math.atan2(-fx,-fz),h=crowd.state.heading[i];
+      const d=Math.atan2(Math.sin(want-h),Math.cos(want-h)),k=HQ_THROW_TURN*dt;
+      crowd.state.heading[i]=h+(Math.abs(d)<=k?d:Math.sign(d)*k);}
     }
     // The simulation decides how long a thrown body stays down (`struck`): 4.9 s for a driver
     // dragged out of a car, longer for anyone else. The HQ chain reached RECOVER at 3.9 s,
