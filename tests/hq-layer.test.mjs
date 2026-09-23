@@ -587,3 +587,15 @@ test('a pedestrian the simulation is carrying away from a car runs; walking back
  assert.equal(clip(),'Walk','a recovering body walking back played a standing Guard and slid');
  layer.dispose();
 });
+
+test('a thrown body turns to face against its flight, so the backwards Fall goes the way it travels',()=>{
+ const people=pool(4,3);
+ const layer=createHQLayer(manifest,bin,{budget:4});
+ const [a]=people;a.heading=0;                   // walking +z
+ layer.sync(people,{x:0,z:0},1/60,{time:0});
+ a.struck=.05;a.flyX=6;a.flyZ=0;a.flyY=1;        // thrown towards +x
+ let t=0;for(let f=0;f<30;f++){a.x+=a.flyX/60;t+=1/60;layer.sync(people,{x:0,z:0},1/60,{time:t});}
+ const h=layer.crowd.state.heading[layer.crowd.indexOf(a.id)],want=Math.atan2(-6,0);
+ assert.ok(Math.abs(Math.atan2(Math.sin(h-want),Math.cos(h-want)))<.05,`heading ${h.toFixed(2)}, want ${want.toFixed(2)}`);
+ layer.dispose();
+});

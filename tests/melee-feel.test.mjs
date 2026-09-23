@@ -57,3 +57,21 @@ test('a fatal blow is left to the knockdown the simulation already runs',()=>{
  assert.equal(layer.blow({victim:1,blow:{...blowOn({x:0,z:-1},people[1]),fatal:true},response:'flee'}),false);
  layer.dispose();
 });
+
+test('a punch leans the spine and never slides the planted feet (no root translation)',async()=>{
+ const {PUNCH_LEAN}=await import('../src/player/figure.mjs');
+ const {readFileSync}=await import('node:fs');
+ const src=readFileSync('src/player/figure.mjs','utf8');
+ assert.ok(PUNCH_LEAN>.12&&PUNCH_LEAN<=.25,`lean ${PUNCH_LEAN}`);
+ assert.doesNotMatch(src,/root\.position\.[xz]\+=[^;]*lean/,'the punch still slides the whole body');
+});
+
+test('the victim recoils: snaps in over the first fifth of the hold, then settles to nothing',async()=>{
+ const {hitRecoil,RECOIL}=await import('../src/player/figure.mjs');
+ assert.equal(hitRecoil(0),0);
+ assert.ok(Math.abs(hitRecoil(.2)-1)<1e-9,'no peak at a fifth of the hold');
+ assert.ok(hitRecoil(.1)>.6,'the snap is not sudden');
+ assert.ok(Math.abs(hitRecoil(1))<1e-9,'the recoil never settles');
+ let last=1;for(let u=.2;u<=1;u+=.05){const k=hitRecoil(u);assert.ok(k<=last+1e-9);last=k;}
+ assert.ok(RECOIL.strong[0]>RECOIL.light[0],'a cross must bend further than a jab');
+});

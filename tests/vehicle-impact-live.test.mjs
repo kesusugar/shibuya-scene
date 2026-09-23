@@ -58,7 +58,9 @@ test('faster is further, and even fast is a heavy body, not a cartoon',t=>{
  t.diagnostic(`travel after the hit: 4 m/s ${slow.toFixed(2)} m, 10 m/s ${mid.toFixed(2)} m, 18 m/s ${fast.toFixed(2)} m`);
  assert.ok(slow<mid&&mid<fast,`travel ${slow.toFixed(1)} / ${mid.toFixed(1)} / ${fast.toFixed(1)} m`);
  assert.ok(slow<3.5,`a 4 m/s hit carried the body ${slow.toFixed(1)} m`);
- assert.ok(fast<16,`an 18 m/s hit carried the body ${fast.toFixed(1)} m`);
+ // Forward-projection reconstruction bands (claude/crowd-realism): not a cartoon, not a thud.
+ assert.ok(mid>6&&mid<9.5,`a 10 m/s hit carried the body ${mid.toFixed(1)} m`);
+ assert.ok(fast>15&&fast<25,`an 18 m/s hit carried the body ${fast.toFixed(1)} m`);
 });
 
 test('one person costs a little speed, a line of them a lot, a dense block nearly all of it',t=>{

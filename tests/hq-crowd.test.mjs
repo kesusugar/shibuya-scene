@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {createHQCrowd,STATE,CLIP_FOR,STATE_HOLD} from '../src/life/hq-crowd.mjs';
+import {createHQCrowd,STATE,CLIP_FOR,STATE_HOLD,BLEND,LOOK_TURN} from '../src/life/hq-crowd.mjs';
 import {createCrowdGrid,applyVehicleThreat,THREAT} from '../src/life/hq-threat.mjs';
 import {appearanceOf,ARCHETYPES,PALETTE} from '../src/life/appearance.mjs';
 
@@ -122,7 +122,11 @@ test('a reaction is a handful of writes, and identity survives it',()=>{
  for(let i=0;i<crowd.population;i++){
   assert.equal(crowd.state.id[i],before[i][0],'a hit changed a pedestrian id');
   assert.equal(crowd.state.lane[i],before[i][1],'a hit changed the body');
-  assert.equal(crowd.state.phase[i],before[i][2],'a hit changed the phase');
+  // claude/crowd-realism: the walk phase is a person's own (and a respawn re-derives it from the
+  // id), but a knockdown is a one-shot and now starts the Fall at its FIRST frame instead of
+  // wherever the walk phase pointed. Everyone not hit keeps their phase exactly.
+  if(i<200){const p=crowd.state.phase[i];assert.ok(Math.min(p,1-p)<1e-6,`the fall started at ${p.toFixed(3)} of the clip`);}
+  else assert.equal(crowd.state.phase[i],before[i][2],'a hit changed a bystander\'s phase');
   assert.equal(crowd.state.height[i],before[i][3],'a hit changed the height');
  }
  crowd.dispose();
@@ -260,4 +264,69 @@ test('trousers are never lighter than skin',()=>{
   assert.ok(lum(bottom)<darkestSkin,
    `trousers #${bottom.toString(16)} (luminance ${lum(bottom).toFixed(0)}) are lighter than `
    +`the darkest skin (${darkestSkin.toFixed(0)})`);
+});
+
+test('clip changes crossfade instead of popping, and the blend rides along with the body',()=>{
+ const crowd=build(8);
+ const clipRow=n=>manifest.clips.find(c=>c.name===n).row;
+ crowd.update(1/60,{time:10});
+ const lane=crowd.lanes[crowd.state.lane[0]],slot=()=>crowd.state.slot[0];
+ // Spawned: no blend in flight.
+ assert.equal(lane.blendAttr.getY(slot()),0,'a new citizen started mid-crossfade');
+ // Walk -> Startle: the walk is remembered and faded out quickly (a flinch is sudden).
+ const walkPhase=crowd.state.phase[0],walkRate=crowd.state.animRate[0];
+ crowd.setState(0,STATE.STARTLE,{force:true});
+ assert.equal(lane.prevAttr.getX(slot()),clipRow('Walk'));
+ assert.equal(lane.prevAttr.getZ(slot()),walkPhase);
+ assert.equal(lane.prevAttr.getW(slot()),walkRate);
+ assert.equal(lane.blendAttr.getX(slot()),10);
+ assert.ok(Math.abs(lane.blendAttr.getY(slot())-BLEND.hit)<1e-6);
+ // ...and the flinch starts at its first frame and is timed to its state, not wrapped.
+ const a=crowd.state.phase[0]+10*crowd.state.animRate[0];
+ assert.ok(Math.min(a%1,1-a%1)<1e-5,'the one-shot did not start at its first frame');
+ assert.ok(Math.abs(crowd.state.animRate[0]*STATE_HOLD[STATE.STARTLE]-.97)<1e-6);
+ // An LOD move carries the blend.
+ const other=crowd.laneFor(crowd.lanes[crowd.state.lane[0]].archetype.id,'L1');
+ if(other>=0&&crowd.moveLane(0,other)){const l=crowd.lanes[other];
+  assert.ok(Math.abs(l.blendAttr.getY(crowd.state.slot[0])-BLEND.hit)<1e-6);assert.equal(l.prevAttr.getX(crowd.state.slot[0]),clipRow('Walk'));}
+ crowd.dispose();
+});
+
+test('a fall lands as KNOCKDOWN ends, lies on its last frame, and getting up is a slow blend',()=>{
+ const crowd=build(4);
+ const fall=manifest.clips.find(c=>c.name==='Fall');
+ let t=5;crowd.update(1/60,{time:t});
+ crowd.setState(0,STATE.KNOCKDOWN,{force:true});
+ assert.ok(Math.abs(crowd.state.animRate[0]*STATE_HOLD[STATE.KNOCKDOWN]-.97)<1e-6,'the fall is not timed to the knockdown');
+ // Run the chain on to DOWNED.
+ while(crowd.state.behaviour[0]!==STATE.DOWNED){t+=1/60;crowd.update(1/60,{time:t});}
+ assert.equal(crowd.state.animRate[0],0);
+ assert.ok(Math.abs(crowd.state.phase[0]-(fall.frames-1)/fall.frames)<1e-6,'DOWNED froze mid-fall');
+ // ...and on to RECOVER: Fall -> Guard fades over the long, get-up blend.
+ while(crowd.state.behaviour[0]!==STATE.RECOVER){t+=1/60;crowd.update(1/60,{time:t});}
+ const lane=crowd.lanes[crowd.state.lane[0]];
+ assert.equal(lane.prevAttr.getX(crowd.state.slot[0]),fall.row);
+ assert.ok(Math.abs(lane.blendAttr.getY(crowd.state.slot[0])-BLEND.rise)<1e-6);
+ crowd.dispose();
+});
+
+test('the crowd shader crossfades two clips only while a blend is running',()=>{
+ const src=readFileSync('src/life/hq-crowd.mjs','utf8');
+ assert.match(src,/attribute vec4 aPrev;/);
+ assert.match(src,/attribute vec2 aBlend;/);
+ assert.match(src,/if\(aBlend\.y>0\.0\)\{[\s\S]*if\(w<1\.0\)/,'the second clip must be sampled only inside a blend');
+});
+
+test('a standing citizen who notices something turns towards it, and back; a walker does not crab',()=>{
+ const crowd=build(4);
+ const s=crowd.state;
+ s.moving[0]=0;s.moving[1]=1;
+ for(const i of [0,1]){crowd.setState(i,STATE.LOOK,{force:true,hold:3});s.attention[i]=s.heading[i]+1.5;}
+ let t=0;for(let f=0;f<60;f++){t+=1/60;crowd.update(1/60,{time:t});}
+ assert.ok(Math.abs(s.look[0]-LOOK_TURN.max)<1e-6,`standing LOOK turned ${s.look[0].toFixed(2)} rad`);
+ assert.equal(s.look[1],0,'a walker turned its whole body sideways');
+ crowd.setState(0,STATE.NORMAL,{force:true});
+ for(let f=0;f<60;f++){t+=1/60;crowd.update(1/60,{time:t});}
+ assert.equal(s.look[0],0,'the turn never came back');
+ crowd.dispose();
 });
