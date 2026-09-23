@@ -33,6 +33,16 @@ const nearby=(crowd,x,z,r)=>{const out=[],ix=Math.floor(x/2),iz=Math.floor(z/2),
  for(let i=ix-cells;i<=ix+cells;i++)for(let j=iz-cells;j<=iz+cells;j++)
   for(const p of crowd?.grid?.get(i+','+j)??[])if(!out.includes(p))out.push(p);
  return out;};
+/**
+ * How far a stagger carries this frame, as a fraction of its push speed (m per m/s). The push
+ * falls linearly from full at `hold` seconds left to zero, so over a frame from `left` to
+ * `left - dt` the distance is the area under that line. Frame-rate independent by
+ * construction: the frames of any length always sum to `hold / 2`.
+ */
+export function staggerStep(left,hold,dt){
+ const a=Math.max(0,left),b=Math.max(0,left-Math.max(0,dt));
+ return (a*a-b*b)/(2*hold);
+}
 const angleTo=(a,b)=>Math.atan2(b.x-a.x,b.z-a.z);
 const turn=(a,b)=>Math.atan2(Math.sin(b-a),Math.cos(b-a));
 
@@ -186,10 +196,13 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null}={}){
    // Staggers: a blown-back step, a fraction of a second long, only where the walkable context
    // allows it and never for anyone on a crossing or on the choreographed track.
    for(const p of nearby(crowd,state.x,state.z,COMBAT.notice+2)){
-    // Counted down by the frame, not by the clock, so it always ends.
+    // Counted down in seconds, so it always ends. The push decays linearly to zero over the
+    // blow's hold, and the step is the EXACT integral of that over this frame: taking the
+    // start-of-frame speed for the whole frame carried a cross 45% further at 7 fps than at
+    // 60 (claude/crowd-realism), and the last partial frame overshot the hold entirely.
     if(!(p.staggerLeft>0)||p.struck!==undefined||onRails(p))continue;
-    const left=p.staggerLeft/Math.max(.05,p.hurtDuration??.34);p.staggerLeft-=dt;
-    const nx=p.x+p.staggerX*left*dt,nz=p.z+p.staggerZ*left*dt;
+    const k=staggerStep(p.staggerLeft,Math.max(.05,p.hurtDuration??.34),dt);p.staggerLeft=Math.max(0,p.staggerLeft-dt);
+    const nx=p.x+p.staggerX*k,nz=p.z+p.staggerZ*k;
     if(crowd.network.ctx.safe(nx,nz,.28)&&!crowd.vehicleOverlap?.(nx,nz,.35)&&!crowd.blocked?.(nx,nz,p,.4,false)){
      const old=crowd.cell(p.x,p.z);p.x=nx;p.z=nz;
      if(crowd.cell(nx,nz)!==old){const b=crowd.grid.get(old),i=b?.indexOf(p);if(i>=0)b.splice(i,1);crowd.insert(p);}
@@ -227,6 +240,9 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null}={}){
       const blow=blowOn(state,p,{attack:swing.name,fatal});
       const response=responseOf(p.id,{archetype:p.archetype,gray:!!ARCHETYPES[p.archetype]?.gray});
       p.hurtUntil=crowd.time+blow.hold;p.hurtDuration=blow.hold;
+      // Which way the blow drove them, for the near body's recoil (figure.mjs hitRecoil). Set
+      // for everyone, including people on a crossing whom the simulation does not stagger.
+      {const l=Math.hypot(blow.impulse.x,blow.impulse.z)||1;p.hurtX=blow.impulse.x/l;p.hurtZ=blow.impulse.z/l;p.hurtStrong=blow.strength==='strong';}
       stats.hits++;stats.byResponse[response]++;
       if(fatal)kill(crowd,p,state);
       else{

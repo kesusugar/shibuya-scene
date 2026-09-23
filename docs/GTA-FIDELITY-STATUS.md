@@ -3,7 +3,7 @@
 The one document to read when resuming this work with no conversation history. Read
 `AGENTS.md` and `CLAUDE.md` first for the repository rules, then this.
 
-**Updated at the close of RUN 7C.** RUNs 0–6, 6.8, 7A, 7B and 7C are complete. RUN 7 proper —
+**Latest section: §9i (crowd realism, branch `claude/crowd-realism`).** Earlier header text: **Updated at the close of RUN 7C.** RUNs 0–6, 6.8, 7A, 7B and 7C are complete. RUN 7 proper —
 the NPC behaviour work — is still only an unverified WIP commit; see §10.
 
 ## 1. Goal
@@ -1807,6 +1807,149 @@ This document is committed on top of `6162a32`; `git log -1` is the final HEAD.
 
 **RUN 11 COMPLETE.** RUN 12 was not started.
 
+## 9i. Crowd realism (branch `claude/crowd-realism`, from `master` `a940ce4`)
+
+Real Chrome on Windows (not SwiftShader), HIGH, `?qa=1`, scene frame rate about **6–7 fps**
+on this machine (`__SHIBUYA_QA__.metrics.fps`), so every live check here ran at a real frame
+rate, not a clamped headless one. A second dev server was started from this checkout on
+**port 5175**; the user's own server on 5174 was left running (see Bug 1).
+
+### Bug 1 — old-model bodies around the player, even with `hq=1`
+
+**Measured cause 1: the 5174 server was not serving this code.** The dev server on
+`127.0.0.1:5174` (PID 30036, started 2026-09-22) is rooted at a different checkout,
+`Documents/shibuya-run10-play`, and served code older than RUN 10's fixes: its page had no
+`ownership()`, no `setHQCovered`, and `/src/life/stance.mjs` returned 404. On that page, in player
+mode at the scramble: near pool **24 baked** (the eleven-bone offline figure with the big eared
+head and the white back plate) + 8 humanoids, and **971 legacy props** (657 phones, 174 bags,
+63 canes, 63 suitcases, 14 cone umbrellas) on HQ/near citizens — exactly what `b87ca60` and
+`401334e` fixed. The same probe on this code (5175): within 25 m, 676 HQ + 8 near, 0 legacy,
+0 baked, 0 props. That is why the cloud QA never saw it.
+
+**Measured cause 2 (a real bug in current code): the HQ crowd was requested once per page.**
+`hqRequested` in `app/ShibuyaScene.tsx` was set on the first request. Toggling traffic rebuilds
+the life module; the new crowd came up with no HQ layer, forever, and the humanoid asset was not
+handed to its new near pool either. Live after one traffic toggle: `hq:false`, **442 legacy +
+21 baked within 25 m**, 1,978 legacy bodies, 972 props.
+
+**Fix:** `src/app/hq-request.mjs` keys the request on the crowd instance: the pack is fetched
+once and shared, each rebuilt crowd gets its own layer, a crowd replaced while the pack is in
+flight is never enabled, and a tier change re-applies the budget (LOW turns it off, HIGH back
+on). A rebuilt crowd is handed the loaded humanoid. `hq-layer.dispose()` hands disowned bodies
+back. `?hq=` absent now means the tier default (`hqBudget` → −1); `?hq=0` / `?hq=false` remain
+the legacy rollback. Live after the same toggle: HQ back, 455 HQ + 8 humanoids, 0 legacy /
+0 baked / 0 props, with no `hq` in the URL.
+
+### Bug 2 — stepping on the spot when stopped
+
+Idle came only from the simulation's waiting flags and Walk played at a fixed cadence
+(`writeClip` claimed to scale by speed but did not). **Fix:** `src/life/pace.mjs`, one rule for
+the HQ crowd and the eight near humanoids: pace is the smoothed velocity **vector** of the drawn
+position (not `p.speed`, which is intent), with hysteresis (start 0.30, stop 0.12 m/s). The
+vector matters: jammed ambient walkers sidestep left/right on alternate ticks (0.4 m/s of path,
+0.05 m/s of progress); a scalar read that as walking. Walk/Run cadence = stride / measured speed
+(Walk 1.30 m, Run 2.687 m per cycle from `citizen.json`), bounded 0.5–1.75×, and a rate change
+shifts the phase so the pose never jumps. Stopped NORMAL/LOOK → Idle; stopped AVOID/FLEE →
+Guard (never running on the spot); Run above 2.2 m/s for reactions, 3.2 m/s for strollers
+(far-LOD walkers move in 0.2 s bursts that read ~3 m/s).
+
+Live, two full signal cycles (~7 fps):
+
+| cycle | red: kerb Idle | green: crossing Walk | near stepping |
+| --- | --- | --- | --- |
+| 1 | 1,455 / 1,455 | 1,455–1,456 / same | 0 |
+| 2 | 1,455 / 1,455 | 1,457 / 1,457 | 0 |
+
+Residual "Walk while net displacement < 0.1 m over 1.5 s": 2–9 of 1,969, mostly far-LOD patrol
+walkers 60–200 m away, plus walkers reversing on a patrol route (real movement the metric
+cannot tell from dither).
+
+### Bug 3 — running on the spot after a car hit
+
+The HQ body went AVOID/FLEE and played Run, but nothing moved the pedestrian: the choreographed
+cast (74–85% of the crowd) never ran `move()`, so `scatter` could not reach it. **Fix, in the
+simulation (the source of truth):** `sim.flee` — away from the threat with a deterministic
+per-person spread (±0.62 rad; ±0.22 for a dodge), 3–5 m/s, 1–1.8 s or 2.4–5.5 m, accel 10 /
+decel 7 m/s², walkable ground or the person's own crossing only, steering round solids and cars,
+and a step may not add overlap inside 0.44 m. Flights run first each tick, furthest from the
+danger first, so a packed kerb unpacks from its far edge. `sim.vehicleThreat`: in the path with
+< 1.5 s to contact → sideways dodge; close → away, but not ahead of the car; below 2 m/s anyone
+inside the car's footprint steps out at 1.5 m/s. `sim.panic`: accident witnesses scatter.
+Cast members carry their displacement as an offset and walk it back with checked steps (never
+into a car). No crossing or queue is released; `isWaiting` is false while fleeing/returning.
+
+Live, same cell (−26, 14), same signal moment, car at 9 m/s:
+
+| | before | after (kerb) | after (on the crossing) |
+| --- | --- | --- | --- |
+| reacted | 361 | 363 | 371 |
+| median moved in 2 s | **0 m** | **2.54 m** | **3.50 m** |
+| moved < 30 cm | 323 / 347 | 22 / 353 | 0 / 353 |
+| moved > 1 m | 17 | 297 | 353 |
+| left / right of the car | 6 / 18 | 163 / 168 | 210 / 161 |
+| peak flee speed | — | 4.97 m/s | 4.96 m/s |
+
+Crossing run, direction at each person's farthest point: sideways 197, away 135, toward 39;
+compass peaks E 154 / W 121 against a northbound car — the crowd parts to both sides. Bodies
+inside the car at the end: 0. Headless on the real network (`tests/crowd-flee.test.mjs`): 347
+fled, median 2.22 m, 26 under 30 cm; dodges go across the path; everyone stops, the cast is back
+on its track within 12 s, signals keep cycling, 0 signal violations.
+
+### The previous implementer's twelve "might look wrong" items
+
+| # | item | live result | action |
+| --- | --- | --- | --- |
+| 1 | running on the spot after a hit | wrong (median 0 m) | fixed (Bug 3) |
+| 2 | stagger counted in frames | it was already seconds, but the start-of-frame speed made a cross carry ~45% further at 7 fps than at 60 | fixed: exact integral, `push·hold/2` at any fps |
+| 3 | sliding: punch push, ground friction, runover | stagger 0.15–0.47 m over its hold under `Hit`/`Startle` reads as a stumble; a lying body sliding is correct | friction retuned (item 9); push kept |
+| 4 | bodies inside the car | wrong: a car below 2 m/s left people in its panels | fixed: step-out rule; 0 inside at the end of both live runs |
+| 5 | punch emphasis slides the feet | wrong: the root moved 11 cm with both feet planted | fixed: spine lean 0.2 rad instead, no root translation |
+| 6 | victim's `Hit` too weak | wrong (baked `Hit` barely moves) | improved: additive spine/head recoil away from the blow, jab 0.2 / cross 0.38 rad; live: a cross from the right played `Hit` for its 0.55 s hold with the direction handed over |
+| 7 | pose jumps on HIT→FLEE, Idle↔Walk, KNOCKDOWN→RECOVER | wrong: every clip change popped; one-shots started at a random frame; DOWNED froze mid-fall; getting up snapped | fixed: GPU crossfade (0.25 s, 0.1 s into a hit, 0.6 s getting up), one-shots from frame 0 timed to their state, DOWNED holds the last frame. Live: 813 / 813 clip changes in 4 s blended |
+| 8 | Idle bodies sliding | ~4% of Idle bodies drift 0.15–0.3 m/s (jam creep) | band narrowed to 0.30 / 0.12 m/s; residual listed below |
+| 9 | throw too flat / short; clip vs direction | wrong: gravity was 16 m/s², slide mostly viscous; the baked Fall goes over backwards whatever the flight | fixed: g 9.81, Coulomb-dominant slide, cap 16 / lift 4 m/s → 1.3 / 8.0 / 17.8 m at 4 / 10 / 18 m/s (was 1.4 / 5.7 / 10.9; reconstruction bands ~6.5–8.5 and 17–25 m); a thrown body turns to face against its flight (live 1.79 → 0 rad) |
+| 10 | car stopping in a dense crowd | natural: now most of the crowd dodges, so fewer are hit (7–17 per run instead of every body in front); through a parted crossing the car kept 10.4 m/s | unchanged |
+| 11 | LOOK looks like nothing | wrong on standing citizens | fixed: a standing LOOK/STARTLE/RECOVER turns up to 0.9 rad towards what was noticed; walkers don't crab |
+| 12 | audio, shake, dust, fighters | fighters **32.7%** (flee 31.6%, back off 35.7%), not ~40%. Shake 0.45 / 0.25 caps unchanged. **Audio not verified:** synthetic clicks are not user gestures, so the page never created its AudioContext, and this session cannot listen | recorded; see next steps |
+
+### Structure and gates
+
+Population 1,978; HQ 1,969 + 8 near humanoids; 0 legacy bodies, 0 baked, 0 props; 12 HQ draws
+(8 at night in one census); total draw calls 471–481 (RUN 11: 473–477); 0 Skeleton, 0
+AnimationMixer; no new per-pedestrian objects, physics bodies or R3F. Fresh pages day and
+night: **0 console errors, 0 exceptions, no error banner.** The only warning is the Windows D3D
+`X4122` precision note, logged before the HQ crowd is enabled, so not from its shader.
+
+**Final gates** (HEAD `e2956e3`, before this document): `npm run typecheck` clean; `npm test`
+(build included) **467 total, 462 pass, 5 existing skips, 0 fail** — 28 new tests over RUN
+11's 439/434/5/0, no regression; the build's static re-bake left the tree unchanged.
+
+### Remaining issues
+
+- **Jam creep in Idle.** Ambient walkers the simulation holds in a jam creep continuously at
+  0.15–0.3 m/s and keep Idle below the 0.30 m/s start threshold (a few percent of Idle bodies).
+  Real people step-and-stop; the fix is in the walker model (stop-and-go), not the renderer.
+- **Far-LOD dither.** 2–9 walkers 60–200 m away still read as Walk with near-zero net progress
+  (0.2 s throttled ticks are slower than the pace smoothing).
+- **Flee is local.** People flee on ground they can see (walkable or their crossing), never
+  across a road, and a packed kerb against a wall has nowhere to go; they press, then walk back.
+- **The HQ LOOK turn is the whole body** (standing only). There is still no head turn on the
+  mass crowd; that needs an additive bone in the atlas shader.
+- **Crossfades are matrix lerps**, not quaternion blends; fine over 0.1–0.6 s at crowd distance,
+  and getting up is a 0.6 s blend from lying to Guard, not a get-up clip (the pack has none).
+- **Audio is unheard**, and the fighter ratio (32.7%) is a design choice left as is — for a
+  Shibuya setting fewer people squaring up may read truer.
+- The user's dev server on 5174 still serves the old checkout until it is restarted from this
+  repository.
+
+### Next
+
+1. Restart the 5174 dev server from this checkout (`npm run dev:local`) and re-check by eye.
+2. Stop-and-go creep for jammed walkers in `simulation.move` (removes the Idle creep).
+3. An additive head-look bone in the crowd shader for LOOK while walking.
+4. Pin `Hit_Knockback` / a get-up clip (UAL2) through `upstream.lock.json`.
+5. A listening pass on the synthesized audio with a real gesture; decide the fighter share.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
@@ -2052,6 +2195,11 @@ seconds. Check the fresh case before blaming the harness.
 | `scripts/test-current.mjs` | the test list that gates this work |
 
 ## 18. Known limitations
+
+- **See §9i for the crowd-realism limitations** (jam creep in Idle, far-LOD dither, local-only
+  flight, body-only LOOK turn, matrix-lerp crossfades, unheard audio). §9i also supersedes two
+  entries below: the HQ crowd is now the default without `hq=` (`hq=0` is the rollback), and
+  the thrown HQ body now falls along its flight.
 
 - **No clothing geometry.** RUN 6.8 gave the near citizens four silhouettes, but clothes are
   still painted onto the body by the garment mask. No skirts, jackets, hoodies, bags, caps or

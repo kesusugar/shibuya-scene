@@ -16,3 +16,14 @@ test('hysteresis retains nearby identity; hit bodies fall back to the existing r
  person.struck=0;p.update([person],{x:0,z:0},.05);assert.equal(p.selected.size,0);delete person.struck;
  p.update([person],{x:0,z:0},.05);assert.equal(p.selected.size,0);p.dispose();
 });
+test('near legs follow the MEASURED pace: a body reporting speed but not moving stands',()=>{
+ // claude/crowd-realism. `speed` is the simulation's intent; the drawn position is the truth.
+ const p=createNearCharacters('low');
+ const still={id:1,active:true,archetype:'casual',x:1,z:2,renderX:1,renderZ:2,height:0,heading:0,speed:1.3};
+ const walker={id:2,active:true,archetype:'casual',x:-1,z:2,renderX:-1,renderZ:2,height:0,heading:0,speed:1.3};
+ for(let f=0;f<40;f++){walker.z+=1.3/60;walker.renderZ=walker.z;p.update([still,walker],{x:0,z:0},1/60);}
+ assert.equal(p.paceOf(still.id).moving,false,'a blocked body walked on the spot');
+ assert.equal(p.paceOf(walker.id).moving,true);
+ assert.ok(Math.abs(p.paceOf(walker.id).speed-1.3)<.15,`${p.paceOf(walker.id).speed}`);
+ p.dispose();
+});

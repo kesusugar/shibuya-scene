@@ -18,8 +18,8 @@ export const IMPACT=Object.freeze({
  heavy:7,           // above this the throw is decisive
  launch:14,         // above this the body leaves the ground properly -- still not a cartoon
  transfer:.8,       // share of the closing speed the body carries away
- maxThrow:14,       // m/s cap on the body's horizontal speed
- maxLift:3.2,       // m/s cap on the vertical kick
+ maxThrow:16,       // m/s cap on the body's horizontal speed
+ maxLift:4,         // m/s cap on the vertical kick
  restitution:.2,    // bonnet and body both give; this is not a billiard ball
  contactDrag:.15,   // m/s every contact costs on top of the momentum exchange
  carry:.25          // share of the victim's own walking velocity kept through the hit

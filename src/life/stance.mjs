@@ -21,6 +21,8 @@ export const KERB_QUEUE_REACH=8;
 /** Standing at a kerb for the signal, in any of the ways the simulation expresses it. */
 export function isWaiting(p){
  if(!p||p.struck!==undefined||p.combatDead)return false;
+ // Running from a car, or walking back from having done so, is not standing at a kerb.
+ if(p.flee||p.state==='returning')return false;
  if(p.state==='waiting')return true;
  if(p.choreographed&&(p.state==='exiting'||p.state==='recycle'))return true;
  return p.kerbQueue===true;

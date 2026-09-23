@@ -486,3 +486,13 @@ test('events are announced for audio and camera: swing, hit, pain',()=>{
  melee.request();run(melee,c,p,1.2);
  for(const k of ['punch_swing','punch_hit','pain_voice'])assert.ok(kinds.includes(k),`no ${k}`);
 });
+
+test('a stagger covers the same ground at 7 fps as at 60 fps (seconds, exact integral)',async()=>{
+ const {staggerStep}=await import('../src/player/combat.mjs');
+ for(const hold of [.34,.55]){
+  const run=dt=>{let left=hold,d=0;while(left>0){d+=staggerStep(left,hold,dt);left=Math.max(0,left-dt);}return d;};
+  const want=hold/2;                       // per m/s of push: a cross at 1.7 m/s is 0.47 m
+  for(const fps of [7,15,30,60,144])
+   assert.ok(Math.abs(run(1/fps)-want)<1e-9,`${fps} fps: ${run(1/fps)} vs ${want}`);
+ }
+});

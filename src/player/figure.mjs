@@ -23,6 +23,8 @@ const GAIT=new Set(['Idle','Walk','Run','Sprint']);
  * the fist is out, and a settle. Timing comes from the measured clip, not a fraction chosen by
  * eye. Pure, for the test.
  */
+/** Spine lean at the peak of a punch, radians (replaces an 11 cm root slide; see below). */
+export const PUNCH_LEAN=.2;
 export function punchEmphasis(name,progress){
  const a=attackOf(name),w=a.windup/a.duration,p=a.peak/a.duration,u=Math.max(0,Math.min(1,progress));
  const ease=x=>x*x*(3-2*x);
@@ -30,6 +32,19 @@ export function punchEmphasis(name,progress){
  if(u<p)return -.35+1.35*ease((u-w)/Math.max(1e-6,p-w));
  return 1-ease((u-p)/Math.max(1e-6,1-p));
 }
+
+/**
+ * The victim's recoil envelope, 0..1 over a blow's hold: snaps in over the first fifth, then
+ * eases out. claude/crowd-realism. The baked `Hit` barely moves the body (UAL2's
+ * Hit_Knockback is still not pinned), so a punch landed on someone who hardly flinched; this
+ * rides on top of it the way punchEmphasis rides on the punch. Pure, for the test.
+ */
+export function hitRecoil(progress){
+ const u=Math.max(0,Math.min(1,progress)),ease=x=>x*x*(3-2*x);
+ return u<.2?Math.sin(Math.PI*.5*u/.2):1-ease((u-.2)/.8);
+}
+/** How far the recoil bends a body, radians: [spine, head], for a jab and for a cross. */
+export const RECOIL=Object.freeze({light:[.2,.22],strong:[.38,.34]});
 
 export function characterAction(state){
  if(state.alive===false)return (state.runOver??0)<.6?'Fall':'Death';
@@ -185,8 +200,21 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
     const k=punchEmphasis(overlay,1-state.attackTime/state.attackDuration);
     const side=overlay==='Punch'?1:-1;       // left jab turns the left shoulder in; cross the right
     spine.rotateY(side*.24*k);chest?.rotateY(side*.2*k);
-    const lean=Math.max(0,k);spine.rotateX(.12*lean);
-    root.position.x+=Math.sin(facing.heading)*.11*lean;root.position.z+=Math.cos(facing.heading)*.11*lean;
+    // claude/crowd-realism: the weight goes forward through the spine, not by sliding the whole
+    // body. Moving the root 11 cm with both feet planted slid both feet 11 cm on every punch;
+    // a deeper lean puts the chest about as far forward and leaves the feet where they are.
+    const lean=Math.max(0,k);spine.rotateX(PUNCH_LEAN*lean);
+   }
+   // claude/crowd-realism: the victim's side of a blow. Bend away from it -- back for a blow
+   // from the front, sideways for one from the side -- in the body's own frame, snapping in and
+   // settling over the blow's hold.
+   if(overlay==='Hit'&&spine&&state.hurtTime>0&&(state.hurtX||state.hurtZ)){
+    const total=state.hurtDuration>0?state.hurtDuration:.34,k=hitRecoil(1-state.hurtTime/total);
+    const [bend,snap]=state.hurtStrong?RECOIL.strong:RECOIL.light;
+    const s=Math.sin(facing.heading),c=Math.cos(facing.heading);
+    const back=-(state.hurtX*s+state.hurtZ*c),across=state.hurtX*c-state.hurtZ*s;
+    spine.rotateX(-bend*k*back);spine.rotateZ(-bend*k*across*.8);
+    head?.rotateX(-snap*k*back);head?.rotateZ(-snap*k*across*.8);
    }
    root.updateMatrixWorld(true);
 

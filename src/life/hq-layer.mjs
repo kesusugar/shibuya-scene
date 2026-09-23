@@ -47,6 +47,8 @@ export const HQ_LOD=Object.freeze({
  * a short visual transition, never a different destination.
  */
 export const HQ_RISE=Object.freeze({gap:.5,speed:3.2,seconds:1.2});
+/** rad/s a thrown body turns to fall along its flight (the baked Fall goes over backwards). */
+export const HQ_THROW_TURN=12;
 
 export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
                                             interpolate=true,onDisown=null,onReclaim=null}={}){
@@ -115,6 +117,8 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
  /** Which clip a pedestrian's own simulated state calls for. */
  const behaviourFor=p=>{
   if(p.struck!==undefined||p.combatDead)return STATE.KNOCKDOWN;
+  // The simulation is really moving them away from something (sim.flee): the body runs.
+  if(p.flee)return STATE.FLEE;
   const speed=Math.abs(p.speed??0);
   if(p.state==='waiting'||p.state==='idle'||speed<.12)return STATE.NORMAL;
   return speed>2.6?STATE.FLEE:STATE.NORMAL;
@@ -152,8 +156,8 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
 
    for(let k=0;k<take;k++){
     const {p,d}=candidates[k];
-    let i=crowd.indexOf(p.id);
-    if(i<0){
+    let i=crowd.indexOf(p.id),born=false;
+    if(i<0){born=true;
      // RUN 9: `appearanceId` lets a pedestrian wear a face that is not their pool id's. It
      // exists for one case -- someone dragged out of a car was already drawn sitting in it,
      // and arriving on the pavement as a different person would undo the whole point of the
@@ -183,6 +187,10 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
        else{x=cx+(x-cx)*step/gap;z=cz+(z-cz)*step/gap;}
       }
      }
+     // How far the drawn body actually moved this frame decides Idle/Walk/Run and the cadence
+     // (src/life/pace.mjs). `p.speed` is the simulation's intent, not the body's motion.
+     // A body spawned this frame has no previous position to measure from.
+     if(!born)crowd.pace(i,x-crowd.state.x[i],z-crowd.state.z[i],dt);
      crowd.place(i,x,p.height??0,z,p.heading??0,p.speed??0);
     }else if(p.struck!==undefined){
      // RUN 11.1: a body the SIMULATION threw is where its flight says, arc included. The crowd
@@ -190,6 +198,14 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
      // place while the pedestrian it stood for slid metres down the road.
      crowd.follow(i,p.x,p.height??0,p.z);
      rising.delete(p.id);
+     // claude/crowd-realism: the baked Fall goes over BACKWARDS (head 1.24 m behind the feet
+     // by its last frame). A body thrown the way it was facing therefore fell back towards the
+     // car while sliding away from it. Turn it, fast, to face against its own flight, so the
+     // clip and the travel agree.
+     const fx=p.flyX??0,fz=p.flyZ??0;
+     if(Math.hypot(fx,fz)>.6&&dt>0){const want=Math.atan2(-fx,-fz),h=crowd.state.heading[i];
+      const d=Math.atan2(Math.sin(want-h),Math.cos(want-h)),k=HQ_THROW_TURN*dt;
+      crowd.state.heading[i]=h+(Math.abs(d)<=k?d:Math.sign(d)*k);}
     }
     // The simulation decides how long a thrown body stays down (`struck`): 4.9 s for a driver
     // dragged out of a car, longer for anyone else. The HQ chain reached RECOVER at 3.9 s,
@@ -212,6 +228,8 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
     const reacting=now===STATE.HIT||now===STATE.KNOCKDOWN||now===STATE.DOWNED
      ||now===STATE.LOOK||now===STATE.STARTLE||now===STATE.AVOID||now===STATE.FLEE||now===STATE.RECOVER;
     if(!reacting&&now!==want)crowd.setState(i,want);
+    // A person the simulation is carrying away from a car is running, whatever a glance said.
+    else if(want===STATE.FLEE&&(now===STATE.LOOK||now===STATE.STARTLE||now===STATE.RECOVER))crowd.setState(i,STATE.FLEE,{force:true});
 
     if(review&&moves<HQ_LOD.movesPerFrame){
      const lane=crowd.state.lane[i];
@@ -351,6 +369,10 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
     disowned:disowned.size};
   },
 
-  dispose(){crowd.dispose();rendered.clear();disowned.clear();rising.clear();}
+  dispose(){
+   // Turned off (a tier with no HQ budget) with bodies still mid-fall: hand them back, or the
+   // simulation keeps them `reactionOwned` with nobody left to release them.
+   for(const id of disowned)onReclaim?.(id,null);
+   crowd.dispose();rendered.clear();disowned.clear();rising.clear();}
  };
 }

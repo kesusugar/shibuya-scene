@@ -452,16 +452,28 @@ test('a body handed back closes the gap even if a car makes it step aside at onc
  layer.dispose();
 });
 
-test('someone waiting at the kerb for the signal plays Idle, decided by state and not by speed',()=>{
+/** Walk `people` along +z at their own `speed` for `seconds`, syncing the layer each frame. */
+function walkFor(layer,people,seconds,{dt=1/60,t0=0,moving=people}={}){
+ let t=t0;
+ for(let f=0;f<Math.round(seconds/dt);f++){
+  for(const p of moving){p.z+=p.speed*dt;p.renderZ=p.z;}
+  t+=dt;layer.sync(people,{x:0,z:0},dt,{time:t});
+ }
+ return t;
+}
+
+test('someone waiting at the kerb plays Idle; anyone the simulation is not moving stands too',()=>{
  const people=pool(12,1);
  const layer=createHQLayer(manifest,bin,{budget:12});
  const [waiting,blocked,walker]=people;
  waiting.state='waiting';waiting.speed=0;
- blocked.state='walking';blocked.speed=0;       // stopped for a moment, not waiting
+ blocked.state='walking';blocked.speed=0;       // held up in a jam: not waiting, not moving
  layer.sync(people,{x:0,z:0},1/60,{time:0});
  const idx=p=>layer.crowd.indexOf(p.id),clip=p=>layer.crowd.clipName(idx(p));
+ let t=walkFor(layer,people,.5,{moving:[walker]});
  assert.equal(clip(waiting),'Idle','a waiting citizen walked on the spot');
- assert.equal(clip(blocked),'Walk','a zero speed alone turned into Idle');
+ // claude/crowd-realism: the measured pace decides, so a jam no longer walks on the spot.
+ assert.equal(clip(blocked),'Idle','a citizen who is not moving walked on the spot');
  assert.equal(clip(walker),'Walk');
  // The instanced attribute really carries the Idle row, not just the name.
  const i=idx(waiting),lane=layer.crowd.lanes[layer.crowd.state.lane[i]];
@@ -470,17 +482,19 @@ test('someone waiting at the kerb for the signal plays Idle, decided by state an
  // A glance keeps the stance (RUN 11.0); a real reaction outranks waiting; physical outranks both.
  layer.crowd.setState(i,STATE.LOOK);assert.equal(clip(waiting),'Idle','a waiting citizen who glanced walked on the spot');
  layer.crowd.setState(i,STATE.STARTLE);assert.equal(clip(waiting),'Startle');
+ // A fright that is not carrying the body anywhere is a wary stance, not a run on the spot.
+ layer.crowd.setState(i,STATE.FLEE,{force:true});assert.equal(clip(waiting),'Guard');
  layer.crowd.setState(i,STATE.KNOCKDOWN,{force:true});assert.equal(clip(waiting),'Fall');
  layer.crowd.setState(i,STATE.NORMAL,{force:true});assert.equal(clip(waiting),'Idle',
   'back to NORMAL at the kerb did not return to Idle');
  // The light changes: they step off and walk.
  waiting.state='crossing';waiting.speed=1.3;
- layer.sync(people,{x:0,z:0},1/60,{time:1/60});
+ t=walkFor(layer,people,.6,{t0:t,moving:[waiting,walker]});
  assert.equal(clip(waiting),'Walk','still idling after starting to cross');
  layer.dispose();
 });
 
-test('the queue behind the front row and the cast between crossings idle too',()=>{
+test('the queue behind the front row and the cast between crossings idle, and walk off when they move',()=>{
  const people=pool(12,1);
  const layer=createHQLayer(manifest,bin,{budget:12});
  const [queued,cast,held]=people;
@@ -491,9 +505,97 @@ test('the queue behind the front row and the cast between crossings idle too',()
  const clip=p=>layer.crowd.clipName(layer.crowd.indexOf(p.id));
  assert.equal(clip(queued),'Idle','the queue behind the front row walked on the spot');
  assert.equal(clip(cast),'Idle','the scramble cast walked on the spot between crossings');
- assert.equal(clip(held),'Walk');
- queued.kerbQueue=false;queued.speed=1.3;                // the light changed and they moved
- layer.sync(people,{x:0,z:0},1/60,{time:1/60});
+ assert.equal(clip(held),'Idle','held up and not moving is standing, not walking on the spot');
+ queued.kerbQueue=false;queued.speed=1.3;held.speed=1.3; // the light changed and they moved
+ walkFor(layer,people,.6,{moving:[queued,held]});
  assert.equal(clip(queued),'Walk');
+ assert.equal(clip(held),'Walk');
+ layer.dispose();
+});
+
+test('Idle and Walk switch on the MEASURED pace with hysteresis, and cadence follows ground speed',()=>{
+ const people=pool(4,3);
+ const layer=createHQLayer(manifest,bin,{budget:4});
+ const [a]=people;
+ layer.sync(people,{x:0,z:0},1/60,{time:0});
+ const clip=()=>layer.crowd.clipName(layer.crowd.indexOf(a.id));
+ const rate=()=>layer.crowd.animRate(layer.crowd.indexOf(a.id));
+ // A shuffle that wobbles around the stop threshold must not flicker Idle/Walk every frame.
+ a.speed=.25;let t=walkFor(layer,people,1,{moving:[a]});
+ let flips=0,last=clip();
+ for(let f=0;f<120;f++){a.speed=f%2?.12:.4;t=walkFor(layer,people,1/60,{t0:t,moving:[a]});
+  if(clip()!==last){flips++;last=clip();}}
+ assert.ok(flips<=1,`${flips} Idle/Walk flips on a threshold wobble`);
+ // Cadence: stride / speed. Walk is authored at 1.30 m per cycle.
+ const walk=manifest.clips.find(c=>c.name==='Walk');
+ a.speed=1.3;t=walkFor(layer,people,1.5,{t0:t,moving:[a]});
+ assert.equal(clip(),'Walk');
+ assert.ok(Math.abs(rate()-1)<.08,`1.3 m/s walked at ${rate()} cycles/s, want ~1.0`);
+ a.speed=1.8;t=walkFor(layer,people,1.5,{t0:t,moving:[a]});
+ assert.ok(Math.abs(rate()-1.8/1.3)<.1,`1.8 m/s walked at ${rate()} cycles/s, want ~1.38`);
+ assert.ok(rate()<=1/walk.duration*1.75+1e-6);
+ // Fast enough is a run, not a sped-up walk.
+ a.speed=3.8;t=walkFor(layer,people,1,{t0:t,moving:[a]});
+ assert.equal(clip(),'Run');
+ // And stopping stands them within half a second, not on the next stalled frame.
+ a.speed=0;t=walkFor(layer,people,1/60,{t0:t,moving:[]});
+ assert.equal(clip(),'Run','one stalled frame is not a stop');
+ // (3.6 m/s also reads as FLEE to the simulation, which drains through RECOVER first.)
+ t=walkFor(layer,people,3.2,{t0:t,moving:[]});
+ assert.equal(clip(),'Idle');
+ layer.dispose();
+});
+
+test('a cadence change keeps the pose where it is (no jump in the cycle)',()=>{
+ const people=pool(2,3);
+ const layer=createHQLayer(manifest,bin,{budget:2});
+ const [a]=people;a.speed=1;
+ layer.sync(people,{x:0,z:0},1/60,{time:0});
+ let t=walkFor(layer,people,1,{moving:[a]});
+ const c=layer.crowd;
+ const pose=at=>{const i=c.indexOf(a.id);const p=c.state.phase[i]+at*c.state.animRate[i];return p-Math.floor(p);};
+ let worst=0;
+ for(let f=0;f<60;f++){
+  a.speed=f<30?1+f*.03:1.9-(f-30)*.03;
+  // The pose the GPU shows at the current time, before and after this frame's rewrite.
+  const before=pose(t);
+  for(const p of [a]){p.z+=p.speed/60;p.renderZ=p.z;}
+  layer.sync(people,{x:0,z:0},1/60,{time:t});   // same instant: only the rewrite can move it
+  let d=Math.abs(pose(t)-before);d=Math.min(d,1-d);worst=Math.max(worst,d);
+  t+=1/60;layer.sync(people,{x:0,z:0},0,{time:t});
+ }
+ assert.ok(worst<.02,`the walk cycle jumped by ${worst.toFixed(3)} of a cycle on a rate change`);
+ layer.dispose();
+});
+
+test('a pedestrian the simulation is carrying away from a car runs; walking back afterwards walks',()=>{
+ const people=pool(4,3);
+ const layer=createHQLayer(manifest,bin,{budget:4});
+ const [a]=people;
+ layer.sync(people,{x:0,z:0},1/60,{time:0});
+ const i=()=>layer.crowd.indexOf(a.id),clip=()=>layer.crowd.clipName(i());
+ // A glance first: a real flight must override it.
+ layer.crowd.setState(i(),STATE.LOOK);
+ a.flee={x:0,z:1};a.speed=4.2;
+ let t=walkFor(layer,people,.8,{moving:[a]});
+ assert.equal(layer.crowd.state.behaviour[i()],STATE.FLEE);
+ assert.equal(clip(),'Run');
+ // The flight is over; FLEE drains through RECOVER while they walk back.
+ a.flee=null;a.speed=1.25;
+ t=walkFor(layer,people,1.8,{t0:t,moving:[a]});
+ assert.equal(layer.crowd.state.behaviour[i()],STATE.RECOVER);
+ assert.equal(clip(),'Walk','a recovering body walking back played a standing Guard and slid');
+ layer.dispose();
+});
+
+test('a thrown body turns to face against its flight, so the backwards Fall goes the way it travels',()=>{
+ const people=pool(4,3);
+ const layer=createHQLayer(manifest,bin,{budget:4});
+ const [a]=people;a.heading=0;                   // walking +z
+ layer.sync(people,{x:0,z:0},1/60,{time:0});
+ a.struck=.05;a.flyX=6;a.flyZ=0;a.flyY=1;        // thrown towards +x
+ let t=0;for(let f=0;f<30;f++){a.x+=a.flyX/60;t+=1/60;layer.sync(people,{x:0,z:0},1/60,{time:t});}
+ const h=layer.crowd.state.heading[layer.crowd.indexOf(a.id)],want=Math.atan2(-6,0);
+ assert.ok(Math.abs(Math.atan2(Math.sin(h-want),Math.cos(h-want)))<.05,`heading ${h.toFixed(2)}, want ${want.toFixed(2)}`);
  layer.dispose();
 });
