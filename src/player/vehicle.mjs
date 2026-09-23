@@ -14,7 +14,7 @@ import {clipCameraArm} from './camera.mjs';
 import {VEHICLES} from '../traffic/config.mjs';
 import {DODGE_SPEED} from '../life/simulation.mjs';
 import {safePose} from '../traffic/graph.mjs';
-import {corners, boxOverlap} from '../traffic/path.mjs';
+import {corners, boxOverlap, pose} from '../traffic/path.mjs';
 import {bounds, inPolygon} from '../geo/core.mjs';
 import {worldAnchor} from '../traffic/vehicle-anchors.mjs';
 
@@ -33,6 +33,8 @@ export const CAR = Object.freeze({
  carPad: .05,                            // m of clearance kept from other cars
  // m of clearance kept from buildings, walls and platforms, by axis. See clearOfSolids.
  solidEnd: .55, solidSide: .25,
+ // m a parked car keeps its whole body from every lane and junction centreline.
+ parkClear: 1.9,
  // Steering authority falls away as the car slows, so a stopped car does not spin on the
  // spot, and a fast one is not twitchy.
  steerLow: 1.2, steerFull: 7,
@@ -132,6 +134,56 @@ export function createPlayerVehicle(sim, ctx) {
   }
   return false;
  };
+ /**
+  * Is this spot on a pedestrian crossing? RUN 10 browser QA, scenario K: from the player start
+  * the first legal road pose was ON the scramble. Its cast stops for any vehicle on its track,
+  * so two dozen of them stood on the crossing for good, and because the signal controller
+  * holds the cycle until a crossing clears, every signal on the map froze. The car still parks
+  * on the carriageway, just never across a crossing or inside the scramble plaza.
+  */
+ const onCrossing = (x, z) => {
+  const signals = sim.signals;
+  if (!signals) return false;
+  if (signals.area?.contains(x, z)) return true;     // pads by a vehicle footprint itself
+  for (const c of signals.crossings?.values() ?? []) {
+   const reach = c.width / 2 + def.length / 2 + .5;
+   for (let i = 1; i < c.points.length; i++) {
+    const a = c.points[i - 1], b = c.points[i], dx = b[0] - a[0], dz = b[1] - a[1];
+    const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz || 1)));
+    if (Math.hypot(x - a[0] - t * dx, z - a[1] - t * dz) < reach) return true;
+   }
+  }
+  return false;
+ };
+ /**
+  * How far a point is from the nearest traffic lane or junction path, up to ~4 m. Moving the
+  * car off the scramble was not enough: the next legal pose, beside it, sat in the lane the
+  * central stream leaves by, and an eight-car platoon stopped behind it INSIDE the scramble
+  * holding the crossing's locks -- no WALK for anyone, ever. Sampled once, on first use.
+  */
+ let laneCells = null;
+ const laneClearance = (x, z) => {
+  if (!laneCells) {
+   laneCells = new Map(); const p = {};
+   for (const l of [...sim.graph.lanes, ...(sim.graph.transitions ?? [])]) {
+    if (!l.path) continue;
+    for (let d = 0; d <= l.path.length; d += 1) {
+     pose(l.path, d, p); const k = Math.floor(p.x / 4) + ',' + Math.floor(p.z / 4);
+     let c = laneCells.get(k); if (!c) laneCells.set(k, c = []); c.push(p.x, p.z);
+    }
+   }
+  }
+  let m = Infinity; const ix = Math.floor(x / 4), iz = Math.floor(z / 4);
+  for (let i = ix - 1; i <= ix + 1; i++) for (let j = iz - 1; j <= iz + 1; j++) {
+   const c = laneCells.get(i + ',' + j);
+   if (c) for (let n = 0; n < c.length; n += 2) m = Math.min(m, Math.hypot(c[n] - x, c[n + 1] - z));
+  }
+  return m;
+ };
+ const offLanes = (x, z, heading) => {
+  probe.x = x; probe.z = z; probe.heading = heading;
+  return [[x, z], ...corners(probe, def.width, def.length, 0)].every(([px, pz]) => laneClearance(px, pz) > CAR.parkClear);
+ };
  /** Road-only test, still used when parking the car so it starts on the carriageway. */
  const onRoadPose = (x, z, heading) => {
   probe.x = x; probe.z = z; probe.heading = heading;
@@ -148,12 +200,16 @@ export function createPlayerVehicle(sim, ctx) {
    // and the car needs road under all four corners. The heading has to have road *ahead* of
    // it too: picking the first of eight that merely fits parks the car facing a kerb, and it
    // then cannot pull away.
+   // First out of every traffic lane; only if there is no such room nearby, anywhere legal.
+   for (const clearOfTraffic of [true, false])
    for (let r = 3; r <= 40; r += 1.5) for (let i = 0; i < 16; i++) {
     const a = i * Math.PI / 8, px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r;
+    if (onCrossing(px, pz)) continue;
     for (let h = 0; h < 16; h++) {
      const ph = h * Math.PI / 8;
      if (!onRoadPose(px, pz, ph)) continue;
      if (!onRoadPose(px + Math.sin(ph) * 6, pz + Math.cos(ph) * 6, ph)) continue;   // road ahead
+     if (clearOfTraffic && !offLanes(px, pz, ph)) continue;
      state.slot = slot; state.x = px; state.z = pz; state.heading = ph; state.course = ph;
      impactCooldown=0; resetDynamics(state); state.speed = 0; state.steering = 0; state.type = CAR.type; state.damage = 0; state.stalled = false;
      def = VEHICLES[CAR.type];
