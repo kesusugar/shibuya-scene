@@ -1479,6 +1479,22 @@ I, near-reaction and L sessions, all with 0 console errors.
 
 **RUN 10 is COMPLETE.** RUN 11 was not started.
 
+**After RUN 10 — signal-waiting Idle (`0d8c0d3`).** This is the one item authorised after the
+RUN closed. On the HQ crowd, NORMAL played `Walk`, so everyone at a kerb walked on the spot.
+`clipFor(behaviour, waiting)` in `hq-crowd.mjs` plays the pack's existing `Idle` clip instead,
+only for NORMAL and only while the simulation says `p.state === 'waiting'` (a crossing queue, or
+the scramble cast at its kerb). It never keys on speed. Priority is physical > awareness >
+waiting/locomotion. This is a visual mapping only: no movement, queue or signal state is
+touched. Browser, in a vehicle-green phase: 1,455/1,455 waiting HQ citizens Idle, 0 others Idle,
+and the 142–155 stopped-but-not-waiting citizens keep `Walk`. The near humanoids already choose
+Idle through their speed-driven locomotion blend and are unchanged.
+
+**Final gates for this handoff (HEAD after `0d8c0d3`):** `npm run typecheck` clean; `npm test`
+403 total, **398 pass, 5 existing skips, 0 fail** (up from 383/5/0: 15 new tests, no
+regression); `npm run build` successful, and its static re-bake left the tree unchanged. Final
+fresh-page console gate on this code, day and night: 0 errors, 0 uncaught exceptions, 0 shader
+messages, no banner.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
