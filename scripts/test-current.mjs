@@ -22,6 +22,7 @@ const files=[
  'tests/vehicle-occupancy.test.mjs',
  'tests/awareness.test.mjs',
  'tests/crowd-ownership.test.mjs',
+ 'tests/near-reaction.test.mjs',
  'tests/shader-warmup.test.mjs',
  'tests/pedestrian-threat.test.mjs',
  'tests/npc-awareness.test.mjs',

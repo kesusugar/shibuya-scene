@@ -201,6 +201,8 @@ export function buildCrowd(data,options={}){
   setHQCamera(p){hqCamera=p;},
   setHQBudget(n){hq?.setBudget(n);hqStats.budget=n;nearCharacters?.setHQCovered(!!hq&&n>0);},
   get hqCrowd(){return hq;},
+  /** The near pool, for QA: which body and which reaction a held citizen shows. */
+  get nearCharacters(){return nearCharacters;},
   // The humanoid arrives late, exactly as it does for the player. Until it does the near
   // pool runs on baked figures, so nothing waits on it.
   setNearCharacterAsset(a){nearCharacters?.setHumanAsset(a);},update(dt,camera){if(disposed)return;if(camera)sim.setCamera(camera.x,camera.z);sim.update(dt);sync(dt);},setTier(t){sim.setTier(t);nearCharacters?.setTier(t);sync();},dispose(){if(disposed)return;disposed=true;hq?.dispose();hq=null;nearCharacters?.dispose();shadows.dispose();sim.dispose();for(const m of Object.values(meshes))m.dispose();for(const g of Object.values(geometry))g.dispose();material.dispose();headMaterial.dispose();hairMaterial.dispose();debug?.geometry.dispose();debug?.material.dispose();root.removeFromParent();root.clear();}};

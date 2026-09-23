@@ -57,6 +57,22 @@ function lifeReaction(p){
  }
 }
 
+/**
+ * Which reaction a near body shows, strongest claim first.
+ *
+ * RUN 10 browser QA. This read `lifeReaction(p) ?? trafficReaction`, so awareness always won.
+ * While the player drives, awareness sees the rider sitting in the car, and people a few
+ * metres from the bonnet were held at LOOK: a quarter of the frames in which a car was about
+ * to hit a near body showed a head turn instead of the guard or startle the car had asked
+ * for. A car about to hit you outranks having noticed the player; everything else keeps the
+ * old order.
+ */
+export function nearReaction(p,clock){
+ const traffic=p.reactionUntil>clock?p.trafficReaction:null;
+ if(traffic==='guard'||traffic==='startle'||traffic==='escape')return traffic;
+ return lifeReaction(p)??traffic??(p.reactionUntil+.6>clock?'recover':null);
+}
+
 // Shared baked geometry/materials; only a bounded pool has individual skeletons/mixers.
 export function createNearCharacters(tier='high',{ctx=null}={}){
  const root=new Group(),slots=[],selected=new Set(),palette=[];root.name='near-character-pool';
@@ -272,11 +288,7 @@ export function createNearCharacters(tier='high',{ctx=null}={}){
     if(slot.human)stats.humanoids++;else stats.baked++;
     if(slot.ik)stats.ik++;
     const distance=Math.hypot(p.x-focus.x,p.z-focus.z),interval=distance<12?0:1/30;
-    // RUN 7's life state, when there is one, decides what the body does: it already folded
-    // the car reaction into itself, so reading both here would let two machines argue. The
-    // older mapping stays as the fallback for a crowd built without awareness.
-    const reaction=lifeReaction(p)??
-     (p.reactionUntil>clock?p.trafficReaction:p.reactionUntil+.6>clock?'recover':null);
+    const reaction=nearReaction(p,clock);slot.reaction=reaction;
     const state={trafficReaction:reaction,threatHeading:p.lifeThreatHeading??p.threatHeading,x:p.renderX??p.x,y:p.height??0,z:p.renderZ??p.z,heading:p.heading,speed:p.speed,alive:true,animationPhase:Math.abs(p.id)*.137,attackTime:p.combatAction>0?Math.min(.42,p.combatAction*.42):0};
     if(slot.elapsed>=interval){slot.figure.update(state,Math.min(.1,slot.elapsed));slot.elapsed=0;}
     else slot.figure.root.position.set(state.x,state.y,state.z);
@@ -284,6 +296,8 @@ export function createNearCharacters(tier='high',{ctx=null}={}){
    return selected;
   },
   /** Which body a citizen currently wears, or null if the pool is not holding them. */
+  /** The reaction word a held citizen's body is showing this frame, or null. For QA. */
+  reactionOf(id){return slots.find(x=>x.id===id)?.reaction??null;},
   bodyOf(id){const s=slots.find(x=>x.id===id);return s?(s.human?'humanoid':'baked'):null;},
   /** Which appearance archetype a held citizen is wearing, or null. */
   lookOf(id){const s=slots.find(x=>x.id===id);return s?.human?(s.variant?.id??null):null;},
