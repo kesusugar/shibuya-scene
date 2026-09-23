@@ -7,6 +7,8 @@ const files=[
  'tests/vehicle-dynamics.test.mjs',
  'tests/vehicle-shape.test.mjs',
  'tests/vehicle-clearance.test.mjs',
+ 'tests/vehicle-impact.test.mjs',
+ 'tests/vehicle-impact-live.test.mjs',
  'tests/vehicle-contact.test.mjs',
  'tests/deferred-vehicle-visual.test.mjs',
  'tests/character-animation.test.mjs',

@@ -17,6 +17,7 @@ import {safePose} from '../traffic/graph.mjs';
 import {corners, boxOverlap, pose} from '../traffic/path.mjs';
 import {bounds, inPolygon} from '../geo/core.mjs';
 import {worldAnchor} from '../traffic/vehicle-anchors.mjs';
+import {vehicleImpact, slowBy} from './vehicle-impact.mjs';
 
 export const CAR = Object.freeze({
  type: 'sedan',
@@ -35,6 +36,8 @@ export const CAR = Object.freeze({
  solidEnd: .55, solidSide: .25,
  // m a parked car keeps its whole body from every lane and junction centreline.
  parkClear: 1.9,
+ // shoves a downed body can take from the car before it is left behind (RUN 11.1).
+ runOverHits: 3,
  // Steering authority falls away as the car slows, so a stopped car does not spin on the
  // spot, and a fast one is not twitchy.
  steerLow: 1.2, steerFull: 7,
@@ -75,6 +78,7 @@ export function createPlayerVehicle(sim, ctx) {
  resetDynamics(state);
  const warnPedestrians=createPedestrianWarnings();
  const probe = {x: 0, z: 0, heading: 0};
+ const impacts = [];        // this step's pedestrian contacts; see strikePedestrians
  let contact=null, impactCooldown=0;
 
  /**
@@ -445,23 +449,56 @@ export function createPlayerVehicle(sim, ctx) {
    * into a queue, or braking to a stop in one, would scatter bodies at walking pace.
    */
   strikePedestrians(crowd) {
+   impacts.length = 0;
    if (!state.active || !crowd || Math.abs(state.speed) < DODGE_SPEED) return 0;
    const reach = Math.hypot(def.width, def.length) / 2 + 1;
-   const dir = Math.sign(state.speed) || 1;
    const x0 = Math.floor((state.x - reach) / 2), x1 = Math.floor((state.x + reach) / 2);
    const z0 = Math.floor((state.z - reach) / 2), z1 = Math.floor((state.z + reach) / 2);
    const body = {width: CAR.bodyWidth, length: CAR.bodyLength};
+   const now = crowd.time ?? 0;
    let hit = 0;
    for (let i = x0; i <= x1; i++) for (let j = z0; j <= z1; j++) {
     for (const p of crowd.grid.get(i + ',' + j) ?? []) {
-     if (!p.active || p.controlled || p.struck !== undefined) continue;
-     // Thrown along the car's course, at the speed that hit them.
-     if (boxOverlap(state, def, p, body, 0) &&
-         crowd.strike(p, Math.sin(state.course) * dir, Math.cos(state.course) * dir, Math.abs(state.speed))) hit++;
+     if (!p.active || p.controlled || !boxOverlap(state, def, p, body, 0)) continue;
+     // RUN 11.1: someone already down in front of the car is shoved along the road for a
+     // moment and the car feels them, instead of the car passing through. Bounded: a body is
+     // pushed at most CAR.runOverHits times, a third of a second apart, so nobody is carried for good.
+     if (p.struck !== undefined) {
+      // Only a body lying on the road: one still in its throw is not hit twice, and the car
+      // catching up with a body it just threw must not rewrite where the throw sent it.
+      if (Math.abs(state.speed) < 1 || p.struck < .6 || (p.flyHeight ?? 0) > .05) continue;
+      if ((p.runOverAt ?? -9) > now - .35 || (p.runOverCount ?? 0) >= CAR.runOverHits) continue;
+      p.runOverAt = now; p.runOverCount = (p.runOverCount ?? 0) + 1;
+      // Raise the body's speed ALONG the car to a share of the car's; keep what it has across.
+      const dirSign = Math.sign(state.speed) || 1, fx = Math.sin(state.course) * dirSign, fz = Math.cos(state.course) * dirSign;
+      const along = (p.flyX ?? 0) * fx + (p.flyZ ?? 0) * fz, want = Math.abs(state.speed) * .45;
+      if (along < want) { p.flyX = (p.flyX ?? 0) + fx * (want - along); p.flyZ = (p.flyZ ?? 0) + fz * (want - along); }
+      state.speed = slowBy(state.speed, .03 * Math.abs(state.speed) + .08);
+      impacts.push({id: p.id, kind: 'runover', x: p.x, z: p.z, closing: Math.abs(state.speed)});
+      continue;
+     }
+     // Direction, strength and state from the contact itself: which face hit, where on it,
+     // how fast they closed, and which way the person was already moving. See vehicle-impact.
+     const r = vehicleImpact(state, def, p, {type: state.type});
+     if (!r) continue;
+     let landed = false;
+     if (r.kind === 'push') {
+      // Too slow to knock anyone down: a shove, and the person steps out of the way.
+      const l = Math.hypot(r.impulse.x, r.impulse.z) || 1;
+      landed = crowd.scatter?.(p, r.impulse.x / l, r.impulse.z / l, .9) ?? false;
+     } else landed = crowd.strike(p, 0, 0, r.closing, r.impulse);
+     if (!landed) continue;
+     hit++;
+     // Every body the car goes through costs it speed; a crowd costs it a lot.
+     state.speed = slowBy(state.speed, r.speedLoss);
+     impacts.push({id: p.id, kind: r.kind, contact: r.contact, x: p.x, z: p.z, closing: r.closing,
+      ix: r.impulse.x, iz: r.impulse.z, iy: r.impulse.y});
     }
    }
    return hit;
   },
+  /** This step's contacts, for QA, audio and camera: {id, kind, contact, closing, impulse}. */
+  get impacts() {return impacts;},
 
   /**
    * Warn everyone the car is about to reach.

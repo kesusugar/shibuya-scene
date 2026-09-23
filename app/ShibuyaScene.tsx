@@ -413,7 +413,7 @@ export default function Home(){
  let carSpeedLast=0,damageLast=0,struckCountRef=0,meleeHitsLast=0,playerReach:any=null;
  // Impact feedback. The shake decays rather than being keyframed, so repeated hits stack
  // into a rattle instead of restarting a canned wobble.
- const SHAKE_PER_HIT=.34,SHAKE_MAX=1,SHAKE_FALL=2.6,SHAKE_THROW=.42,IMPACT_BLEED=.06;
+ const SHAKE_PER_HIT=.34,SHAKE_MAX=1,SHAKE_FALL=2.6,SHAKE_THROW=.42;
  let shake=0;
  let lastPlayTick=performance.now();let qaReadyRef=false;const frame=(now:number)=>{if(disposed)return;const dt=frameGate.step(now);if(dt===null){raf=requestAnimationFrame(frame);return;}const frameStart=performance.now(),updateStart=frameStart;const playElapsed=document.hidden?0:Math.max(0,(now-lastPlayTick)/1000);lastPlayTick=now;frameHits=0;if(playerMode&&player)player.updateInput(dt);if(playerMode&&player){
   if(vehicleTransition.active){const pose=vehicleTransition.update(dt);if(pose){
@@ -472,7 +472,10 @@ export default function Home(){
     // little of what it was carrying. All three scale with how fast it was taken.
     const force=Math.min(1,Math.abs(c.speed)/playerCar.def.speed);
     shake=Math.min(SHAKE_MAX,shake+SHAKE_PER_HIT*(.4+force)*struck);
-    c.speed*=1-IMPACT_BLEED*force;}
+    // RUN 11.1: the car's speed loss is per contact now, inside strikePedestrians, where each
+    // body's closing speed and the car's mass are known. A flat bleed here on top of it
+    // counted every frame with a hit twice.
+   }
    // The crowd queues a mark where a body is caught and another where it stops sliding;
    // draining it here keeps the simulation free of anything that draws.
    // An impact is a step that lost its speed: compare before and after rather than having

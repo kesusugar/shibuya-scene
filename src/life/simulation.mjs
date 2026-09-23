@@ -23,6 +23,7 @@ export const FALL_TILT=.85;
 // at roughly ten metres and well overhead, with air time long enough for the tumble to read,
 // while a nudge at the dodge threshold stays a shove: the floor is low enough not to launch it.
 export const LAUNCH=.92,LAUNCH_MIN=2.2,LIFT=.62,GRAVITY=16,GROUND_DRAG=1.6,AIR_DRAG=.14,SPIN=3.4;
+export const GROUND_FRICTION=3.5;   // m/s^2 of sliding friction on a thrown body (RUN 11.1)
 // How long a body stays on the street, and so how long the marks it leaves last: long
 // enough to be something you drove past and can come back to, rather than something that
 // blinks out while you are still braking.
@@ -99,10 +100,17 @@ export class CrowdSimulation{
   * mid-crossing still occupies their signal group, and a group that never reports clear
   * never gives the cars their window.
   */
- strike(p,dx=0,dz=0,speed=0){if(!p.active||p.struck!==undefined)return false;this.leave(p);
+ strike(p,dx=0,dz=0,speed=0,impulse=null){if(!p.active||p.struck!==undefined)return false;this.leave(p);
   p.struck=0;p.speed=0;
-  const carry=Math.max(LAUNCH_MIN,speed*LAUNCH),len=Math.hypot(dx,dz)||1;
-  p.flyX=dx/len*carry;p.flyZ=dz/len*carry;p.flyY=carry*LIFT;
+  // RUN 11.1: a vehicle hands over the whole impulse it computed from the contact (direction,
+  // side, closing speed, the victim's own motion). Anything else keeps the old throw.
+  let carry;
+  if(impulse&&Number.isFinite(impulse.x)&&Number.isFinite(impulse.z)){
+   p.flyX=impulse.x;p.flyZ=impulse.z;p.flyY=Math.max(0,impulse.y||0);carry=Math.hypot(impulse.x,impulse.z);
+  }else{
+   carry=Math.max(LAUNCH_MIN,speed*LAUNCH);const len=Math.hypot(dx,dz)||1;
+   p.flyX=dx/len*carry;p.flyZ=dz/len*carry;p.flyY=carry*LIFT;
+  }
   p.flyGround=this.network.ctx.height(p.x,p.z);p.flyHeight=0;p.flySettled=0;
   // Tumble about the axis across the throw, faster the harder the hit, and in a direction
   // that depends on which way the body was facing when it was caught.
@@ -123,6 +131,10 @@ export class CrowdSimulation{
   if(!airborne){p.flyHeight=0;if(p.flyY<0)p.flyY=-p.flyY*.22;if(p.flyY<1.2)p.flyY=0;}
   const drag=Math.max(0,1-(airborne?AIR_DRAG:GROUND_DRAG)*dt);
   p.flyX*=drag;p.flyZ*=drag;
+  // RUN 11.1: a body sliding on tarmac also loses a fixed amount every second, so it comes to
+  // a definite stop instead of creeping on for metres at walking pace. That is most of what
+  // makes a person read as heavy.
+  if(!airborne){const v=Math.hypot(p.flyX,p.flyZ);if(v>0){const k=Math.max(0,v-GROUND_FRICTION*dt)/v;p.flyX*=k;p.flyZ*=k;}}
   const nx=p.x+p.flyX*dt,nz=p.z+p.flyZ*dt;
   if(this.network.ctx.solid(nx,nz,RADIUS)){p.flyX=0;p.flyZ=0;}
   else{p.x=nx;p.z=nz;p.flyGround=this.network.ctx.height(nx,nz);}

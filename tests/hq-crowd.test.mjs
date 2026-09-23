@@ -176,7 +176,10 @@ test('bodies hit together do not all fall the same way',()=>{
   hit++;
   angles.add(Math.round(Math.atan2(crowd.state.impulseZ[i],crowd.state.impulseX[i])*8));
  }
- assert.ok(hit>=20,`only ${hit} were knocked down`);
+ // RUN 11.1: contact is face-aware now. A car going straight ahead knocks down the people in
+ // front of it; the ones this widened radius puts ten metres to its side have no closing
+ // speed and are not hit, which is correct. Enough still go down to judge the spread.
+ assert.ok(hit>=10,`only ${hit} were knocked down`);
  assert.ok(angles.size>=2,`${hit} bodies share ${angles.size} fall direction(s)`);
  crowd.dispose();
 });

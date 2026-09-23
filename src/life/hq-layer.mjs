@@ -181,6 +181,12 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
       }
      }
      crowd.place(i,x,p.height??0,z,p.heading??0,p.speed??0);
+    }else if(p.struck!==undefined){
+     // RUN 11.1: a body the SIMULATION threw is where its flight says, arc included. The crowd
+     // used to run a second, unrelated impulse, so the body the player saw dropped nearly in
+     // place while the pedestrian it stood for slid metres down the road.
+     crowd.follow(i,p.x,p.height??0,p.z);
+     rising.delete(p.id);
     }
     // The simulation decides how long a thrown body stays down (`struck`): 4.9 s for a driver
     // dragged out of a car, longer for anyone else. The HQ chain reached RECOVER at 3.9 s,

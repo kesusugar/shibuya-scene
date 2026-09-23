@@ -306,7 +306,8 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
   ready:new Float32Array(max),      // crowd time before which this citizen will not re-alarm
   attention:new Float32Array(max),  // heading toward whatever they last noticed
   calmed:new Uint8Array(max),       // the reaction `ready` is cooling off from
-  waiting:new Uint8Array(max)       // standing at a kerb for the signal: Idle, not Walk
+  waiting:new Uint8Array(max),      // standing at a kerb for the signal: Idle, not Walk
+  light:new Uint8Array(max)         // this HIT is a flinch that ends standing, not a knockdown
  };
  // The palette also lives here, not only in the instanced attribute, because moving a citizen
  // between LOD lanes has to rewrite it into the new lane and an attribute is write-mostly.
@@ -357,7 +358,7 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
    state.phase[i]=((h>>>8)&1023)/1023;
    state.rate[i]=.88+((h>>>18)&255)/255*.24;
    state.behaviour[i]=STATE.NORMAL;state.timer[i]=0;
-   state.noticed[i]=0;state.ready[i]=0;state.attention[i]=0;state.calmed[i]=0;state.waiting[i]=0;
+   state.noticed[i]=0;state.ready[i]=0;state.attention[i]=0;state.calmed[i]=0;state.waiting[i]=0;state.light[i]=0;
    state.health[i]=100;state.fallen[i]=0;
    state.impulseX[i]=state.impulseZ[i]=state.impulseY[i]=0;
    palette[i*4]=PACK(look.skin);palette[i*4+1]=PACK(look.top);
@@ -481,6 +482,16 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
   clipName(i){return i<0||i>=population?null:clipFor(state.behaviour[i],state.waiting[i]);},
 
   /**
+   * Put a thrown body where the simulation's flight has it, arc height included, and drop
+   * the crowd's own impulse so the two never pull it different ways. RUN 11.1.
+   */
+  follow(i,x,y,z){
+   if(i<0||i>=population)return false;
+   state.x[i]=x;state.y[i]=y;state.z[i]=z;
+   state.impulseX[i]=state.impulseZ[i]=state.impulseY[i]=0;
+   return true;
+  },
+  /**
    * Keep the current state from draining for at least `seconds` more. For a body whose end the
    * simulation decides rather than this timer -- someone it is still holding on the ground.
    */
@@ -490,12 +501,15 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
    return true;
   },
 
-  setState(i,behaviour,{impulseX=0,impulseZ=0,impulseY=0,force=false}={}){
+  setState(i,behaviour,{impulseX=0,impulseZ=0,impulseY=0,force=false,light=false,hold}={}){
    if(i<0||i>=population)return false;
    if(!force&&state.timer[i]>0&&priority(behaviour)<priority(state.behaviour[i]))return false;
    if(state.behaviour[i]===behaviour&&!force)return false;
    state.behaviour[i]=behaviour;
-   state.timer[i]=STATE_HOLD[behaviour]??0;
+   state.timer[i]=hold??STATE_HOLD[behaviour]??0;
+   // RUN 11.1/11.2: a LIGHT hit is a flinch or a stumble and ends on the feet. Without it every
+   // HIT drained into KNOCKDOWN, so a shove from a creeping car or a jab floored everyone.
+   state.light[i]=behaviour===STATE.HIT&&light?1:0;
    if(behaviour===STATE.KNOCKDOWN||behaviour===STATE.HIT){
     state.impulseX[i]=impulseX;state.impulseZ[i]=impulseZ;state.impulseY[i]=impulseY;
    }
@@ -538,7 +552,7 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
       // Somebody who has just run from something does not resume strolling on the same
       // frame they stop, and RECOVER is the state that already means "wary, getting over
       // it". Every awareness state still ends at NORMAL; none of them is terminal.
-      const next=behaviour===STATE.HIT?STATE.KNOCKDOWN
+      const next=behaviour===STATE.HIT?(state.light[i]?STATE.NORMAL:STATE.KNOCKDOWN)
        :behaviour===STATE.KNOCKDOWN?STATE.DOWNED
        :behaviour===STATE.DOWNED?STATE.RECOVER
        :behaviour===STATE.FLEE?STATE.RECOVER

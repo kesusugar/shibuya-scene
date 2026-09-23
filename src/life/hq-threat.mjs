@@ -12,6 +12,8 @@
  * is the whole reason this is a separate module.
  */
 import {STATE} from './hq-crowd.mjs';
+import {vehicleImpact} from '../player/vehicle-impact.mjs';
+import {VEHICLES} from '../traffic/config.mjs';
 
 export const THREAT={
  cell:4,                 // metres. A car is ~4.5 m long, so a swept box spans a few cells.
@@ -91,16 +93,16 @@ export function applyVehicleThreat(crowd,grid,car,dt,scratch=[]){
 
   // Contact: inside the body of the car, whatever direction they were walking.
   if(along>-1.2&&along<2.6&&across<THREAT.hitRadius){
-   const push=Math.max(THREAT.knockSpeed,speed)*THREAT.launch;
-   const away=across<.05?{x:dirX,z:dirZ}:{x:(dx*dirZ-dz*dirX)>0?dirZ:-dirZ,z:(dx*dirZ-dz*dirX)>0?-dirX:dirX};
-   // Thrown along the car and away from its centreline, so a row of people does not all
-   // fall the same way -- the side they were caught on decides.
-   crowd.setState(i,speed>=THREAT.knockSpeed?STATE.KNOCKDOWN:STATE.HIT,{
-    impulseX:dirX*push+away.x*push*.45,
-    impulseZ:dirZ*push+away.z*push*.45,
-    impulseY:Math.min(4.2,1.4+speed*.18),
-    force:true});
-   result.knocked++;result.hit++;
+   // RUN 11.1: the same contact model the simulation's throw uses -- face, offset, closing
+   // speed and the victim's own motion -- so the HQ body and the pedestrian agree. A stopped
+   // car shoves nobody.
+   const r=vehicleImpact(car,VEHICLES[car.type]??VEHICLES.sedan,
+    {x:x[i],z:z[i],heading:crowd.state.heading[i],speed:crowd.state.speed[i]},{type:car.type});
+   if(r.closing<.3)continue;
+   crowd.setState(i,r.state==='HIT'?STATE.HIT:STATE.KNOCKDOWN,{
+    impulseX:r.impulse.x,impulseZ:r.impulse.z,impulseY:r.impulse.y,
+    light:r.kind==='push',force:true});
+   if(r.kind==='push')result.hit++;else{result.knocked++;result.hit++;}
    continue;
   }
   if(along<0)continue;                          // behind the car
