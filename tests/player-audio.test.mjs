@@ -35,3 +35,13 @@ test('no audio context is simply silence',()=>{
   assert.doesNotThrow(()=>{audio.swing();audio.punchHit();audio.bodyImpact();audio.runover();});}
  finally{globalThis.AudioContext=saved;}
 });
+
+test('a suspended context makes no sound and does not fill the voice budget',()=>{
+ const {Ctx,log}=fakeContext();class Suspended extends Ctx{constructor(){super();this.state='suspended';}}
+ const saved=globalThis.AudioContext;globalThis.AudioContext=Suspended;
+ try{const audio=createPlayerAudio();audio.resume();
+  for(let i=0;i<50;i++)audio.bodyImpact(1);
+  assert.equal(audio.ringing,0,'suspended sounds were counted as ringing and never released');
+  assert.equal(log.sources,0);}
+ finally{globalThis.AudioContext=saved;}
+});

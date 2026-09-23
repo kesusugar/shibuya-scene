@@ -69,7 +69,8 @@ export function createPlayerAudio() {
  let ringing = 0;
  /** One burst of filtered noise: a collision, a body, a fist, a swing. */
  const burst = (level, ms, cutoff, {type = 'lowpass', sweepTo = null, q = .7} = {}) => {
-  if (!ctx || !engine || ringing >= AUDIO.maxVoices) return false;
+  // A suspended context never ends a source, which would pin `ringing` at the cap for good.
+  if (!ctx || !engine || ctx.state !== 'running' || ringing >= AUDIO.maxVoices) return false;
   const src = ctx.createBufferSource(); src.buffer = noiseOf(ms);
   const filter = ctx.createBiquadFilter(); filter.type = type; filter.frequency.value = cutoff; filter.Q.value = q;
   if (sweepTo) filter.frequency.exponentialRampToValueAtTime(sweepTo, ctx.currentTime + ms / 1000);
@@ -81,7 +82,8 @@ export function createPlayerAudio() {
  };
  /** A short, falling sine for the body of a thump, under the noise. */
  const thump = (level, hz, ms) => {
-  if (!ctx || !engine || ringing >= AUDIO.maxVoices) return false;
+  // A suspended context never ends a source, which would pin `ringing` at the cap for good.
+  if (!ctx || !engine || ctx.state !== 'running' || ringing >= AUDIO.maxVoices) return false;
   const osc = ctx.createOscillator(); osc.type = 'sine'; osc.frequency.value = hz;
   const t = ctx.currentTime, gain = ctx.createGain();
   osc.frequency.exponentialRampToValueAtTime(Math.max(30, hz * .45), t + ms / 1000);
