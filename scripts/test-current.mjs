@@ -35,6 +35,7 @@ const files=[
  'tests/pedestrian-threat.test.mjs',
  'tests/npc-awareness.test.mjs',
  'tests/launch-config.test.mjs',
+ 'tests/hq-request.test.mjs',
  'tests/asphalt-material.test.mjs',
  'tests/build-runner.test.mjs',
  'tests/build-scheduling.test.mjs',

@@ -35,3 +35,15 @@ test('preview and UI tests keep separate optimizer caches', () => {
   assert.match(preview, /cacheDir:.*vite-local/);
   assert.match(ui, /cacheDir:.*vite-ui-tests/);
 });
+
+test('the HQ crowd is the default; hq=0 / hq=false remain the legacy rollback', () => {
+  // Absent: the tier default, not the legacy capsule crowd.
+  assert.equal(parseLaunchConfig().hqCrowd, -1);
+  assert.equal(parseLaunchConfig('?tier=medium&time=day').hqCrowd, -1);
+  for (const on of ['?hq', '?hq=', '?hq=1', '?hq=true']) assert.equal(parseLaunchConfig(on).hqCrowd, -1, on);
+  for (const off of ['?hq=0', '?hq=false']) assert.equal(parseLaunchConfig(off).hqCrowd, 0, off);
+  assert.equal(parseLaunchConfig('?hq=512').hqCrowd, 512);
+  assert.equal(parseLaunchConfig('?hq=128.9').hqCrowd, 128);
+  // Garbage never silently falls back to the legacy bodies.
+  assert.equal(parseLaunchConfig('?hq=yes').hqCrowd, -1);
+});
