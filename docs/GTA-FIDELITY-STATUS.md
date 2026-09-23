@@ -19,9 +19,9 @@ in use now is a placeholder for the pipeline, not the final visual asset.
 ## 2. Branch and HEAD
 
 - Working branch: **`claude/gta-fidelity-upgrade`**, pushed to `origin`. Stay on it.
-- RUN 10.1 handoff HEAD: **`76dc411`**. RUN 10.2–10.5 follow it on this branch; use `git log -1`
-  for the current HEAD. Older HEAD lines and the old roadmap lower in this document are
-  historical snapshots and are superseded by §9g.
+- RUN 10.1 handoff HEAD: **`76dc411`**. RUN 10.2–10.5 follow it on this branch; RUN 11 starts
+  from `b037bc8` (§9h). Use `git log -1` for the current HEAD. Older HEAD lines and the old
+  roadmap lower in this document are historical snapshots and are superseded by §9g.
 - RUN 8 and RUN 9 are complete. The old RUN 7 WIP at `f6aa8e8` was found active in production
   and replaced by the single HQ authority in RUN 10.1.
 - `master` is untouched by this work and must stay that way. It moved ahead independently
@@ -68,7 +68,7 @@ cdb6271  RUN 6.7: near-pool budgets on every tier
 | 8 | Melee combat phases + mass crowd reaction | **COMPLETE** |
 | 9 | Vehicle occupancy / enter-exit / carjacking | **COMPLETE** |
 | 10 | NPC life / awareness consolidation | complete: browser acceptance closed 2026-09-23 (§9g) |
-| 11 | Carjacking | folded into RUN 9 |
+| 11 | Visual / audio / GTA feel polish | **COMPLETE** 2026-09-23 (§9h) |
 | 12 | Lighting / PBR polish | not started |
 | 13 | Performance / stability | not started |
 | 14 | Final QA and handoff | not started |
@@ -1495,6 +1495,318 @@ regression); `npm run build` successful, and its static re-bake left the tree un
 fresh-page console gate on this code, day and night: 0 errors, 0 uncaught exceptions, 0 shader
 messages, no banner.
 
+
+## 9h. RUN 11 — Visual / audio / GTA feel polish
+
+Started from `b037bc8` (RUN 10 complete). Work was done on a local worktree branch and
+fast-forwarded onto `claude/gta-fidelity-upgrade`; `master` was not touched. Browser QA ran in
+the real HIGH/day scene with `?qa=1&hq=1`, driven over the DevTools protocol in headless
+Chromium on SwiftShader at 0.1–1.5 fps. With `FrameGate` clamping dt to 0.1 s, every live check
+waits on simulated progress, and no frame rate here is a performance result.
+
+### 11.0 Regression cleanup (`401334e`)
+
+**Old-looking bodies.** Re-diagnosed live rather than trusting RUN 10's count. For every
+pedestrian within 20 m of the player the QA pass recorded owner, near body type, HQ lane LOD and
+state:
+- all were HQ (L0) or near humanoids;
+- the legacy renderer drew **no bodies**;
+- it DID still draw **971 props** on those same citizens: 657 phones, 174 bags, 63 canes,
+  63 suitcases and 14 cone umbrellas.
+
+The prop parts were never masked with the body. HQ and near citizens therefore wore the legacy
+capsule's box phone, bag and suitcase and a floating cone umbrella, sized for a capsule, and
+after a hit these tumbled on the legacy arc. That is what read as blocky old bodies around the
+player, on crossings, in dense crowds and after contact. Props are now drawn only with a legacy
+body. Live afterwards: 0 legacy props, 0 legacy bodies, 0 drawn twice, 1,969–1,970 HQ plus 7–8
+near humanoids and 0 baked. `tests/crowd-legacy-props.test.mjs` builds the real crowd renderer
+with the HQ pack and pins this.
+
+**Walking on the spot at red lights.** RUN 10's Idle keyed on `p.state === 'waiting'` alone.
+Measured at a red phase, the defect was a waiting citizen who glanced at the player: they went
+to LOOK, and LOOK borrows the Walk clip. LOOK now keeps the stance underneath; STARTLE, AVOID,
+FLEE and every physical state still win.
+`src/life/stance.mjs` also counts as waiting:
+- the scramble cast standing at the kerb between crossings (`exiting`/`recycle`);
+- the queue behind the front row, through a `kerbQueue` flag the simulation sets when a blocked
+  walker is within 8 m of a closed crossing.
+Speed alone never decides. Live at a red phase: **1,455/1,455** waiting HQ citizens and
+**8/8** near humanoids Idle. The 120 other stopped walkers were ordinary congestion across the
+city (87 of them for under 2 s), none at the scramble, and keep Walk.
+
+### 11.1 Vehicle impact realism (`db1d180`)
+
+**Why hits read wrong.** Two unrelated models ran on one contact:
+- *Simulation:* it threw every body along the car's course, whatever part of the car struck
+  it, and put 57% of the horizontal speed upwards. A 20 m/s hit flew about 36 m.
+- *HQ body:* it ran its own second impulse and usually dropped almost where it stood, so the
+  body the player saw did not follow the simulation.
+- *Car:* its speed bled off at a flat rate per frame of contact, which double-counted a crowd
+  and ignored mass.
+
+**One contact model** (`src/player/vehicle-impact.mjs`, pure):
+- *Inputs:* the car's velocity vector, which face hit (front, side or rear), where on that
+  face, the closing speed along the contact normal, and the victim's own motion.
+- *Output:* an impulse, a lift, a state and the speed the car loses.
+- *Kinds:* push (closing < 2.2 m/s: a light HIT that stumbles and stays standing), knock,
+  heavy (≥ 7) and launch (≥ 14). The throw is 0.8 × closing, capped at 14 m/s, with a low lift
+  (≤ 3.2 m/s), so a body is thrown rather than launched into the air.
+- *Direction:* a corner deflects the body off that corner, weighted by how far off-centre the
+  contact is. A side swipe throws sideways.
+
+**Following the throw.** Both the simulation's throw (`strike` now takes the impulse) and the HQ
+contact use the model. A disowned HQ body now follows the simulation's flight, arc included,
+through `crowd.follow`, instead of its own. Thrown bodies get 3.5 m/s² of sliding friction on
+the ground, so they come to rest definitively.
+
+**Weight and crowd resistance.** Each contact costs the car speed by momentum exchange: 75 kg
+against the vehicle's own mass, 20% restitution, plus a little contact drag. The flat bleed is
+gone. A body already lying in the road is shoved forward at most three times (every 0.35 s),
+keeps its sideways motion and is never carried along.
+
+**Numbers** (`tests/vehicle-impact-live.test.mjs`, real player vehicle, real flight):
+
+| Case | Result |
+| --- | --- |
+| Travel after the hit at 4 / 10 / 18 m/s | 1.37 / 5.73 / 10.86 m |
+| 10 m/s sedan, one contact | 9.20 m/s |
+| … then over that body lying in the road | 8.49 m/s |
+| … ten people in a line | 1.95 m/s |
+| … a dense block of 30 | 0.95 m/s |
+
+### 11.2 Melee feel (`efb6fbf`, `6162a32`)
+
+**Why a punch looked like a touch.** `controller.startAttack` ignored the attack's name and
+length, so the figure always played `Punch` (never the cross), squeezed into the last 0.42 s
+of a 0.87–1.0 s swing. That is double speed, and it came 0.2–0.35 s AFTER the measured hit
+window had already run the damage. The swing now carries its name and duration, and the clip
+plays at its own speed, so the frame the fist is out is the frame the hit test runs.
+
+On top of the clip, an additive envelope (`punchEmphasis`):
+- winds the torso up away from the punching side;
+- drives spine_02/03 through with the shoulder, leans in and steps the body 11 cm forward;
+- peaks exactly at the measured fist-out time and settles to zero.
+
+`tests/melee-feel.test.mjs` pins the peak to the measured `peak` and inside the hit window.
+`Hit_Knockback` (UAL2) was not integrated: the repository's character sources are fetched
+through `assets/character/upstream.lock.json` with hashes of the official archive, and UAL2 has
+no such pinned provenance here. See limitations.
+
+**Victims** (`src/life/temperament.mjs`):
+- *How a blow lands:* `blowOn()` gives each blow a strength (jab = light flinch, 0.34 s,
+  0.9 m/s push; cross = strong stagger, 0.55 s, 1.7 m/s) and a direction away from the fist,
+  classified by the victim's own quarter (front, back, left, right).
+- *Movement:* the simulation owns a short stagger, counted down by the frame and never applied
+  to anyone on a crossing or the cast.
+- *HQ bodies:* a light HIT that stays owned by the simulation (no disown), then gives way to
+  the chosen answer through a new `then` state.
+- *Near bodies:* they play `Hit` for the blow's hold. Before, the victim was handed
+  `combatAction = 1` and played its own Punch.
+
+**Retaliate / flee / back off.** Everyone punched used to turn and fight for 14 s. The answer is
+now a deterministic temperament on the same nerve awareness uses:
+- fight (nerve > .68) engages as before;
+- flee (< .42) runs through the simulation's scatter and HQ FLEE;
+- back off (in between) takes a short scatter and AVOID.
+
+Kids and the elderly never fight. Over the 1,978 ids each answer covers more than 15%, and fewer
+than half fight. The crossing/cast rule is unchanged: they take the blow and are not stopped.
+
+### 11.3 / 11.4 Witnesses, feedback, audio, camera (`082f702`, `4225ab8`)
+
+**Witnesses** (`hq-awareness.witness`, `WITNESS`):
+- *Close:* inside 5 m the whole reaction is immediate.
+- *Middle distance:* the witness LOOKs first. The rest arrives after their own reaction delay
+  (×1.6), plus 0.035 s per metre and 0.3 s if they were facing away.
+- *Far edge:* the outer 20% of the radius only looks.
+- *Queue:* escalations wait in a bounded queue (256) that the layer flushes every frame. A
+  knocked-down witness is never lifted by one.
+- *Vehicle accidents:* a car hit raises an accident witness event (severity 0.55 + closing/15,
+  16 m radius), at most one pass per 0.25 s because a pass rebuilds the grid. Three or more
+  reacting produce a `crowd_gasp`.
+
+**Event hooks** (`src/app/feedback-bus.mjs`): `vehicle_impact`, `vehicle_runover`,
+`pedestrian_scream`, `punch_swing`, `punch_hit`, `pain_voice`, `crowd_gasp`, `panic_voice`.
+Each kind has a cooldown, coincident events of one kind merge into one (the loudest), and a frame
+delivers at most 6.
+
+**Audio.** Still entirely synthesised: no samples are shipped and there are no new assets or
+licences.
+- *New sounds:* a swing (a band of noise sweeping up), a punch hit (a body thump plus a short
+  slap), a vehicle–person impact (heavier and lower), and a run-over thump.
+- *Pooling and caps:* noise buffers are generated once per length and shared (it was a fresh
+  random buffer per hit). At most 6 one-shots ring at once, and nothing starts on a suspended
+  context, which never releases a source and would have pinned the cap.
+- *Voices:* pain (うっ／いたっ／ぐっ) and gasp (えっ) go through the simulation's own voice queue,
+  so its per-person cooldown and the 4-voice cap apply.
+
+**Camera and visual.** Person hits added shake multiplied by the number hit in the frame, so a
+crowd pinned the camera at full throw (0.42 m). There is now one bounded knock per frame of
+contact (max 0.45) and a small punch knock (max 0.25). A contact raises a low road-dust puff from
+the existing 72-particle effects pool, adding no draw call. The existing blood marks were not
+increased.
+
+### 11.5 Browser acceptance
+
+Real HIGH/day scene, `?qa=1&hq=1`, headless Chromium on SwiftShader. Every scenario opened a
+fresh page, and each checkpoint took the same census: population, owners, legacy props and
+bodies, Skeleton and AnimationMixer counts, draw calls, non-finite transforms, behaviour
+histogram, disowned and struck bodies, and feedback bus statistics.
+
+**A. Old-looking bodies.** Checked at start, middle and end of every scenario below:
+- 0 legacy props and 0 legacy bodies on HQ or near citizens;
+- 0 citizens drawn twice and 0 baked;
+- HQ 1,968–1,970 plus 7–8 near humanoids, population 1,976–1,978 (the gap is victims
+  recycling).
+
+**B. Signal waiting** (two full red → green cycles, simulations pumped to each phase and then
+40 s of real frames to apply the clips):
+
+| Cycle | Red: HQ waiting Idle | Red: near Idle | Green: HQ crossing Walk | Green: near Walk |
+| --- | --- | --- | --- | --- |
+| 1 (signal 140 s / 200 s) | 1,455 / 1,455 | 8 / 8 | 1,455 / 1,455 | 8 / 8 |
+| 2 (signal 248 s / 308 s) | 1,456 / 1,456 | 7 / 7 | 1,455 / 1,455 | 8 / 8 |
+
+No waiting citizen was on Walk and no crossing citizen on Idle.
+
+**C. Vehicle impacts** (player car aimed at a single pedestrian, then at the densest 4 m cell):
+
+| Case | Kind | Face | Closing | Travel | Direction vs expected |
+| --- | --- | --- | --- | --- | --- |
+| Low, 4 m/s | knock | front | 6.51 m/s* | 1.15 m | 6.6° |
+| Mid, 9 m/s | knock | front | 5.62 m/s | 1.47 m | −2.3° |
+| High, 15 m/s | heavy | front | 9.69 m/s | 3.88 m | 0° |
+| Diagonal, 9 m/s, 0.8 off-centre | heavy | front | 8.77 m/s | 2.97 m | −12.3° (deflected off the corner) |
+
+\* The low-speed pedestrian was walking into the car, which adds to the closing speed.
+
+- *Every victim:* HQ went DOWNED on `Fall`, with the HQ body 0 m from the simulation's and a
+  flight arc of at most 0.28 m.
+- *Dense cell of 88 at 10 m/s:* 5.1 m/s after 7 hits, 0.68 after 18, then stopped. The car
+  was not carried through.
+- *After the hits:* 17 DOWNED and disowned, 56 AVOID, 83 LOOK (witness tiers). Eighteen
+  seconds later there were 0 disowned and 0 struck, and the victims had recycled.
+- *Feedback:* 70 events emitted, 23 merged, 6 throttled, 41 delivered, at most 3 in one frame.
+- *Smoke (§F):* a dense cell of 122 took 7 hits and stopped the car.
+
+**D. Melee** (12 swings next to walking pedestrians, 10 hits):
+- *Clips:* both `Punch` and `PunchCross` played. The hit landed at clip progress 0.115 / 0.20,
+  inside the measured window (one frame of ordering offset).
+- *Victims:* every near-body victim played `Hit` for the blow's hold.
+- *Answers:* back off 5, fight 4, flee 1.
+- *Afterwards:* all NORMAL again after 16 s, and no hostile left.
+- *Feedback:* 32 events, at most 2 in a frame.
+
+**E. Witnesses.** Tiers were seen live in C (AVOID close, LOOK further out). Escalation from LOOK
+to AVOID/FLEE is pinned by `tests/awareness.test.mjs`, including the 256-entry bound.
+
+**F. Long mixed smoke** (one page, in order): walk → run → wait at red at the scramble kerb →
+cross on the green → three punches on one pedestrian → carjack → drive → hit → dense crowd →
+get out → walk → 20 s settle.
+- *Punches:* three hits, light/back, strong/left, then light/left and fatal. The victim, a
+  fleer, went DOWNED on `Fall` under HQ ownership.
+- *Carjack:* succeeded, and the thrown driver was later milling with `cameFromVehicle` set.
+- *Hit:* the single-pedestrian hit in this run found no clear line (a building stood between
+  car and target) and was skipped. C covers it.
+- *Dense crowd:* 7 hits, car stopped.
+- *Settled:* population 1,978 (HQ 1,969, near 8), every HQ citizen NORMAL, 0 reacting, 0 down,
+  0 disowned, 0 struck. 62 drivers seated, 0 legacy props or bodies, 0 non-finite.
+- *Feedback:* 19 emitted, 5 merged, 1 throttled, 13 delivered, at most 3 in a frame.
+- *Harness notes:* the harness stepped the player onto the road after getting out, and a
+  passing kei car ran the player over. That is existing behaviour (the `轢かれました` retry
+  banner). The run hit its 90-minute wall-clock limit before the last two steps; they were
+  finished on the same open page.
+- *Errors:* all 50 page log entries of the run were replayed on re-attach: 0 errors,
+  0 exceptions, 0 shader failures. The only warnings were Chrome's headless AudioContext
+  autoplay notices.
+
+**G. Structure.**
+- 0 `Skeleton` and 0 `AnimationMixer` on crowd citizens in every census.
+- HQ draws stayed at 12; total draw calls 442–461 (RUN 10: 444–458).
+- No per-pedestrian physics bodies.
+- Audio: 0 one-shots ringing in any census (the headless context stays suspended). The pool
+  cap and the suspended guard are pinned in `tests/player-audio.test.mjs`.
+- No new startup work: the noise buffers are built lazily, once per length.
+
+**Console gate.** Fresh pages, HIGH, `hq=1`, day then night, on the RUN 11 code. Day covered
+walking, running, a punch, boarding, driving and getting out; night covered load and idle.
+- **0 errors, 0 uncaught exceptions, 0 shader-compile messages, no `[role="alert"]` banner.**
+- 0 Skeletons and 0 Mixers. HQ 1,969 (day) and 1,972 (night); draw calls 473 / 477.
+- The only warnings were 3 per page of Chrome's AudioContext autoplay notice, as in RUN 10.
+
+**Final gates** (HEAD `6162a32`, before this document):
+- `npm run typecheck`: clean.
+- `npm test`: 439 total, **434 pass, 5 existing skips, 0 fail**. That is 36 new tests over
+  RUN 10's 403/398/5/0, with no regression.
+- `npm run build` (run by `npm test`): successful, and the static re-bake left the tree
+  unchanged.
+
+**RUN 10 limitations closed by this RUN:**
+- LOOK no longer walks a waiting citizen on the spot.
+- The throw is now drawn on the HQ body (`crowd.follow`).
+- A light push no longer knocks anyone down.
+- The NPC hit reaction is directional in movement: the push goes away from the fist and is
+  classified by quarter. It still uses the same `Hit` clip, so it is not directional in
+  animation.
+
+**Remaining known limitations:**
+- **`Hit_Knockback` is not integrated.** UAL2 is CC0 by its authors' statement, but this
+  repository fetches character sources only through `assets/character/upstream.lock.json`, with
+  the official archive's hash, and UAL2 has no pinned lock here. Adding it is an asset-pipeline
+  change, not a RUN 11 polish item. The victim's `Hit` still barely moves, and a front blow and
+  a back blow play the same clip; the stagger and push carry the direction.
+- **HQ and near citizens carry no props.** Masking the legacy props removed the capsule-sized
+  box phones and cone umbrellas. The HQ pack has no prop meshes, so no citizen near the player
+  shows a phone, bag or umbrella now. That needs new assets.
+- **Crossing and cast victims are not stopped.** A victim on a crossing or in the scramble cast
+  takes the blow (HQ HIT and near `Hit`) but is not staggered by the simulation, for the reason
+  in §18.
+- **The kerb queue flag rarely fires in practice.** The cast's own `exiting`/`recycle` states
+  cover most of the scramble. It exists for non-cast queues behind a closed crossing.
+- **A stationary player car still makes people within 8 m ahead AVOID** (RUN 10, unchanged).
+- **The near pool has no reaction clocks** (RUN 10, unchanged). Its eight bodies react on the
+  frame.
+- **Audio could not be heard in this environment.** The headless AudioContext never leaves
+  `suspended`. Scheduling, pooling, caps and the suspended guard are unit-tested against a fake
+  context, but loudness and mix balance need a listening pass in a real browser.
+- **Third-cycle central-stream spillback in the browser** (RUN 10 K) stays a known limitation.
+  RUN 11 does not touch traffic or signals, and the two signal cycles above ran without it.
+- The player can be run over by traffic after getting out in a road. This is existing
+  gameplay and is unchanged.
+
+**Performance observations** (structural only; SwiftShader frame rates are not a result):
+- Nothing new per frame is O(population). The feedback bus is O(events), with a 6-event cap.
+- The witness escalation queue is bounded at 256 and flushed in O(pending).
+- A vehicle contact costs a grid lookup of the car's cells, as before.
+- The accident witness pass reuses `witness`, at most 4 times a second.
+- No new draw calls: dust uses the existing particle pool, and props were removed.
+- Noise buffers are built lazily, once per length.
+
+**Carried to RUN 12:**
+- The HQ layer ranks all ~1,978 citizens every frame (~2.3 ms).
+- `witness` rebuilds the grid on every call (0.56 ms at 1,978). The accident pass makes this
+  more frequent in dense crashes, capped at 4 per second.
+- The QA-only `ownership()` census is O(population); it is QA-gated.
+- LOW/MEDIUM prebake coverage.
+
+**New assets and licences:** none. Every RUN 11 sound is synthesised at runtime. No samples, no
+models, no textures and no new dependencies.
+
+**Commits** (on `claude/gta-fidelity-upgrade`, on top of `b037bc8`):
+
+```
+401334e  RUN 11.0: fix crowd render and signal-idle regressions
+db1d180  RUN 11.1: directional vehicle impact, weight, and crowd resistance
+efb6fbf  RUN 11.2: a punch that reads as a punch, and victims who answer it
+082f702  RUN 11.3/11.4: witness panic, feedback events, audio, camera, dust
+4225ab8  RUN 11.4: never start a one-shot on a suspended AudioContext; QA hooks for feedback and audio
+6162a32  RUN 11.5: report the last landed blow (victim, answer, strength) in the melee snapshot for QA
+```
+
+This document is committed on top of `6162a32`; `git log -1` is the final HEAD.
+
+**RUN 11 COMPLETE.** RUN 12 was not started.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
@@ -1752,8 +2064,9 @@ seconds. Check the fresh case before blaming the harness.
 - **The layer ranks all ~1,978 pedestrians by distance every frame** to spend its budget
   nearest the camera — about 2.3 ms, and the clearest remaining CPU target. Re-ranking on a
   slower cadence would cut most of it.
-- **A 120-second signal cycle was measured headlessly in RUN 10** (§9g); live browser
-  signal progression with the new awareness pass still needs capture.
+- **A 120-second signal cycle was measured headlessly in RUN 10** (§9g). RUN 11 captured two
+  live browser red → green cycles with the awareness pass running (§9h B); the RUN 10
+  third-cycle central-stream spillback is still open.
 - ~~The HQ crowd looks washed out in the scene.~~ **Fixed in RUN 7C** — it was a colour-space
   bug in the crowd shader, not the scene. See §9d.
 - **The garment boundary softens at LOD2.** Decimation blurs the mask, so a sleeve fades into
@@ -1789,8 +2102,9 @@ seconds. Check the fresh case before blaming the harness.
 - **There is one punch combination and no combos.** `Punch` and `PunchCross` alternate. There
   is no input buffering — a press during recovery is dropped, not queued — so the rhythm is
   the clips' own. Blocking, dodging, grappling and weapons do not exist.
-- **The NPC hit reaction is the existing `Hit`/knockdown chain, not a directional one.** A
-  punch from the front and a punch from behind produce the same animation. `hit` remains a
+- **The NPC hit animation is the existing `Hit`/knockdown chain, not a directional one.** A
+  punch from the front and a punch from behind produce the same clip; since RUN 11 the push and
+  stagger go away from the fist (§9h). `hit` remains a
   **C** for the reason recorded above.
 - ~~The shader-compile banner appears in this headless SwiftShader browser.~~ **Fixed in RUN 8**
   — see §9e; it was a real redefinition in the vehicle shadow shader, not the environment.
