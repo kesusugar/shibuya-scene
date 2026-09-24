@@ -55,6 +55,7 @@ const files=[
  'tests/cafe-frontage.test.mjs',
  'tests/core-readability.test.mjs',
  'tests/headlight-glows.test.mjs',
+ 'tests/traffic-fleet.test.mjs',
  'tests/high-graphics.test.mjs',
  'tests/lightboxes.test.mjs',
  'tests/network-startup.test.mjs',
