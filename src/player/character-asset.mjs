@@ -17,23 +17,34 @@
 //
 // Replacing the body later means producing this shape. It does not mean editing the player
 // controller, the camera, combat, or the crowd.
-import {Color,MeshStandardMaterial,ObjectLoader} from 'three';
+import {Color,MeshStandardMaterial,ObjectLoader,Vector2} from 'three';
 import {clone} from 'three/addons/utils/SkeletonUtils.js';
+import {GARMENT_PATTERN_GLSL} from '../life/garment-pattern.mjs';
 
-/** A citizen's five surfaces. Everything on the humanoid body is a mix of these. */
-export const WARDROBE=Object.freeze({skin:0xdfb994,top:0xc94d38,bottom:0x263443,hair:0x241d19,shoe:0x191a1f});
+/**
+ * A citizen's five surfaces. Everything on the humanoid body is a mix of these. The patterns
+ * (PLAN-LOOKS-AND-FLEET Step A) default to solid, and the player keeps that default: their red
+ * top stays one findable colour in a crowd that now wears stripes.
+ */
+export const WARDROBE=Object.freeze({skin:0xdfb994,top:0xc94d38,bottom:0x263443,hair:0x241d19,shoe:0x191a1f,
+ topPattern:0,bottomPattern:0});
 
 const ROUGHNESS=Object.freeze({skin:.62,top:.86,bottom:.8,hair:.52,shoe:.44});
 
 const UNIFORMS=`uniform vec3 uSkin;uniform vec3 uTop;uniform vec3 uBottom;uniform vec3 uHair;
-uniform vec3 uShoe;uniform float uRough[5];
+uniform vec3 uShoe;uniform float uRough[5];uniform vec2 uPattern;
+varying vec3 vGarm;
+${GARMENT_PATTERN_GLSL}`;
+// The bind-pose position, before skinning: a stripe is painted on the cloth, not the screen.
+const GARMENT_VERTEX=`varying vec3 vGarm;
 `;
 // The converter writes a garment weight per vertex: red is skin, green the top, blue the
 // trousers, alpha the hair, and whatever the four leave over is the shoe. The weights come
 // from the skin weights themselves, so the mix is already soft wherever the skinning is.
 const GARMENT=`
  float wShoe=max(0.,1.-vColor.r-vColor.g-vColor.b-vColor.a);
- diffuseColor.rgb=vColor.r*uSkin+vColor.g*uTop+vColor.b*uBottom+vColor.a*uHair+wShoe*uShoe;
+ diffuseColor.rgb=vColor.r*uSkin+vColor.g*garmentPattern(uTop,uPattern.x,vGarm)
+  +vColor.b*garmentPattern(uBottom,uPattern.y,vGarm)+vColor.a*uHair+wShoe*uShoe;
 `;
 // Skin, cotton, denim, hair and a shoe do not scatter light alike, and one roughness makes all
 // five look like the same plastic. The mix that picks the colour picks the roughness too.
@@ -61,12 +72,19 @@ export function dressCitizen(root,palette={}){
    roughness:ROUGHNESS.top,vertexColors:true});
   material.userData.palette={...colours};
   material.onBeforeCompile=shader=>{
-   shader.uniforms.uSkin={value:new Color(colours.skin)};
-   shader.uniforms.uTop={value:new Color(colours.top)};
-   shader.uniforms.uBottom={value:new Color(colours.bottom)};
-   shader.uniforms.uHair={value:new Color(colours.hair)};
-   shader.uniforms.uShoe={value:new Color(colours.shoe)};
+   // The palette as it is NOW, not as it was at construction: the near pool recolours a slot
+   // as soon as it is handed out, often before its first frame compiles this material, and
+   // reading the construction palette here gave every such person the default red top.
+   const worn=material.userData.palette;
+   shader.uniforms.uSkin={value:new Color(worn.skin)};
+   shader.uniforms.uTop={value:new Color(worn.top)};
+   shader.uniforms.uBottom={value:new Color(worn.bottom)};
+   shader.uniforms.uHair={value:new Color(worn.hair)};
+   shader.uniforms.uShoe={value:new Color(worn.shoe)};
    shader.uniforms.uRough={value:[ROUGHNESS.skin,ROUGHNESS.top,ROUGHNESS.bottom,ROUGHNESS.hair,ROUGHNESS.shoe]};
+   shader.uniforms.uPattern={value:new Vector2(worn.topPattern??0,worn.bottomPattern??0)};
+   shader.vertexShader=GARMENT_VERTEX+shader.vertexShader
+    .replace('#include <begin_vertex>','#include <begin_vertex>\n vGarm=position;');
    shader.fragmentShader=UNIFORMS+shader.fragmentShader
     // color_fragment has just multiplied the mask into diffuseColor; replace it outright.
     .replace('#include <color_fragment>','#include <color_fragment>'+GARMENT)
@@ -88,6 +106,7 @@ export function dressCitizen(root,palette={}){
     shader.uniforms.uSkin.value.set(merged.skin);shader.uniforms.uTop.value.set(merged.top);
     shader.uniforms.uBottom.value.set(merged.bottom);shader.uniforms.uHair.value.set(merged.hair);
     shader.uniforms.uShoe.value.set(merged.shoe);
+    shader.uniforms.uPattern.value.set(merged.topPattern??0,merged.bottomPattern??0);
    }
   }
  };

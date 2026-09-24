@@ -18,6 +18,7 @@ const files=[
  'tests/near-characters.test.mjs',
  'tests/near-humanoid.test.mjs',
  'tests/appearance.test.mjs',
+ 'tests/garment-pattern.test.mjs',
  'tests/hq-crowd.test.mjs',
  'tests/hq-layer.test.mjs',
  'tests/hq-sync-cost.test.mjs',
