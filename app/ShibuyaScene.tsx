@@ -38,7 +38,7 @@ import {createFrameSamples,waitForRenderedFrames} from '../src/qa/frame-samples.
 import {createDeferredVehicleVisual as createVehicleVisual} from '../src/player/deferred-vehicle-visual.mjs';
 import {createVehicleEffects} from '../src/player/effects.mjs';
 import {createPlayUI} from '../src/player/play-ui.mjs';
-import {reactToRunner,settleNearbyWaiters} from '../src/player/crowd-interaction.mjs';
+import {yieldToPlayer,settleNearbyWaiters} from '../src/player/crowd-interaction.mjs';
 import {PLAYER,createPlayer,playerCamera} from '../src/player/controller.mjs';
 import {createPlayerMarker,MARKER} from '../src/player/marker.mjs';
 import {createPlayerFigure} from '../src/player/figure.mjs';
@@ -556,7 +556,7 @@ export default function Home(){
    carSpeedLast=Math.abs(c.speed);
    playerAudio?.engine(c.speed,playerCar.def.speed,Math.max(0,drive.forward),c.damage);
    if(playerCar.state.damage!==damageLast){damageLast=playerCar.state.damage;setCarDamage(damageLast);}}
-  else{player.step(dt);if(player.state.alive)combatDeathReported=false;reactToRunner(lifeEntry.hooks.current?.sim,player.state);const combat=melee.update(dt,lifeEntry.hooks.current?.sim,player);if(combat.hits>meleeHitsLast){meleeHitsLast=combat.hits;}playerFigure?.update(player.state,dt);groundPlayerShadow();
+  else{player.step(dt);if(player.state.alive)combatDeathReported=false;yieldToPlayer(lifeEntry.hooks.current?.sim,player.state);const combat=melee.update(dt,lifeEntry.hooks.current?.sim,player);if(combat.hits>meleeHitsLast){meleeHitsLast=combat.hits;}playerFigure?.update(player.state,dt);groundPlayerShadow();
    if(!player.state.alive&&!combatDeathReported){combatDeathReported=true;setPlayerHit(player.state.hitBy??'fight');}
    playerMarker?.update(player.state,dt,PLAYER_HEIGHT);
    // Nothing on screen said where the car was: the orange cone is over the player, so a

@@ -5,8 +5,11 @@ import {buildGroundModel} from '../src/ground/model.mjs';
 import {buildBuildingModel} from '../src/buildings/model.mjs';
 import {buildStationModel} from '../src/station/model.mjs';
 import {buildStreetscapeModel} from '../src/streetscape/model.mjs';
-import {buildPedestrianNetwork} from '../src/life/network.mjs';
+import {buildPedestrianNetwork,inCrossing} from '../src/life/network.mjs';
+import {buildTrafficGraph} from '../src/traffic/graph.mjs';
+import {TrafficSimulation} from '../src/traffic/simulation.mjs';
 import {CrowdSimulation} from '../src/life/simulation.mjs';
+import {yieldToPlayer,YIELD} from '../src/player/crowd-interaction.mjs';
 import {createPlayer,PLAYER} from '../src/player/controller.mjs';
 import {CONTACT,bodiesNear} from '../src/player/crowd-contact.mjs';
 
@@ -18,6 +21,7 @@ const core=buildStationModel(data,{ground,generic});
 const street=buildStreetscapeModel(data,{tier:'high',ground,generic,core});
 const network=buildPedestrianNetwork(data,{ground,generic,street,core});
 const ctx=network.ctx;
+const graph=buildTrafficGraph(data,{ground,generic,street,core});
 const SPOT={x:-38,z:74};
 
 /** A crowd with nobody in it but whoever the test puts there. */
@@ -44,13 +48,16 @@ function walker(sim,{x=SPOT.x,z=SPOT.z,heading=0}={}){
  Object.assign(player.state,{x,z,y:ctx.height(x,z),heading,bodyHeading:heading,course:heading});
  return player;
 }
-/** One frame as the scene runs it: the player, then the crowd. */
+/** One frame of contact alone (Step A): the player, then the crowd. */
 function frame(player,sim,dt=1/60){player.step(dt);sim?.update(dt);}
+/** One frame as the scene runs it: the player, the crowd giving way (Step B), then the crowd. */
+function sceneFrame(player,sim,dt=1/60){player.step(dt);if(sim)yieldToPlayer(sim,player.state);sim?.update(dt);}
 
 test('the contact radii are the player\'s and a pedestrian\'s bodies',()=>{
  assert.equal(CONTACT.playerRadius,PLAYER.radius);
  assert.equal(CONTACT.gap,CONTACT.playerRadius+CONTACT.bodyRadius);
  assert.equal(CONTACT.knockDown,false);
+ assert.equal(YIELD.body,CONTACT.gap);
 });
 
 test('1. walking into someone standing still: never closer than 0.55 m, and the player slides past',()=>{
@@ -150,4 +157,114 @@ test('anyone close enough to touch the player is on the every-frame (near) updat
  sim.setCamera(SPOT.x,SPOT.z);
  for(let i=0;i<40;i++)sim.step(1/30);
  assert.equal(p.lod,'near');
+});
+
+test('B. a walking player: people ahead step aside before they are touched',()=>{
+ const sim=emptyCrowd();
+ const ahead=person(sim,SPOT.x+.15,SPOT.z+1.4);
+ const player=walker(sim,{z:SPOT.z-.6,heading:0});
+ player.setTouch({forward:1,strafe:0,running:false});
+ let yieldedAt=null,closest=Infinity;
+ for(let i=0;i<150;i++){
+  sceneFrame(player,sim);
+  if(yieldedAt===null&&(ahead.flee||Math.hypot(ahead.x-SPOT.x-.15,ahead.z-SPOT.z-1.4)>.05))
+   yieldedAt=Math.hypot(ahead.x-player.state.x,ahead.z-player.state.z);
+  closest=Math.min(closest,Math.hypot(ahead.x-player.state.x,ahead.z-player.state.z));
+ }
+ assert.ok(yieldedAt!==null,'they never moved');
+ assert.ok(yieldedAt>CONTACT.gap+.3,`they only moved once the player was ${yieldedAt.toFixed(2)} m away`);
+ assert.equal(player.contact.stats.bumps,0,'they stepped aside and were still bumped');
+ assert.ok(closest>=CONTACT.gap-.02,`came within ${closest.toFixed(2)} m`);
+ // Aside, not ahead: the step is off the player's line.
+ assert.ok(Math.abs(ahead.x-SPOT.x)>.3,`only ${Math.abs(ahead.x-SPOT.x).toFixed(2)} m aside`);
+});
+
+test('B. someone walking at the player gives way outside the cone; nobody moves for a standing player',()=>{
+ const sim=emptyCrowd();
+ // 1.2 m to the side of the line, 1.4 m ahead: outside the 0.7 m lane, facing the player.
+ const toward=Math.atan2(-1.2,-1.4);
+ const oncoming=person(sim,SPOT.x+1.2,SPOT.z+1.4,{heading:toward,speed:1.3});
+ const player=walker(sim,{heading:0});
+ player.state.speed=1.4;
+ assert.equal(yieldToPlayer(sim,player.state),1);
+ assert.ok(oncoming.flee?.dodge,'no dodge');
+ const idle=emptyCrowd();
+ const there=person(idle,SPOT.x,SPOT.z+1);
+ const still=walker(idle,{heading:0});still.state.speed=.2;
+ assert.equal(yieldToPlayer(idle,still.state),0);
+ assert.equal(there.flee,null);
+});
+
+test('B. the oncoming side is by id, so a pair never mirror each other',()=>{
+ const sides=new Set();
+ for(const id of [10,11]){
+  const sim=emptyCrowd();
+  const p=person(sim,SPOT.x,SPOT.z+1.2,{heading:Math.PI,speed:1.3});
+  const q=sim.pool.find(x=>x.id===id&&!x.active);
+  // Re-seat the person on the id under test.
+  if(q&&q!==p){Object.assign(q,{...p,id});p.active=false;sim.rebuild();}
+  const who=q??p;
+  const player=walker(sim,{heading:0});player.state.speed=1.4;
+  yieldToPlayer(sim,player.state);
+  sides.add(Math.sign(who.flee.x));
+ }
+ assert.equal(sides.size,2,'two ids stepped the same way');
+});
+
+test('3. a cast member bumped mid-crossing dodges, returns to the track, holds no signal',()=>{
+ // Into the pedestrian phase, so the hero cast starts part-way across (heroStart). That start
+ // puts ~1,300 people on the crossings and the controller holds its clock ~55 s while they
+ // clear, player or not, so the signal check below is against the same run without a player.
+ const world=()=>{const traffic=new TrafficSimulation(graph,{tier:'high',street});traffic.signals.time=90;
+  const sim=new CrowdSimulation(network,{traffic,tier:'high',choreography:true,heroStart:true});
+  for(let i=0;i<30;i++){traffic.update(1/30);sim.step(1/30);}return {traffic,sim};};
+ const {traffic,sim}=world();
+ // A cast member well inside a crossing, with nobody else close ahead of them.
+ const cast=sim.pool.filter(p=>p.active&&p.choreographed&&p.crossing&&p.track&&!p.flee&&
+  p.track.distance>p.track.length*.15&&p.track.distance<p.track.length*.4);
+ const lonely=cast.find(p=>{const ax=p.x+Math.sin(p.heading)*2.2,az=p.z+Math.cos(p.heading)*2.2;
+  return !ctx.solid(ax,az,.4)&&!sim.pool.some(q=>q!==p&&q.active&&Math.hypot(q.x-ax,q.z-az)<1.2);});
+ assert.ok(lonely,'no cast member mid-crossing to test with');
+ const p=lonely,e=p.track.e??network.edges[p.edge];
+ // The player stands in their path, facing them, and walks at them.
+ const px=p.x+Math.sin(p.heading)*2.2,pz=p.z+Math.cos(p.heading)*2.2;
+ const player=createPlayer(ctx,{start:[px,pz],heading:p.heading+Math.PI,bodies:()=>sim});
+ Object.assign(player.state,{x:px,z:pz,y:ctx.height(px,pz),bodyHeading:p.heading+Math.PI,course:p.heading+Math.PI});
+ sim.setCamera(px,pz);
+ // Whoever calls leave() from the player's side of the frame would release their group.
+ let inPlayer=false,leftByPlayer=0;
+ const leave=sim.leave.bind(sim);sim.leave=q=>{if(inPlayer)leftByPlayer++;return leave(q);};
+ player.setTouch({forward:1,strafe:0,running:false});
+ let peak=0,closest=Infinity,offCrossing=0;
+ const t0=traffic.signals.time;
+ for(let f=0;f<60*2;f++){
+  inPlayer=true;player.step(1/60);yieldToPlayer(sim,player.state);inPlayer=false;
+  traffic.update(1/60);sim.update(1/60);
+  peak=Math.max(peak,Math.hypot(p.fleeOffX??0,p.fleeOffZ??0));
+  closest=Math.min(closest,Math.hypot(p.x-player.state.x,p.z-player.state.z));
+  // The dodge must not carry them anywhere their own track position is not: off the crossing
+  // into a traffic lane. (The cast's tracks are spread across the crossing's width, so the
+  // track point itself is the reference, not the crossing's centre polygon.)
+  const ox=p.fleeOffX??0,oz=p.fleeOffZ??0,on=(x,z)=>ctx.safe(x,z,.27)||inCrossing(x,z,e,.29);
+  if(Math.hypot(ox,oz)>.01&&on(p.x-ox,p.z-oz)&&!on(p.x,p.z))offCrossing++;
+ }
+ player.setTouch({forward:0,strafe:0,running:false});
+ let settled=null;
+ for(let f=0;f<60*12;f++){
+  inPlayer=true;player.step(1/60);inPlayer=false;traffic.update(1/60);sim.update(1/60);
+  if(settled===null&&peak>0&&Math.hypot(p.fleeOffX??0,p.fleeOffZ??0)<.01)settled=f/60;
+ }
+ assert.ok(peak>.1,`the cast member never stepped aside (offset ${peak.toFixed(3)} m)`);
+ assert.ok(closest>=.5,`the player went within ${closest.toFixed(2)} m of them`);
+ assert.equal(offCrossing,0,'stepped off the crossing into the road');
+ assert.ok(settled!==null,`still ${Math.hypot(p.fleeOffX,p.fleeOffZ).toFixed(2)} m off their track 12 s later`);
+ assert.equal(leftByPlayer,0,'leave() was called from the player side');
+ for(let f=0;f<30*80;f++){traffic.update(1/30);sim.step(1/30);}
+ const base=world(),b0=base.traffic.signals.time;
+ for(let f=0;f<60*14;f++){base.traffic.update(1/60);base.sim.update(1/60);}
+ for(let f=0;f<30*80;f++){base.traffic.update(1/30);base.sim.step(1/30);}
+ const advanced=traffic.signals.time-t0,baseline=base.traffic.signals.time-b0;
+ assert.ok(advanced>=baseline-2,`the signals advanced ${advanced.toFixed(1)} s against ${baseline.toFixed(1)} s without the player`);
+ assert.ok(advanced>40,`the signals advanced only ${advanced.toFixed(1)} s in 94 s`);
+ assert.equal(sim.audit().signalViolations,0);
 });

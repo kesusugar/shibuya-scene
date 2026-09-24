@@ -15,6 +15,61 @@ export function reactToRunner(crowd,state){
  return count;
 }
 
+// People give way to a walking player before they touch (plan Step B). Running keeps
+// reactToRunner's scatter. Bounded to the same 3x3 grid cells round the player, and rate
+// limited per person by the same `runnerUntil`. A step aside is the dodge flight the slow car
+// uses, so someone on a crossing may shift only within it (`fleeAllowed`), the cast moves by
+// its flee offset and comes back to its track, and nobody's crossing or queue is released.
+export const YIELD=Object.freeze({
+ walk:.5,            // m/s: below this the player is standing, and nobody moves for them
+ run:2.5,            // m/s: at and above this, reactToRunner
+ ahead:1.6,          // m: how far ahead of the player the cone reaches
+ lane:.7,            // m: either side of the player's line
+ oncoming:2,         // m: someone facing the player gives way this far out, cone or not
+ facing:.7,          // cos: how squarely they have to be facing the player to count as oncoming
+ step:[.35,.5],      // m: how far they step aside, per person
+ clear:.8,           // m: the most anyone steps aside for a walker
+ body:.6,            // m: the player's and a pedestrian's radii together (CONTACT.gap)
+ level:1.2,          // m: the contact system's own level limit
+ rate:1.2            // s: once per person per this long
+});
+const unit=(id,salt)=>((Math.imul((id|0)+salt*7919,0x9e3779b1)>>>0)%100003)/100002;
+export function yieldToPlayer(crowd,state){
+ if(!crowd||!state.alive)return 0;
+ const speed=state.speed??0;
+ if(speed>=YIELD.run)return reactToRunner(crowd,state);
+ if(speed<YIELD.walk)return 0;
+ // Where the body is going, which is what an oncoming walker reads, not where the camera looks.
+ const h=state.bodyHeading??state.heading,ux=Math.sin(h),uz=Math.cos(h);
+ const r=Math.max(YIELD.ahead,YIELD.oncoming);let count=0;
+ for(let x=Math.floor((state.x-r)/2);x<=Math.floor((state.x+r)/2);x++)for(let z=Math.floor((state.z-r)/2);z<=Math.floor((state.z+r)/2);z++){
+  for(const p of crowd.grid.get(x+','+z)??[]){
+   if(!p.active||p.controlled||p.struck!==undefined||p.combatDead||p.flee)continue;
+   if(Math.abs((p.height??0)-(state.y??0))>YIELD.level)continue;
+   if((p.runnerUntil??0)>crowd.time)continue;
+   const dx=p.x-state.x,dz=p.z-state.z,along=dx*ux+dz*uz,side=dx*uz-dz*ux,d=Math.hypot(dx,dz);
+   if(along<=0)continue;
+   const inCone=along<=YIELD.ahead&&Math.abs(side)<=YIELD.lane;
+   // Facing the player: their heading points back along the line to the player.
+   const facing=d>1e-6&&(-(Math.sin(p.heading)*dx+Math.cos(p.heading)*dz)/d)>=YIELD.facing;
+   const oncoming=!inCone&&d<=YIELD.oncoming&&facing&&(p.speed??0)>.1;
+   if(!inCone&&!oncoming)continue;
+   // Which way: off the player's line on the side they are already on. Someone walking
+   // straight at the player picks a side by who they are, so two people never mirror each
+   // other into the same gap.
+   const pick=facing&&Math.abs(side)<.25?(p.id%2?1:-1):(Math.sign(side)||(p.id%2?1:-1));
+   p.runnerUntil=crowd.time+YIELD.rate;
+   // Far enough to clear the player's shoulder: someone right on the line needs more than
+   // the usual half step, or the player still walks into them.
+   const distance=Math.min(YIELD.clear,Math.max(YIELD.step[0]+(YIELD.step[1]-YIELD.step[0])*unit(p.id,11),
+    YIELD.body+.1-Math.abs(side)));
+   if(crowd.flee(p,uz*pick+ux*.15,-ux*pick+uz*.15,{urgency:0,dodge:true,from:state,speed:1.1,distance,voice:false}))count++;
+  }
+ }
+ crowd.stats.yielded=(crowd.stats.yielded??0)+count;
+ return count;
+}
+
 // Small, deterministic adjustments within the pavement make waiters less regimented.
 // Every step checks neighbours, vehicles and walkable ground; crossings are never moved here.
 export function settleNearbyWaiters(crowd,state,dt){
