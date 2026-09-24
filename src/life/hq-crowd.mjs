@@ -22,6 +22,7 @@ import {InstancedMesh,InstancedBufferAttribute,BufferGeometry,BufferAttribute,
         MeshStandardMaterial,DataTexture,RGBAFormat,FloatType,NearestFilter,
         Object3D,Group,DynamicDrawUsage} from 'three';
 import {PACE,paceStep,cadence} from './pace.mjs';
+import {GARMENT_PATTERN_GLSL,GARMENT_UNPACK_GLSL,packGarment} from './garment-pattern.mjs';
 
 /** The states a citizen can be in. Index into CLIP_FOR, and what the CPU writes. */
 /**
@@ -146,6 +147,7 @@ uniform vec2 boneAtlasSize;
 uniform float crowdTime;
 varying vec4 vPal;
 varying float vShoe;
+varying vec3 vGarm;       // Step A: bind-pose position, where the clothes' patterns are drawn
 
 vec3 unpackRGB(float v){
  float r=floor(v/65536.0);
@@ -226,7 +228,7 @@ mat4 crowdSkinMatrix(){
  mat3 crowdHeadRot=mat3(crowdHc,0.0,-crowdHs, 0.0,1.0,0.0, crowdHs,0.0,crowdHc);
  vec3 crowdNeckAt=(crowdBone*vec4(0.0,crowdNeck.x,0.0,1.0)).xyz;
  objectNormal=crowdHeadRot*objectNormal;
- vPal=aPal;vShoe=aShoe.x;`);
+ vPal=aPal;vShoe=aShoe.x;vGarm=position;`);
   shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>',
 `#include <begin_vertex>
  transformed=(crowdBone*vec4(transformed,1.0)).xyz;
@@ -237,7 +239,8 @@ mat4 crowdSkinMatrix(){
   shader.fragmentShader=shader.fragmentShader.replace('#include <common>',`#include <common>
 varying vec4 vPal;
 varying float vShoe;
-vec3 unpackRGB(float v){
+varying vec3 vGarm;
+${GARMENT_UNPACK_GLSL}${GARMENT_PATTERN_GLSL}vec3 unpackRGB(float v){
  float r=floor(v/65536.0);
  float g=floor(mod(v,65536.0)/256.0);
  float b=mod(v,256.0);
@@ -260,8 +263,12 @@ vec3 unpackRGB(float v){
 }`);
   shader.fragmentShader=shader.fragmentShader.replace('#include <color_fragment>',`
  float wShoe=max(0.0,1.0-vColor.r-vColor.g-vColor.b-vColor.a);
- diffuseColor.rgb=vColor.r*unpackRGB(vPal.x)+vColor.g*unpackRGB(vPal.y)
-  +vColor.b*unpackRGB(vPal.z)+vColor.a*unpackRGB(vPal.w)+wShoe*unpackRGB(vShoe);`);
+ // Step A: the top and bottom carry a pattern id in their top three bits (7-bit colour).
+ // Evaluated unconditionally: fwidth() inside a branch is undefined.
+ vec3 crowdTop=garmentPattern(unpackGarment(vPal.y),garmentId(vPal.y),vGarm);
+ vec3 crowdBottom=garmentPattern(unpackGarment(vPal.z),garmentId(vPal.z),vGarm);
+ diffuseColor.rgb=vColor.r*unpackRGB(vPal.x)+vColor.g*crowdTop
+  +vColor.b*crowdBottom+vColor.a*unpackRGB(vPal.w)+wShoe*unpackRGB(vShoe);`);
   // The same per-garment roughness the near characters use (RUN 6.8). Without it every
   // surface is one number and skin, cotton, denim, hair and a shoe all read as the same
   // plastic -- which under the scene's tone mapping came out as a washed-out white crowd,
@@ -493,8 +500,8 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
    state.noticed[i]=0;state.ready[i]=0;state.attention[i]=0;state.calmed[i]=0;state.waiting[i]=0;state.light[i]=0;state.after[i]=0;
    state.health[i]=100;state.fallen[i]=0;
    state.impulseX[i]=state.impulseZ[i]=state.impulseY[i]=0;
-   palette[i*4]=PACK(look.skin);palette[i*4+1]=PACK(look.top);
-   palette[i*4+2]=PACK(look.bottom);palette[i*4+3]=PACK(look.hairColour);
+   palette[i*4]=PACK(look.skin);palette[i*4+1]=packGarment(look.top,look.topPattern??0);
+   palette[i*4+2]=packGarment(look.bottom,look.bottomPattern??0);palette[i*4+3]=PACK(look.hairColour);
    shoe[i]=PACK(look.shoe);
    lane.palAttr.setXYZW(slot,palette[i*4],palette[i*4+1],palette[i*4+2],palette[i*4+3]);
    lane.shoeAttr.setX(slot,shoe[i]);

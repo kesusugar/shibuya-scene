@@ -17,6 +17,8 @@
  * a shirt colour, never a body, a hairstyle, a build or a height. Silhouette is what the run
  * is about, and silhouette is never negotiated at runtime.
  */
+import {ARCHETYPES as LIFE} from './config.mjs';
+import {PATTERN} from './garment-pattern.mjs';
 
 /**
  * The appearance archetypes, in the order the recipe indexes them.
@@ -80,6 +82,52 @@ const SHOES=Object.freeze([0x14161a,0x1f2126,0x2b2d33,0xe8e6e1,0x3a3c42]);
 const SKINS=Object.freeze([0xe8c9a8,0xdfb994,0xc79a72,0xa3764f,0x7a5334,0x5d3d26]);
 const HAIRS=Object.freeze([0x141215,0x1b1a1c,0x241d1a,0x2e2320,0x3a2a1e,0x55483c,0x6f6259]);
 
+/**
+ * Patterns by life archetype (PLAN-LOOKS-AND-FLEET Step A). Weights, not shares: each row is
+ * normalised. Office workers lean to solid and pinstripe, young people to border, check and
+ * print, older people to solid. Bottoms carry denim and suit pinstripe; check is a skirt.
+ *
+ * The life archetype is read from the id the same way the simulation's spawn assigns it
+ * (`styleOf`), never from the pedestrian record: the HQ layer only has the id, and the rule is
+ * that a look is a pure function of it.
+ */
+const S=PATTERN;
+export const PATTERN_WEIGHTS=Object.freeze({
+ office:  {top:{[S.solid]:55,[S.pinstripe]:25,[S.openJacket]:15,[S.check]:5},bottom:{[S.solid]:70,[S.pinstripe]:25,[S.check]:5}},
+ student: {top:{[S.solid]:40,[S.border]:20,[S.check]:15,[S.print]:10,[S.openJacket]:15},bottom:{[S.solid]:45,[S.denim]:40,[S.check]:15}},
+ casual:  {top:{[S.solid]:45,[S.border]:20,[S.check]:10,[S.print]:10,[S.openJacket]:15},bottom:{[S.solid]:40,[S.denim]:60}},
+ hoodie:  {top:{[S.solid]:70,[S.border]:10,[S.print]:20},bottom:{[S.solid]:40,[S.denim]:60}},
+ shopper: {top:{[S.solid]:45,[S.border]:15,[S.check]:15,[S.print]:15,[S.openJacket]:10},bottom:{[S.solid]:45,[S.denim]:40,[S.check]:15}},
+ tourist: {top:{[S.solid]:45,[S.border]:15,[S.check]:20,[S.print]:20},bottom:{[S.solid]:45,[S.denim]:55}},
+ elderly: {top:{[S.solid]:75,[S.check]:15,[S.openJacket]:10},bottom:{[S.solid]:85,[S.check]:15}},
+ kid:     {top:{[S.solid]:40,[S.border]:30,[S.print]:30},bottom:{[S.solid]:60,[S.denim]:40}},
+ jogger:  {top:{[S.solid]:85,[S.border]:15},bottom:{[S.solid]:100}},
+ pastel:  {top:{[S.solid]:40,[S.border]:20,[S.check]:20,[S.print]:20},bottom:{[S.solid]:50,[S.denim]:30,[S.check]:20}},
+ umbrella:{top:{[S.solid]:55,[S.border]:15,[S.check]:10,[S.openJacket]:20},bottom:{[S.solid]:55,[S.denim]:45}}
+});
+/** The adult life archetypes in the order `CrowdSimulation.spawn` indexes them by id. */
+const ADULT_STYLES=Object.freeze(Object.keys(LIFE).filter(k=>k!=='kid'));
+/** The life archetype an id is spawned as (a lone adult; group kids are the exception). */
+export const styleOf=id=>ADULT_STYLES[Math.abs(id|0)%ADULT_STYLES.length];
+
+function weighted(table,u){
+ let total=0;for(const k in table)total+=table[k];
+ let x=u*total;
+ for(const k in table){x-=table[k];if(x<0)return Number(k);}
+ return Number(Object.keys(table).at(-1));
+}
+/** A third decorrelated hash: patterns must not correlate with colours already chosen. */
+function hash3(id){
+ let h=Math.imul((id|0)^0x2c1b3c6d,0x297a2d39);
+ h^=h>>>15;h=Math.imul(h,0x68e31da4|1);h^=h>>>14;h=Math.imul(h,0xb5297a4d);h^=h>>>16;
+ return h>>>0;
+}
+/** The top and bottom pattern of citizen `id`. Pure. */
+export function patternOf(id){
+ const w=PATTERN_WEIGHTS[styleOf(id)],h=hash3(id);
+ return {top:weighted(w.top,(h&0xffff)/65536),bottom:weighted(w.bottom,(h>>>16)/65536)};
+}
+
 /** Everything the recipe can choose from, for tests and for the status document. */
 export const PALETTE=Object.freeze({tops:TOPS,bottoms:BOTTOMS,shoes:SHOES,skins:SKINS,hairs:HAIRS});
 
@@ -117,6 +165,7 @@ export function appearanceOf(id,baseHeight=1.76){
  const height=Math.min(APPEARANCE.maxHeight,Math.max(APPEARANCE.minHeight,
   baseHeight*archetype.height*(1+spread(h,8)*APPEARANCE.heightJitter)));
  const width=archetype.width*(1+spread(g,8)*APPEARANCE.widthJitter);
+ const pattern=patternOf(id);
  return {
   id,archetype,
   rig:archetype.rig,hair:archetype.hair,
@@ -125,13 +174,14 @@ export function appearanceOf(id,baseHeight=1.76){
   top:pick(g,0,TOPS),
   bottom:pick(g,16,BOTTOMS),
   shoe:pick(g,24,SHOES),
+  topPattern:pattern.top,bottomPattern:pattern.bottom,
   height,width
  };
 }
 
 /** The palette shape `dressCitizen` wants, from an appearance. */
 export const paletteOf=look=>({skin:look.skin,top:look.top,bottom:look.bottom,
- hair:look.hairColour,shoe:look.shoe});
+ hair:look.hairColour,shoe:look.shoe,topPattern:look.topPattern??0,bottomPattern:look.bottomPattern??0});
 
 /**
  * Keep two people standing next to each other from being the same person.
@@ -147,8 +197,8 @@ export const paletteOf=look=>({skin:look.skin,top:look.top,bottom:look.bottom,
  * same answer, whatever order the pool happens to hold them in, and the lowest id always
  * keeps the colour the recipe gave them.
  *
- * It moves a shirt and nothing else. Body, hairstyle, build and height are whatever
- * `appearanceOf` said, always.
+ * It moves a shirt colour and nothing else -- never a pattern (Step A). Body, hairstyle,
+ * build and height are whatever `appearanceOf` said, always.
  */
 export function deduplicate(looks){
  const ordered=[...looks].sort((a,b)=>a.id-b.id);
