@@ -85,6 +85,7 @@ and no licence question.
   | 「動くな！」 | an officer close to the player; just before an arrest | `g`, `k`, `n` (existing) |
   | 「逃げるな！」 | the player running away on foot | `n`, `g`, new `r`, `n` |
   | 「降りろ！」 | the player's car stopped or pinned by police | new `r`, then vowels |
+  | 「確保！」 | the arrest itself | `k`, `k`, `h` (existing) |
 
 - **New onsets** in `ONSETS`, in the same style as today's:
   - `m`: a nasal like `n`, with a lower second formant and a short hum before the vowel;
@@ -120,6 +121,7 @@ and no licence question.
   - Player's car stopped or pinned: 「降りろ！」.
   - On foot and running: 「逃げるな！」 and 「止まれ！」.
   - An officer within 3 m, or an arrest starting: 「動くな！」.
+  - The arrest completes: 「確保！」 (outside the gap rule, once per arrest).
   - Never repeat the last line.
 - **Remove the machine voice.**
   - `speechSynthesis` (`createLoudspeaker` in `src/police/siren.mjs`) is no longer used in play.
