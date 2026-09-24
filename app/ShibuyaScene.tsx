@@ -342,7 +342,7 @@ export default function Home(){
    const sim=lifeEntry.hooks.current?.sim;if(!sim)return;
    lifeEntry.hooks.current?.blow?.({victim:p.id,blow:{hold:b.hold,fatal:false},response:b.strong?'backoff':'look',from:player?.state});
    feedback.emit('player_bump',sim.time,{x:p.x,z:p.z,intensity:b.strong?1:.35,id:p.id});
-   if(b.fight&&player)melee.provoke(sim,p,player);}});
+   if(b.fight&&player&&(police?.allowBumpFight(sim)??true))melee.provoke(sim,p,player);}});
   if(!player.place()){console.warn('[Player] no standable ground at the start point');return false;}
   if(!playerMarker){playerMarker=createPlayerMarker();groups.dynamic.add(playerMarker.mesh);}
   if(!carMarker){carMarker=createPlayerMarker(MARKER.car);groups.dynamic.add(carMarker.mesh);}

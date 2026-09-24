@@ -4997,6 +4997,31 @@ not collide with traffic or box the player in (no PIT at ☆3). Officers do not 
 cars; they are pedestrians from the street. The grab has no animation of its own. Traffic brakes
 for a siren but does not pull over.
 
+## 9s. Police plan, ☆4–☆5 extras and the W4 balance cap (branch `claude/looks-fleet-7`, on `claude/looks-fleet-6`)
+
+- **Unmarked car** (`unmarked`, "Unmarked"): the saloon loft in a fixed dark paint with one small
+  red beacon dome on the driver's side of the roof (tail-lamp part, so it flashes with the siren).
+  One joins the chase at ☆4.
+- **Riot transport** (`riotBus`, "Riot Transport"): the one-box loft at bus size in a blue lower,
+  white upper livery (`LIVERY.riot`). One joins at ☆5. No lettering on either.
+- Both have weight 0 (never ordinary traffic) and share a `police` flag with the patrol car
+  (`isPolice`), so sight, sirens, rams and "taking a police car" (☆3) cover all three.
+- **Roadblock** at ☆4, once per episode: two patrol cars parked across the road, side by side,
+  80–140 m from the player and out of view, on a cell the flow field reaches, turned across the
+  direction the field runs there. They stand until the level clears, then leave like other units,
+  and count toward the cap (5 at ☆4).
+- **Balance cap** (W4): while wanted, a crowd bump starts a fight only while fewer than two
+  civilians are already fighting the player (`POLICE.bumpFightCap`, `allowBumpFight`); officers and
+  finished fights do not count. A tuning constant for the user.
+- **Not done:** cones at the roadblock, riot officers with shields (officers are the ordinary
+  uniform), the riot transport unloading anyone, and a PIT manoeuvre.
+- **No device check.** Claude Code stopped the dev server because the PC ran low on memory while
+  this step was being built, and the rule is not to restart it unasked. Covered by tests only.
+- **Tests:** `tests/police-extras.test.mjs` (3): the extra types are police, weight 0, fixed or
+  liveried paint, with a beacon; ☆4 gives a parallel, stationary two-car roadblock and an unmarked
+  car within the cap, ☆5 a riot transport; the balance cap. New exports, so they fail on the code
+  before.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle

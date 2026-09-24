@@ -134,11 +134,11 @@ export function createPoliceUnits({koban = {x: 48.5, z: 20.4}, buildBudget = 150
  const cars = new Set(), officers = new Set();
  let samples = null, sampledGraph = null, clock = 0, spawnClock = 0;
  const arrest = {foot: 0, car: 0};
- let field = null, fieldCtx = null, flowClock = 0;
+ let field = null, fieldCtx = null, flowClock = 0, blocked = false;
  const scratch = {};
 
 
- function spawnCar(traffic, me, visible) {
+ function spawnCar(traffic, me, visible, type = 'police') {
   const slot = traffic.pool.find(v => !v.active);
   if (!slot) return false;
   // Only where the flow field can bring the car to the player.
@@ -152,7 +152,7 @@ export function createPoliceUnits({koban = {x: 48.5, z: 20.4}, buildBudget = 150
   const lane = traffic.graph.lanes[s.lane];
   pose(lane.path, s.d, scratch);
   Object.assign(slot, {active: true, parked: false, controlled: true, service: false, platoon: undefined,
-   type: 'police', x: scratch.x, z: scratch.z, heading: scratch.heading, speed: 0, brake: false, blinker: 0,
+   type, x: scratch.x, z: scratch.z, heading: scratch.heading, speed: 0, brake: false, blinker: 0,
    lane: s.lane, transition: -1, next: -1, progress: s.d, age: 0, stuck: 0, junction: null, siren: true,
    pursuit: {leaving: false}});
   slot.locks?.clear?.(); slot.passed?.clear?.(); slot.yellowStops?.clear?.();
@@ -173,6 +173,7 @@ export function createPoliceUnits({koban = {x: 48.5, z: 20.4}, buildBudget = 150
    P.leaving = true;
    if (d > UNITS.leaveAfter && !visible(v.x, v.z)) {traffic.despawn(v, 'police'); cars.delete(v); return;}
   }
+  if (P.roadblock) {v.speed = 0; if (!P.leaving) return;}   // a roadblock stands until the level clears
   let aim = null;
   if (!P.leaving && d <= UNITS.straightIn) aim = me;
   else if (field?.ready) aim = field.ahead(v.x, v.z, P.leaving);
@@ -188,6 +189,35 @@ export function createPoliceUnits({koban = {x: 48.5, z: 20.4}, buildBudget = 150
   let step = v.speed * dt;
   if (!P.leaving) step = Math.min(step, Math.max(0, d - UNITS.stopShort));
   v.x += Math.sin(v.heading) * step; v.z += Math.cos(v.heading) * step;
+ }
+
+ /**
+  * ☆4: a roadblock. Two patrol cars across the road, 80–140 m away and out of view, on a cell
+  * the flow field reaches, turned across the direction the field runs there. Once per episode.
+  */
+ function roadblock(traffic, me, visible) {
+  const free = traffic.pool.filter(v => !v.active);
+  if (free.length < 2 || !field?.ready) return false;
+  field.flow(me.x, me.z);
+  for (let tries = 0; tries < 40; tries++) {
+   const a = ((clock * 37 + tries * 2.39996) % (Math.PI * 2)), r = 80 + (tries * 7) % 60;
+   const x = me.x + Math.sin(a) * r, z = me.z + Math.cos(a) * r;
+   if (visible(x, z) || field.distanceAt(x, z) < 0) continue;
+   const next = field.ahead(x, z); if (!next) continue;
+   const along = Math.atan2(next.x - x, next.z - z), across = along + Math.PI / 2;
+   const half = VEHICLES.police.length / 2 + .3;
+   free.slice(0, 2).forEach((slot, i) => {
+    const k = i ? 1 : -1;
+    Object.assign(slot, {active: true, parked: false, controlled: true, service: false, platoon: undefined,
+     type: 'police', x: x + Math.sin(across) * half * k, z: z + Math.cos(across) * half * k, heading: across,
+     speed: 0, brake: true, blinker: 0, lane: -1, transition: -1, next: -1, progress: 0, age: 0, stuck: 0,
+     junction: null, siren: true, pursuit: {leaving: false, roadblock: true}});
+    slot.locks?.clear?.(); slot.passed?.clear?.(); slot.yellowStops?.clear?.();
+    cars.add(slot);
+   });
+   return true;
+  }
+  return false;
  }
 
  function giveWay(traffic, dt) {
@@ -269,8 +299,9 @@ export function createPoliceUnits({koban = {x: 48.5, z: 20.4}, buildBudget = 150
    flowClock -= dt;
    if (field?.ready && cars.size && flowClock <= 0) {flowClock = 1; field.flow(me.x, me.z);}
    const wanted = stars > 0;
+   if (!wanted) blocked = false;
    // Units first leave when the level clears.
-   if (traffic) for (const v of [...cars]) {if (!v.active || v.type !== 'police') {cars.delete(v); continue;} driveCar(v, traffic, me, dt, wanted, visible);}
+   if (traffic) for (const v of [...cars]) {if (!v.active || !VEHICLES[v.type]?.police) {cars.delete(v); continue;} driveCar(v, traffic, me, dt, wanted, visible);}
    if (crowd) for (const p of [...officers]) {if (!p.active && !p.officerPending) {officers.delete(p); continue;} if (p.active) driveOfficer(p, crowd, me, dt, wanted && !driving, visible, attacking, hurt);}
    // Pending conversions: off for a frame so the HQ layer drops the old body, then back in uniform.
    if (crowd) for (const p of officers) if (p.officerPending && !p.active && crowd.time >= p.officerPending) {
@@ -281,7 +312,11 @@ export function createPoliceUnits({koban = {x: 48.5, z: 20.4}, buildBudget = 150
    }
    if (wanted && spawnClock <= 0) {
     spawnClock = UNITS.spawnEvery;
-    if (traffic && samples?.length && field?.ready && cars.size < UNITS.cars[stars]) spawnCar(traffic, me, visible);
+    const has = t => [...cars].some(v => v.type === t);
+    const tryBlock = traffic && field?.ready && stars >= 4 && !blocked && cars.size + 2 <= UNITS.cars[stars];
+    if (tryBlock && roadblock(traffic, me, visible)) blocked = true;
+    else if (traffic && samples?.length && field?.ready && cars.size < UNITS.cars[stars])
+     spawnCar(traffic, me, visible, stars >= 5 && !has('riotBus') ? 'riotBus' : stars >= 4 && !has('unmarked') ? 'unmarked' : 'police');
     else if (crowd && officers.size < UNITS.officers[stars]) {
      const near = stars === 1 && Math.hypot(koban.x - me.x, koban.z - me.z) < 180;
      const c = officerCandidates(crowd, me, visible, near);

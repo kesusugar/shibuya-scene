@@ -130,7 +130,7 @@ const SILHOUETTE={
 };
 const STYLE={taxi:'sedan',sedan:'sedan',kei:'hatch',van:'onebox',bus:'onebox',keiTruck:'cabover',
  longVan:'semibonnet',minivan:'minivan',tallKei:'tallbox',cityTaxi:'mpv',truck2t:'cabover',
- police:'sedan',coupe:'coupe',ownCar:'fastback'};
+ police:'sedan',coupe:'coupe',ownCar:'fastback',unmarked:'sedan',riotBus:'onebox'};
 /** The silhouettes, for tests: every lofted type must name one. */
 export const SILHOUETTES=Object.freeze(Object.keys(SILHOUETTE));
 export const STYLES=Object.freeze({...STYLE});
@@ -344,6 +344,14 @@ export function buildVehicleShape(type,{detail=1}={}){
   const to=d.cargo.to*L,from=-.5*L+.05,top=d.cargo.height;
   const box=new BoxGeometry(W*.99,top-deckTop,to-from);
   box.translate(0,(top+deckTop)/2,(to+from)/2);parts.paint.push(box);
+ }
+ if(d.beacon){
+  // The unmarked car's magnetic lamp: one small red dome, driver's side of the roof.
+  const flat=profile.house.filter(([,y])=>y>=.985);
+  const mid=flat.length?(flat[0][0]+flat[flat.length-1][0])/2:0;
+  const [topF,widthF]=at(profile.house,mid);
+  const dome=new CylinderGeometry(.07,.09,.12,12);dome.translate(-W*widthF*.2,H*topF+.06,(mid+.06)*L);parts.tail.push(dome);
+  lightbar=[-W*widthF*.2,H*topF+.12,(mid+.06)*L];
  }
  if(d.lightbar){
   const flat=profile.house.filter(([,y])=>y>=.985);

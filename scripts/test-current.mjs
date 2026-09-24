@@ -61,6 +61,7 @@ const files=[
  'tests/own-car.test.mjs',
  'tests/wanted.test.mjs',
  'tests/police-units.test.mjs',
+ 'tests/police-extras.test.mjs',
  'tests/high-graphics.test.mjs',
  'tests/lightboxes.test.mjs',
  'tests/network-startup.test.mjs',
