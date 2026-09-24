@@ -5031,7 +5031,7 @@ The orange widebody became the player's own car (§9p). The other two:
   still means the own car's full kit.
 - **Where.** `HERO_SPOTS`: two unclassified side streets 6.5–7 m wide, 72 m and 98 m from the
   Scramble (found with a lane query, not guessed). `placeHero` parks each at the nearest legal kerb
-  pose, deterministic, on the initial refill at HIGH and MEDIUM; `setTier` keeps them above LOW.
+  pose, deterministic, on the initial refill at HIGH and MEDIUM; `setTier` keeps them above LOW. They take two of the parked budget (HIGH stays at 12 parked, which `static-mobility` pins): they are placed first and the ordinary parked mix fills the rest.
   Weight 0: never ordinary traffic. The plan's "one sometimes drives the loop at night" is not done.
 - **Handling and sound.** Drift tunes like the own car (steer .74/.72, grip 8/8.5, slide 1.6/1.7) and
   higher-revving saw-wave voices (64–220 / 58–205 Hz).
