@@ -1,5 +1,6 @@
 import {Group,Color,HemisphereLight,DirectionalLight} from 'three';
 import {ROAD_SPILL_GLSL} from '../nightglow/road-spill.mjs';
+import {ROAD_REFLECTION_GLSL,ROAD_REFLECTION_UNIFORMS} from '../nightglow/road-reflection.mjs';
 import {FRONTAGE_SPILL_GLSL} from '../nightglow/frontage-spill.mjs';
 export const DAY_NIGHT=Object.freeze({day:{sky:0x9fb5ce,exposure:.9,ambient:.4,key:1.2},night:{sky:0x03060c,exposure:1,ambient:.22,key:.08}});
 // One uniform per existing shared material. No geometry, extra pass, or per-frame allocation.
@@ -28,13 +29,15 @@ roughnessFactor=mix(roughnessFactor,mix(.82,.28,roadWetMask),s12Night*s13Nightgl
    }
    if(mode==='groundPoolWalk')fragment+=FRONTAGE_SPILL_GLSL;
    vertex='varying vec3 s161Position;\n';fragment+='varying vec3 s161Position;\n';body='s161Position=(modelMatrix*vec4(transformed,1.0)).xyz;';
+   // RUN 12.2: the real mirror, shared by every asphalt program; black and zero until one exists.
+   if(mode==='groundPoolRoad'){fragment+=ROAD_REFLECTION_GLSL;Object.assign(shader.uniforms,ROAD_REFLECTION_UNIFORMS);}
    shader.fragmentShader=shader.fragmentShader.replace('#include <emissivemap_fragment>',`#include <emissivemap_fragment>
 vec2 q=s161Position.xz;
 float alley=(1.-smoothstep(3.0,3.6,abs(q.x-q.y-4.0)))*smoothstep(-96.,-90.,q.x)*(1.-smoothstep(-35.,-31.,q.x));
 float plank=step(.1,fract((q.x+q.y)*1.4));
 diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.24,.115,.07)*mix(.65,1.,plank),alley);
 totalEmissiveRadiance+=vec3(.24,.13,.065)*alley*s12Night*(.25+.75*pow(.5+.5*cos((q.x+q.y)*.32),6.));
-${mode==='groundPoolRoad'?'totalEmissiveRadiance+=billboardRoadSpill(q)*s12Night;':''}
+${mode==='groundPoolRoad'?'totalEmissiveRadiance+=billboardRoadSpill(q)*s12Night*(1.0-.55*s13ReflectStrength);totalEmissiveRadiance+=roadMirror(q,smoothstep(.23,.76,roadNoise(q*.42)))*s12Night;':''}
 ${mode==='groundPoolWalk'?'totalEmissiveRadiance+=frontageSpill(q)*s12Night;':''}
 float pool=0.0;
 for(int i=0;i<4;i++){vec2 c=vec2(i<2?-22.0:22.0,mod(float(i),2.0)<0.5?-19.0:19.0);pool+=(0.20+0.018*float(i))*pow(max(0.0,1.0-length(q-c)/16.0),2.4);}
