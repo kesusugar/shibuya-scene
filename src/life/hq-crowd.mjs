@@ -97,6 +97,13 @@ export const REACTION_COOLDOWN=1.15;
 export const BLEND=Object.freeze({normal:.25,hit:.1,rise:.6});
 /** A standing citizen who noticed something turns this far towards it, at this rate (rad, rad/s). */
 export const LOOK_TURN=Object.freeze({max:.9,rate:2.6});
+/**
+ * RUN 12.4: the head, for someone who notices something while walking (the body keeps its
+ * heading, or they would crab), and for the rest of a standing turn past LOOK_TURN.max. Only
+ * the vertices above the neck turn, faded over `band` (fraction of the body's height) so the
+ * neck bends rather than tears; the pivot is the neck itself, carried by its own bone.
+ */
+export const HEAD_TURN=Object.freeze({max:.75,rate:3.2,neck:.845,band:.035});
 
 /** How long a state lasts before it can give way, in seconds. 0 means "until told". */
 export const STATE_HOLD=Object.freeze({
@@ -114,12 +121,13 @@ const PACK=c=>((c>>16)&255)*65536+((c>>8)&255)*256+(c&255);
  * and every instance picks its own row. That is the whole trick, and it is why nothing here
  * needs a Skeleton object.
  */
-function installCrowdSkinning(material,atlas,size,{interpolate=true}={}){
+function installCrowdSkinning(material,atlas,size,{interpolate=true,neck=[1.5,.06]}={}){
  material.defines={...material.defines,HQ_CROWD:'1',...(interpolate?{HQ_LERP:'1'}:{})};
  material.onBeforeCompile=shader=>{
   shader.uniforms.boneAtlas={value:atlas};
   shader.uniforms.boneAtlasSize={value:size};
   shader.uniforms.crowdTime={value:0};
+  shader.uniforms.crowdNeck={value:neck};
   material.userData.shader=shader;
   shader.vertexShader=shader.vertexShader.replace('#include <common>',`#include <common>
 attribute vec4 skinIndex;
@@ -129,7 +137,10 @@ attribute vec2 aAnim;     // x: phase 0..1, y: playback rate (0 freezes on the p
 attribute vec4 aPrev;     // the clip this one replaced: row, frames, phase, rate
 attribute vec2 aBlend;    // x: crowd time the change happened, y: crossfade seconds (0: none)
 attribute vec4 aPal;      // skin, top, bottom, hair -- each RGB packed into one float
-attribute float aShoe;
+// RUN 12.4: x is the shoe tint; y the head yaw (rad, about the neck). One slot for both: the
+// crowd shader already fills the 16 vertex attributes WebGL guarantees, and a 17th fails to link.
+attribute vec2 aShoe;
+uniform vec2 crowdNeck;   // bind-pose neck height and fade band, model units
 uniform sampler2D boneAtlas;
 uniform vec2 boneAtlasSize;
 uniform float crowdTime;
@@ -209,10 +220,17 @@ mat4 crowdSkinMatrix(){
 `#include <beginnormal_vertex>
  mat4 crowdBone=crowdSkinMatrix();
  objectNormal=mat3(crowdBone)*objectNormal;
- vPal=aPal;vShoe=aShoe;`);
+ // RUN 12.4: turn the head. Weighted by bind-pose height, so it follows the neck through any clip.
+ float crowdHeadW=aShoe.y==0.0?0.0:smoothstep(crowdNeck.x-crowdNeck.y,crowdNeck.x+crowdNeck.y,position.y);
+ float crowdHa=aShoe.y*crowdHeadW,crowdHc=cos(crowdHa),crowdHs=sin(crowdHa);
+ mat3 crowdHeadRot=mat3(crowdHc,0.0,-crowdHs, 0.0,1.0,0.0, crowdHs,0.0,crowdHc);
+ vec3 crowdNeckAt=(crowdBone*vec4(0.0,crowdNeck.x,0.0,1.0)).xyz;
+ objectNormal=crowdHeadRot*objectNormal;
+ vPal=aPal;vShoe=aShoe.x;`);
   shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>',
 `#include <begin_vertex>
- transformed=(crowdBone*vec4(transformed,1.0)).xyz;`);
+ transformed=(crowdBone*vec4(transformed,1.0)).xyz;
+ transformed=crowdHeadRot*(transformed-crowdNeckAt)+crowdNeckAt;`);
 
   // The garment mask, exactly as RUN 6.8's near characters use it: four vertex-colour
   // channels choose between five surfaces, the shoe being whatever the four leave over.
@@ -297,7 +315,9 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
   const level=archetype.levels.find(l=>l.name===wanted)??archetype.levels[0];
   const geometry=geometryFrom(level,bin);
   const material=new MeshStandardMaterial({vertexColors:true,roughness:.82,metalness:0});
-  installCrowdSkinning(material,atlas,atlasSize,{interpolate});
+  geometry.computeBoundingBox();
+  const low=geometry.boundingBox.min.y,tall=Math.max(1e-3,geometry.boundingBox.max.y-low);
+  installCrowdSkinning(material,atlas,atlasSize,{interpolate,neck:[low+tall*HEAD_TURN.neck,tall*HEAD_TURN.band]});
   const mesh=new InstancedMesh(geometry,material,capacity);
   mesh.instanceMatrix.setUsage(DynamicDrawUsage);
   mesh.frustumCulled=false;mesh.count=0;
@@ -306,7 +326,7 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
   const clipAttr=new InstancedBufferAttribute(new Float32Array(capacity*2),2).setUsage(DynamicDrawUsage);
   const animAttr=new InstancedBufferAttribute(new Float32Array(capacity*2),2).setUsage(DynamicDrawUsage);
   const palAttr=new InstancedBufferAttribute(new Float32Array(capacity*4),4).setUsage(DynamicDrawUsage);
-  const shoeAttr=new InstancedBufferAttribute(new Float32Array(capacity),1).setUsage(DynamicDrawUsage);
+  const shoeAttr=new InstancedBufferAttribute(new Float32Array(capacity*2),2).setUsage(DynamicDrawUsage);
   const prevAttr=new InstancedBufferAttribute(new Float32Array(capacity*4),4).setUsage(DynamicDrawUsage);
   const blendAttr=new InstancedBufferAttribute(new Float32Array(capacity*2),2).setUsage(DynamicDrawUsage);
   geometry.setAttribute('aPrev',prevAttr);
@@ -363,7 +383,8 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
   clipRow:new Int16Array(max),prevRow:new Float32Array(max),prevFrames:new Float32Array(max),
   prevPhase:new Float32Array(max),prevRate:new Float32Array(max),
   blendStart:new Float32Array(max),blendDur:new Float32Array(max),
-  look:new Float32Array(max)        // extra turn towards what a standing citizen noticed, rad
+  look:new Float32Array(max),       // extra turn towards what a standing citizen noticed, rad
+  head:new Float32Array(max)        // RUN 12.4: head yaw on top of it, rad
  };
  // The palette also lives here, not only in the instanced attribute, because moving a citizen
  // between LOD lanes has to rewrite it into the new lane and an attribute is write-mostly.
@@ -467,7 +488,7 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
    state.rate[i]=.88+((h>>>18)&255)/255*.24;
    state.pace[i]=Math.max(0,speed);state.paceX[i]=Math.sin(heading)*state.pace[i];state.paceZ[i]=Math.cos(heading)*state.pace[i];state.moving[i]=speed>PACE.stopBelow?1:0;
    state.fast[i]=speed>PACE.strollTop?1:0;state.animRate[i]=0;
-   state.clipRow[i]=-1;state.blendDur[i]=0;state.look[i]=0;state.prevRow[i]=0;state.prevFrames[i]=1;state.prevPhase[i]=0;state.prevRate[i]=0;
+   state.clipRow[i]=-1;state.blendDur[i]=0;state.look[i]=0;state.head[i]=0;state.prevRow[i]=0;state.prevFrames[i]=1;state.prevPhase[i]=0;state.prevRate[i]=0;
    state.behaviour[i]=STATE.NORMAL;state.timer[i]=0;
    state.noticed[i]=0;state.ready[i]=0;state.attention[i]=0;state.calmed[i]=0;state.waiting[i]=0;state.light[i]=0;state.after[i]=0;
    state.health[i]=100;state.fallen[i]=0;
@@ -744,7 +765,14 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
     // turning the whole body while stepping would crab-walk.
     {const b=state.behaviour[i],standing=!state.moving[i]&&(b===STATE.LOOK||b===STATE.STARTLE||b===STATE.RECOVER);
      let want=0;if(standing){const d=Math.atan2(Math.sin(state.attention[i]-state.heading[i]),Math.cos(state.attention[i]-state.heading[i]));want=Math.max(-LOOK_TURN.max,Math.min(LOOK_TURN.max,d));}
-     const d=want-state.look[i],k=LOOK_TURN.rate*dt;state.look[i]+=Math.abs(d)<=k?d:Math.sign(d)*k;}
+     const d=want-state.look[i],k=LOOK_TURN.rate*dt;state.look[i]+=Math.abs(d)<=k?d:Math.sign(d)*k;
+     // RUN 12.4: the head does what the body may not -- all of it for a walker, the rest past
+     // the body's limit for someone standing. Nothing for anyone in a physical state.
+     const noticing=b===STATE.LOOK||b===STATE.STARTLE||b===STATE.RECOVER;let head=0;
+     if(noticing){const toward=Math.atan2(Math.sin(state.attention[i]-state.heading[i]),Math.cos(state.attention[i]-state.heading[i]));
+      head=Math.max(-HEAD_TURN.max,Math.min(HEAD_TURN.max,toward-state.look[i]));}
+     const dh=head-state.head[i],kh=HEAD_TURN.rate*dt;state.head[i]+=Math.abs(dh)<=kh?dh:Math.sign(dh)*kh;
+     lane.shoeAttr.setY(state.slot[i],state.head[i]);}
     scratch.rotation.set(0,state.heading[i]+state.look[i],0);
     scratch.scale.set(k*state.width[i],k,k*state.width[i]);
     scratch.updateMatrix();
@@ -755,6 +783,7 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
    for(const lane of lanes){
     lane.mesh.count=lane.count;
     lane.mesh.instanceMatrix.needsUpdate=true;
+    if(lane.count)lane.shoeAttr.needsUpdate=true;
     if(lane.count){draws++;triangles+=lane.count*lane.triangles;vertices+=lane.count*lane.vertices;}
    }
    stats.population=population;stats.drawCalls=draws;

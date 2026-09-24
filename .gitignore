@@ -48,6 +48,7 @@ next-env.d.ts
 /qa/gta-upgrade/*
 !/qa/gta-upgrade/charbench.html
 !/qa/gta-upgrade/vehiclebench.html
+!/qa/gta-upgrade/sync-cost.mjs
 !/qa/gta-upgrade/locomotionbench.html
 !/qa/gta-upgrade/footikbench.html
 !/qa/gta-upgrade/footik-contact.mjs
@@ -75,3 +76,7 @@ next-env.d.ts
 
 # character pipeline: upstream downloads are verified, never committed
 /assets/character/upstream/
+# audio pipeline (RUN 12.1): upstream downloads are verified, never committed
+/assets/audio/upstream/
+# ground textures (RUN 12.3): upstream downloads are verified, never committed
+/assets/textures/upstream/

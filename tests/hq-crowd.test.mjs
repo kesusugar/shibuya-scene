@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {createHQCrowd,STATE,CLIP_FOR,STATE_HOLD,BLEND,LOOK_TURN} from '../src/life/hq-crowd.mjs';
+import {createHQCrowd,STATE,CLIP_FOR,STATE_HOLD,BLEND,LOOK_TURN,HEAD_TURN} from '../src/life/hq-crowd.mjs';
 import {createCrowdGrid,applyVehicleThreat,THREAT} from '../src/life/hq-threat.mjs';
 import {appearanceOf,ARCHETYPES,PALETTE} from '../src/life/appearance.mjs';
 
@@ -328,5 +328,43 @@ test('a standing citizen who notices something turns towards it, and back; a wal
  crowd.setState(0,STATE.NORMAL,{force:true});
  for(let f=0;f<60;f++){t+=1/60;crowd.update(1/60,{time:t});}
  assert.equal(s.look[0],0,'the turn never came back');
+ crowd.dispose();
+});
+
+test('RUN 12.4: a walker who notices something turns the head, not the body; the head comes back',()=>{
+ const crowd=build(4);
+ const s=crowd.state;
+ s.moving[0]=0;s.moving[1]=1;s.moving[2]=1;
+ for(const i of [0,1]){crowd.setState(i,STATE.LOOK,{force:true,hold:3});s.attention[i]=s.heading[i]+1.5;}
+ crowd.setState(2,STATE.KNOCKDOWN,{force:true});s.attention[2]=s.heading[2]+1.5;
+ let t=0;for(let f=0;f<60;f++){t+=1/60;crowd.update(1/60,{time:t});}
+ assert.ok(Math.abs(s.head[1]-HEAD_TURN.max)<1e-6,`walker head ${s.head[1].toFixed(2)} rad`);
+ assert.equal(s.look[1],0,'the walker body turned');
+ // Standing: the body takes LOOK_TURN.max and the head the rest of the way (1.5 rad in all).
+ assert.ok(Math.abs(s.look[0]+s.head[0]-1.5)<1e-6,`standing total turn ${(s.look[0]+s.head[0]).toFixed(2)}`);
+ assert.equal(s.head[2],0,'a knocked-down body turned its head');
+ // The GPU sees it.
+ const lane=crowd.lanes[s.lane[1]];
+ assert.ok(Math.abs(lane.shoeAttr.getY(s.slot[1])-s.head[1])<1e-6);
+ for(const i of [0,1])crowd.setState(i,STATE.NORMAL,{force:true});
+ for(let f=0;f<60;f++){t+=1/60;crowd.update(1/60,{time:t});}
+ assert.equal(s.head[1],0,'the head never came back');assert.equal(s.head[0],0);
+ crowd.dispose();
+});
+
+test('RUN 12.4: the head turns only above the neck, about the neck, and costs nothing when zero',()=>{
+ const src=readFileSync('src/life/hq-crowd.mjs','utf8');
+ assert.match(src,/attribute vec2 aShoe;/);
+ assert.doesNotMatch(src,/attribute float aHead/,'a 17th vertex attribute fails to link in WebGL');
+ assert.match(src,/aShoe\.y==0\.0\?0\.0:smoothstep\(crowdNeck\.x-crowdNeck\.y,crowdNeck\.x\+crowdNeck\.y,position\.y\)/);
+ assert.match(src,/transformed=crowdHeadRot\*\(transformed-crowdNeckAt\)\+crowdNeckAt;/);
+ const crowd=build(1);
+ for(const lane of crowd.lanes){
+  const box=lane.geometry.boundingBox,shader={uniforms:{},vertexShader:'#include <common>\n#include <beginnormal_vertex>\n#include <begin_vertex>',fragmentShader:'#include <common>'};
+  lane.material.onBeforeCompile(shader);
+  const [neck,band]=shader.uniforms.crowdNeck.value,tall=box.max.y-box.min.y;
+  assert.ok(neck>box.min.y+tall*.8&&neck<box.min.y+tall*.9,`${lane.lod} neck at ${((neck-box.min.y)/tall).toFixed(3)} of the height`);
+  assert.ok(band>0&&band<tall*.05);
+ }
  crowd.dispose();
 });

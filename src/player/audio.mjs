@@ -1,5 +1,9 @@
 // The car you can hear.
 //
+// RUN 12.1: recorded CC0 clips (src/audio/bank.mjs) now play the punches, impacts, crashes
+// and tyres, and these synthesised versions are the fallback until they decode. The engine note
+// is still only this.
+//
 // Every sound here is synthesised. Nothing is downloaded and no sample is shipped: the
 // engine is two detuned oscillators through a lowpass, and an impact is a short burst of
 // filtered noise. That keeps the repository free of third-party audio whose licensing would

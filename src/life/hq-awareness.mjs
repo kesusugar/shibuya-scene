@@ -276,10 +276,12 @@ export function createAwareness(){
    * The spread is the point: at one distance some people look, some startle, some step away
    * and the nervous ones run. A chorus would read as a script.
    */
-  witness(crowd,grid,{x,z,severity=.7,radius=AWARE.witnessRadius,kind='melee'}={}){
+  witness(crowd,grid,{x,z,severity=.7,radius=AWARE.witnessRadius,kind='melee'}={},{rebuilt=false}={}){
    if(!crowd?.population||!grid)return 0;
    const start=(typeof performance!=='undefined'?performance.now():0);
-   grid.rebuild(crowd);
+   // RUN 12.0: the HQ layer passes `rebuilt` when the grid already matches this frame, so a
+   // burst of witness events shares one O(population) rebuild instead of paying one each.
+   if(!rebuilt)grid.rebuild(crowd);
    grid.near(x,z,radius,scratch);
    stats.witnessCandidates=scratch.length;
    const s=crowd.state;

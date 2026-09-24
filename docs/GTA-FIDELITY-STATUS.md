@@ -18,7 +18,9 @@ in use now is a placeholder for the pipeline, not the final visual asset.
 
 ## 2. Branch and HEAD
 
-- Working branch: **`claude/gta-fidelity-upgrade`**, pushed to `origin`. Stay on it.
+- Current work lands on `master` through PRs: #19 (RUN 10–11), #20 (crowd realism, §9i) and
+  #21 (RUN 12, the final RUN, §9j, branch `claude/happy-tesla-dkn52d`). The historical working
+  branch **`claude/gta-fidelity-upgrade`** is merged and no longer where work happens.
 - RUN 10.1 handoff HEAD: **`76dc411`**. RUN 10.2–10.5 follow it on this branch; RUN 11 starts
   from `b037bc8` (§9h). Use `git log -1` for the current HEAD. Older HEAD lines and the old
   roadmap lower in this document are historical snapshots and are superseded by §9g.
@@ -69,9 +71,9 @@ cdb6271  RUN 6.7: near-pool budgets on every tier
 | 9 | Vehicle occupancy / enter-exit / carjacking | **COMPLETE** |
 | 10 | NPC life / awareness consolidation | complete: browser acceptance closed 2026-09-23 (§9g) |
 | 11 | Visual / audio / GTA feel polish | **COMPLETE** 2026-09-23 (§9h) |
-| 12 | Lighting / PBR polish | not started |
-| 13 | Performance / stability | not started |
-| 14 | Final QA and handoff | not started |
+| 12 | **Final**: performance guard, recorded audio, wet-road reflection, PBR ground, motion, robustness, final QA | **COMPLETE** 2026-09-24 (§9j) |
+| 13 | Performance / stability | folded into RUN 12 |
+| 14 | Final QA and handoff | folded into RUN 12 |
 
 **Current authority:** `src/life/hq-awareness.mjs` (RUN 10.1 onward). The old
 `src/life/awareness.mjs` is deprecated historical code with no production import. The RUN 7
@@ -1950,6 +1952,172 @@ night: **0 console errors, 0 exceptions, no error banner.** The only warning is 
 4. Pin `Hit_Knockback` / a get-up clip (UAL2) through `upstream.lock.json`.
 5. A listening pass on the synthesized audio with a real gesture; decide the fighter share.
 
+## 9j. RUN 12 — the final RUN: performance guard, recorded audio, wet-road reflection, PBR ground, motion, robustness, final QA
+
+**Scope and working method.**
+- **Base:** started from `master` `6c779cb` (PR #20 merged) on branch `claude/happy-tesla-dkn52d`, PR #21. RUNs 13 and 14 of the old roadmap are folded in here.
+- **Choosing what to do:** TIDELIGHT (a small WebGL scene, studied from outside) was used as a checklist of methods, never as a source of code or assets. Taken from it: recorded CC0 sound, a planar reflection, CC0 PBR surfaces, one shared definition for CPU and GPU, and graded quality and robustness. Left out: sun shafts (little use at night) and the no-bundler layout.
+- **Verification:** everything was checked in headless Chromium on SwiftShader (0.1–1.5 fps) and by the test suite. **Nothing here has been listened to or watched at a real frame rate.** Those are the user's real-device checks listed at the end of this section.
+
+### 12.0 Performance guard (`ae7e546`, `86110e3`)
+- **Ranking:** the HQ layer sorted every pedestrian by distance every frame, allocating a record for each, only to take the nearest `budget`. It now keeps pooled records, orders nothing when everyone fits (HIGH), and runs an in-place O(n) nearest-k selection (`selectNearest`) otherwise.
+- **Grid:** the crowd grid (O(population)) is built at most once per synced frame and shared by the vehicle threat, every witness event and the perception tick (`ensureGrid`). It used to be rebuilt up to three times a frame.
+- **Cost:** `qa/gta-upgrade/sync-cost.mjs` measures 1,978 walkers over 600 frames, CPU only.
+
+  | Budget | Mean before → after | p95 before → after |
+  | --- | --- | --- |
+  | 1,978 | 1.355 → 0.975 ms | 1.821 → 1.455 ms |
+  | 512 | 0.876 → 0.321 ms | 1.329 → 0.449 ms |
+
+**Quality tiers, as they stand** (collected from the modules that own them):
+
+| | HIGH | MEDIUM | LOW |
+| --- | --- | --- | --- |
+| Pixel ratio × render scale | ≤1.5 × 1 | ≤1.25 × .6 | 1 × .3 |
+| Frame cap | 60 | 30 | 24 |
+| Shadows / GTAO / SMAA / bloom | 4096 / on / on / on | off | off |
+| Night point lights / spots | 6 / on | 2 / off | 0 / off |
+| Environment map | on | on | off |
+| HQ crowd budget | 1,978 | 512 | 0 (legacy) |
+| Near humanoids / near slots | 8 / 32 | 4 / 12 | 0 / 4 |
+| Moving / parked cars | 62 / 12 | 30 / 7 | 14 / 3 |
+| Road mirror (12.2) | on at night, 1/2 res, every 2nd frame (4th below 25 fps) | off | off |
+| PBR ground (12.3) | on | on | off |
+| Recorded audio (12.1) | on | on | on |
+
+### 12.1 Recorded CC0 audio (`0064309`, `deb6415`, `51cd72f`)
+- **Sources and pipeline:**
+  - `assets/audio/upstream.lock.json` pins 33 CC0-1.0 sources: 32 Freesound sounds, each licence read from the sound's own page, plus Kenney's Impact Sounds.
+  - `npm run fetch:audio` verifies every file by SHA-256.
+  - `npm run convert:audio` does the rest in a local Chrome:
+    - cuts each clip to its window and trims the silence;
+    - normalises one-shots to −12 dBFS on their loudest 50 ms, beds to −20 dBFS and the chirp to −16 dBFS, with peaks ≤ −1 dBFS;
+    - crossfades loop tails into their heads;
+    - encodes to MP3 (lamejs, dev only);
+    - records the encoder's 25 ms lead-in.
+  - Output: 40 clips, 1.73 MB, in `public/audio/`. Credits are in `docs/AUDIO-ASSETS.md`.
+  - Commit `0064309` carries both the pipeline and its runtime. A broken command chain merged two intended commits; it was pushed and not rewritten.
+- **Playback** (`src/audio/bank.mjs`, `src/audio/soundscape.mjs`):
+  - Clips load after the entering-player gesture and are never awaited; every sound keeps its synthesised fallback until they decode.
+  - Variants rotate and detune ±3%.
+  - Placed sounds are HRTF panners with the listener on the camera.
+  - Caps: 4 voices per kind and 18 in total; a safety compressor guards the output.
+  - Two beds scale with the people and moving cars near the ears: Heigh-hoo's real `cross_road_shibuya` and `ginza_ambience` recordings.
+  - A Japanese "cuckoo" crossing chirp sits at the scramble during the pedestrian green.
+  - Footsteps play per stride actually covered, and tyres squeal on a real slide or a hard stop. Crashes duck the beds, and **H** sounds the horn.
+  - Crowd screams, gasps and low grunts use recordings through the voices' own cap, gaps and scream priority. The words stay synthesised.
+- **Live** (headless with autoplay allowed):
+  - 40 clips decoded, 0 errors, 0 fallbacks once loaded;
+  - 3 loops playing and 10 steps over a 5 s walk;
+  - punches played as recordings;
+  - 0 voices left ringing.
+
+### 12.2 Wet-road reflection (`a5d8bc6`, `06541c9`)
+- **Method:** the asphalt's night patch now samples a real mirror (`src/nightglow/road-reflection.mjs`).
+  - The mirror camera sits below the road with an oblique near plane.
+  - It is sampled along a ripple-perturbed reflected ray and blurred more along the view, the way wet asphalt streaks light.
+  - It is weighted by Fresnel and the existing wet mask, and faded at the texture edges.
+- **Budget:**
+  - HIGH at night only, half resolution capped at 960 px, every 2nd frame (every 4th below 25 fps).
+  - Ground, crowd and wet decals are hidden from the mirror.
+  - The texture is unbound while it is drawn into, so it can never form a feedback loop.
+  - The painted streaks and patches step back (×0.45, ×0.4) instead of doubling.
+- **Headless HIGH night:** at CAM-03 and CAM-08 the lit frontage, signs and street lamps now appear in the crossing. 0 errors, 0 shader messages. `__SHIBUYA_MIRROR__.enabled` gives an A/B.
+- **Found this way:** the GLSL snippet lacked a trailing newline, so the three.js shader it was prepended to began `}#define STANDARD` and the asphalt failed to compile. A test now checks every preprocessor line.
+
+### 12.3 PBR ground (`612dc5e`, `fd976a0`, `2dbe71f`, `692c110`, `d0512cd`)
+- **Sets:** two Poly Haven CC0 sets. `asphalt_track` is 2 m, dark and crack-free, so no repeating cracks. `concrete_pavement` is 1.8 m grey rectangular pavers.
+- **Pipeline:** pinned by hash and re-encoded in Chrome's canvas at 1024 px, 4.7 → 1.33 MB.
+- **Runtime** (`src/ground/pbr.mjs`):
+  - The maps are swapped onto the same materials once the city stands (idle callback), so draw calls are unchanged and the night patches carry over.
+  - They tile at real scale.
+  - Each material is tinted per channel, in linear light, so the photograph averages exactly what the procedural texture did. The lighting was calibrated against that average.
+  - LOW and `?pbr=0` keep the procedural ground.
+- **Headless:** applied to both sets day and night, draw calls unchanged (341 / 349), 0 errors. The difference is detail in close-up, not grade.
+
+### 12.4 Motion (`eedfc73`, `63c03dd`, `429ef3a`, `51a4a8d`)
+- **Returning cast stay on the pavement.** The walk-back after fleeing a car used a single fallback: once held up for a second, any non-solid step. It is now tiered: after 1 s, walkable ground with a thin 5 cm margin or their own crossing; only after 3 s, any clear step. In one crowd arrangement 7 of 347 fleers had ended off walkable ground; now 0.
+- **The head.**
+  - A walker who notices something turns the head (≤0.75 rad), and a standing one's head takes whatever the body turn left over.
+  - Only bind-pose vertices above the neck turn, faded over 3.5% of the height and pivoting on the neck carried by its own skin matrix.
+  - The yaw shares the shoe attribute's slot (`aShoe` is now `vec2`). The crowd shader already uses the 16 vertex attributes WebGL guarantees, and a separate `aHead` failed to link ("Too many attributes"). A test pins it.
+- **Wind in the street trees.**
+  - The shared leaf material sways in the vertex shader in two unequal gusts per 11 s cycle.
+  - The front travels at 3.2 m/s across the street, and the sway is weighted by height so planters barely move.
+  - The shadow depth material carries the same patch.
+- **Tried and reverted: stop-and-go for jammed walkers.** Measured on the real network over 60 s:
+  - the renderer-visible creep (smoothed pace 0.12–0.3 m/s) fell only from 7.6% to 5.9%;
+  - stopped walkers went from 12% to 30%, and stuck recycles from 5 to 19.
+
+  The creep is almost all far-LOD walkers 60–200 m out, updated every 0.2 s. Near the player it is ≈0.3% of samples and the renderer's start threshold hides it.
+- **Not done, by decision:**
+  - Velocity-matched (Hermite) pose transfer: PR #20's crossfades already remove the pops, and the GPU atlas keeps no per-bone state to match.
+  - `Hit_Knockback`: its provenance still cannot be pinned.
+
+### 12.5 Robustness (`85ba0f0`, `d6f2c1e`)
+- **Hidden tab:** the AudioContext is suspended if it was running, and resumed on return. Live: running → suspended → running.
+- **Lost WebGL context:** the sound stops with the picture.
+- **Reduced motion:** `prefers-reduced-motion` quarters camera knocks, and `?shake=0` removes them.
+- **Touch devices:** the road mirror starts off (`?mirror=1` / `?mirror=0` force it). The tier is not lowered, because MEDIUM and LOW still lack full prebake coverage.
+- **Already present:** dt clamp (FrameGate, 0.1 s), load-failure notice, and a fallback for every optional upgrade (HQ crowd, audio, ground textures).
+
+### 12.6 Final QA
+**Long mixed run.**
+- **Setup:** headless HIGH, player mode, autoplay allowed so the audio really ran. The mirror was off (`?mirror=0`) and the viewport 420×240 so the run could finish. The mirror itself was verified separately in 12.2.
+- **Each cycle:** walk or run, two punches, a carjack attempt, a day/night switch through the UI.
+- **Length:** 108 s of simulated time, three time switches.
+- **Every sample, start to end:**
+  - population 1,977–1,978 (1,968–1,969 HQ plus 8 near);
+  - 0 legacy bodies or props, 0 Skeleton and 0 Mixer, 0 non-finite;
+  - GPU geometries 183 and textures 48, constant from the first sample to the last;
+  - JS heap 198 → 186 → 190 → 190 MB (flat);
+  - 27 recorded sounds played, 0 dropped, 0 decode errors, 0 left ringing.
+- **Console:** 0 errors across all 18 of the page's log entries, replayed on re-attach.
+- **Harness notes:** the carjack did not complete inside the harness's real-time wait (boarding takes seconds of simulated time, which is minutes at 0.2 fps). The run hit its 90-minute wall-clock limit inside the third cycle; the final sample was taken by re-attaching to the same page.
+
+**Drive check** (simulated-time waits, same setup):
+- boarded a stolen car and drove it into the densest 4 m cell: 10 people hit;
+- horn (H) 1, tyre screech on a forced slide 1;
+- 21 recorded sounds, including body impacts;
+- crowd voices: 63 played (5 of them recorded screams), 159 dropped by the voice cap, as designed for a crowd pass;
+- feedback bus: 14 emitted, 10 delivered, at most 3 per frame;
+- 0 errors.
+
+**Frame rate here:** 0.1–0.2 fps at both 900×520 and 420×240. The cost is per frame on the CPU, not fill rate, which is in line with RUN 11's headless runs (0.1–1.5 fps). SwiftShader numbers are not a performance result. Real-device fps is the user's check below.
+
+**Console gate.**
+- **Setup:** fresh pages, HIGH, the HQ crowd by default, day then night. Day covered walking, running, a punch, boarding, driving and getting out; night covered load and idle.
+- **Result:** **0 errors, 0 uncaught exceptions, 0 shader-compile messages, no `[role="alert"]` banner** at any checkpoint.
+- **Structure:** 0 Skeleton and 0 Mixer; HQ 1,969 (day) and 1,971 (night); draw calls 473 / 477, the same as RUN 11's gate.
+- **Warnings:** only Chrome's AudioContext autoplay notice, as in RUN 11. It is not an app error.
+
+**Final gates:** `npm run typecheck` clean. `npm test` (build included): 496 tests, **491 pass, 5 existing skips, 0 fail**. That is 30 new tests over PR #20's 467 / 462 / 5 / 0, with no regression.
+
+### What the user checks on real hardware
+1. **Mirror:** `?qa=1&tier=high&time=night&camera=street`. Look at the wet crossing. Toggle `__SHIBUYA_MIRROR__.enabled` and note fps and draw calls for both.
+2. **Audio:** in player mode, walk (steps), stand at the scramble (bed; chirp on the green), punch (E), drive (F), horn (H), brake hard or slide, and hit someone. Say which kinds are too loud or too quiet (`MIX` in `src/audio/bank.mjs`).
+3. **Ground:** close up in player mode by day. Compare `?pbr=0`.
+4. **Head turns and wind:** drive near a crowd; walkers should turn their heads. Watch the street trees for a few gusts.
+
+### Remaining limitations (added by RUN 12)
+- **Audio:**
+  - Nothing has been listened to; levels are measured, not balanced by ear.
+  - The engine is still the synthesised note.
+  - The crowd's words are still formant speech.
+  - Freesound transports are the sounds' 128 kbps previews, since originals need an API key.
+- **Mirror:**
+  - It does not show the crowd or the ground, so reflected people are absent.
+  - Its cost on the user's GPU is unmeasured.
+  - Off on touch devices.
+- **PBR:** only road and pavement. Curbs, crossing paint and tactile paving are flat.
+- **Motion:**
+  - Far-LOD jam creep remains (see 12.4).
+  - The head turn is yaw only.
+  - `Hit_Knockback` / a get-up clip is still missing.
+- **Tiers:** MEDIUM and LOW prebake coverage is still incomplete (`docs/ISSUE-LOW-TIER-PREBAKE-2026-09-20.md`).
+
+**RUN 12 COMPLETE. This was the final RUN of the GTA Fidelity plan; RUN 13 and 14 are folded in. What is left is the real-device checks above and the limitations listed with them.**
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
@@ -2054,6 +2222,21 @@ proportions, pose, material and visual bugs are reviewed from screenshots.
 
 Each of these cost real time to find. They are recorded so the next session recognises the
 symptom instead of rediscovering the cause.
+
+**RUN 12: a GLSL snippet without a trailing newline.** A shader string prepended to a three.js
+shader that opens with `#define` glued the two into `}#define STANDARD`, and the asphalt failed to
+compile ("'#' : invalid character") only in the browser. Every injected snippet must end in `\n`.
+`tests/road-reflection.test.mjs` and `tests/street-wind.test.mjs` check that every preprocessor
+line starts a line.
+
+**RUN 12: the crowd shader is at WebGL's 16 vertex attributes.** A new instanced `float` failed to
+link ("Too many attributes"). Pack new per-instance data into a spare component of an existing
+attribute (the head yaw is `aShoe.y`), never into a new attribute. `tests/hq-crowd.test.mjs` pins
+this.
+
+**RUN 12: a filtered converter run wiped the shipped clips.** `AUDIO_ONLY` debugging used to clear
+`public/audio` and rewrite the manifest with only the filtered clips. Filtered runs now write to
+a scratch folder.
 
 **`isReady` TypeError at city build.** `compileAsync` polls materials every 10 ms with no
 stop; `WebGLProperties.get` returns a fresh empty object for a material that has been
@@ -2196,6 +2379,8 @@ seconds. Check the fresh case before blaming the harness.
 
 ## 18. Known limitations
 
+- **See §9j for RUN 12's limitations**: unheard audio, mirror cost unmeasured and crowd-free,
+  PBR only on road and pavement, far-LOD jam creep, yaw-only head turn.
 - **See §9i for the crowd-realism limitations** (jam creep in Idle, far-LOD dither, local-only
   flight, body-only LOOK turn, matrix-lerp crossfades, unheard audio). §9i also supersedes two
   entries below: the HQ crowd is now the default without `hq=` (`hq=0` is the rollback), and
