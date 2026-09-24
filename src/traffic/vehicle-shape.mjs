@@ -130,7 +130,8 @@ const SILHOUETTE={
 };
 const STYLE={taxi:'sedan',sedan:'sedan',kei:'hatch',van:'onebox',bus:'onebox',keiTruck:'cabover',
  longVan:'semibonnet',minivan:'minivan',tallKei:'tallbox',cityTaxi:'mpv',truck2t:'cabover',
- police:'sedan',coupe:'coupe',ownCar:'fastback',unmarked:'sedan',riotBus:'onebox'};
+ police:'sedan',coupe:'coupe',ownCar:'fastback',unmarked:'sedan',riotBus:'onebox',
+ heroSilver:'coupe',heroDark:'coupe'};
 /** The silhouettes, for tests: every lofted type must name one. */
 export const SILHOUETTES=Object.freeze(Object.keys(SILHOUETTE));
 export const STYLES=Object.freeze({...STYLE});
@@ -367,22 +368,26 @@ export function buildVehicleShape(type,{detail=1}={}){
  // base to the nose, side skirts between the arches, a front lip and a small rear wing.
  const popups=[];
  if(d.kit){
+  // `kit` may be true (the own car: everything) or say which pieces: {bonnet, wing:'small'|'big'}.
+  const kit=d.kit===true?{bonnet:true,wing:'small'}:d.kit;
   const screen=profile.house[profile.house.length-1][0];
   const bonnet=[];const span=Math.max(6,Math.round(10*detail));
   for(let i=0;i<=span;i++){
    const f=lerp(screen,.497,i/span),z=f*L,[beltF,widthF]=at(profile.belt,f);
    bonnet.push({z,ring:panelRing(W/2*widthF*.90,H*beltF-.012,H*beltF+.010,round*.5)});
   }
-  parts.dark.push(loft(bonnet));
+  if(kit.bonnet)parts.dark.push(loft(bonnet));else bonnet.length=0;
   for(const side of [-1,1]){
    const skirt=new BoxGeometry(.05,H*.085,axleZ*2-radius*2.6);
    skirt.translate(side*(W/2*.985),H*profile.arch*.78,0);parts.dark.push(skirt);
   }
   const lip=new BoxGeometry(W*.84,.045,.14);lip.translate(0,H*profile.floor*.9,L*.5-.03);parts.dark.push(lip);
   const [tailBeltF]=at(profile.belt,-.46);
-  const wing=new BoxGeometry(W*.78,.03,.20);wing.translate(0,H*tailBeltF+.13,-L*.455);parts.dark.push(wing);
+  // A big wing stands higher and wider on taller posts.
+  const big=kit.wing==='big',rise=big?.24:.13;
+  const wing=new BoxGeometry(W*(big?.92:.78),.035,big?.26:.20);wing.translate(0,H*tailBeltF+rise,-L*.455);parts.dark.push(wing);
   for(const side of [-1,1]){
-   const post=new BoxGeometry(.04,.13,.06);post.translate(side*W*.30,H*tailBeltF+.06,-L*.455);parts.dark.push(post);
+   const post=new BoxGeometry(.04,rise,.06);post.translate(side*W*.30,H*tailBeltF+rise/2-.005,-L*.455);parts.dark.push(post);
   }
  }
  if(d.popups){

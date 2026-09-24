@@ -21,6 +21,13 @@ export const VEHICLES={
  // PLAN-POLICE W2/W4 ☆4–☆5: never in ordinary traffic (weight 0). An unmarked dark saloon with a
  // magnetic red beacon, and a riot-squad transport in blue and white. Generic, unlettered.
  unmarked:{width:1.8,length:4.9,height:1.47,speed:13,accel:2.2,brake:4.5,weight:0,color:0x1a1d22,name:'Unmarked',fixedPaint:true,beacon:true,steer:.64,grip:14,police:true},
+ // PLAN-LOOKS Step D: two one-off night cars, parked near the crossing (HIGH and MEDIUM). Weight 0:
+ // never ordinary traffic. A compact FR coupe in silver-blue with a clean kit and a big wing, and a
+ // short wide two-seater in gunmetal on black rims. Drift tune and a higher-revving voice. No decals.
+ heroSilver:{width:1.72,length:4.3,height:1.28,speed:14,accel:2.5,brake:4.8,weight:0,color:0x9aa7b4,name:'Tsuki S',fixedPaint:true,hero:true,
+  kit:{bonnet:false,wing:'big'},steer:.74,grip:8,slide:1.6,engine:{idleHz:64,revHz:220,wave:'sawtooth'}},
+ heroDark:{width:1.84,length:4.2,height:1.27,speed:14.5,accel:2.7,brake:5,weight:0,color:0x3b3f45,name:'Yoru Z',fixedPaint:true,hero:true,rim:0x151618,
+  kit:{bonnet:false,wing:'small'},steer:.72,grip:8.5,slide:1.7,engine:{idleHz:58,revHz:205,wave:'sawtooth'}},
  riotBus:{width:2.3,length:7.6,height:2.9,speed:10,accel:1.3,brake:3.2,weight:0,color:0x1f3f7a,name:'Riot Transport',livery:'riot',steer:.45,grip:10,police:true},
  coupe:{width:1.78,length:4.4,height:1.3,speed:13,accel:2.4,brake:4.5,weight:2,color:0x9c1d22,name:'Street GT',steer:.68,grip:14},
  // PLAN-POLICE-AND-OWN-CAR Step H: the player's own drift fastback. Weight 0 and `owned`: traffic
