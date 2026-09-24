@@ -169,8 +169,10 @@ test('a diagonal input walks diagonally rather than sliding sideways',()=>{
  const s=player.state;
  // The body ends up facing where it is going, and where it is going is 45 degrees off the
  // camera. Feet pointing one way while the body travels another is the thing to avoid.
+ // At heading 0 the camera looks toward +z and its right is world -x, so forward-right is
+ // -PI/4 (this test used to expect +PI/4, which is forward-left on screen).
  assert.ok(Math.abs(turnTo(s.bodyHeading,s.course))<.05,'the body is not facing its course');
- assert.ok(Math.abs(turnTo(s.course,Math.PI/4))<.05,`course is ${s.course}`);
+ assert.ok(Math.abs(turnTo(s.course,-Math.PI/4))<.05,`course is ${s.course}`);
 });
 
 test('a reversal does not happen at full speed',()=>{

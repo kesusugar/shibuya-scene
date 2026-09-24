@@ -89,8 +89,10 @@ test('melee selects a facing adult, provokes counterattacks, and either side can
  // Each swing has to finish before the next one starts: a press during recovery is dropped
  // rather than queued, so landing two more hits means waiting for the arm to come back twice
  // rather than pressing twice.
+ // Step E (player crowd contact): four blows put someone down, so three more after the first
+ // (this loop was two while a punch did 34).
  player.state.hurtTime=0;
- for(let i=0;i<2;i++){
+ for(let i=0;i<3;i++){
   while(fight.phase!=='idle')fight.update(.1,crowd,player);
   fight.request();
   for(let k=0;k<14;k++){fight.update(.1,crowd,player);player.state.hurtTime=0;}
