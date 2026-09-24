@@ -28,7 +28,8 @@ export const LIVERY=Object.freeze({
  police:Object.freeze({id:1,lower:0x121417,second:0xf1f1ec,band:.58}),
  taxiTwoTone:Object.freeze({id:2,lower:0xe7b823,second:0x2f6b45,band:.73}),
  bus:   Object.freeze({id:3,lower:0x2f7d4f,second:0xe9e2c8,band:.40}),
- taxiCream:Object.freeze({id:4,lower:0xe8e1cf,second:0x7a1f2b,band:.73})
+ taxiCream:Object.freeze({id:4,lower:0xe8e1cf,second:0x7a1f2b,band:.73}),
+ riot:  Object.freeze({id:5,lower:0x1f3f7a,second:0xe9ecef,band:.52})
 });
 const LIVERY_BY_ID=Object.values(LIVERY).sort((a,b)=>a.id-b.id);
 
@@ -90,7 +91,7 @@ function pickShare(list,u){
 export function paintOf(id,type){
  const h=hash(id,0x5bd1e995),u=(h&0xffff)/65536,shade=h>>>16;
  // The player's own car is always its own colour.
- if(VEHICLES[type]?.owned)return {hex:VEHICLES[type].color,livery:0,band:0,name:'own'};
+ if(VEHICLES[type]?.owned||VEHICLES[type]?.fixedPaint)return {hex:VEHICLES[type].color,livery:0,band:0,name:VEHICLES[type].owned?'own':type};
  const fixed=VEHICLES[type]?.livery;
  if(fixed){const l=LIVERY[fixed];return {hex:l.lower,livery:l.id,band:l.band,name:fixed};}
  if(type==='taxi'||type==='cityTaxi'){

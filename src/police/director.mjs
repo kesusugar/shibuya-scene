@@ -4,19 +4,34 @@
 import {createWanted,WANTED} from './wanted.mjs';
 import {createSirens,createLoudspeaker} from './siren.mjs';
 import {createPoliceUnits} from './units.mjs';
+import {VEHICLES} from '../traffic/config.mjs';
+
+/** Is this traffic slot a police vehicle (patrol car, unmarked car, riot transport)? */
+export const isPolice = v => !!VEHICLES[v?.type]?.police;
 
 export const POLICE = Object.freeze({
  respondRange: 300,        // m: patrol cars this close run their sirens while the player is wanted
  witnessRange: 25,         // m: civilians this close to a fight see it
  ramSpeed: 2,              // m/s: slower than this, touching a patrol car is not ramming it
  ramRepeat: 3,             // s between two rams counting twice
- speakRange: 35            // m: the loudspeaker is used when a siren car is this close
+ speakRange: 35,           // m: the loudspeaker is used when a siren car is this close
+ // W4 balance: while wanted, a crowd bump may start a fight only while fewer than this many
+ // civilians are already fighting the player. Police plus a mob made a dense Scramble unwinnable.
+ bumpFightCap: 2
 });
+
+/** May a bump start one more civilian fight? Pure; `stars` is the wanted level. */
+export function allowBumpFight(stars, pool, time, cap = POLICE.bumpFightCap) {
+ if (!stars) return true;
+ let n = 0;
+ for (const p of pool ?? []) if (p.active && !p.officer && !p.combatDead && p.combatTarget === 'player' && p.combatUntil > time && ++n >= cap) return false;
+ return true;
+}
 
 /** Patrol cars that can see a point: in the traffic pool, not the player's, within sight range. */
 export function officersSee(pool, x, z, except = null, range = WANTED.sightRange) {
  for (const v of pool ?? []) {
-  if (!v.active || v.type !== 'police' || v === except) continue;
+  if (!v.active || !isPolice(v) || v === except) continue;
   if (Math.hypot(v.x - x, v.z - z) <= range) return true;
  }
  return false;
@@ -76,7 +91,7 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
     runovers.add(e.id);
     wanted.crime('runoverKill', {x: e.x, z: e.z, t: time, id: 100000 + e.id});
    }
-   if (driving && car?.state?.slot && car.state.type === 'police' && !taken.has(car.state.slot)) {
+   if (driving && car?.state?.slot && isPolice(car.state) && !taken.has(car.state.slot)) {
     taken.add(car.state.slot);
     wanted.crime('policeCarTaken', {x: car.state.x, z: car.state.z, t: time});
    }
@@ -90,7 +105,7 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
    const rammed = car?.state?.rammed;
    if (rammed) {
     car.state.rammed = null;
-    if (rammed.type === 'police' && Math.abs(car.state.speed ?? 0) >= POLICE.ramSpeed && time - lastRam >= POLICE.ramRepeat) {
+    if (isPolice(rammed) && Math.abs(car.state.speed ?? 0) >= POLICE.ramSpeed && time - lastRam >= POLICE.ramRepeat) {
      lastRam = time;
      wanted.crime('policeRam', {x: car.state.x, z: car.state.z, t: time});
     }
@@ -112,7 +127,7 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
    sources.length = 0;
    const responding = wanted.state.stars > 0;
    for (const v of pool) {
-    if (!v.active || v.type !== 'police') continue;
+    if (!v.active || !isPolice(v)) continue;
     if (v === except) {
      // The player's own patrol car runs its siren only when they switch it on (H).
      v.siren = !!car?.state?.siren && driving;
@@ -130,11 +145,13 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
   },
   /** H in a patrol car: siren and lamps on or off. Returns false if this car has none. */
   toggleSiren(car) {
-   if (!car?.state || car.state.type !== 'police') return false;
+   if (!car?.state || !isPolice(car.state)) return false;
    car.state.siren = !car.state.siren;
    return true;
   },
   clear(reason) {wanted.clear(reason);},
+  /** W4: the crowd-bump fight cap, for the scene's bump callback. */
+  allowBumpFight(crowd) {return allowBumpFight(wanted.state.stars, crowd?.pool, crowd?.time ?? 0);},
   dispose(traffic, crowd) {sirens.dispose(); units.dispose(traffic, crowd);}
  };
  return api;

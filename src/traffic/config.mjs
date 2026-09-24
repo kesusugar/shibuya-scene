@@ -17,7 +17,11 @@ export const VEHICLES={
  tallKei:{width:1.48,length:3.4,height:1.78,speed:9,accel:1.6,brake:4,weight:5,color:0xe8dcb4,name:'Tall Box K',steer:.64,grip:12},
  cityTaxi:{width:1.7,length:4.4,height:1.75,speed:10,accel:1.7,brake:4,weight:10,color:0x1d2440,name:'Metro Cab',roofSign:true},
  truck2t:{width:1.9,length:4.8,height:2.3,speed:8,accel:1.2,brake:3.5,weight:4,color:0xeeeeea,name:'Delivery 2t',cargo:{to:.06,height:2.95},steer:.5,grip:10},
- police:{width:1.8,length:4.9,height:1.47,speed:12,accel:2.1,brake:4.5,weight:1.5,color:0x121417,name:'Patrol',livery:'police',lightbar:true,steer:.64,grip:14},
+ police:{width:1.8,length:4.9,height:1.47,speed:12,accel:2.1,brake:4.5,weight:1.5,color:0x121417,name:'Patrol',livery:'police',lightbar:true,steer:.64,grip:14,police:true},
+ // PLAN-POLICE W2/W4 ☆4–☆5: never in ordinary traffic (weight 0). An unmarked dark saloon with a
+ // magnetic red beacon, and a riot-squad transport in blue and white. Generic, unlettered.
+ unmarked:{width:1.8,length:4.9,height:1.47,speed:13,accel:2.2,brake:4.5,weight:0,color:0x1a1d22,name:'Unmarked',fixedPaint:true,beacon:true,steer:.64,grip:14,police:true},
+ riotBus:{width:2.3,length:7.6,height:2.9,speed:10,accel:1.3,brake:3.2,weight:0,color:0x1f3f7a,name:'Riot Transport',livery:'riot',steer:.45,grip:10,police:true},
  coupe:{width:1.78,length:4.4,height:1.3,speed:13,accel:2.4,brake:4.5,weight:2,color:0x9c1d22,name:'Street GT',steer:.68,grip:14},
  // PLAN-POLICE-AND-OWN-CAR Step H: the player's own drift fastback. Weight 0 and `owned`: traffic
  // never spawns or drives one. Orange with a black bonnet and kit (`kit`), pop-up lamps, round
