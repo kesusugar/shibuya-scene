@@ -4941,6 +4941,62 @@ run-over once per body; a stolen patrol car ☆3 and H). New modules, so they fa
 officers (W2). Civilian witnesses are a count, so a report is never cancelled in the game (the
 module supports ids). The siren's sound is unheard and untuned.
 
+## 9r. Police plan, W2 — pursuit, giving way, officers and the arrest (branch `claude/looks-fleet-6`, on `claude/looks-fleet-5`)
+
+**Plan:** `docs/PLAN-POLICE-AND-OWN-CAR.md` W2. New `src/police/units.mjs`, driven by the director.
+
+**What changed.**
+- **Patrol cars.** Caps 1/2/4/5/6 by star. One is added every 1.5 s below the cap, in a free traffic
+  slot, at a lane sample 80–200 m from the player that the camera frustum does not contain
+  (`inView` in the scene) and the flow field can reach. It is a `controlled` slot, so traffic sees
+  it and stops behind it but does not drive it.
+- **How they drive: a flow field, not a route.** Measured on the HIGH graph, fewer than one lane
+  pair in ten is connected (lanes are one-way segments that traffic leaves at the end of a route);
+  a routed chase wandered off, and look-ahead steering with `safePose` stalled in narrow streets.
+  So the carriageway is a 4 m grid (a cell is road when its centre or one of four inner points is:
+  centre-only sampling left 56 islands, this leaves 6 with 98.8% in one piece), built ~150 cells a
+  frame from entering player mode (1.3 s of `ctx.onRoad` in total; fps unchanged while building),
+  with a breadth-first distance from the player's cell refreshed every second. A car steers at the
+  point three cells down the field, slows for sharp turns, drives the last 30 m straight in and
+  stops 4.5 m short.
+- **Traffic gives way.** Cars within 40 m ahead of a siren and going the same way (±60°) brake and
+  hold (`givingWay`). They do not pull to the kerb yet.
+- **Officers.** Caps 2/4/6/8/8. A pedestrian 40–140 m away and out of view (near the koban at ☆1)
+  is taken out for one frame, so the HQ layer drops the old body, and comes back with
+  `appearanceId = OFFICER_BASE + id`: `appearanceOf` gives that id the same body in a navy
+  uniform with no pattern (still a pure function of the id, and `deduplicate` never recolours a
+  uniform). They run in (3.4 m/s), cross roads (only walls stop them), come to arm's reach, grab
+  a player who is not fighting — 2 s is an arrest, a punch breaks it — and use the baton, 15 a
+  hit every 1.1 s, on one who is. The civilian fight loop skips them. A punch on an officer is an
+  assault, a kill an officer kill (W1).
+- **In a car.** Stopped (< 1 m/s) with a patrol car against it for 3 s is an arrest.
+- **The arrest** freezes the player, gets them out of a car, and shows the game-over dialog as
+  「逮捕 / 警察に捕まりました。交番から再開します」; 「もう一度」 revives them at the koban (the station
+  koban POI) with 100 HP and the stars cleared. A baton death reads 「警官に取り押さえられました」.
+- **Leaving.** When the level clears, cars drive away down the field and officers stop; each is
+  freed only when out of view and more than 60 m away, so nothing pops out in sight.
+
+**Found on the device check, and fixed.** Officers stopped 4 m short — the civilian fight loop only
+acts on people standing on pavement; units now own officers. The arrested player respawned at the
+start — `revive()` re-places the player, so the koban placement moved after it.
+
+**Device check** (`evidence/police-own-car/w2/`, HIGH night, standing still): at ☆2 two patrol cars
+came from 167/172 m to 4–5 m, four officers from 40–120 m to arm's reach, then 逮捕 and a respawn
+4.7 m from the koban at 100 HP, stars cleared; 0 errors; fps unchanged while the field built.
+
+**Tests.** `tests/police-units.test.mjs` (9): a lane route; cars never spawn in view or nearer than
+80 m and reach each star's cap; a car closes in and stops short, stays while in view after the
+level clears and is freed out of view; traffic ahead of a siren slows (not beside, not oncoming);
+officers are converted out of view in uniform with their own body and return to being people;
+uniforms are pure and not deduplicated, and the baton is 15; the arrest on foot (2 s, broken by a
+punch); the arrest in a car (3 s, reset by driving off); officers close in and the baton hits a
+player who fights back.
+
+**Limitations.** No line-of-sight test (a patrol car or officer within 45 m "sees"). Patrol cars do
+not collide with traffic or box the player in (no PIT at ☆3). Officers do not get out of the patrol
+cars; they are pedestrians from the street. The grab has no animation of its own. Traffic brakes
+for a siren but does not pull over.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
@@ -5059,6 +5115,8 @@ Unpack with power-of-two divisions after `floor(v+0.5)`, never by dividing by a 
 **Looks B (§9n): a fragment snippet guarded by a vertex-only macro.** three defines `USE_BATCHING_COLOR` for the vertex stage only; the fragment stage gets `USE_COLOR_ALPHA`. Code guarded by the vertex macro in a fragment shader silently compiles out. `tests/traffic-fleet.test.mjs` checks the livery snippet.
 
 **Police W3 (§9q): do not add point lights for sirens.** Every lit material is compiled for the scene's light count; two more lights recompile everything and exceed the HIGH night budget (6). The roof bar is emissive.
+
+**Police W2 (§9r): the lane graph is not a road map.** Fewer than one lane pair in ten connects; route a chase over the carriageway flow field in `units.mjs`, not over lanes. And `revive()` re-places the player: anything that moves them on respawn goes after it.
 
 **Player crowd contact (§9l): a dodge is a request, not a guarantee.** People who do not act on it
 (the cast walking a track through the player, a fighter, someone fleeing or in cooldown) walked
