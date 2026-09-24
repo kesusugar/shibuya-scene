@@ -12,12 +12,12 @@
 //  - encoded to MP3 (every browser decodes it; Safari does not decode Ogg Vorbis everywhere);
 //  - decoded AGAIN to measure the encoder's lead-in, so a punch starts on the frame it lands.
 //
-// Chrome is found through CHROME_PATH, then the usual install locations.
-import {spawn} from 'node:child_process';
+// Chrome is found by scripts/lib/headless-chrome.mjs (CHROME_PATH, then the usual places).
 import {existsSync,readFileSync,writeFileSync,mkdirSync,readdirSync,rmSync} from 'node:fs';
 import {join} from 'node:path';
 import {inflateRawSync} from 'node:zlib';
 import {Mp3Encoder} from '@breezystack/lamejs';
+import {openPage} from './lib/headless-chrome.mjs';
 import {AUDIO_LOCK_PATH,upstreamFile} from './fetch-audio-upstream.mjs';
 
 export const OUT='public/audio';
@@ -46,32 +46,9 @@ export function unzip(buffer){
  return out;
 }
 
-function findChrome(){
- const list=[process.env.CHROME_PATH,
-  ...(existsSync('/opt/pw-browsers')?readdirSync('/opt/pw-browsers').filter(d=>d.startsWith('chromium-')).map(d=>`/opt/pw-browsers/${d}/chrome-linux/chrome`):[]),
-  '/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser',
-  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe','C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'];
- const found=list.find(p=>p&&existsSync(p));
- if(!found)throw new Error('No Chrome found; set CHROME_PATH');
- return found;
-}
-
 /** A headless Chrome page that decodes audio bytes to PCM with the Web Audio decoder. */
 async function openDecoder(){
- const dir=join(process.env.TMPDIR??'/tmp',`shibuya-audio-${process.pid}`);
- const chrome=spawn(findChrome(),['--headless=new','--no-sandbox','--disable-gpu','--remote-debugging-port=0',`--user-data-dir=${dir}`,'about:blank'],{stdio:['ignore','ignore','pipe']});
- const endpoint=await new Promise((resolve,reject)=>{let text='';
-  chrome.stderr.on('data',d=>{text+=d;const m=/DevTools listening on (ws:\/\/\S+)/.exec(text);if(m)resolve(m[1]);});
-  chrome.on('exit',()=>reject(new Error('Chrome exited: '+text.slice(-400))));});
- const port=new URL(endpoint).port;
- const page=(await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find(t=>t.type==='page');
- const ws=new WebSocket(page.webSocketDebuggerUrl);await new Promise(r=>ws.addEventListener('open',r,{once:true}));
- let n=0;const pending=new Map();
- ws.addEventListener('message',e=>{const m=JSON.parse(e.data);if(m.id&&pending.has(m.id)){pending.get(m.id)(m);pending.delete(m.id);}});
- const call=(method,params)=>new Promise(r=>{const id=++n;pending.set(id,r);ws.send(JSON.stringify({id,method,params}));});
- const evaluate=async expression=>{const m=await call('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true});
-  if(m.result?.exceptionDetails)throw new Error(m.result.exceptionDetails.exception?.description??'evaluate failed');return m.result.result.value;};
+ const {evaluate,close}=await openPage();
  // The decoded window stays in the page and is pulled out in chunks: one message carrying a
  // whole stereo bed (~40 MB of float samples) stalls the DevTools socket.
  await evaluate(`window.__decode=async(b64,channels,start,end)=>{const bytes=Uint8Array.from(atob(b64),c=>c.charCodeAt(0));
@@ -93,7 +70,7 @@ async function openDecoder(){
     out.push(pcm);}
    return out;
   },
-  close(){try{ws.close();}catch{}chrome.kill();try{rmSync(dir,{recursive:true,force:true});}catch{}}
+  close
  };
 }
 
@@ -148,7 +125,11 @@ async function main(){
  const sources=new Map(lock.sources.map(s=>[s.id,s]));
  const zips=new Map();
  mkdirSync(OUT,{recursive:true});
- for(const f of readdirSync(OUT))if(f.endsWith('.mp3'))rmSync(join(OUT,f));
+ // A filtered run (AUDIO_ONLY, for debugging one clip) writes to a scratch folder instead:
+ // it must never delete or re-list the clips it was not asked about.
+ const out=process.env.AUDIO_ONLY?join(process.env.TMPDIR??'/tmp','shibuya-audio-only'):OUT;
+ mkdirSync(out,{recursive:true});
+ if(!process.env.AUDIO_ONLY)for(const f of readdirSync(OUT))if(f.endsWith('.mp3'))rmSync(join(OUT,f));
  const decoder=await openDecoder();
  const clips=[];
  try{
@@ -169,7 +150,7 @@ async function main(){
    let gain=lin(target)/Math.max(measured,1e-6);
    const peak=peakOf(ch)*gain;if(peak>lin(TARGET.peak))gain*=lin(TARGET.peak)/peak;
    for(const d of ch)for(let i=0;i<d.length;i++)d[i]*=gain;
-   const mp3=encode(ch),file=`${clip.name}.mp3`;writeFileSync(join(OUT,file),mp3);
+   const mp3=encode(ch),file=`${clip.name}.mp3`;writeFileSync(join(out,file),mp3);
    const back=await decoder.decode(mp3,channels);
    const lead=loop?0:leadOf(back,ch);
    const duration=ch[0].length/RATE;
@@ -185,7 +166,7 @@ async function main(){
  const encoderDelay=leads.length?leads[leads.length>>1]:0;
  for(const c of clips)if(c.loop){c.lead=encoderDelay;c.loopStart=encoderDelay;c.loopEnd=+(encoderDelay+c.duration).toFixed(4);}
  const manifest={version:1,rate:RATE,targets:TARGET,encoderDelay,generator:'scripts/convert-audio.mjs',clips};
- writeFileSync(join(OUT,'manifest.json'),JSON.stringify(manifest,null,1)+'\n');
+ writeFileSync(join(out,'manifest.json'),JSON.stringify(manifest,null,1)+'\n');
  const total=clips.reduce((s,c)=>s+c.bytes,0);
  console.log(`${clips.length} clips, ${(total/1e6).toFixed(2)} MB`);
 }
