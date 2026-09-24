@@ -329,7 +329,14 @@ export default function Home(){
   if(!ctx){console.warn('[Player] the crowd network is not ready yet');return false;}
   // The crowd's people are bodies to the player (src/player/crowd-contact.mjs); read through the
   // hook each frame, so a crowd rebuilt by a tier change is picked up and a missing one is none.
-  player??=createPlayer(ctx,{bodies:()=>lifeEntry.hooks.current?.sim??null});
+  // A bump (Step C) is a flinch on the HQ body and a look round at the player, a small knock and
+  // (at a run) a thud through the feedback bus, and -- for the 30% who take it badly -- the same
+  // fight a punch starts. Never damage.
+  player??=createPlayer(ctx,{bodies:()=>lifeEntry.hooks.current?.sim??null,onBump:(p:any,b:any)=>{
+   const sim=lifeEntry.hooks.current?.sim;if(!sim)return;
+   lifeEntry.hooks.current?.blow?.({victim:p.id,blow:{hold:b.hold,fatal:false},response:b.strong?'backoff':'look',from:player?.state});
+   feedback.emit('player_bump',sim.time,{x:p.x,z:p.z,intensity:b.strong?1:.35,id:p.id});
+   if(b.fight&&player)melee.provoke(sim,p,player);}});
   if(!player.place()){console.warn('[Player] no standable ground at the start point');return false;}
   if(!playerMarker){playerMarker=createPlayerMarker();groups.dynamic.add(playerMarker.mesh);}
   if(!carMarker){carMarker=createPlayerMarker(MARKER.car);groups.dynamic.add(carMarker.mesh);}
@@ -450,7 +457,7 @@ export default function Home(){
  // RUN 11.4: a person is not a wall. Per-person shake used to be multiplied by how many were hit
  // in the frame, so a crowd pinned the camera at full shake (0.42 m of throw). Now one bounded
  // knock per frame of contact, and a smaller, sharper one for a landed punch.
- const SHAKE_PER_HIT=.12,SHAKE_PERSON_MAX=.45,SHAKE_PUNCH=.07,SHAKE_PUNCH_MAX=.25,SHAKE_FALL=2.6,SHAKE_THROW=.42;
+ const SHAKE_BUMP=.05,SHAKE_PER_HIT=.12,SHAKE_PERSON_MAX=.45,SHAKE_PUNCH=.07,SHAKE_PUNCH_MAX=.25,SHAKE_FALL=2.6,SHAKE_THROW=.42;
  // RUN 12.5: the OS "reduce motion" setting quarters every camera knock; ?shake=0 removes it.
  const SHAKE_SCALE=params.get('shake')==='0'?0:(typeof matchMedia==='function'&&matchMedia('(prefers-reduced-motion: reduce)').matches?.25:1);
  let shake=0,lastAccidentWitness=-Infinity;
@@ -462,6 +469,7 @@ export default function Home(){
   switch(e.kind){
    case 'punch_swing':if(!soundscape?.event(e,who))playerAudio?.swing(e.intensity);break;
    case 'punch_hit':if(!soundscape?.event(e,who))playerAudio?.punchHit(e.intensity);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_PUNCH*(.6+.4*e.intensity));break;
+   case 'player_bump':soundscape?.event(e,who);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_BUMP*e.intensity);break;
    case 'vehicle_impact':if(!soundscape?.event(e,who))playerAudio?.bodyImpact(e.intensity);break;
    case 'vehicle_runover':if(!soundscape?.event(e,who))playerAudio?.runover(e.intensity);break;
    case 'pain_voice':if(who)sim.say(who,'pain',e.intensity);break;

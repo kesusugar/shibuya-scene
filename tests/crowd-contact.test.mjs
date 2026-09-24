@@ -11,7 +11,9 @@ import {TrafficSimulation} from '../src/traffic/simulation.mjs';
 import {CrowdSimulation} from '../src/life/simulation.mjs';
 import {yieldToPlayer,YIELD} from '../src/player/crowd-interaction.mjs';
 import {createPlayer,PLAYER} from '../src/player/controller.mjs';
-import {CONTACT,bodiesNear} from '../src/player/crowd-contact.mjs';
+import {CONTACT,bodiesNear,bump} from '../src/player/crowd-contact.mjs';
+import {createMeleeCombat} from '../src/player/combat.mjs';
+import {createFeedbackBus} from '../src/app/feedback-bus.mjs';
 
 // The player bumps into people instead of walking through them. Staged on the real pedestrian
 // network, with the crowd's own simulation moving the people, on a clear 5 m patch of pavement.
@@ -267,4 +269,110 @@ test('3. a cast member bumped mid-crossing dodges, returns to the track, holds n
  assert.ok(advanced>=baseline-2,`the signals advanced ${advanced.toFixed(1)} s against ${baseline.toFixed(1)} s without the player`);
  assert.ok(advanced>40,`the signals advanced only ${advanced.toFixed(1)} s in 94 s`);
  assert.equal(sim.audit().signalViolations,0);
+});
+
+/** The scene's bump handler, minus drawing: a fight for the ones who take it badly. */
+function wired(sim,{witness=()=>0}={}){
+ const melee=createMeleeCombat({onWitness:witness});
+ let player=null;
+ const make=opts=>{player=createPlayer(ctx,{...opts,bodies:()=>sim,onBump:(p,b)=>{if(b.fight)melee.provoke(sim,p,player);}});return player;};
+ return {melee,make};
+}
+
+test('5. a bump is not a blow: no damage, no witness, no combat stats',()=>{
+ const sim=emptyCrowd();
+ let witnessed=0;
+ const {melee,make}=wired(sim,{witness:()=>{witnessed++;return 0;}});
+ const other=person(sim,SPOT.x+.15,SPOT.z);
+ const player=make({start:[SPOT.x,SPOT.z-1.4],heading:0});
+ Object.assign(player.state,{x:SPOT.x,z:SPOT.z-1.4,y:ctx.height(SPOT.x,SPOT.z),heading:0,bodyHeading:0,course:0});
+ player.setTouch({forward:1,strafe:0,running:false});
+ // Up to the bump and a moment after it: short of an angry pedestrian's first wind-up.
+ let f=0;for(;f<120&&!player.contact.stats.bumps;f++){player.step(1/60);melee.update(1/60,sim,player);sim.update(1/60);}
+ for(let i=0;i<12;i++){player.step(1/60);melee.update(1/60,sim,player);sim.update(1/60);}
+ assert.equal(player.contact.stats.bumps,1,'no bump');
+ assert.equal(player.state.health,100);
+ assert.equal(other.combatHealth,100);
+ assert.equal(witnessed,0,'a bump was witnessed as a punch');
+ const m=melee.snapshot();
+ assert.equal(m.swings+m.hits+m.misses+m.witnessEvents,0,`combat counted it: ${JSON.stringify(m)}`);
+ assert.ok(other.hurtUntil>0&&other.hurtStrong===false,'no light flinch');
+ assert.ok(Math.hypot(other.hurtX,other.hurtZ-1)<.3,'the flinch is not away from the player');
+});
+
+test('5. over 1,000 seeded bumps, 30% +- 3% start a fight, and the rest never do',()=>{
+ const sim=emptyCrowd();
+ const {melee,make}=wired(sim);
+ const player=make({start:[SPOT.x,SPOT.z],heading:0});
+ Object.assign(player.state,{x:SPOT.x,z:SPOT.z,y:ctx.height(SPOT.x,SPOT.z),speed:1.4});
+ const p=person(sim,SPOT.x,SPOT.z+.55);
+ let fights=0,calm=0,calmHostile=0;
+ for(let i=0;i<1000;i++){
+  Object.assign(p,{x:SPOT.x,z:SPOT.z+.55,flee:null,bumpUntil:undefined,combatTarget:null,combatUntil:0,state:'idle'});
+  sim.time+=1;
+  const b=bump(sim,p,player.state);
+  assert.ok(b,'the bump did not happen');
+  if(b.fight){fights++;melee.provoke(sim,p,player);assert.equal(p.combatTarget,'player');}
+  else{calm++;if(p.combatTarget)calmHostile++;}
+ }
+ assert.ok(Math.abs(fights/1000-.3)<=.03,`${fights} of 1,000 bumps started a fight`);
+ assert.equal(calmHostile,0,`${calmHostile} of ${calm} calm bumps set combatTarget anyway`);
+});
+
+test('5. a bump fight is the ordinary fight: an off-rails person stands and swings, a cast member keeps walking',()=>{
+ const sim=emptyCrowd();
+ const {melee,make}=wired(sim);
+ const player=make({start:[SPOT.x,SPOT.z],heading:0});
+ Object.assign(player.state,{x:SPOT.x,z:SPOT.z,y:ctx.height(SPOT.x,SPOT.z)});
+ const off=person(sim,SPOT.x,SPOT.z+.8);
+ assert.equal(melee.provoke(sim,off,player),true);
+ assert.equal(off.state,'fighting');
+ for(let i=0;i<120;i++){melee.update(1/60,sim,player);sim.time+=1/60;}
+ assert.ok(player.state.health<100,'the provoked person never swung');
+ const cast=person(sim,SPOT.x+1,SPOT.z+.5,{choreographed:true,state:'crossing'});
+ let left=0;const leave=sim.leave.bind(sim);sim.leave=q=>{if(q===cast)left++;return leave(q);};
+ assert.equal(melee.provoke(sim,cast,player),true);
+ assert.equal(cast.combatTarget,'player');
+ assert.notEqual(cast.state,'fighting','a cast member was stopped to fight');
+ assert.equal(left,0,'the cast member was taken off their crossing');
+});
+
+test('6. a sprint bump staggers harder than a walking one, and knocks nobody down',()=>{
+ const run=(running)=>{
+  const sim=emptyCrowd();
+  const melee=createMeleeCombat();
+  const other=person(sim,SPOT.x+.12,SPOT.z+.6);
+  const player=createPlayer(ctx,{start:[SPOT.x,SPOT.z-2],heading:0,bodies:()=>sim});
+  Object.assign(player.state,{x:SPOT.x,z:SPOT.z-2,y:ctx.height(SPOT.x,SPOT.z),heading:0,bodyHeading:0,course:0});
+  player.setTouch({forward:1,strafe:0,running});
+  let moved=0;
+  const start={x:other.x,z:other.z};
+  let bumpedAt=null;
+  for(let f=0;f<120;f++){
+   player.step(1/60);melee.update(1/60,sim,player);sim.update(1/60);
+   if(bumpedAt===null&&player.contact.stats.bumps)bumpedAt={x:other.x,z:other.z,strong:other.hurtStrong,speed:player.state.speed};
+   moved=Math.max(moved,Math.hypot(other.x-start.x,other.z-start.z));
+  }
+  return {moved,other,bumpedAt,stats:player.contact.stats};
+ };
+ const walk=run(false),sprint=run(true);
+ assert.ok(walk.bumpedAt&&sprint.bumpedAt,'somebody was not bumped');
+ assert.equal(walk.bumpedAt.strong,false);
+ assert.equal(sprint.bumpedAt.strong,true);
+ assert.ok(sprint.moved>walk.moved+.1,`sprint moved them ${sprint.moved.toFixed(2)} m, walking ${walk.moved.toFixed(2)} m`);
+ assert.equal(sprint.other.struck,undefined,'a sprint bump knocked someone down');
+ assert.equal(walk.other.struck,undefined);
+});
+
+test('C. the player loses pace on the frame of a bump, and the bus carries it',()=>{
+ const sim=emptyCrowd();
+ person(sim,SPOT.x,SPOT.z+.62);
+ const player=createPlayer(ctx,{start:[SPOT.x,SPOT.z],heading:0,bodies:()=>sim});
+ Object.assign(player.state,{x:SPOT.x,z:SPOT.z,y:ctx.height(SPOT.x,SPOT.z),heading:0,bodyHeading:0,course:0,speed:1.5});
+ player.setTouch({forward:1,strafe:0,running:false});
+ player.step(1/60);
+ assert.equal(player.contact.stats.bumps,1);
+ assert.ok(player.state.speed<=1.5*CONTACT.slow+1e-6,`still at ${player.state.speed.toFixed(2)} m/s`);
+ const bus=createFeedbackBus();
+ assert.equal(bus.emit('player_bump',0,{x:0,z:0,intensity:.35}),true,'the bus does not know player_bump');
 });

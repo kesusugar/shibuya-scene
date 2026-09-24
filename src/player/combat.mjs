@@ -347,6 +347,17 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null}={}){
    if(target&&(!target.active||target.combatDead||target.combatUntil<=crowd.time))target=null;
    return stats;
   },
+  /**
+   * Start a fight without a blow: the player walked into someone and they took it badly
+   * (src/player/crowd-contact.mjs, 30% of bumps). The same `engage` a punch uses, so someone
+   * on a crossing or the Scramble cast keeps walking and turns at the kerb, and the fight that
+   * follows is the ordinary one. Nothing is counted as a swing, a hit or a witness event.
+   */
+  provoke(crowd,p,player){
+   if(disposed||!crowd||!p||!player?.state?.alive||!eligible(p,crowd))return false;
+   if(p.combatTarget==='player'&&p.combatUntil>crowd.time)return false;
+   engage(crowd,p,player.state);return true;
+  },
   snapshot(){return {...stats,byResponse:{...stats.byResponse},lastBlow,target:target?.id??null,
    phase:swing?swing.phase:PHASE.IDLE,clip:swing?swing.name:null};},
   reset(){pending=false;target=null;swing=null;},

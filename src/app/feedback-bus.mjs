@@ -15,7 +15,8 @@ export const FEEDBACK=Object.freeze({
   vehicle_runover:{cooldown:.25,cap:1},
   pedestrian_scream:{cooldown:.3,cap:2},
   crowd_gasp:{cooldown:1.2,cap:1},
-  panic_voice:{cooldown:.5,cap:1}
+  panic_voice:{cooldown:.5,cap:1},
+  player_bump:{cooldown:.25,cap:1}    // the player walking or running into someone
  }),
  perFrame:6        // across every kind, per drain
 });

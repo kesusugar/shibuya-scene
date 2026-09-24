@@ -106,6 +106,9 @@ export function createSoundscape(bank, {scramble = {x: 6.5, z: 2}} = {}) {
     case 'punch_hit': played = bank?.play('punch', {x, y: 1.4, z, gain: .6 + .4 * i}); if (played) bank.duck(.7, .8); break;
     case 'vehicle_impact': played = bank?.play('body', {x, y: .8, z, gain: .5 + .5 * i}); if (played) bank.duck(); break;
     case 'vehicle_runover': played = bank?.play('runover', {x, y: .2, z, gain: .5 + .5 * i}); break;
+    // A shoulder at a run is a thud, well under a car's; a walking brush is silent here (the
+    // person's own voice, if any, is theirs).
+    case 'player_bump': if (i < .8) return false; played = bank?.play('body', {x, y: 1.1, z, gain: .22 + .12 * i}); break;
     default: return false;
    }
    if (played) stats.events++;

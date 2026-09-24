@@ -338,9 +338,12 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
    * temperament chose -- run, step back, or (for a fighter) nothing here, because fighting is
    * the simulation's job. A fatal blow is left to `struck`, which already knocks them down.
    */
-  blow({victim,blow,response}={}){
+  blow({victim,blow,response,from=null}={}){
    const i=crowd.indexOf(victim);if(i<0||!blow||blow.fatal)return false;
-   const then=response==='flee'?STATE.FLEE:response==='backoff'?STATE.AVOID:STATE.NORMAL;
+   // 'look': the player brushed past them (src/player/crowd-contact.mjs). A flinch, then they
+   // look round at who it was -- LOOK is what turns the head (RUN 12.4), toward `from`.
+   const then=response==='flee'?STATE.FLEE:response==='backoff'?STATE.AVOID:response==='look'?STATE.LOOK:STATE.NORMAL;
+   if(from&&Number.isFinite(from.x)&&Number.isFinite(from.z))crowd.state.attention[i]=Math.atan2(from.x-crowd.state.x[i],from.z-crowd.state.z[i]);
    return crowd.setState(i,STATE.HIT,{light:true,hold:blow.hold,then,force:true});
   },
 

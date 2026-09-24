@@ -31,7 +31,12 @@ export const CONTACT=Object.freeze({
  // RUN "player crowd contact": the part of a bump that turns into a fight, drawn once per bump
  // from the simulation's own seeded rng.
  fightChance:.3,
- sprint:3.7              // m/s: a bump at or above this is a hard one (Step C)
+ sprint:3.7,             // m/s: a bump at or above this is a hard one
+ // What a bump looks like on the person (Step C): a short light flinch walking, a stagger at a
+ // sprint. `stagger` is how far a sprint bump carries someone off rails, in metres.
+ flinch:.25,hardFlinch:.34,stagger:.6,
+ speaks:.3,              // the share of people (by id) who say something when walked into
+ slow:.6                 // the player's speed is multiplied by this on the frame of a bump
 });
 
 // Tried in this order when the straight step is blocked: small turns first, then wider ones.
@@ -177,14 +182,17 @@ export function createCrowdContact({onBump=null}={}){
    * and whoever walked into the player is moved off them.
    */
   react(crowd,state,dt){
+   let bumped=false;
    for(const c of result.contacts){
     const p=c.p;
     const d=Math.hypot(p.x-state.x,p.z-state.z);
     stats.minGap=stats.minGap===null?d:Math.min(stats.minGap,d);
     stats.contacts++;
-    if(c.into){const b=bump(crowd,p,state);if(b){stats.bumps++;if(b.dodged)stats.dodges++;if(b.fight)stats.fights++;onBump?.(p,b);}}
+    if(c.into){const b=bump(crowd,p,state);if(b){stats.bumps++;bumped=true;if(b.dodged)stats.dodges++;if(b.fight)stats.fights++;onBump?.(p,b);}}
     else if(d<CONTACT.gap&&giveWay(crowd,p,state,d))stats.dodges++;
    }
+   // The player loses pace on the frame they hit someone, which is most of what makes it read.
+   if(bumped)state.speed*=CONTACT.slow;
    stats.lastMs=now()-lastStart;
   },
   reset(){Object.assign(stats,{checks:0,contacts:0,bumps:0,dodges:0,fights:0,minGap:null,trappedSeconds:0,lastMs:0});},
@@ -206,20 +214,51 @@ function sideStep(p,state){
  return {x:uz*side+ox/d*.5,z:-ux*side+oz/d*.5};
 }
 
+/** A deterministic 0..1 per person, so the same people are the ones who speak up. */
+const unit=(id,salt)=>((Math.imul((id|0)+salt*7919,0x9e3779b1)>>>0)%100003)/100002;
+
 /**
  * A person the player walked into. Once per person per `CONTACT.cooldown`, and never someone
- * already running from something. They step aside with the same `dodge` flight the slow player
- * car uses -- it moves the choreographed cast through their flee offset and brings them back to
- * their track, and it never calls `leave()`, so no signal group is ever held for a bump.
+ * already running from something.
+ *
+ * - They flinch away from the player: the `hurt*` fields the near figure's Hit overlay and the
+ *   HQ crowd read, light walking and strong at a sprint. It is NOT a blow: no health changes,
+ *   and nothing here touches combat.
+ * - They get out of the way. Walking, and anyone on rails (a crossing or the Scramble cast) at
+ *   any pace, with the dodge flight the slow player car uses: it moves the cast through their
+ *   flee offset and brings them back to their track, and it never calls `leave()`, so no
+ *   signal group is held for a bump. Off rails at a sprint, a stagger the combat system carries
+ *   (`staggerX/Z`, as a punch does), about `CONTACT.stagger` metres.
+ * - One draw from the simulation's own seeded rng decides whether this bump starts a fight
+ *   (`CONTACT.fightChance`). Whoever listens (`onBump`) starts it, through combat's own path.
+ *   Someone off rails who is going to fight stands their ground rather than stepping aside.
+ * - Never a knock-down while `CONTACT.knockDown` is false.
  */
 export function bump(crowd,p,state){
  if((p.bumpUntil??-Infinity)>crowd.time||p.flee)return null;
  p.bumpUntil=crowd.time+CONTACT.cooldown;
- const speed=Math.max(0,state.speed??0),d=Math.hypot(p.x-state.x,p.z-state.z),away=sideStep(p,state);
- const dodged=!!crowd.flee?.(p,away.x,away.z,{urgency:0,dodge:true,from:state,speed:1.2+.3*speed,
-  distance:CONTACT.gap-d+.35,voice:false});
+ const speed=Math.max(0,state.speed??0),d=Math.hypot(p.x-state.x,p.z-state.z);
+ const strong=speed>=CONTACT.sprint,onRails=!!(p.crossing||p.choreographed);
+ const fight=(crowd.rng?crowd.rng():Math.random())<CONTACT.fightChance;
+ let dx=p.x-state.x,dz=p.z-state.z;{const l=Math.hypot(dx,dz);if(l>1e-6){dx/=l;dz/=l;}else{const h=state.bodyHeading??state.heading??0;dx=Math.sin(h);dz=Math.cos(h);}}
+ const hold=strong?CONTACT.hardFlinch:CONTACT.flinch;
+ p.hurtUntil=crowd.time+hold;p.hurtDuration=hold;p.hurtX=dx;p.hurtZ=dz;p.hurtStrong=strong;
+ const stands=fight&&!onRails&&p.archetype!=='kid';
+ let dodged=false,staggered=false;
+ if(strong&&!onRails&&!stands){
+  // The stagger's distance is push * hold / 2 (combat.mjs staggerStep), so the push is set
+  // from the distance wanted.
+  const push=2*CONTACT.stagger/hold;
+  p.staggerX=dx*push;p.staggerZ=dz*push;p.staggerLeft=hold;staggered=true;
+ }else if(!stands){
+  const away=sideStep(p,state);
+  dodged=!!crowd.flee?.(p,away.x,away.z,{urgency:0,dodge:true,from:state,speed:1.2+.3*speed,
+   distance:CONTACT.gap-d+.35+(strong?.25:0),voice:false});
+ }
+ if(strong)crowd.say?.(p,'pain',.45);
+ else if(unit(p.id,23)<CONTACT.speaks)crowd.say?.(p,'alert',.4);
  crowd.stats.bumped=(crowd.stats.bumped??0)+1;
- return {dodged,speed,fight:false,strong:false};
+ return {dodged,staggered,speed,fight,strong,hold,dirX:dx,dirZ:dz,onRails};
 }
 
 /** Someone who walked into the player: out of the way, no bump. Rate limited the same way. */
