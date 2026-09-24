@@ -1,6 +1,6 @@
 # Plan: patterned clothes, accessories, a Japanese street fleet, and Tokyo-drift-style hero cars
 
-Status: **Step A implemented** on `claude/looks-fleet-1` (§9m), **Step B** on `claude/looks-fleet-2` (§9n), **Step C** on `claude/looks-fleet-3` (§9o), 2026-09-25; later steps follow on stacked branches. Originally: Written 2026-09-24 on `master` `3e15698`. This comes after
+Status: **Step A implemented** on `claude/looks-fleet-1` (§9m), **Step B** on `claude/looks-fleet-2` (§9n), **Step C** on `claude/looks-fleet-3` (§9o), **Step D** (the two parked cars; the third is the own car) on `claude/looks-fleet-8` (§9t), 2026-09-25. Step E (accessories) is not started; later steps follow on stacked branches. Originally: Written 2026-09-24 on `master` `3e15698`. This comes after
 `docs/PLAN-PLAYER-CROWD-CONTACT.md`, which is being implemented separately. The work happens
 in a local Claude CLI session so it can be checked on the real device. Read `AGENTS.md`,
 `CLAUDE.md` and `docs/GTA-FIDELITY-STATUS.md` (§9j, §9k, §16a) first.

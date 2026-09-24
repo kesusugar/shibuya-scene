@@ -11,7 +11,7 @@
 
 /** Kilograms. Only the ratio to a person matters. */
 export const VEHICLE_MASS=Object.freeze({taxi:1400,sedan:1300,kei:850,van:1800,bus:11000,truck:7500,scooter:180,
- keiTruck:900,longVan:1950,minivan:2000,tallKei:950,cityTaxi:1450,truck2t:3500,police:1650,coupe:1250,ownCar:1280});
+ keiTruck:900,longVan:1950,minivan:2000,tallKei:950,cityTaxi:1450,truck2t:3500,police:1650,coupe:1250,ownCar:1280,unmarked:1650,riotBus:9000,heroSilver:1240,heroDark:1480});
 export const PERSON_MASS=75;
 
 export const IMPACT=Object.freeze({

@@ -5022,6 +5022,26 @@ for a siren but does not pull over.
   car within the cap, ☆5 a riot transport; the balance cap. New exports, so they fail on the code
   before.
 
+## 9t. Looks and fleet, Step D (the rest) — two parked night cars (branch `claude/looks-fleet-8`, on `claude/looks-fleet-7`)
+
+The orange widebody became the player's own car (§9p). The other two:
+- **"Tsuki S"** (`heroSilver`): the coupe loft at 4.3 × 1.72 m in silver-blue, side skirts, lip and a
+  **big** wing (taller posts, wider plank), no black bonnet. **"Yoru Z"** (`heroDark`): 4.2 × 1.84 m,
+  gunmetal on black rims, the small wing. `kit` now takes `{bonnet, wing:'small'|'big'}`; `true`
+  still means the own car's full kit.
+- **Where.** `HERO_SPOTS`: two unclassified side streets 6.5–7 m wide, 72 m and 98 m from the
+  Scramble (found with a lane query, not guessed). `placeHero` parks each at the nearest legal kerb
+  pose, deterministic, on the initial refill at HIGH and MEDIUM; `setTier` keeps them above LOW. They take two of the parked budget (HIGH stays at 12 parked, which `static-mobility` pins): they are placed first and the ordinary parked mix fills the rest.
+  Weight 0: never ordinary traffic. The plan's "one sometimes drives the loop at night" is not done.
+- **Handling and sound.** Drift tunes like the own car (steer .74/.72, grip 8/8.5, slide 1.6/1.7) and
+  higher-revving saw-wave voices (64–220 / 58–205 Hz).
+- **Not done:** the neon underglow, the night loop drive, and a device check (the dev server had
+  been stopped by Claude Code for low memory; not restarted unasked).
+- **Tests:** `tests/hero-cars.test.mjs` (4): fictional one-offs with fixed paint in the close-up
+  pack; parked within 25 m of their spots at HIGH and MEDIUM and staying parked, none at LOW; the
+  player can take both, they slide more than the sedan and rev higher; the big wing and no bonnet
+  skin. `ui-commercial-mobility` (the opening staging) still passes with the two extra parked cars.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
