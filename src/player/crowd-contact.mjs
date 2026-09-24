@@ -18,6 +18,7 @@
 //
 // Bounded: every query reads the simulation's own 2 m grid, 3x3 cells round the player.
 import {RADIUS} from '../life/config.mjs';
+import {onRails as railed} from './combat.mjs';
 
 export const CONTACT=Object.freeze({
  playerRadius:.35,       // PLAYER.radius (not imported: controller.mjs imports this module)
@@ -238,7 +239,7 @@ export function bump(crowd,p,state){
  if((p.bumpUntil??-Infinity)>crowd.time||p.flee)return null;
  p.bumpUntil=crowd.time+CONTACT.cooldown;
  const speed=Math.max(0,state.speed??0),d=Math.hypot(p.x-state.x,p.z-state.z);
- const strong=speed>=CONTACT.sprint,onRails=!!(p.crossing||p.choreographed);
+ const strong=speed>=CONTACT.sprint,onRails=railed(p);
  const fight=(crowd.rng?crowd.rng():Math.random())<CONTACT.fightChance;
  let dx=p.x-state.x,dz=p.z-state.z;{const l=Math.hypot(dx,dz);if(l>1e-6){dx/=l;dz/=l;}else{const h=state.bodyHeading??state.heading??0;dx=Math.sin(h);dz=Math.cos(h);}}
  const hold=strong?CONTACT.hardFlinch:CONTACT.flinch;

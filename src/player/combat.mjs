@@ -15,10 +15,11 @@
 // crowd, and the HQ crowd never decides combat -- it reads `struck` and `combatDead` off the
 // pedestrian, exactly as it already reads them for a car.
 import {ATTACKS,attackOf} from './attack-timing.mjs';
-import {blowOn,responseOf,RESPONSE} from '../life/temperament.mjs';
-import {ARCHETYPES} from '../life/config.mjs';
+import {blowOn,RESPONSE} from '../life/temperament.mjs';
 
-export const COMBAT=Object.freeze({range:1.75,notice:4.5,playerDamage:34,npcDamage:14,
+// Player crowd contact, Step E: four blows either way. The player's punch and a pedestrian's
+// both take 25 of 100, so whoever takes the fourth first goes down (was 34, and 14-18).
+export const COMBAT=Object.freeze({range:1.75,notice:4.5,playerDamage:25,npcDamage:25,
  attackSeconds:.42,npcWindup:.55,npcCooldown:1.05,hostileSeconds:14,
  // How wide a swing reaches, in radians either side of where the body is facing. A punch is
  // not a radius: something directly behind you cannot be hit.
@@ -48,6 +49,31 @@ export function staggerStep(left,hold,dt){
  return (a*a-b*b)/(2*hold);
 }
 const angleTo=(a,b)=>Math.atan2(b.x-a.x,b.z-a.z);
+
+/**
+ * Someone whose movement belongs to something other than their own will: an in-progress
+ * crossing, or a Scramble cast member walking their track.
+ *
+ * They can be HIT. They cannot be STOPPED. Taking either off their route mid-stride is what
+ * holds a signal group, and a held group stops the clock for every signal on the map.
+ *
+ * A cast member standing at a kerb (waiting for the green, or just off the far end) is NOT on
+ * rails: the choreography holds them there while they fight (choreography.mjs), and whatever
+ * the fight moves them is kept as their flee offset, so they walk back to their slot through
+ * the same return a flight uses. Before, `choreographed` alone counted, and since the cast is
+ * always cast, a punched cast member never fought back anywhere.
+ */
+export const onRails=p=>!!(p.crossing||p.choreographed&&(p.state==='crossing'||p.track?.finishing));
+/**
+ * Move a pedestrian for combat (an approach, a stagger), keeping the grid right, and for a cast
+ * member keeping the displacement as a flee offset so their track takes them back.
+ */
+function shift(crowd,p,nx,nz){
+ const old=crowd.cell(p.x,p.z);
+ if(p.choreographed){p.fleeOffX=(p.fleeOffX??0)+nx-p.x;p.fleeOffZ=(p.fleeOffZ??0)+nz-p.z;}
+ p.x=nx;p.z=nz;
+ if(crowd.cell(nx,nz)!==old){const b=crowd.grid.get(old),i=b?.indexOf(p);if(i>=0)b.splice(i,1);crowd.insert(p);}
+}
 const turn=(a,b)=>Math.atan2(Math.sin(b-a),Math.cos(b-a));
 
 /**
@@ -67,15 +93,6 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null}={}){
  let lastBlow=null;                    // the most recent landed blow, for QA
  const stats={swings:0,hits:0,misses:0,npcHits:0,npcDeaths:0,witnessEvents:0,witnesses:0,
   byResponse:{fight:0,flee:0,backoff:0}};
-
- /**
-  * Someone whose movement belongs to something other than their own will: the Scramble
-  * choreography's fixed track, or an in-progress crossing.
-  *
-  * They can be HIT. They cannot be STOPPED. Taking either off their route mid-stride is what
-  * holds a signal group, and a held group stops the clock for every signal on the map.
-  */
- const onRails=p=>!!(p.crossing||p.choreographed);
 
  /**
   * Who may be punched.
@@ -146,17 +163,6 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null}={}){
   // `strike` is the simulation's own knock-down: it calls `leave` first, so a crossing is
   // released rather than abandoned, and the HQ crowd picks the body up from `struck`.
   crowd.strike(p,dx,dz,2.4);p.fatal=true;
- }
-
- /**
-  * Someone who will not fight: they get away from the attacker, at a run or a few steps.
-  * The simulation's own scatter moves them, so the route, crossing and signal stay theirs.
-  */
- function answer(crowd,p,state,response){
-  let dx=p.x-state.x,dz=p.z-state.z;const d=Math.hypot(dx,dz)||1;dx/=d;dz/=d;
-  if(p.combatTarget==='player'){p.combatTarget=null;p.combatUntil=0;}
-  crowd.scatter?.(p,dx,dz,response===RESPONSE.FLEE?1:.45);
-  if(response===RESPONSE.FLEE)crowd.say?.(p,'scream',.9);
  }
 
  /** Tell whoever is listening that a punch was thrown here. Bounded by the listener. */
@@ -233,10 +239,7 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null}={}){
     if(!(p.staggerLeft>0)||p.struck!==undefined||onRails(p))continue;
     const k=staggerStep(p.staggerLeft,Math.max(.05,p.hurtDuration??.34),dt);p.staggerLeft=Math.max(0,p.staggerLeft-dt);
     const nx=p.x+p.staggerX*k,nz=p.z+p.staggerZ*k;
-    if(crowd.network.ctx.safe(nx,nz,.28)&&!crowd.vehicleOverlap?.(nx,nz,.35)&&!crowd.blocked?.(nx,nz,p,.4,false)){
-     const old=crowd.cell(p.x,p.z);p.x=nx;p.z=nz;
-     if(crowd.cell(nx,nz)!==old){const b=crowd.grid.get(old),i=b?.indexOf(p);if(i>=0)b.splice(i,1);crowd.insert(p);}
-    }
+    if(crowd.network.ctx.safe(nx,nz,.28)&&!crowd.vehicleOverlap?.(nx,nz,.35)&&!crowd.blocked?.(nx,nz,p,.4,false))shift(crowd,p,nx,nz);
    }
 
    if(swing){
@@ -275,7 +278,9 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null}={}){
       p.combatHealth=(p.combatHealth??100)-COMBAT.playerDamage;
       const fatal=p.combatHealth<=0;
       const blow=blowOn(state,p,{attack:swing.name,fatal});
-      const response=responseOf(p.id,{archetype:p.archetype,gray:!!ARCHETYPES[p.archetype]?.gray});
+      // Whoever is punched hits back (player crowd contact, Step E). Temperament still decides
+      // what the people who SEE it do (hq-awareness); for the victim it no longer does.
+      const response=RESPONSE.FIGHT;
       p.hurtUntil=crowd.time+blow.hold;p.hurtDuration=blow.hold;
       // Which way the blow drove them, for the near body's recoil (figure.mjs hitRecoil). Set
       // for everyone, including people on a crossing whom the simulation does not stagger.
@@ -283,8 +288,7 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null}={}){
       stats.hits++;stats.byResponse[response]++;
       if(fatal)kill(crowd,p,state);
       else{
-       if(response===RESPONSE.FIGHT)engage(crowd,p,state);
-       else answer(crowd,p,state,response);
+       engage(crowd,p,state);
        // A stagger the simulation owns, so every renderer shows the same step back.
        if(!onRails(p)){p.staggerX=blow.impulse.x;p.staggerZ=blow.impulse.z;p.staggerLeft=blow.hold;}
       }
@@ -314,8 +318,7 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null}={}){
      const step=Math.min(.95*dt,d-COMBAT.range*.72),dx=(state.x-p.x)/d,dz=(state.z-p.z)/d,
       nx=p.x+dx*step,nz=p.z+dz*step;
      if(crowd.network.ctx.safe(nx,nz,.28)&&!crowd.vehicleOverlap(nx,nz,.35)&&!crowd.blocked?.(nx,nz,p,.52,false)){
-      const old=crowd.cell(p.x,p.z);p.x=nx;p.z=nz;p.renderX=nx;p.renderZ=nz;
-      if(crowd.cell(nx,nz)!==old){const b=crowd.grid.get(old),i=b?.indexOf(p);if(i>=0)b.splice(i,1);crowd.insert(p);}
+      shift(crowd,p,nx,nz);p.renderX=nx;p.renderZ=nz;
      }
      p.npcSwing=null;
     }else if(state.alive){
@@ -336,7 +339,7 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null}={}){
       if(p.npcSwing.elapsed>=windup&&before<activeEnd&&!p.npcSwing.hitConsumed){
        p.npcSwing.hitConsumed=true;
        if(Math.hypot(state.x-p.x,state.z-p.z)<=COMBAT.range&&
-          player.hurt?.(COMBAT.npcDamage+(p.id%3)*2,'fight'))stats.npcHits++;
+          player.hurt?.(COMBAT.npcDamage,'fight'))stats.npcHits++;
       }
       if(p.npcSwing.elapsed>=duration){
        p.npcSwing=null;p.combatNext=crowd.time+COMBAT.npcCooldown+(p.id%4)*.12;

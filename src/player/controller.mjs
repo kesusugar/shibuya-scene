@@ -37,7 +37,12 @@ export const PLAYER = Object.freeze({
  followBack: 4.6, followUp: 2.1, followLerp: 9,
  // Where a session starts. Chosen by sampling the walkable surface: full kerb height, so
  // it is pavement rather than a gap between solids, and 27 m out with the crossing in view.
- start: [12, 24], startHeading: Math.atan2(-12, -24)
+ start: [12, 24], startHeading: Math.atan2(-12, -24),
+ // A traffic car hitting the player on foot (player crowd contact, Step E): a quarter of the
+ // health, not a death, unless it was the last quarter. The player is thrown 1-1.5 m (more the
+ // faster the car), through `advance()` so never into a wall, over `throwSeconds`, and gets
+ // control back after `stun`. `carGrace` stops one car hitting again on the next frame.
+ carDamage: 25, carGrace: 1.5, thrown: [1, 1.5], throwSeconds: .35, stun: 1
 });
 
 /** Furthest the player may stand from the middle, matching the modelled extent. */
@@ -73,7 +78,8 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
   // a character walk diagonally without sliding and turn the view without spinning on a heel.
   course: heading, bodyHeading: heading, targetSpeed: 0,
   speed: 0, running: false, moving: false, alive: true,
-  runOver: 0, hitBy: null, health: 100, attackTime: 0, hurtTime: 0, vehiclePhase: 0
+  runOver: 0, hitBy: null, health: 100, attackTime: 0, hurtTime: 0, vehiclePhase: 0,
+  carGrace: 0, stunTime: 0, knockX: 0, knockZ: 0, knockLeft: 0
  };
  const keys = new Set();
  let padPoll = null;
@@ -196,7 +202,7 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    */
   place(x = PLAYER.start[0], z = PLAYER.start[1], heading = PLAYER.startHeading) {
    const land = (px, pz) => {
-    Object.assign(state, {x: px, z: pz, heading, bodyHeading: heading, course: heading, targetSpeed: 0, speed: 0, alive: true, runOver: 0, hitBy: null, health:100, attackTime:0, hurtTime:0, vehiclePhase:0});
+    Object.assign(state, {x: px, z: pz, heading, bodyHeading: heading, course: heading, targetSpeed: 0, speed: 0, alive: true, runOver: 0, hitBy: null, health:100, attackTime:0, hurtTime:0, vehiclePhase:0, carGrace:0, stunTime:0, knockX:0, knockZ:0, knockLeft:0});
     state.y = ctx.height(px, pz); return true;
    };
    for (const test of [ctx.safe, standable]) {
@@ -268,6 +274,21 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
 
   step(dt) {
    if (!state.alive) {state.runOver += dt; state.speed = 0; state.moving = false; return;}
+   state.carGrace = Math.max(0, (state.carGrace ?? 0) - dt);
+   // Thrown by a car: carried off by the knock, then stood there until control comes back.
+   if ((state.stunTime ?? 0) > 0) {
+    state.stunTime = Math.max(0, state.stunTime - dt);
+    if (state.knockLeft > 0) {
+     // The push falls linearly to zero, and this is its exact integral over the frame, so the
+     // distance is the same at any frame rate (combat.mjs staggerStep does the same).
+     const hold = PLAYER.throwSeconds, a = state.knockLeft, b = Math.max(0, a - dt), k = (a * a - b * b) / (2 * hold);
+     state.knockLeft = b;
+     advance(state.knockX * k, state.knockZ * k);
+    }
+    state.speed = 0; state.targetSpeed = 0; state.moving = false;
+    state.y = ctx.height(state.x, state.z);
+    return;
+   }
    const {forward: fz, strafe: fx, running} = api.input();
    const len = Math.hypot(fx, fz);
    state.running = running;
@@ -326,10 +347,29 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
   /** True while the player is standing on carriageway rather than pavement. */
   get onRoad() {return ctx.onRoad(state.x, state.z);},
 
-  /** Called when a vehicle box overlaps the player; the run-over is recorded, not simulated. */
+  /**
+   * Called when a vehicle box overlaps the player. A quarter of the health; only the hit that
+   * takes it to 0 is a death, recorded rather than simulated as before. Returns true when it
+   * counted (false inside the grace period, or already down).
+   */
   knockDown(vehicle) {
-   if (!state.alive) return false;
-   state.alive = false; state.runOver = 0; state.hitBy = vehicle?.type ?? 'vehicle'; return true;
+   if (!state.alive || (state.carGrace ?? 0) > 0) return false;
+   state.carGrace = PLAYER.carGrace;
+   state.health = Math.max(0, state.health - PLAYER.carDamage);
+   state.hitBy = vehicle?.type ?? 'vehicle';
+   if (state.health <= 0) {state.alive = false; state.runOver = 0; return true;}
+   // Thrown away from the car, leaning the way it was going.
+   const h = vehicle?.heading ?? 0, v = Math.abs(vehicle?.speed ?? 0);
+   let dx = state.x - (vehicle?.x ?? state.x) + Math.sin(h) * Math.min(1, v / 6), dz = state.z - (vehicle?.z ?? state.z) + Math.cos(h) * Math.min(1, v / 6);
+   const l = Math.hypot(dx, dz);
+   if (l > 1e-6) {dx /= l; dz /= l;} else {dx = Math.sin(h); dz = Math.cos(h);}
+   const distance = PLAYER.thrown[0] + (PLAYER.thrown[1] - PLAYER.thrown[0]) * Math.min(1, v / 10);
+   const push = 2 * distance / PLAYER.throwSeconds;
+   state.knockX = dx * push; state.knockZ = dz * push; state.knockLeft = PLAYER.throwSeconds;
+   state.stunTime = PLAYER.stun; state.speed = 0; state.attackTime = 0;
+   // The strong Hit, recoiling away from the car.
+   state.hurtTime = .6; state.hurtDuration = .6; state.hurtX = dx; state.hurtZ = dz; state.hurtStrong = true;
+   return true;
   },
   // RUN 11.2: the name and length go with the swing, so the figure plays THIS clip at its own
   // speed. Before, every swing played `Punch` squeezed into the last 0.42 s of the attack --

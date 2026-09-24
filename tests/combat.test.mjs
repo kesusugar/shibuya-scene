@@ -448,21 +448,21 @@ test('a cast member fights back once they are no longer cast',()=>{
  assert.ok(p.state.health<before,'the ex-cast pedestrian never landed a punch');
 });
 
-test('only people with the temper for it fight back; the rest run or step away',()=>{
- for(const [id,expect] of [[FIGHTER,'fight'],[FLEER,'flee'],[BACKER,'backoff']]){
+// Player crowd contact, Step E: whoever is punched hits back, whatever their temperament. This
+// test used to require the FLEER and BACKER temperaments to run or step away instead; the user
+// changed the rule on 2026-09-24. Temperament still decides what WITNESSES do (hq-awareness).
+test('every punched person fights back, whatever their temperament',()=>{
+ for(const id of [FIGHTER,FLEER,BACKER]){
   const target=npc(id,0,1.0);
   const c=crowd([target]);const shoved=[];c.scatter=(q,dx,dz,u)=>{shoved.push({dx,dz,u});return true;};
   const p=player(),melee=createMeleeCombat();
   melee.request();run(melee,c,p,1.2);
   const snap=melee.snapshot();
-  assert.equal(snap.byResponse[expect],1,`id ${id} did not answer ${expect}`);
-  if(expect==='fight')assert.equal(target.combatTarget,'player');
-  else{
-   assert.notEqual(target.combatTarget,'player',`a ${expect} temperament squared up anyway`);
-   assert.equal(shoved.length,1,'they were not sent away from the attacker');
-   assert.ok(shoved[0].dz>0,'sent towards the attacker instead of away');
-   assert.ok(expect==='flee'?shoved[0].u>shoved.length*.9:shoved[0].u<.6);
-  }
+  assert.equal(snap.byResponse.fight,1,`id ${id} (${responseOf(id)}) did not fight back`);
+  assert.equal(target.combatTarget,'player');
+  assert.equal(shoved.length,0,'a victim was sent away instead of fighting');
+  const before=p.state.health;run(melee,c,p,3);
+  assert.ok(p.state.health<before,`id ${id} never swung back`);
  }
 });
 

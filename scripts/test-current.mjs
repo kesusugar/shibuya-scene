@@ -39,6 +39,7 @@ const files=[
  'tests/punch-aim.test.mjs',
  'tests/steer-direction.test.mjs',
  'tests/crowd-contact.test.mjs',
+ 'tests/player-health.test.mjs',
  'tests/feedback-bus.test.mjs',
  'tests/player-audio.test.mjs',
  'tests/crowd-legacy-props.test.mjs',

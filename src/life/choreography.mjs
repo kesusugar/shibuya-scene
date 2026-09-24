@@ -28,6 +28,11 @@ export class ScrambleChoreography {
   const regions=['center-gai','center-gai','hachiko','station'];for(let i=0;i<q.total&&active.length<q.total;i++){const region=regions[i%regions.length],p=s.spawn('patrol',region);if(p){p.choreographed=false;active.push(p);}}
  }
  move(p,dt){const s=this.sim,t=p.track,e=p.edge>=0?s.network.edges[p.edge]:t.e;p.animationTime+=dt;p.age+=dt;p.speed=0;
+  // Player crowd contact, Step E: someone punched (or provoked by a bump) fights back once they
+  // are at a kerb. While the fight lasts they neither start a crossing nor walk back to their
+  // slot; combat owns their stance, and whatever it moved them is their flee offset, which the
+  // return below walks off once it is over. Never on a crossing: that is still never stopped.
+  if(!p.crossing&&!t.finishing&&p.combatTarget==='player'&&p.combatUntil>s.time&&!p.combatDead)return;
   // claude/crowd-realism: back from running away (sim.flee). While they stand, they walk the
   // offset back to their spot; while they cross, the offset rides on the track and closes.
   const ox=p.fleeOffX??0,oz=p.fleeOffZ??0;
