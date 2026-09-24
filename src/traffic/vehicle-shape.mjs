@@ -75,9 +75,55 @@ const SILHOUETTE={
   house:[[ .072,.700,.86],[ .096,.868,.92],[ .120,.962,.95],[ .180,1.000,.962],[ .330,.998,.958],
          [ .400,.944,.93],[ .452,.800,.86],[ .486,.690,.80]],
   floor:.170, arch:.330, axle:.315, plate:'rear', roof:.94
+ },
+ // --- Looks C: classes of the Japanese street, generic (no model is copied) ------------------
+ // The big commercial 1BOX: a long box with a short semi-bonnet in front of the screen.
+ semibonnet:{
+  belt:[[-.500,.430,.82],[-.478,.520,.90],[-.450,.565,.95],[-.380,.580,.99],[ .000,.585,1],
+        [ .300,.585,1],[ .360,.575,.99],[ .400,.520,.97],[ .450,.470,.92],[ .500,.400,.84]],
+  house:[[-.470,.590,.83],[-.452,.770,.90],[-.436,.905,.94],[-.400,.978,.958],[ .120,1.000,.962],
+         [ .250,.998,.958],[ .300,.950,.935],[ .360,.780,.88],[ .400,.600,.82]],
+  floor:.110, arch:.290, axle:.330, plate:'both', roof:.94
+ },
+ // The large minivan: tall, a near-vertical nose and a big plain grille area.
+ minivan:{
+  belt:[[-.500,.460,.82],[-.470,.550,.90],[-.440,.580,.95],[-.380,.595,.99],[ .000,.600,1],
+        [ .280,.600,1],[ .340,.580,.99],[ .400,.550,.97],[ .460,.510,.93],[ .500,.450,.86]],
+  house:[[-.460,.605,.84],[-.445,.780,.90],[-.430,.910,.94],[-.390,.980,.955],[ .100,1.000,.960],
+         [ .220,.998,.955],[ .290,.930,.930],[ .340,.780,.88],[ .370,.620,.82]],
+  floor:.110, arch:.300, axle:.320, plate:'both', roof:.94
+ },
+ // The tall-box kei: kei width, a very short bonnet and a square greenhouse.
+ tallbox:{
+  belt:[[-.500,.440,.86],[-.470,.520,.93],[-.440,.550,.97],[-.380,.560,1],[ .250,.560,1],
+        [ .310,.540,.99],[ .380,.500,.96],[ .450,.460,.92],[ .500,.400,.86]],
+  house:[[-.460,.565,.88],[-.450,.780,.93],[-.430,.930,.96],[-.390,.985,.970],[ .100,1.000,.970],
+         [ .200,.995,.965],[ .260,.930,.940],[ .300,.760,.90],[ .320,.580,.85]],
+  floor:.120, arch:.310, axle:.330, plate:'both', roof:.94
+ },
+ // The newer tall city taxi: a compact MPV, taller than the saloon it replaces.
+ mpv:{
+  belt:[[-.500,.520,.82],[-.470,.600,.90],[-.440,.630,.95],[-.380,.645,.99],[ .100,.650,1],
+        [ .260,.645,1],[ .310,.600,.99],[ .390,.570,.97],[ .450,.530,.92],[ .500,.470,.84]],
+  house:[[-.430,.650,.84],[-.415,.800,.90],[-.395,.930,.935],[-.350,.990,.950],[ .050,1.000,.955],
+         [ .140,.995,.950],[ .210,.920,.930],[ .270,.800,.89],[ .310,.660,.83]],
+  floor:.125, arch:.310, axle:.315, plate:'both', roof:.94
+ },
+ // The sports coupe: long bonnet, short deck, low roof.
+ coupe:{
+  belt:[[-.500,.600,.80],[-.470,.680,.90],[-.430,.710,.95],[-.370,.720,.99],[-.250,.725,1],
+        [ .100,.730,1],[ .200,.720,1],[ .260,.700,.995],[ .360,.660,.97],[ .450,.600,.90],[ .500,.540,.80]],
+  house:[[-.300,.720,.78],[-.240,.840,.84],[-.190,.930,.88],[-.130,.985,.90],[ .000,1.000,.905],
+         [ .060,.990,.90],[ .140,.900,.87],[ .200,.800,.83],[ .240,.720,.78]],
+  floor:.140, arch:.330, axle:.310, plate:'both'
  }
 };
-const STYLE={taxi:'sedan',sedan:'sedan',kei:'hatch',van:'onebox',bus:'onebox',keiTruck:'cabover'};
+const STYLE={taxi:'sedan',sedan:'sedan',kei:'hatch',van:'onebox',bus:'onebox',keiTruck:'cabover',
+ longVan:'semibonnet',minivan:'minivan',tallKei:'tallbox',cityTaxi:'mpv',truck2t:'cabover',
+ police:'sedan',coupe:'coupe'};
+/** The silhouettes, for tests: every lofted type must name one. */
+export const SILHOUETTES=Object.freeze(Object.keys(SILHOUETTE));
+export const STYLES=Object.freeze({...STYLE});
 
 /** Wheel radius, tuned so the tyre fills its arch instead of hanging under a flat sill. */
 export const wheelRadius=type=>type==='bus'?.46:type==='kei'||type==='keiTruck'?.28:.33;
@@ -278,6 +324,26 @@ export function buildVehicleShape(type,{detail=1}={}){
   parts.paint.push(loft(roofStations));
  }
 
+ // --- Looks C: a cargo box, and the patrol car's roof light bar --------------------------------
+ // The 2-tonne truck is the cab-over with a plain box on its deck. The light bar is a tail-lamp
+ // part so the traffic renderer and the player's model both colour it with the rear lamps: dark
+ // red at rest, lit by the siren (PLAN-POLICE-AND-OWN-CAR W3). No text, no emblem.
+ let lightbar=null;
+ if(d.cargo){
+  const deckTop=H*at(profile.belt,-.3)[0];
+  const to=d.cargo.to*L,from=-.5*L+.05,top=d.cargo.height;
+  const box=new BoxGeometry(W*.99,top-deckTop,to-from);
+  box.translate(0,(top+deckTop)/2,(to+from)/2);parts.paint.push(box);
+ }
+ if(d.lightbar){
+  const flat=profile.house.filter(([,y])=>y>=.985);
+  const mid=flat.length?(flat[0][0]+flat[flat.length-1][0])/2:0;
+  const [topF,widthF]=at(profile.house,mid);
+  const bar=new BoxGeometry(W*widthF*.78,.11,.30);
+  bar.translate(0,H*topF+.06,mid*L);parts.tail.push(bar);
+  lightbar=[0,H*topF+.12,mid*L];
+ }
+
  // --- pillars and window frame ---------------------------------------------------------------
  // Without these the greenhouse is one continuous pane and reads as a black box sitting on the
  // car. Painted posts at the screen edges and one in the middle, plus a strip along the belt,
@@ -441,7 +507,8 @@ export function buildVehicleShape(type,{detail=1}={}){
   driverSeat:[-W*.235,H*profile.arch+.12,axleZ-L*.085],
   driverDoor:[-W*.50, H*profile.arch+.24,axleZ-L*.105],
   driverEntry:[-(W*.5+.74),0,axleZ-L*.105],
-  driverExit: [-(W*.5+.80),0,axleZ-L*.170]
+  driverExit: [-(W*.5+.80),0,axleZ-L*.170],
+  ...(lightbar?{lightbar}:{})
  };
 
  // Everything in `parts` is already in body space; merge each material's pile into one mesh.

@@ -13,14 +13,16 @@ export function handling(s,def,input,dt){
  if(!throttle||s.handbrake)s.speed-=Math.sign(s.speed)*Math.min(Math.abs(s.speed),(s.handbrake?5:1.4)*dt);
  s.speed=clamp(s.speed,-4.5*health,limit);
  s.steering=damp(s.steering,turn,10,dt);
- s.steerAngle=s.steering*.62/(1+Math.abs(s.speed)*.057);
+ // Looks C: steering lock and grip per body (VEHICLES.steer/grip/slide); a long van is heavy
+ // and slow to turn, a coupe light and quick. The defaults are the old single tuning.
+ s.steerAngle=s.steering*(def.steer??.62)/(1+Math.abs(s.speed)*.057);
  const wheelbase=def.length*.62;
  const target=-s.speed*Math.tan(s.steerAngle)/wheelbase*(s.handbrake?1.3:1);
  s.yawRate=damp(s.yawRate??0,clamp(target,-1.85,1.85),10,dt);
  // Rotate velocity into the new body frame; retain lateral momentum through a turn.
  const angle=s.yawRate*dt,lat=s.lateral??0,forward=s.speed;
  s.speed=forward*Math.cos(angle)+lat*Math.sin(angle);
- s.lateral=(lat*Math.cos(angle)-forward*Math.sin(angle))*Math.exp(-(s.handbrake?2.8:13)*dt);
+ s.lateral=(lat*Math.cos(angle)-forward*Math.sin(angle))*Math.exp(-(s.handbrake?(def.slide??2.8):(def.grip??13))*dt);
  s.acceleration=damp(s.acceleration??0,clamp((s.speed-before)/dt,-28,15),7,dt);
  const direction=Math.sign(s.speed)||1;
  return {heading:s.heading+angle,course:s.heading+angle+Math.atan2(s.lateral*direction,s.speed*direction),travel:direction*Math.hypot(s.speed,s.lateral)*dt};

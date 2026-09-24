@@ -4801,6 +4801,54 @@ stage locks (`test:legacy`) and fail the same 4 tests on the base commit as with
 - The glass reflects the sky strongly by day and can read as clear.
 - The ☆ name guard test comes with Step C.
 
+## 9o. Looks and fleet, Step C — the Japanese street classes (branch `claude/looks-fleet-3`, on `claude/looks-fleet-2`)
+
+**Plan:** `docs/PLAN-LOOKS-AND-FLEET.md` Step C.
+
+**What changed.**
+- **Seven types** in `VEHICLES` with fictional names: `longVan` "Cargo Hauler", `minivan` "Grand
+  Voyage", `tallKei` "Tall Box K", `cityTaxi` "Metro Cab", `truck2t` "Delivery 2t", `police`
+  "Patrol", `coupe` "Street GT". Each has a silhouette (new loft profiles `semibonnet`, `minivan`,
+  `tallbox`, `mpv`, `coupe`; the truck is the cab-over plus a cargo box, the patrol car the saloon),
+  a mass in `VEHICLE_MASS`, a spawn weight and the loft's anchors. Seated drivers use the same
+  anchors, so they sit in every new type.
+- **Spawn mix** is the plan's table (taxis 25, minivan 14, kei 12, vans 10, trucks 8, scooter 5,
+  coupe 2, police 1.5, bus on major roads; the sedan takes the rest) and the weights sum to 100.
+  The parked mix (`PARKED_MIX`) now includes tall kei, minivans, long vans and 2t trucks.
+- **The patrol car.** Black lower body and white upper (band at 58% of the height, so bonnet and
+  boot lid are white — tuned on the device from 70%), a red roof bar and no text or emblem. The
+  bar is in the tail-lamp part, so it is dark red at rest and can be lit with the rear lamps for
+  the siren (PLAN-POLICE W3); `anchors.lightbar` marks it.
+- **Handling per body.** `VEHICLES.steer / grip / slide` feed `vehicle-dynamics.mjs` (defaults are
+  the old single tuning): a long van turns less than a saloon, a coupe more.
+- **Rebaked** the static pack (lanes now list the new types in `allowed`) and the playable pack
+  (13 close-range bodies), both as generated commits.
+- **Hero staging** (the opening scene's queues at the Scramble) now stages the shortest bodies
+  first and retries once. The longer mix had cut the default seed from 15 to 13 staged cars
+  (`ui-commercial-mobility` wants ≥ 14); now 14. Across seven seeds it was 13–15 before and is
+  12–14 now: the queues are only so long and the plan's mix is longer on average.
+- **Name guard** (`tests/name-guard.test.mjs`): fails on real maker, model, body-kit, film or
+  agency names (including 警視庁 and the emblem) in `src/` and `app/`. "Skyline" and "Crown" are
+  matched only as proper nouns, because the codebase uses a building's crown and a city skyline;
+  chassis codes like s15 are left out because the stage ids are s1–s16.
+
+**Device check** (`evidence/looks-fleet/step-c/`): all 14 types on the street at once by day;
+287 draw calls by day (285 with Step B) and 293 at night; 0 console errors, no banner.
+
+**Tests.** `tests/fleet-types.test.mjs` (7) and `tests/name-guard.test.mjs` (3), registered: each new
+type has a silhouette, mass, weight, anchors, a seat inside the body and all five parts; the mix;
+every type is allowed on the baked lanes and the new bodies park; the player can take every new
+type and it is drawn from the playable pack; a long van turns less than a saloon and a coupe more;
+the patrol car's livery and roof bar; the truck's box height. They fail on the code before (the
+types and exports did not exist; the guard's label test fails without fictional names).
+
+**Not done / limitations.**
+- No door text on the patrol car (the plan allowed a generic "POLICE"; there are no textures in
+  the fleet batches, and none is the safe side).
+- Not driven by hand on the device; the take-over and close-up model are tested.
+- The opening scene holds 12–14 staged cars depending on the seed, one fewer than before on
+  average.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
