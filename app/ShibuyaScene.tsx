@@ -49,6 +49,7 @@ import {createPlayerAudio} from '../src/player/audio.mjs';
 import {createSoundBank} from '../src/audio/bank.mjs';
 import {createSoundscape} from '../src/audio/soundscape.mjs';
 import {upgradeGroundTextures} from '../src/ground/pbr.mjs';
+import {advanceWind} from '../src/streetscape/wind.mjs';
 import {createRoadReflection,ROAD_REFLECTION,ROAD_REFLECTION_UNIFORMS} from '../src/nightglow/road-reflection.mjs';
 import {createDiagnostics} from '../src/player/diagnostics.mjs';
 import {createTouchControls,wantsTouch} from '../src/player/touch-controls.mjs';
@@ -399,6 +400,7 @@ export default function Home(){
  const frameGate=new FrameGate(config.tier),drawingSize=new THREE.Vector2();let frames=0,last=performance.now(),raf=0,renderedFrames=0,readyFrames=0,latestFps:number|null=null,qaBusyNow=false;
  let timingObserver:any=null;if(s5TimingEnabled&&typeof PerformanceObserver!=='undefined'){const types=(PerformanceObserver as any).supportedEntryTypes??[];const observed=['longtask','gc'].filter(type=>types.includes(type));if(observed.length){timingObserver=new PerformanceObserver(list=>{for(const entry of list.getEntries()){const trace=stationTimingTrace;if(trace?.active)(entry.entryType==='gc'?trace.gc:trace.longTasks).push({start:entry.startTime,duration:entry.duration,name:entry.name});}});timingObserver.observe({entryTypes:observed});}}
  const renderScene=()=>{const completeBeforeRender=startupBuildComplete();
+  advanceWind(performance.now()/1000);   // RUN 12.4: street-tree wind
   // RUN 12.2: the wet road's mirror, HIGH and night only, rendered before the frame that samples it.
   const glow=nightglowEntry.hooks.current;
   roadReflection?.update(scene,view,{active:currentTier==='high'&&!!glow?.stats.active,time:performance.now()/1000,
