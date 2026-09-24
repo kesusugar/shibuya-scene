@@ -76,20 +76,22 @@ and no licence question.
 
 ### V1. Police lines in the formant synthesiser
 
-- **Lines**, chosen for how well the existing phoneme set can say them:
+- **Lines** (chosen by the user 2026-09-25; short commands a Japanese officer shouts):
 
-  | Line | What it needs |
-  | --- | --- |
-  | 「こらー！」 | `k` onset plus o, a (existing) |
-  | 「待てー！」 | new `m` onset, then `t` (existing) |
-  | 「止まれ！」 | `t`, new `m`, new `r` (a tap) |
-  | 「止まりなさーい！」 (optional) | also a new `s`. Keep it only if it survives the device check, otherwise drop it |
+  | Line | When | What it needs |
+  | --- | --- | --- |
+  | 「止まれ！」 | the pursuit, the player driving or on foot | `t`, new `m`, new `r` |
+  | 「停車！停車！」 | the pursuit, the player driving. Said twice: a lone 「停車」 reads stiff. Drop it if it does not survive the device check | new `sh` (a palatal fricative), then `a` |
+  | 「動くな！」 | an officer close to the player; just before an arrest | `g`, `k`, `n` (existing) |
+  | 「逃げるな！」 | the player running away on foot | `n`, `g`, new `r`, `n` |
+  | 「降りろ！」 | the player's car stopped or pinned by police | new `r`, then vowels |
 
 - **New onsets** in `ONSETS`, in the same style as today's:
   - `m`: a nasal like `n`, with a lower second formant and a short hum before the vowel;
   - `r`: the Japanese flap, a very short (about 15–25 ms) closure dip with no burst, between
     vowels;
-  - `s`: a fricative, high-pass noise at about 4–6 kHz for 60–90 ms before the vowel.
+  - `sh`: a fricative, band-passed noise at about 2.5–4.5 kHz for 70–100 ms before the vowel.
+    It is lower than an `s`, which gives 「しゃ」.
 - **Police personas.** Two adult male throats (a lower base pitch, formants scaled for a longer
   vocal tract), deterministic by car id like the crowd's personas.
   - The contour is a shout: a strong onset, a raised peak and a falling end, with the last vowel
@@ -98,7 +100,7 @@ and no licence question.
     crowd's lines.
 - **Tests.**
   - Every police line is built only from defined vowels and onsets.
-  - The new onsets produce their intended shape: `m` and `n` have no noise burst, `s` has
+  - The new onsets produce their intended shape: `m` and `n` have no noise burst, `sh` has
     high-frequency noise and `r` is shorter than 30 ms.
   - The police kind is separate from the crowd's kinds.
 
@@ -114,8 +116,10 @@ and no licence question.
 - **When.**
   - Only while pursuing with the siren on, the car within 40 m of the player, and at most one line
     every 6–8 s across all cars.
-  - Driving player: 「止まれ！」 and 「止まりなさーい！」. On foot: 「こらー！」, 「待てー！」 and
-    「止まれ！」.
+  - Driving player: 「止まれ！」 and 「停車！停車！」.
+  - Player's car stopped or pinned: 「降りろ！」.
+  - On foot and running: 「逃げるな！」 and 「止まれ！」.
+  - An officer within 3 m, or an arrest starting: 「動くな！」.
   - Never repeat the last line.
 - **Remove the machine voice.**
   - `speechSynthesis` (`createLoudspeaker` in `src/police/siren.mjs`) is no longer used in play.
@@ -124,7 +128,7 @@ and no licence question.
   - The selection follows the driving/on-foot state, never repeats a line and keeps the gap.
   - The megaphone chain is built only for the police kind.
   - `speechSynthesis` is never called without `?voice=tts`.
-- **Device check.** The user listens: can 「止まれ！」 and 「こらー！」 be recognised in a chase?
+- **Device check.** The user listens: can each of the five lines be recognised in a chase?
   - If not after tuning, the fallback is a paid, commercially licensed TTS (ElevenLabs or
     OpenAI) or a commissioned voice actor.
   - Either one only changes where the audio comes from. The playback in V2 stays.
