@@ -147,7 +147,7 @@ one of them.
 | `tallKei` | the tall-box kei (the N-BOX/Tanto class) | "Tall Box K" | kei width, tall square greenhouse |
 | `cityTaxi` | the newer tall Tokyo taxi (the JPN TAXI class) | "Metro Cab" | compact tall MPV, roof lamp with no company text |
 | `truck2t` | the 2-tonne cab-over delivery truck | "Delivery 2t" | cabover plus a plain white box body |
-| `police` | the sedan patrol car | "Patrol" | sedan with a black/white livery and a light bar (emissive at night) |
+| `police` | the Japanese patrol car (a large rear-drive sedan) | "Patrol" | black lower body and white upper, a red roof light bar, generic "POLICE" door text, no agency name or emblem. The siren, lamps and behaviour are in `docs/PLAN-POLICE-AND-OWN-CAR.md` |
 | `coupe` | the Japanese sports coupé, rare in traffic | "Street GT" | long bonnet, short deck, low roof |
 
 - **Mix at the Scramble** (a starting point; tune on the device):
@@ -182,6 +182,10 @@ rear wing, lower ride height, wider tyres and deep-dish rims, and bonnet vents.
 | Id | Mood (evocative, not copied) | Fictional name |
 | --- | --- | --- |
 | `heroWide` | a widebody FR coupé in orange and black, very low | "Kaze Wide" |
+
+> **Changed 2026-09-24:** the orange-and-black car becomes the player's own car ("Kaze FR",
+> a `fastback` silhouette). See `docs/PLAN-POLICE-AND-OWN-CAR.md` Step H. Steps D and H share
+> the body-kit parameters, and the two remaining hero cars stay parked.
 | `heroSilver` | a compact FR coupé in silver/blue-grey, clean kit, big wing | "Tsuki S" |
 | `heroDark` | a short, wide two-seater in dark gunmetal, black rims | "Yoru Z" |
 
