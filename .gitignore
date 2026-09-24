@@ -78,3 +78,5 @@ next-env.d.ts
 /assets/character/upstream/
 # audio pipeline (RUN 12.1): upstream downloads are verified, never committed
 /assets/audio/upstream/
+# ground textures (RUN 12.3): upstream downloads are verified, never committed
+/assets/textures/upstream/
