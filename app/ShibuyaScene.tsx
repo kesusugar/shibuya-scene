@@ -327,7 +327,9 @@ export default function Home(){
  const preset=(id:string,applyTime=true)=>{if(playerMode&&id!==currentCamera)exitPlayer();const c=CAMERAS.find((v:any)=>v.id===id)!;view.position.fromArray(id==='center-gai'?[-19,4.8,-24]:c.position);controls.target.fromArray(id==='center-gai'?[-61,9,-61]:c.target);controls.update();currentCamera=id;setCamera(id);if(applyTime&&c.time)clock.set(c.time);};preset(config.camera,!config.explicitTime);
  const enterPlayer=()=>{const ctx=lifeEntry.hooks.current?.network?.ctx;
   if(!ctx){console.warn('[Player] the crowd network is not ready yet');return false;}
-  player??=createPlayer(ctx);
+  // The crowd's people are bodies to the player (src/player/crowd-contact.mjs); read through the
+  // hook each frame, so a crowd rebuilt by a tier change is picked up and a missing one is none.
+  player??=createPlayer(ctx,{bodies:()=>lifeEntry.hooks.current?.sim??null});
   if(!player.place()){console.warn('[Player] no standable ground at the start point');return false;}
   if(!playerMarker){playerMarker=createPlayerMarker();groups.dynamic.add(playerMarker.mesh);}
   if(!carMarker){carMarker=createPlayerMarker(MARKER.car);groups.dynamic.add(carMarker.mesh);}
@@ -387,7 +389,7 @@ export default function Home(){
   // Foot IK is invisible from outside: a solver that never ran and a solver that ran and
   // declined to move anything look identical on screen. Under ?qa=1 the figure and the
   // surface it queries are reachable, so a check can tell those two apart.
-  if(config.qa){(window as any).__SHIBUYA_FEEDBACK__=feedback;(window as any).__SHIBUYA_AUDIO__=playerAudio;(window as any).__SHIBUYA_SOUNDS__={bank:soundBank,scape:soundscape};(window as any).__SHIBUYA_MELEE__=melee;(window as any).__SHIBUYA_FIGURE__=playerFigure;(window as any).__SHIBUYA_CTX__=ctx;(window as any).__SHIBUYA_LIFE__=lifeEntry.hooks.current;(window as any).__SHIBUYA_TRAFFIC__=trafficEntry.hooks.current;}
+  if(config.qa){(window as any).__SHIBUYA_FEEDBACK__=feedback;(window as any).__SHIBUYA_AUDIO__=playerAudio;(window as any).__SHIBUYA_SOUNDS__={bank:soundBank,scape:soundscape};(window as any).__SHIBUYA_MELEE__=melee;(window as any).__SHIBUYA_CONTACT__=player.contact.stats;(window as any).__SHIBUYA_FIGURE__=playerFigure;(window as any).__SHIBUYA_CTX__=ctx;(window as any).__SHIBUYA_LIFE__=lifeEntry.hooks.current;(window as any).__SHIBUYA_TRAFFIC__=trafficEntry.hooks.current;}
   return true;};
  const exitPlayer=()=>{if(!playerMode)return;soundscape?.silence();playUI?.hide();vehicleVisual?.hide();vehicleEffects?.hide();lifeEntry.hooks.current?.setPlayerFocus(null);followCamera.reset();melee.reset();
   // An abandoned carjack must not leave a driver half out of a car, a door hanging open, or a
@@ -395,7 +397,7 @@ export default function Home(){
   {const was=vehicleTransition.cancel();
    if(was?.kind==='carjack'&&was.slot){abortCarjack(trafficEntry.hooks.current?.sim,was.slot);was.slot.doorPhase=0;}
    if(was&&!was.seated)playerCar?.unreserve();}
-  playerMode=false;driving=false;setDriving(false);playerCar?.release();playerCar=null;carMarker?.hide();playerAudio?.silence();touchPad?.hide();player?.detach();playerMarker?.hide();playerFigure?.hide();playerShadow?.begin();playerShadow?.end();releaseCrowdSlot();delete (window as any).__SHIBUYA_PLAYER__;delete (window as any).__SHIBUYA_CAR__;delete (window as any).__SHIBUYA_FIGURE__;delete (window as any).__SHIBUYA_CTX__;delete (window as any).__SHIBUYA_LIFE__;delete (window as any).__SHIBUYA_TRAFFIC__;
+  playerMode=false;driving=false;setDriving(false);playerCar?.release();playerCar=null;carMarker?.hide();playerAudio?.silence();touchPad?.hide();player?.detach();playerMarker?.hide();playerFigure?.hide();playerShadow?.begin();playerShadow?.end();releaseCrowdSlot();delete (window as any).__SHIBUYA_PLAYER__;delete (window as any).__SHIBUYA_CONTACT__;delete (window as any).__SHIBUYA_CAR__;delete (window as any).__SHIBUYA_FIGURE__;delete (window as any).__SHIBUYA_CTX__;delete (window as any).__SHIBUYA_LIFE__;delete (window as any).__SHIBUYA_TRAFFIC__;
   view.fov=50;view.updateProjectionMatrix();controls.enabled=!config.qa;setPlayerHit(null);setMode('observe');preset(currentCamera,false);};
  resize();setTier(currentTier);setTime(clock.value);setModules(system.snapshot());
  const observer=new ResizeObserver(resize);observer.observe(mount.current);

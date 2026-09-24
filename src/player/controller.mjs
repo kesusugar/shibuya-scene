@@ -10,6 +10,7 @@
 // crowd's own neighbour avoidance sees the player and parts around them.
 
 import {clipCameraArm} from './camera.mjs';
+import {createCrowdContact} from './crowd-contact.mjs';
 
 // The camera arm. Solids are tested at the camera's own height rather than on the ground,
 // so it is a facade that pulls the camera in and not a bollard it is sailing well above.
@@ -57,7 +58,14 @@ function turnToward(from, to, dt) {
  return from + step;
 }
 
-export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startHeading} = {}) {
+/**
+ * @param {object} ctx the pedestrian context the crowd walks on
+ * @param {object} [options]
+ * @param {null|(()=>any)} [options.bodies] the crowd simulation whose people are bodies to the
+ *   player, or null. Absent, the player collides with walls only, exactly as before.
+ * @param {null|((p:any,bump:any)=>void)} [options.onBump] told about each person the player bumps.
+ */
+export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startHeading, bodies = ctx.bodies ?? null, onBump = null} = {}) {
  const state = {
   x: start[0], z: start[1], y: 0, heading, pitch: -.12,
   // `heading` is where the camera looks, `course` where the input asks the body to go, and
@@ -80,6 +88,9 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
   return null;
  };
  let detach = null;
+ // The people, as bodies. Resolved before `advance()`, which keeps the walls; the two are
+ // separate and run in the same order every frame.
+ const contact = createCrowdContact({onBump: (p, b) => onBump?.(p, b)});
 
  const standable = (x, z) => Math.abs(x) <= LIMIT && Math.abs(z) <= LIMIT && !ctx.solid(x, z, PLAYER.radius);
 
@@ -97,6 +108,7 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
 
  const api = {
   state,
+  contact,
   /**
    * Keyboard and pointer, attached only while the player has the scene.
    *
@@ -286,18 +298,26 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    state.speed=Math.max(0,state.speed);
    state.targetSpeed=target;
 
+   let mx=0,mz=0;
    if(state.speed>1e-4){
     const step=state.speed*dt;
-    const ox=state.x,oz=state.z;
     // Travel along the body's own heading once it exists, so the character goes where it is
     // pointing rather than sliding sideways while it turns.
     const along=state.bodyHeading??course;
-    advance(Math.sin(along)*step,Math.cos(along)*step);
+    mx=Math.sin(along)*step;mz=Math.cos(along)*step;
+   }
+   // People first, then walls. With no crowd this is skipped and the step is untouched.
+   const crowd=typeof bodies==='function'?bodies():bodies;
+   if(crowd){const r=contact.resolve(crowd,state,mx,mz,dt,len>0&&!attacking);mx=r.dx;mz=r.dz;}
+   if(state.speed>1e-4||mx||mz){
+    const ox=state.x,oz=state.z;
+    advance(mx,mz);
     const moved=dt>0?Math.hypot(state.x-ox,state.z-oz)/dt:0;
     // Walking into a wall must not leave the legs running: the speed the legs see is the
-    // speed the body actually made, not the speed it wanted.
-    state.speed=Math.min(state.speed,moved);
+    // speed the body actually made, not the speed it wanted. The same holds for a crowd.
+    if(state.speed>1e-4)state.speed=Math.min(state.speed,moved);
    }
+   if(crowd)contact.react(crowd,state,dt);
    // The figure turns the body; this is only what it is turning towards.
    if(len>0&&!attacking)state.bodyHeading=turnToward(state.bodyHeading??course,course,dt);
    state.y = ctx.height(state.x, state.z);

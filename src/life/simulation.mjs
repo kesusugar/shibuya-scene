@@ -121,7 +121,7 @@ export class CrowdSimulation{
   * is for. Deterministic per person (angle, speed, how far), so the same crowd fans out the
   * same way and the same person is always the quick one.
   */
- flee(p,awayX,awayZ,{urgency=.7,dodge=false,from=null,speed=null,distance=null}={}){
+ flee(p,awayX,awayZ,{urgency=.7,dodge=false,from=null,speed=null,distance=null,voice=true}={}){
   if(!p?.active||p.struck!==undefined||p.combatDead||p.controlled||p.combatTarget)return false;
   const f=p.flee;if(f&&!dodge&&f.until-this.time>FLEE.cooldown)return false;
   let len=Math.hypot(awayX,awayZ);if(!(len>1e-6)){awayX=p.id%2?1:-1;awayZ=0;len=1;}
@@ -136,7 +136,9 @@ export class CrowdSimulation{
   if(p.pause>0)p.pause=0;
   p.fleeOffX??=0;p.fleeOffZ??=0;
   this.stats.fled=(this.stats.fled??0)+1;if(dodge)this.stats.dodged=(this.stats.dodged??0)+1;
-  this.say(p,'alert',.5+.5*u);return true;}
+  // `voice:false` for a step aside that is not a fright (the player brushing past): whoever
+  // bumped them decides whether they say anything.
+  if(voice)this.say(p,'alert',.5+.5*u);return true;}
  /** Somewhere a fleeing person may put a foot: walkable ground, or their own crossing. */
  fleeAllowed(p,x,z){const n=this.network,ctx=n.ctx;
   // Someone already inside a car's footprint may always step, or they could never get out.
