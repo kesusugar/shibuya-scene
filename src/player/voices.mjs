@@ -1,5 +1,9 @@
 // The crowd you can hear.
 //
+// RUN 12.1: screams, gasps and low grunts of pain now play CC0 recordings when the sound bank
+// (src/audio/bank.mjs) has them -- see `recordedKind`. Everything below is still true of the
+// words, and of every voice until the recordings have decoded.
+//
 // Nothing here is a recording. The repository ships no third-party audio -- the licensing
 // would have to be cleared and the bytes would land on the startup path this project guards
 // hardest -- so a shout is built the way a voice is built: a buzzing glottal source shaped by
@@ -159,7 +163,20 @@ export function prioritise(list, listener) {
  * `getContext` is a function rather than a context because the context does not exist until
  * the click that enters player mode creates it, and this module is built before that.
  */
-export function createCrowdVoices(getContext) {
+/**
+ * RUN 12.1: which recorded kind stands in for a synthesised one, by register. A scream, a
+ * gasp and a grunt of pain are sounds a recording does far better than formants; words
+ * (「あぶな！」) stay synthesised, because there is no CC0 recording of them. `null` means
+ * no recording suits this voice and the formant voice is used.
+ */
+export function recordedKind(kind, high) {
+ if (kind === 'scream') return high ? 'scream' : 'scream-low';
+ if (kind === 'gasp') return 'gasp';
+ if (kind === 'pain') return high ? null : 'pain-low';
+ return null;
+}
+
+export function createCrowdVoices(getContext, {samples = null} = {}) {
  // What is sounding right now. Held as a list rather than a count because a scream that
  // finds every slot taken does not queue behind the chatter -- it cuts one short and takes
  // the slot. Six of twelve bodies went under the car in silence before this, which is the
@@ -224,6 +241,25 @@ export function createCrowdVoices(getContext) {
    const near = Math.max(0, Math.min(1, (VOICE.range - distance) / (VOICE.range - VOICE.near)));
    const level = VOICE.gain * line.level * near ** 1.4;
    if (level < .004) {stats.culled++; return null;}
+
+   // A recording, if the bank has one for this voice. The scheduling above (range, cap, gap,
+   // a scream taking a chatter slot) is the same either way; only the source differs. Placed
+   // in the world, so the panner does the distance and side the formant path does by hand.
+   const recorded = recordedKind(kind, me.high);
+   if (recorded && samples?.has?.(recorded)) {
+    const slot = {kind, cut(when) {voice?.cut(when, VOICE.duck);}};
+    // Each person keeps one pitch: a few percent either side, from their own throat.
+    const rate = Math.max(.9, Math.min(1.1, me.high ? me.f0 / 360 : me.f0 / 190));
+    const voice = samples.play(recorded, {x, z, y: 1.55, gain: line.level, rate, when: at, onEnd: () => {
+     const i = live.indexOf(slot); if (i >= 0) live.splice(i, 1);
+    }});
+    if (voice) {
+     live.push(slot);
+     if (scream) lastScream = at; else lastAlert = at;
+     stats.played++; stats.recorded = (stats.recorded ?? 0) + 1;
+     return line;
+    }
+   }
 
    try {
     // Source: one sawtooth for the glottis, one slow oscillator bending its detune, which is

@@ -27,6 +27,8 @@
     "qa:capture": "node scripts/run-visual-qa.mjs",
     "fetch:character": "node scripts/fetch-character-upstream.mjs",
     "convert:character": "node scripts/convert-character.mjs",
+    "fetch:audio": "node scripts/fetch-audio-upstream.mjs",
+    "convert:audio": "node scripts/convert-audio.mjs",
     "analyse:gait": "node scripts/analyse-gait.mjs",
     "bake:crowd-hq": "node scripts/bake-crowd-hq.mjs"
   },
@@ -60,6 +62,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@breezystack/lamejs": "^1.2.7",
     "@cloudflare/vite-plugin": "1.37.1",
     "@cloudflare/workers-types": "^4.20260702.1",
     "@tailwindcss/postcss": "4.2.1",

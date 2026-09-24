@@ -76,3 +76,5 @@ next-env.d.ts
 
 # character pipeline: upstream downloads are verified, never committed
 /assets/character/upstream/
+# audio pipeline (RUN 12.1): upstream downloads are verified, never committed
+/assets/audio/upstream/

@@ -105,7 +105,7 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    * leaves no way out at all; `onExit` is called so Escape leaves play entirely. `onDrive`
    * is the get-in/get-out key.
    */
-  attach(element, {onExit, onDrive, onAttack} = {}) {
+  attach(element, {onExit, onDrive, onAttack, onHorn} = {}) {
    if (detach) return;
    const down = (e) => {
     if (e.repeat) return;
@@ -115,6 +115,7 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
     if (k === 'escape') {keys.clear(); onExit?.(); return;}
     if (k === 'f') {onDrive?.(); e.preventDefault(); return;}
     if (k === 'e') {onAttack?.(); e.preventDefault(); return;}
+    if (k === 'h') {onHorn?.(); e.preventDefault(); return;}   // RUN 12.1: the horn, while driving
     if (!'wasd'.includes(k) && k !== 'shift' && k !== ' ') return;
     keys.add(k === ' ' ? 'shift' : k); e.preventDefault();
    };
