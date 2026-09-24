@@ -1,4 +1,4 @@
-# Plan: the player bumps into people instead of passing through them
+# Plan: the player bumps into people, fights to four blows, and steers the right way
 
 Status: **PLAN, not implemented.** Written 2026-09-24, after PR #22 (master `3e15698`). The
 work itself happens in a local Claude CLI session on the user's PC, so that it can be checked
@@ -41,6 +41,9 @@ on the real device (Chrome + phone). Read `AGENTS.md`, `CLAUDE.md` and
 - **Knock-down on a sprint bump is OFF.** It stays behind a flag (`CONTACT.knockDown = false`).
   The user was asked and did not choose, so the safe default holds. Turning it on later reuses
   `crowd.strike()`, the simulation's existing knock-down.
+- **30% of bumps start a fight.** The user added this on 2026-09-24. Each bump draws once from
+  the simulation's own seeded `rng`, and the person's cooldown means it draws once per bump,
+  not once per frame. A fight started this way is the same fight a punch starts (Step E).
 - **Not while driving.** The car already has `vehicleThreat`. Everything here is on foot only.
 - **Bounded work.** Every query reads the simulation's own 2 m grid around the player (3×3
   cells). There is never a scan over the population.
@@ -127,11 +130,10 @@ through `fleeAllowed`.
   - Speed ×0.6 on the frame of contact.
   - A tiny camera knock through the feedback bus (a new `player_bump` event), which respects
     `SHAKE_SCALE` and reduced motion.
-- **A bump is never a fight.** It must not:
-  - change `combatHealth`;
-  - open hostility (`combatTarget`);
-  - count as a punch for `witness`;
-  - raise the player's wanted or combat stats.
+- **A bump is not a blow.**
+  - It never changes health, counts as a punch for `witness`, or adds to the combat stats.
+  - The 30% that start a fight (§2) open hostility through the same `engage()` path a punch
+    uses, so the fighting rules in Step E apply unchanged. The other 70% never do.
 
 ### Step D: tests, bench, device check
 
@@ -148,7 +150,10 @@ fail on the code before this work.
    - the signal cycle keeps advancing. Use the real network the way the robustness and flee
      tests do.
 4. **Someone on another level** (more than 1.2 m above or below) does not block.
-5. **A bump is not combat:** no health change, no hostility, no witness event.
+5. **A bump is not a blow:**
+   - no health change and no witness event;
+   - over 1,000 seeded bumps, 30% ± 3% open a fight;
+   - the rest never set `combatTarget`.
 6. **A sprint bump** staggers harder than a walking bump, and knocks nobody down while the
    flag is off.
 7. **No crowd** (`ctx.bodies` absent): movement is exactly as before (the existing controller
@@ -169,6 +174,72 @@ Target: mean below 0.05 ms and p95 below 0.15 ms.
 - **Console:** 0 errors and 0 shader messages.
 - **On a phone** (GitHub Pages after merge): the touch pad walks into people, slides past and
   gets through a crowd.
+- **Left and right:** the touch pad pushed left walks left on screen. The same for A/D and for
+  steering the car.
+- **A fight to the end, both ways:** four punches drop a pedestrian, and taking four ends the
+  game with the retry screen. The health bar goes 100 → 75 → 50 → 25 → 0. A traffic car takes
+  25 without killing.
+
+### Step 0 (do first, on its own): left and right are mirrored on foot
+
+- **Symptom (user, real device):** pushing the touch pad left moves the player right. Keyboard
+  A/D and a gamepad stick go the same wrong way, because all three feed the same `strafe` axis.
+- **Cause.** `controller.step()` turns the input into a course with
+  `atan2(fz*s + fx*c, fz*c - fx*s)`, which sends `strafe = +1` toward world +x at heading 0.
+  `playerCamera()` sits behind the player and looks along the heading, so at heading 0 the
+  camera looks toward +z, and the right of the screen is world −x. Right input therefore walks
+  left on screen.
+- **Fix.** Flip the strafe term in the course, to `atan2(fz*s - fx*c, fz*c + fx*s)`. Leave the
+  input sources alone: the touch pad, keys and pad already say "right is +1".
+- **Also check the car.** `vehicle-dynamics.mjs` steers with `heading + angle` from the same
+  `strafe`. Turning with right input must move the view to the right. If it does not, the same
+  mirror applies there.
+- **Mouse look is correct.** `look()` does `heading -= dx`, and dragging right turns the view
+  right. Do not change it.
+- **Tests.**
+  - With the player at headings 0, π/2 and π, strafe +1 moves them toward the camera's right
+    vector (derived from `playerCamera()`, not written by hand).
+  - The same for the car's steering.
+  - Some existing locomotion and controller tests may have encoded the wrong sign. Update them
+    and say which ones in the commit message.
+
+### Step E: health, retaliation and game over (added by the user 2026-09-24)
+
+- **The player has 100 HP.**
+  - A health bar goes in the dashboard (`src/player/play-ui.mjs`, `.play-health`, today text
+    only). Show the bar and the number, colour it by level, and keep it readable at phone width.
+  - Health is `state.health` (already 100 at spawn and `revive()`).
+- **Four blows either way.**
+  - `COMBAT.playerDamage` becomes 25 (today 34), so four punches take a pedestrian from 100 to 0.
+  - An NPC's punch does 25 to the player (today 14–18, `npcDamage + (p.id % 3) * 2`), so four
+    take the player to 0.
+  - Whoever takes the fourth blow first loses: the pedestrian goes down (the existing
+    `kill()`), or the player dies and the game is over.
+- **A punched person always hits back.** Today `responseOf()` (temperament) sends some victims
+  running or backing off. Per the user, a victim now fights back.
+  - Witnesses still react by temperament.
+  - The crossing rule (§16a) still holds: someone on a crossing or in the choreographed cast is
+    never stopped on it. They take the blow, keep walking, and turn to fight when they reach the
+    kerb; `combatUntil` already carries this.
+  - Kids stay ineligible, as today.
+- **A traffic car that hits the player on foot does 25.**
+  - Today `knockDown()` kills outright (`alive = false`). Now it takes 25 HP, and only at 0 is
+    it a death.
+  - Below that the player is thrown: the strong `Hit` plus a knock-back of 1–1.5 m through
+    `advance()`, so never into a wall. Control returns after about 1 s.
+  - A 1.5 s grace period means one car cannot hit again on the next frame.
+  - The player's own car, when driving, is unaffected.
+- **Game over.** At 0 HP, the existing death path (`setPlayerHit`, the death clip) shows a
+  "ゲームオーバー" screen with a retry button that calls the existing respawn (`revive()`, back
+  to 100 HP).
+- **Tests.**
+  - Four player punches take a pedestrian down, and three do not.
+  - Four NPC punches end the game, and three do not.
+  - A punched off-rails pedestrian fights back.
+  - A punched cast member does not stop on the crossing, and fights back at the kerb.
+  - A car hit takes 25 and leaves the player alive at 75, and four car hits end the game.
+  - The grace period stops a double hit.
+  - `revive()` restores 100.
 
 ## 4. Risks and how to check them
 
@@ -185,9 +256,13 @@ Target: mean below 0.05 ms and p95 below 0.15 ms.
 
 ## 5. Order of work and commits
 
+0. Step 0 (left/right) plus its tests. One commit; it is independent and small, so it can
+   ship first.
 1. Step A plus its tests 1, 2, 4 and 7. One commit.
 2. Step B plus test 3. One commit.
 3. Step C plus tests 5 and 6. One commit.
+3b. Step E (health, retaliation, car damage, game over) plus its tests. One commit, or one per
+    rule if that reads better.
 4. The bench, the device-check evidence (`evidence/player-contact/`), and the status-doc
    section (a new §9l, plus a §16a entry if a bug is found). Separate commits for evidence and
    docs.
