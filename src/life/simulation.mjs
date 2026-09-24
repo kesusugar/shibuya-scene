@@ -193,8 +193,12 @@ export class CrowdSimulation{
    // Held up for a second (a car parked across the way, a kerb-edge margin the flight squeezed
    // past): then any step that is not into a solid will do, so nobody is left off their track.
    // Never into a car: a spot the player's car now stands on is waited for, beside it.
-   const ok=(p.returnHeld??0)>1?!this.network.ctx.solid(baseX+nx,baseZ+nz,RADIUS*.6)&&!this.vehicleOverlap(baseX+nx,baseZ+nz,RADIUS+.15)
-    :this.fleeAllowed(p,baseX+nx,baseZ+nz);
+   // RUN 12.4: tiered. After a second, walkable ground with only a thin margin (the kerb edge
+   // the flight squeezed past) or their own crossing; only after three, any non-solid step. The
+   // single fallback put returning cast on the road edge while a nearer way was open.
+   const held=p.returnHeld??0,x=baseX+nx,z=baseZ+nz,clear=!this.network.ctx.solid(x,z,RADIUS*.6)&&!this.vehicleOverlap(x,z,RADIUS+.15);
+   const e=this.network.edges[p.edge]??p.track?.e;
+   const ok=held>3?clear:held>1?clear&&(this.network.ctx.safe(x,z,.05)||(!!e?.crossingId&&inCrossing(x,z,e,.29))):this.fleeAllowed(p,x,z);
    if(!ok)continue;
    p.returnHeld=0;p.fleeOffX=nx;p.fleeOffZ=nz;return Math.hypot(nx,nz);}
   p.returnHeld=(p.returnHeld??0)+dt;
