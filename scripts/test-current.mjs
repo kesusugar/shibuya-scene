@@ -23,6 +23,7 @@ const files=[
  'tests/hq-sync-cost.test.mjs',
  'tests/sound-bank.test.mjs',
  'tests/road-reflection.test.mjs',
+ 'tests/ground-pbr.test.mjs',
  'tests/combat.test.mjs',
  'tests/vehicle-occupancy.test.mjs',
  'tests/awareness.test.mjs',
