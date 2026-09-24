@@ -363,7 +363,10 @@ export class CrowdSimulation{
  }
  move(p,dt){if(!p.active)return;if(p.choreographed)return this.choreography.move(p,dt);const n=this.network,oldCell=this.cell(p.x,p.z);p.age+=dt;p.animationTime+=dt;
   p.combatAction=Math.max(0,(p.combatAction??0)-dt*3.5);
-  if(p.combatTarget&&p.combatUntil>this.time){p.state='fighting';p.speed=0;return;}
+  // Hostile, but never stopped while admitted to a crossing: that holds the signal group, and a
+  // held group stops every signal on the map (GTA-FIDELITY-STATUS 16a). They finish crossing,
+  // `leave()` releases the group at the far kerb, and the fight picks up there.
+  if(p.combatTarget&&p.combatUntil>this.time&&!p.crossing){p.state='fighting';p.speed=0;return;}
   if(p.combatTarget){p.combatTarget=null;p.combatAction=0;}
   // Curb waiters and idle actors yield locally to occupied crossing exits.
   // They remain on walkable ground; no recycling or position snap clears a crossing.
@@ -450,7 +453,9 @@ export class CrowdSimulation{
    p.elapsed+=dt;const interval=p.crossing||p.choreographed?1/30:p.mode==='idle'?.5:p.lod==='near'?1/30:p.lod==='mid'?1/15:.2;if(p.elapsed+1e-8<interval){this.stats.throttled++;continue;}const elapsed=p.elapsed;p.elapsed=0;this.move(p,elapsed);}
   if(this.refillClock>=2){this.refillClock=0;this.refill();}
  }
- update(dt){const start=performance.now();this.accumulator+=Math.max(0,Math.min(.25,dt));while(this.accumulator>=1/30){this.step(1/30);this.accumulator-=1/30;}this.stats.updateMs=performance.now()-start;}
+ // `postUpdate(dt)`, if set, runs after the steps and before anything draws them: the player's
+ // contact settles whoever the crowd walked into the player this frame (crowd-contact.mjs).
+ update(dt){const start=performance.now();this.accumulator+=Math.max(0,Math.min(.25,dt));while(this.accumulator>=1/30){this.step(1/30);this.accumulator-=1/30;}this.postUpdate?.(dt);this.stats.updateMs=performance.now()-start;}
  snapshot(debug=false){const active=this.pool.filter(p=>p.active),counts=key=>Object.fromEntries([...new Set(active.map(p=>p[key]))].map(k=>[k,active.filter(p=>p[key]===k).length]));return {...this.stats,target:QUALITY[this.tier].total,choreographed:active.filter(p=>p.choreographed).length,waitingCells:this.network.stats.waitingCells??0,reasons:{...this.stats.reasons},entries:{...this.stats.entries},completed:{...this.stats.completed},total:active.length,tier:this.tier,archetypes:counts('archetype'),modes:counts('mode'),states:counts('state'),lod:counts('lod'),regions:counts('region'),hachiko:active.filter(p=>district(p.x,p.z)==='hachiko').length,centerGai:active.filter(p=>district(p.x,p.z)==='center-gai').length,groupCount:this.groups.filter(g=>g.members.filter(id=>this.pool[id].active&&this.pool[id].group===g.id).length>1).length,queueSizes:Object.fromEntries([...this.queue].map(([k,s])=>[k,s.size])),...(debug?{actors:active.map(p=>({id:p.id,archetype:p.archetype,edge:p.edge,destination:p.destination,state:p.state,queue:p.queueKey,group:p.group,lod:p.lod,stuck:p.stuck,radius:RADIUS,grid:this.cell(p.x,p.z),crossing:p.crossing})),signalPhase:this.signals?.phase()??'unbound'}:{})};}
  audit(){const findings=[],minor={groupSeparation:0,stuck:0};let maxStack=0;for(const p of this.pool){if(!p.active||p.struck!==undefined)continue;if(![p.x,p.z,p.heading,p.height].every(Number.isFinite))findings.push({id:p.id,kind:'finite'});if(p.edge>=0&&!this.network.edges[p.edge])findings.push({id:p.id,kind:'invalid-path'});if(this.network.ctx.solid(p.x,p.z,RADIUS-.01))findings.push({id:p.id,kind:'solid'});if(!p.crossing&&!this.network.ctx.safe(p.x,p.z,RADIUS-.01))findings.push({id:p.id,kind:'road-intrusion'});if(this.vehicleOverlap(p.x,p.z,RADIUS-.02))findings.push({id:p.id,kind:'vehicle-overlap'});if(this.blocked(p.x,p.z,p,RADIUS*2-.03,false))findings.push({id:p.id,kind:'pedestrian-overlap'});if(p.crossing&&this.network.ctx.onRoad(p.x,p.z)&&!inCrossing(p.x,p.z,this.network.edges[p.edge],.23))findings.push({id:p.id,kind:'crosswalk-boundary'});if(p.crossing&&!this.signals?.groups.has(p.crossing))findings.push({id:p.id,kind:'invalid-signal'});if(p.stuck>5)minor.stuck++;if(p.leader>=0&&this.pool[p.leader].active&&Math.hypot(p.x-this.pool[p.leader].x,p.z-this.pool[p.leader].z)>8)minor.groupSeparation++;}
   for(const s of this.queue.values())maxStack=Math.max(maxStack,s.size);return {major:findings.length,minor,findings,maxQueue:maxStack,signalViolations:this.stats.signalViolations};}

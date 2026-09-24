@@ -176,3 +176,28 @@ test('the throw goes through advance(): never into a wall',()=>{
  for(let f=0;f<60;f++)p.step(1/60);
  assert.ok(p.state.z<=.8,`thrown into the wall to z ${p.state.z.toFixed(2)}`);
 });
+
+// Found while checking the device: `simulation.move` stopped anyone with a live combatTarget where
+// they stood, crossing or not. Combat never stops an on-rails victim itself, but an ordinary
+// walker admitted to a crossing and still on its pavement end can be punched or provoked, and
+// was then frozen for the 14 s hostility window, holding the signal group.
+test('an ordinary walker admitted to a crossing is not frozen there by a fight',()=>{
+ const data=JSON.parse(readFileSync('public/data/shibuya-scene-data.json'));
+ const ground=buildGroundModel(data),generic=buildBuildingModel(data);
+ const core=buildStationModel(data,{ground,generic});
+ const street=buildStreetscapeModel(data,{tier:'high',ground,generic,core});
+ const network=buildPedestrianNetwork(data,{ground,generic,street,core});
+ const graph=buildTrafficGraph(data,{ground,generic,street,core});
+ const traffic=new TrafficSimulation(graph,{tier:'high',street});
+ traffic.signals.time=88.5;
+ const sim=new CrowdSimulation(network,{traffic,tier:'high'});
+ let p=null;
+ for(let i=0;i<30*20&&!p;i++){traffic.update(1/30);sim.step(1/30);
+  p=sim.pool.find(q=>q.active&&!q.choreographed&&q.crossing&&q.progress<1.5&&q.state==='crossing')??null;}
+ assert.ok(p,'nobody was admitted to a crossing');
+ p.combatTarget='player';p.combatUntil=sim.time+14;
+ const start=p.progress,edge=p.edge;
+ for(let i=0;i<30*3;i++){traffic.update(1/30);sim.step(1/30);}
+ assert.ok(p.edge!==edge||p.progress>start+1,`frozen on the crossing (progress ${start.toFixed(2)} -> ${p.progress.toFixed(2)})`);
+ assert.notEqual(p.state,'fighting');
+});

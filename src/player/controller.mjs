@@ -344,6 +344,12 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    state.y = ctx.height(state.x, state.z);
   },
 
+  /** After the crowd has moved this frame: move whoever walked into the player back out. */
+  settleCrowd(dt) {
+   const crowd = typeof bodies === 'function' ? bodies() : bodies;
+   return crowd ? contact.settle(crowd, state, dt) : 0;
+  },
+
   /** True while the player is standing on carriageway rather than pavement. */
   get onRoad() {return ctx.onRoad(state.x, state.z);},
 

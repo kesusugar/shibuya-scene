@@ -206,10 +206,27 @@ export function createCrowdContact({onBump=null}={}){
     stats.contacts++;
     if(c.into){const b=bump(crowd,p,state);if(b){stats.bumps++;bumped=true;if(b.dodged)stats.dodges++;if(b.fight)stats.fights++;onBump?.(p,b);}}
     else if(d<CONTACT.gap&&giveWay(crowd,p,state,d))stats.dodges++;
+    if(d<CONTACT.gap)pushOut(crowd,p,state,d,dt);
    }
    // The player loses pace on the frame they hit someone, which is most of what makes it read.
    if(bumped)state.speed*=CONTACT.slow;
    stats.lastMs=resolveMs+now()-t0;
+  },
+  /**
+   * After the crowd's own update (CrowdSimulation.postUpdate), before it is drawn: whoever the
+   * crowd walked into the player this frame is moved out of the player's circle, the whole of
+   * the overlap, since the player has already moved. Reads this frame's `nearby` list (nobody
+   * crosses 2 m in a frame), so it adds no grid scan.
+   */
+  settle(crowd,state,dt){
+   if(!state.alive)return 0;let n=0;
+   for(const p of nearby){
+    if(!p.active||p.struck!==undefined||p.combatDead)continue;
+    const d=Math.hypot(p.x-state.x,p.z-state.z);
+    if(d<CONTACT.gap&&pushOut(crowd,p,state,d,dt,1))n++;
+   }
+   stats.settled=(stats.settled??0)+n;
+   return n;
   },
   reset(){Object.assign(stats,{checks:0,contacts:0,bumps:0,dodges:0,fights:0,minGap:null,trappedSeconds:0,lastMs:0});},
   snapshot(){return {...stats};}
@@ -275,6 +292,39 @@ export function bump(crowd,p,state){
  else if(unit(p.id,23)<CONTACT.speaks)crowd.say?.(p,'alert',.4);
  crowd.stats.bumped=(crowd.stats.bumped??0)+1;
  return {dodged,staggered,speed,fight,strong,hold,dirX:dx,dirZ:dz,onRails};
+}
+
+/**
+ * Whoever is still inside the player's circle after this frame is moved out of it by their
+ * share: two thirds of the overlap, the player having taken (at most) the other third in
+ * resolveStep. Found on the device check: a dodge is a request, and the people who do not act
+ * on it -- the cast walking a track that goes through the player (their flee offset closes back
+ * onto that line), someone squaring up to fight, someone already running or in cooldown -- were
+ * walked through at their own pace. This is the part that is not a request.
+ *
+ * Only onto ground they may stand on (`fleeAllowed`: walkable, or their own crossing), and for
+ * the cast through the flee offset, so their track carries it and brings them back. Never
+ * `leave()`. Fast enough for a walker coming straight at the player (`PUSH_RATE`), and at
+ * least `depenetrate` for an overlap that was already there.
+ */
+const PUSH_RATE=2.5;
+function pushOut(crowd,p,state,d,dt,share=2/3){
+ let nx=p.x-state.x,nz=p.z-state.z;
+ if(d>1e-6){nx/=d;nz/=d;}else{nx=p.id%2?1:-1;nz=0;}
+ const move=Math.min((CONTACT.gap-d)*share,Math.max(CONTACT.depenetrate,PUSH_RATE)*dt);
+ if(!(move>1e-5))return false;
+ // Straight out, or a little to either side if that is where the ground allows.
+ for(const t of [0,.5,-.5,1,-1]){
+  const c=Math.cos(t),s=Math.sin(t),dx=(nx*c+nz*s)*move,dz=(-nx*s+nz*c)*move,x=p.x+dx,z=p.z+dz;
+  if(crowd.fleeAllowed&&!crowd.fleeAllowed(p,x,z))continue;
+  const old=crowd.cell?.(p.x,p.z);
+  if(p.choreographed){p.fleeOffX=(p.fleeOffX??0)+dx;p.fleeOffZ=(p.fleeOffZ??0)+dz;}
+  p.previousX=p.x;p.previousZ=p.z;p.x=x;p.z=z;
+  if(crowd.network?.ctx?.height)p.height=crowd.network.ctx.height(x,z);
+  if(old!==undefined&&crowd.cell(x,z)!==old){const b=crowd.grid.get(old),i=b?.indexOf(p);if(i>=0)b.splice(i,1);crowd.insert(p);}
+  return true;
+ }
+ return false;
 }
 
 /** Someone who walked into the player: out of the way, no bump. Rate limited the same way. */

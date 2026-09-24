@@ -480,7 +480,7 @@ export default function Home(){
    // that want to know, not a second voice.
   }
  });
- let lastPlayTick=performance.now();let qaReadyRef=false;const frame=(now:number)=>{if(disposed)return;const dt=frameGate.step(now);if(dt===null){raf=requestAnimationFrame(frame);return;}const frameStart=performance.now(),updateStart=frameStart;const playElapsed=document.hidden?0:Math.max(0,(now-lastPlayTick)/1000);lastPlayTick=now;frameHits=0;if(playerMode&&player)player.updateInput(dt);if(playerMode&&player){
+ let lastPlayTick=performance.now();let qaReadyRef=false;const frame=(now:number)=>{if(disposed)return;const dt=frameGate.step(now);if(dt===null){raf=requestAnimationFrame(frame);return;}const frameStart=performance.now(),updateStart=frameStart;const playElapsed=document.hidden?0:Math.max(0,(now-lastPlayTick)/1000);lastPlayTick=now;frameHits=0;{const s=lifeEntry.hooks.current?.sim;if(s)s.postUpdate=null;}if(playerMode&&player)player.updateInput(dt);if(playerMode&&player){
   if(vehicleTransition.active){const pose=vehicleTransition.update(dt);if(pose){
     // The DOOR comes from the stage, not from the overall phase. `sin(phase * PI)` opened the
     // panel as the player started walking and had it shut again by the time they sat down,
@@ -565,7 +565,7 @@ export default function Home(){
    carSpeedLast=Math.abs(c.speed);
    playerAudio?.engine(c.speed,playerCar.def.speed,Math.max(0,drive.forward),c.damage);
    if(playerCar.state.damage!==damageLast){damageLast=playerCar.state.damage;setCarDamage(damageLast);}}
-  else{player.step(dt);if(player.state.alive)combatDeathReported=false;yieldToPlayer(lifeEntry.hooks.current?.sim,player.state,player.contact.nearby);const combat=melee.update(dt,lifeEntry.hooks.current?.sim,player);if(combat.hits>meleeHitsLast){meleeHitsLast=combat.hits;}playerFigure?.update(player.state,dt);groundPlayerShadow();
+  else{player.step(dt);{const s=lifeEntry.hooks.current?.sim;if(s)s.postUpdate=(d:number)=>player.settleCrowd(d);}if(player.state.alive)combatDeathReported=false;yieldToPlayer(lifeEntry.hooks.current?.sim,player.state,player.contact.nearby);const combat=melee.update(dt,lifeEntry.hooks.current?.sim,player);if(combat.hits>meleeHitsLast){meleeHitsLast=combat.hits;}playerFigure?.update(player.state,dt);groundPlayerShadow();
    if(!player.state.alive&&!combatDeathReported){combatDeathReported=true;setPlayerHit(player.state.hitBy??'fight');}
    playerMarker?.update(player.state,dt,PLAYER_HEIGHT);
    // Nothing on screen said where the car was: the orange cone is over the player, so a

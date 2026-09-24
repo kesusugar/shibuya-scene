@@ -376,3 +376,62 @@ test('C. the player loses pace on the frame of a bump, and the bus carries it',(
  const bus=createFeedbackBus();
  assert.equal(bus.emit('player_bump',0,{x:0,z:0,intensity:.35}),true,'the bus does not know player_bump');
 });
+
+// Found on the device check (HIGH, day, player walking into the Scramble): the minimum gap fell to
+// 0.14 m. The cast walks its track without looking at the player, and a flee offset closes back
+// onto the track line, so a player standing on it was walked through at 1.3 m/s while the
+// player's own depenetration moved at most 0.27 m/s.
+test('a cast member walking into a player who stands on their crossing goes round, not through',()=>{
+ const traffic=new TrafficSimulation(graph,{tier:'high',street});
+ traffic.signals.time=90;
+ const sim=new CrowdSimulation(network,{traffic,tier:'high',choreography:true,heroStart:true});
+ for(let i=0;i<30;i++){traffic.update(1/30);sim.step(1/30);}
+ const cast=sim.pool.filter(p=>p.active&&p.choreographed&&p.crossing&&p.track&&!p.flee&&
+  p.track.distance>p.track.length*.15&&p.track.distance<p.track.length*.5);
+ const tested=[];
+ for(const p of cast){
+  const ax=p.x+Math.sin(p.heading)*1.6,az=p.z+Math.cos(p.heading)*1.6;
+  if(ctx.solid(ax,az,.4)||sim.pool.some(q=>q!==p&&q.active&&Math.hypot(q.x-ax,q.z-az)<.9))continue;
+  tested.push({p,ax,az});if(tested.length>=3)break;
+ }
+ assert.ok(tested.length,'no cast member to test with');
+ for(const {p,ax,az} of tested){
+  const player=createPlayer(ctx,{start:[ax,az],heading:p.heading+Math.PI,bodies:()=>sim});
+  Object.assign(player.state,{x:ax,z:az,y:ctx.height(ax,az),bodyHeading:p.heading+Math.PI});
+  sim.postUpdate=d=>player.settleCrowd(d);   // as the scene wires it
+  let closest=Infinity;
+  for(let f=0;f<60*4;f++){player.step(1/60);traffic.update(1/60);sim.update(1/60);
+   closest=Math.min(closest,Math.hypot(p.x-player.state.x,p.z-player.state.z));}
+  assert.ok(closest>=.5,`cast member ${p.id} came within ${closest.toFixed(2)} m of a standing player`);
+ }
+});
+
+test('at a low frame rate (clamped 0.1 s frames) the crowd still never ends a frame inside the player',()=>{
+ const traffic=new TrafficSimulation(graph,{tier:'high',street});
+ traffic.signals.time=90;
+ const sim=new CrowdSimulation(network,{traffic,tier:'high',choreography:true,heroStart:true});
+ for(let i=0;i<30;i++){traffic.update(1/30);sim.step(1/30);}
+ const cells=new Map();
+ for(const p of sim.pool){if(!p.active)continue;const k=Math.floor(p.x/4)+','+Math.floor(p.z/4);cells.set(k,(cells.get(k)??0)+1);}
+ let plan=null;
+ for(const [k] of [...cells].sort((a,b)=>b[1]-a[1]).slice(0,30)){
+  const [i,j]=k.split(',').map(Number),tx=i*4+2,tz=j*4+2;
+  for(let a=0;a<32&&!plan;a++){const h=a/32*Math.PI*2,sx=tx-Math.sin(h)*5,sz=tz-Math.cos(h)*5;let ok=true;
+   for(let d=0;d<=10&&ok;d+=.5)if(ctx.solid(sx+Math.sin(h)*d,sz+Math.cos(h)*d,.5))ok=false;
+   if(ok)plan={sx,sz,h};}
+  if(plan)break;
+ }
+ const player=createPlayer(ctx,{start:[plan.sx,plan.sz],heading:plan.h,bodies:()=>sim});
+ Object.assign(player.state,{x:plan.sx,z:plan.sz,y:ctx.height(plan.sx,plan.sz),bodyHeading:plan.h,course:plan.h});
+ sim.postUpdate=d=>player.settleCrowd(d);
+ player.setTouch({forward:1,strafe:0,running:false});
+ let closest=Infinity;
+ for(let f=0;f<80;f++){
+  player.step(.1);yieldToPlayer(sim,player.state,player.contact.nearby);traffic.update(.1);sim.update(.1);
+  player.state.health=100;player.state.hurtTime=0;
+  // What would be drawn: everyone's position at the end of the frame.
+  for(const p of player.contact.nearby)if(p.active&&p.struck===undefined&&!p.combatDead)
+   closest=Math.min(closest,Math.hypot(p.x-player.state.x,p.z-player.state.z));
+ }
+ assert.ok(closest>=.5,`someone ended a frame ${closest.toFixed(2)} m from the player`);
+});
