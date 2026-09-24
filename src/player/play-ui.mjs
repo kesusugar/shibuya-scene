@@ -8,9 +8,11 @@ export function createPlayUI(network,parent,{onExit,onDrive}={}){
  root.innerHTML=`<div class="play-top"><div class="play-brand">SHIBUYA <span>FREE ROAM · Tab メニュー</span></div><button class="play-exit" type="button">観察に戻る</button></div>
  <div class="play-mission"><strong>渋谷デリバリー</strong><p class="play-task">徒歩と車で3か所へ。降車して停止すると配達できます。</p><div class="play-task-row"><span class="play-timer"></span><button class="play-start" type="button">配送を始める</button><button class="play-cancel" type="button" hidden>中止</button></div><progress class="play-progress" max="1" value="0" aria-label="受け渡し進行" hidden></progress></div>
  <div class="play-map"><canvas width="320" height="320" aria-label="周辺地図・北が上"></canvas><span>N · 北 / 緑：目的地 / 青：車</span></div>
- <div class="play-dashboard"><div><b class="play-speed">徒歩</b><div class="play-health" role="meter" aria-label="体力" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100" data-level="ok"><span>体力</span><span class="play-health-bar"><i></i></span><b class="play-health-value">100</b></div><small class="play-hint">E/クリック 攻撃</small><small class="play-damage"></small></div><button class="play-drive" type="button">車を探す</button></div>`;
+ <div class="play-dashboard"><div><div class="play-wanted" role="img" aria-label="手配度 0" data-stars="0" data-flash="false"><i>★</i><i>★</i><i>★</i><i>★</i><i>★</i></div><b class="play-speed">徒歩</b><div class="play-health" role="meter" aria-label="体力" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100" data-level="ok"><span>体力</span><span class="play-health-bar"><i></i></span><b class="play-health-value">100</b></div><small class="play-hint">E/クリック 攻撃</small><small class="play-damage"></small></div><button class="play-drive" type="button">車を探す</button></div>`;
+ root.insertAdjacentHTML('beforeend','<div class="play-wanted-banner" role="status" aria-live="polite" hidden></div>');
  document.body.appendChild(root);
- const query=s=>root.querySelector(s),canvas=query('canvas'),c=canvas.getContext('2d'),task=query('.play-task'),timer=query('.play-timer'),start=query('.play-start'),cancel=query('.play-cancel'),progress=query('.play-progress'),speed=query('.play-speed'),health=query('.play-health'),healthBar=query('.play-health-bar i'),healthValue=query('.play-health-value'),damage=query('.play-damage'),drive=query('.play-drive');
+ const query=s=>root.querySelector(s),canvas=query('canvas'),c=canvas.getContext('2d'),task=query('.play-task'),timer=query('.play-timer'),start=query('.play-start'),cancel=query('.play-cancel'),progress=query('.play-progress'),speed=query('.play-speed'),health=query('.play-health'),healthBar=query('.play-health-bar i'),healthValue=query('.play-health-value'),damage=query('.play-damage'),drive=query('.play-drive'),wanted=query('.play-wanted'),stars=[...root.querySelectorAll('.play-wanted i')],banner=query('.play-wanted-banner');
+ let bannerFor=0,bannerSeq=0;
  let current=null,visible=false,clock=0,disposed=false;
  query('.play-exit').onclick=()=>onExit?.();drive.onclick=()=>onDrive?.();
  start.onclick=()=>{if(current&&current.alive!==false){mission.start(current);document.exitPointerLock?.();clock=1;}};
@@ -24,7 +26,20 @@ export function createPlayUI(network,parent,{onExit,onDrive}={}){
   if(car?.active)dot(car,'#70d7ff',6);if(target)dot(target,'#68e7b4',8);
   c.save();c.translate(160,160);c.rotate(-position.heading);c.fillStyle='#fff';c.beginPath();c.moveTo(0,10);c.lineTo(-7,-7);c.lineTo(7,-7);c.closePath();c.fill();c.restore();
  }
- return {mission,show(){visible=true;root.hidden=false;clock=1;},hide(){visible=false;root.hidden=true;marker.hide();mission.cancel();},
+ /**
+  * PLAN-POLICE W4: five stars beside the health bar, solid while the police can see the player
+  * and flashing while they search; a short banner the first time each level is reached.
+  */
+ function setWanted(w,dt=0){
+  if(disposed||!w)return;
+  const n=w.stars|0;
+  wanted.dataset.stars=String(n);wanted.dataset.flash=String(!!w.flashing);
+  wanted.setAttribute('aria-label',`手配度 ${n}${w.flashing?'（捜索中）':''}`);
+  stars.forEach((s,i)=>{s.dataset.on=String(i<n);});
+  if(w.roseSeq&&w.roseSeq!==bannerSeq){bannerSeq=w.roseSeq;banner.textContent=`手配度 ☆${w.rose||n}`;banner.hidden=false;bannerFor=2.5;}
+  if(bannerFor>0){bannerFor-=dt;if(bannerFor<=0)banner.hidden=true;}
+ }
+ return {mission,setWanted,show(){visible=true;root.hidden=false;clock=1;},hide(){visible=false;root.hidden=true;marker.hide();mission.cancel();},
   update(dt,position,car,driving,entry,hits=0){if(disposed||!visible)return;current=position;mission.tick(dt,position,{driving,alive:position.alive,hits});const s=mission.snapshot();
    if(s.target)marker.update({x:s.target.x,z:s.target.z,y:network.ctx.height(s.target.x,s.target.z)},dt,2.4);else marker.hide();
    clock+=dt;if(clock<.2)return;clock=0;draw(position,car,s.target);

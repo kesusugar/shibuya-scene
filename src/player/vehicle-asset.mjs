@@ -90,8 +90,8 @@ function wrap(type,root,materials,{owned,dimensions,anchors}){
    for(const pivot of popups)pivot.rotation.x=-POPUP.open*popupPhase;
   },
   /** Brake beats nothing, an indicator beats a brake. */
-  setRear(brake,indicator){
-   const hex=indicator?LAMP.indicator:brake?LAMP.brake:LAMP.off;
+  setRear(brake,indicator,override=null){
+   const hex=override??(indicator?LAMP.indicator:brake?LAMP.brake:LAMP.off);
    materials.tail.color.setHex(hex);materials.tail.emissive.setHex(hex);
   },
   dispose(){
