@@ -10,6 +10,20 @@ export const FIGURE=Object.freeze({height:1.76,shirt:0xc94d38,trousers:0x263443,
 const looping=new Set(['Idle','Walk','Run','Sprint','Death','Guard','Drive']);
 /** Clips the gait blend owns. Anything else is a one-shot the state machine plays over it. */
 const GAIT=new Set(['Idle','Walk','Run','Sprint']);
+/** The swings. They own the whole body while they play; see STRIKE. */
+const PUNCHES=new Set(['Punch','PunchCross']);
+
+/**
+ * How a swing takes the body over, and how fast the body turns onto its target.
+ *
+ * The punch used to go through the mixer at weight 1 ON TOP of a gait blend that already
+ * summed to 1. three.js averages every action that animates a bone, so the arm was half punch
+ * and half idle: at the jab's peak the fist sat 0.6 m out to the side at chest height instead
+ * of 0.76 m forward at the shoulder, which is the sideways swing seen on real hardware. A
+ * swing now takes weight from the gait instead of being added to it, so the sum stays 1 and
+ * the fist goes where the clip puts it.
+ */
+export const STRIKE=Object.freeze({fadeIn:.08, fadeOut:.3, turnRate:14});
 
 /**
  * What the body is doing, other than walking.
@@ -24,7 +38,7 @@ const GAIT=new Set(['Idle','Walk','Run','Sprint']);
  * eye. Pure, for the test.
  */
 /** Spine lean at the peak of a punch, radians (replaces an 11 cm root slide; see below). */
-export const PUNCH_LEAN=.2;
+export const PUNCH_LEAN=.13;
 export function punchEmphasis(name,progress){
  const a=attackOf(name),w=a.windup/a.duration,p=a.peak/a.duration,u=Math.max(0,Math.min(1,progress));
  const ease=x=>x*x*(3-2*x);
@@ -97,13 +111,14 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
  const head=root.getObjectByName(asset.bones.head);
  // RUN 11.2: what a punch leans on. Present on the humanoid rig, absent on the baked figure,
  // which simply goes without the emphasis.
- const spine=root.getObjectByName('spine_02'),chest=root.getObjectByName('spine_03');
+ const spine=root.getObjectByName('spine_02');
  const gait=createGaitBlend(buildGaitSpace(instance.clips,asset.gait,asset.gaitDetail));
  const facing=createBodyFacing(0);
  // Foot IK only exists where the skeleton names the joints it needs; the offline-baked figure
  // has eleven bones and none of these names, so it simply goes without.
  const footIK=asset.legBones?createFootIK(root,{bones:asset.legBones,ctx}):null;
  let overlay=null,previousAttack=0,disposed=false,seeded=false,dominant='Idle';
+ const strike={Punch:0,PunchCross:0};
  // A jump in world position is a teleport, not a stride. Locked feet have to be forgotten or
  // one gets dragged across the city on the next frame.
  let lastX=null,lastZ=null;
@@ -123,10 +138,13 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
  function setOverlay(next,state){
   const restart=(next==='Punch'||next==='PunchCross')&&(state.attackTime??0)>previousAttack+.01;
   if(next===overlay&&!restart)return;
-  if(overlay&&actions[overlay])actions[overlay].fadeOut(next==='Fall'?.06:.14);
+  // A swing's weight is not the mixer's to fade: it is set every frame against the gait (see
+  // STRIKE), so it neither fades in over the legs nor out to nothing.
+  if(overlay&&actions[overlay]&&!PUNCHES.has(overlay))actions[overlay].fadeOut(next==='Fall'?.06:.14);
   if(next&&actions[next]){
    const action=actions[next];
-   action.reset().setEffectiveWeight(1).fadeIn(overlay?.14:.1).play();
+   if(PUNCHES.has(next))action.reset().play();
+   else action.reset().setEffectiveWeight(1).fadeIn(overlay?.14:.1).play();
   }
   overlay=next&&actions[next]?next:null;
  }
@@ -139,12 +157,22 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
    dt=Math.max(0,Math.min(.1,Number(dt)||0));root.visible=true;
    const speed=Math.abs(state.speed??0);
 
-   // Legs first, always: an overlay covers them rather than replacing them, so a punch thrown
-   // while walking does not stop the walk and a hit taken at speed does not freeze the feet.
+   // Legs first: an overlay covers them rather than replacing them, so a hit taken at speed
+   // does not freeze the feet. A swing is the exception (STRIKE): it is a standing punch, the
+   // controller plants the player for it, and it takes the whole body.
    const weights=gait.update(speed,dt);
+   // A swing takes its share from the gait rather than being averaged with it (STRIKE).
+   const requested=characterAction(state);
+   let swung=0;
+   for(const name of PUNCHES){
+    const on=requested===name&&actions[name]?1:0,rate=dt/(on?STRIKE.fadeIn:STRIKE.fadeOut);
+    strike[name]+=Math.max(-rate,Math.min(rate,on-strike[name]));
+    actions[name]?.setEffectiveWeight(strike[name]);swung+=strike[name];
+   }
+   const share=Math.max(0,1-swung);
    for(const name of GAIT){
     const action=actions[name];if(!action)continue;
-    const weight=weights.get(name)??0;
+    const weight=(weights.get(name)??0)*share;
     action.setEffectiveWeight(weight);
     if(name==='Idle'){action.paused=false;action.timeScale=1;continue;}
     const time=gait.timeFor(name);
@@ -156,7 +184,6 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
    dominant='Idle';
    {let best=-1;for(const [name,weight] of weights)if(weight>best){best=weight;dominant=name;}}
 
-   const requested=characterAction(state);
    setOverlay(requested&&actions[requested]?requested:null,state);
    mixer.update(dt);
 
@@ -184,22 +211,27 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
    // is createBodyFacing's job. Feeding it the body heading in both cases, as this did, meant
    // a standing character never learned the view had moved at all and stood facing a wall
    // while the camera orbited it.
-   const desired=speed>LOCOMOTION.idleSpeed
+   // A swing faces what it is thrown at: combat picks the target when the swing starts and
+   // tracks it through the wind-up (`attackHeading`), and the body turns onto it fast enough
+   // to be square before the fist is out.
+   const aiming=state.attackTime>0&&Number.isFinite(state.attackHeading);
+   const desired=aiming?state.attackHeading:speed>LOCOMOTION.idleSpeed
     ?(state.bodyHeading??state.heading??0)
     :(state.heading??state.bodyHeading??0);
-   facing.update(desired,speed,dt);
+   facing.update(desired,speed,dt,aiming?STRIKE.turnRate:undefined);
    root.position.set(state.x,state.y,state.z);
    root.rotation.set(0,facing.heading,facing.lean,'YXZ');
    if(state.trafficReaction==='look'&&Number.isFinite(state.threatHeading)&&head)
     head.rotation.y=Math.max(-.8,Math.min(.8,Math.atan2(Math.sin(state.threatHeading-facing.heading),Math.cos(state.threatHeading-facing.heading))));
-   // RUN 11.2: weight behind a punch. The clip is authored small; on top of it the torso winds
-   // up away from the punching side, then drives through with the shoulder, leans in, and the
-   // body steps a hand's width forward at the moment the fist is out. Additive and bounded,
-   // and only for a swing that carries its timing (the player's).
-   if((overlay==='Punch'||overlay==='PunchCross')&&state.attackDuration>0&&spine){
+   // RUN 11.2: weight behind a punch: the body leans into it as the fist goes out. Additive
+   // and bounded, and only for a swing that carries its timing (the player's).
+   //
+   // It used to twist the torso as well (spine .24 and chest .2 rad). The twist ran the wrong
+   // way -- positive yaw pulls the left shoulder BACK -- and any twist at all swings an
+   // extended arm off its line: at the jab's peak it alone moved the fist 28 cm outward. The
+   // clips already turn the shoulders into the punch, so the twist is gone and the lean stays.
+   if(PUNCHES.has(overlay)&&state.attackDuration>0&&spine){
     const k=punchEmphasis(overlay,1-state.attackTime/state.attackDuration);
-    const side=overlay==='Punch'?1:-1;       // left jab turns the left shoulder in; cross the right
-    spine.rotateY(side*.24*k);chest?.rotateY(side*.2*k);
     // claude/crowd-realism: the weight goes forward through the spine, not by sliding the whole
     // body. Moving the root 11 cm with both feet planted slid both feet 11 cm on every punch;
     // a deeper lean puts the chest about as far forward and leaves the feet where they are.
@@ -232,7 +264,7 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
    footIK?.reset();
    mixer.stopAllAction();
    for(const action of Object.values(actions))action.reset();
-   overlay=null;previousAttack=0;seeded=false;dominant='Idle';
+   overlay=null;previousAttack=0;seeded=false;dominant='Idle';strike.Punch=strike.PunchCross=0;
    gait.reset();facing.reset(0);
    for(const name of GAIT)actions[name]?.play().setEffectiveWeight(0);
    for(const name of GAIT)if(actions[name])actions[name].paused=true;

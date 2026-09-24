@@ -36,6 +36,7 @@ const files=[
  'tests/crowd-flee.test.mjs',
  'tests/temperament.test.mjs',
  'tests/melee-feel.test.mjs',
+ 'tests/punch-aim.test.mjs',
  'tests/feedback-bus.test.mjs',
  'tests/player-audio.test.mjs',
  'tests/crowd-legacy-props.test.mjs',
