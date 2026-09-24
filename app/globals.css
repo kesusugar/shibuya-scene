@@ -158,3 +158,10 @@ body.tc-on .player-hint{display:none}
 @media(pointer:coarse){.play-health-bar{width:84px}.play-hint{display:none}.play-dashboard{bottom:160px;right:16px}.play-map{bottom:auto;top:70px;left:auto;right:16px;width:115px}.play-mission{width:min(280px,calc(100vw - 155px))}.play-dashboard .play-drive{display:none}}
 @media(max-height:550px){.play-top{top:10px}.play-mission{top:48px;padding:10px 12px}.play-map{width:125px}.play-task{margin:5px 0;font-size:11px}.play-dashboard{bottom:14px}}
 @media(pointer:coarse) and (max-height:550px){.play-map{top:48px;width:100px}.play-dashboard{bottom:auto;top:170px;padding:7px 10px}.play-speed{font-size:17px}.play-mission{width:260px}}
+/* PLAN-POLICE W4: wanted stars beside the health bar, and the level banner. */
+.play-wanted{display:flex;gap:2px;height:14px;margin:0 0 4px;font-size:13px;line-height:14px;visibility:hidden}.play-wanted[data-stars]:not([data-stars="0"]){visibility:visible}
+.play-wanted i{font-style:normal;color:#ffffff2e}.play-wanted i[data-on="true"]{color:#ffd23f;text-shadow:0 0 6px #ffb80088}
+.play-wanted[data-flash="true"] i[data-on="true"]{animation:play-wanted-flash .8s steps(2,jump-none) infinite}
+@keyframes play-wanted-flash{0%{opacity:1}100%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.play-wanted[data-flash="true"] i[data-on="true"]{animation:none;opacity:.6}}
+.play-wanted-banner{position:absolute;top:18%;left:50%;transform:translateX(-50%);padding:8px 18px;background:#0b1724dd;border:1px solid #ffd23f66;border-radius:10px;color:#ffd23f;font-weight:700;font-size:20px;letter-spacing:.06em;pointer-events:none}

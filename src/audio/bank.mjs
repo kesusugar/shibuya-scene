@@ -103,6 +103,8 @@ export function createSoundBank(getContext, {base = 'audio/', fetchImpl = global
  const api = {
   get ready() {return ready;},
   get stats() {return {...stats, live: total, kinds: Object.fromEntries([...byKind].map(([k, v]) => [k, v.length]))};},
+  /** The effects bus, for synthesised voices that must sit under the bank's master and guard. */
+  get bus() {return graph() ? sfx : null;},
   has(kind) {return ready && !!byKind.get(kind)?.length;},
   load,
   /**

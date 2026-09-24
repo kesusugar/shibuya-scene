@@ -140,7 +140,7 @@ export function createPlayerVehicle(sim, ctx) {
   for(const v of sim.pool){
    if(!v.active||v===state.slot)continue;
    const d=VEHICLES[v.type];if(d&&boxOverlap(probe,def,v,d,CAR.carPad)){
-    contact=edgeContact(corners(v,d.width,d.length,CAR.carPad),state);break;
+    contact=edgeContact(corners(v,d.width,d.length,CAR.carPad),state);state.rammed=v;break;
    }
   }
   return false;

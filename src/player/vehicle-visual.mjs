@@ -9,6 +9,7 @@
 // feeds wheel height. There is one now, and the generator is a generator.
 import {Group,ObjectLoader} from 'three';
 import {adoptVehicleAsset,popupTarget,POPUP} from './vehicle-asset.mjs';
+import {flashPhase} from '../police/siren.mjs';
 import {createVehicleShadows} from '../traffic/vehicle-shadow.mjs';
 import vehiclePack from './generated/vehicles.mjs';
 
@@ -29,7 +30,7 @@ export function createVehicleVisual({onAssetReady=null}={}){
  // One vehicle, five shadow instances: the floorpan and four tyres.
  const shadows=createVehicleShadows(5);root.add(shadows.mesh);
  let asset=null,type=null,slot=null,disposed=false;
- let lastSpeed=0,pitch=0,roll=0,spin=0;
+ let lastSpeed=0,pitch=0,roll=0,spin=0,elapsed=0;
 
  function build(next){
   asset?.dispose();asset=null;
@@ -83,7 +84,10 @@ export function createVehicleVisual({onAssetReady=null}={}){
    // the player exactly as the traffic simulation writes them for everyone else. Reading them
    // here rather than re-deriving them is what stops the player's car being the one vehicle in
    // the city whose lights disagree with its own AI record.
-   asset.setRear(!!state.slot?.brake,state.slot?.blinker??0);
+   elapsed+=dt;
+   // W3: a patrol car with its siren on flashes its roof bar (and, like a real one, its rear lamps).
+   if(state.slot?.siren)asset.setRear(false,0,flashPhase(elapsed)?0xff2a1a:0x7a0d08);
+   else asset.setRear(!!state.slot?.brake,state.slot?.blinker??0);
    asset.setDoor(state.doorSide,state.doorPhase);
    // Step H: pop-up lamps rise when the lamps are lit and fold away by day.
    if(asset.popups!==null){
