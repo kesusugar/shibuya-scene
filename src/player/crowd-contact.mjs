@@ -40,6 +40,8 @@ export const CONTACT=Object.freeze({
  slow:.6                 // the player's speed is multiplied by this on the frame of a bump
 });
 
+// How far round the player `nearby` reaches: the give-way reach (2 m oncoming) and a frame of travel.
+export const NEARBY=2.05;
 // Tried in this order when the straight step is blocked: small turns first, then wider ones.
 const TURNS=[.45,.9,1.35];
 const EMPTY=[];
@@ -54,9 +56,12 @@ export function bodiesNear(crowd,x,z,y,r=1.4,out=[]){
  const grid=crowd?.grid;if(!grid)return out;
  const ix=Math.floor(x/2),iz=Math.floor(z/2),r2=r*r;
  for(let i=ix-1;i<=ix+1;i++)for(let j=iz-1;j<=iz+1;j++)for(const p of grid.get(i+','+j)??EMPTY){
+  // Distance first: it rejects nearly everyone in the nine cells, and the flags after it are
+  // reads on large, many-shaped objects, which is where this function's time went.
+  const dx=p.x-x,dz=p.z-z;
+  if(dx*dx+dz*dz>r2)continue;
   if(!p.active||p.controlled||p.struck!==undefined||p.combatDead)continue;
   if(Math.abs((p.height??0)-(y??0))>CONTACT.level)continue;
-  if((p.x-x)**2+(p.z-z)**2>r2)continue;
   out.push(p);
  }
  return out;
@@ -161,21 +166,30 @@ export function resolveStep(state,dx,dz,bodies,dt,pushing=false,out={dx:0,dz:0,s
  * own reaction here has been applied.
  */
 export function createCrowdContact({onBump=null}={}){
- const bodies=[],result={dx:0,dz:0,shoved:false,contacts:[],checks:0};
+ // `nearby` is everyone within NEARBY of the player, gathered once a frame from the grid and
+ // shared with yieldToPlayer (crowd-interaction.mjs), so the nine cells are read once, not
+ // twice. `bodies` is the part of it that can touch the player this frame.
+ const nearby=[],bodies=[],result={dx:0,dz:0,shoved:false,contacts:[],checks:0};
  const stats={checks:0,contacts:0,bumps:0,dodges:0,fights:0,minGap:null,trappedSeconds:0,lastMs:0};
  const now=()=>typeof performance!=='undefined'?performance.now():Date.now();
- let lastStart=0;
+ // The contact work only: resolve() and react(), not the wall test (advance) between them.
+ let resolveMs=0;
  const api={
   stats,
   get bodies(){return bodies;},
+  /** Everyone within `NEARBY` of the player at the start of this frame's step. */
+  get nearby(){return nearby;},
   /** Step 1-4 above for this frame's step. Returns `{dx, dz, shoved, contacts}`. */
   resolve(crowd,state,dx,dz,dt,pushing){
-   lastStart=now();
+   const t0=now();
    const reach=CONTACT.gap+Math.hypot(dx,dz)+.2;
-   bodiesNear(crowd,state.x,state.z,state.y,reach,bodies);
+   bodiesNear(crowd,state.x,state.z,state.y,NEARBY,nearby);
+   bodies.length=0;
+   for(const p of nearby)if((p.x-state.x)**2+(p.z-state.z)**2<=reach*reach)bodies.push(p);
    resolveStep(state,dx,dz,bodies,dt,pushing,result);
    stats.checks+=result.checks+bodies.length;
    if(result.shoved)stats.trappedSeconds+=dt;
+   resolveMs=now()-t0;
    return result;
   },
   /**
@@ -183,6 +197,7 @@ export function createCrowdContact({onBump=null}={}){
    * and whoever walked into the player is moved off them.
    */
   react(crowd,state,dt){
+   const t0=now();
    let bumped=false;
    for(const c of result.contacts){
     const p=c.p;
@@ -194,7 +209,7 @@ export function createCrowdContact({onBump=null}={}){
    }
    // The player loses pace on the frame they hit someone, which is most of what makes it read.
    if(bumped)state.speed*=CONTACT.slow;
-   stats.lastMs=now()-lastStart;
+   stats.lastMs=resolveMs+now()-t0;
   },
   reset(){Object.assign(stats,{checks:0,contacts:0,bumps:0,dodges:0,fights:0,minGap:null,trappedSeconds:0,lastMs:0});},
   snapshot(){return {...stats};}

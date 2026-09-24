@@ -34,26 +34,38 @@ export const YIELD=Object.freeze({
  rate:1.2            // s: once per person per this long
 });
 const unit=(id,salt)=>((Math.imul((id|0)+salt*7919,0x9e3779b1)>>>0)%100003)/100002;
-export function yieldToPlayer(crowd,state){
+/**
+ * `near`, when given, is the people the contact system already gathered round the player this
+ * frame (`player.contact.nearby`, within 2.05 m, the down, dead and other-level already left
+ * out), so the grid is not read a second time. Without it, the 3x3 cells are scanned here.
+ */
+const yieldedAt=new WeakMap();
+export function yieldToPlayer(crowd,state,near=null){
  if(!crowd||!state.alive)return 0;
+ // The crowd only moves on its own fixed step (30 Hz); between two steps nothing about it has
+ // changed, so giving way once per step is all there is to do. At 60 fps this halves the calls.
+ if(yieldedAt.get(crowd)===crowd.time)return 0;
+ yieldedAt.set(crowd,crowd.time);
  const speed=state.speed??0;
  if(speed>=YIELD.run)return reactToRunner(crowd,state);
  if(speed<YIELD.walk)return 0;
  // Where the body is going, which is what an oncoming walker reads, not where the camera looks.
  const h=state.bodyHeading??state.heading,ux=Math.sin(h),uz=Math.cos(h);
  const r=Math.max(YIELD.ahead,YIELD.oncoming);let count=0;
- for(let x=Math.floor((state.x-r)/2);x<=Math.floor((state.x+r)/2);x++)for(let z=Math.floor((state.z-r)/2);z<=Math.floor((state.z+r)/2);z++){
-  for(const p of crowd.grid.get(x+','+z)??[]){
-   if(!p.active||p.controlled||p.struck!==undefined||p.combatDead||p.flee)continue;
-   if(Math.abs((p.height??0)-(state.y??0))>YIELD.level)continue;
-   if((p.runnerUntil??0)>crowd.time)continue;
-   const dx=p.x-state.x,dz=p.z-state.z,along=dx*ux+dz*uz,side=dx*uz-dz*ux,d=Math.hypot(dx,dz);
-   if(along<=0)continue;
+ const consider=p=>{
+   // Geometry first; the flags are the expensive reads.
+   const dx=p.x-state.x,dz=p.z-state.z,along=dx*ux+dz*uz;
+   if(along<=0||along>r)return;
+   const side=dx*uz-dz*ux,d=Math.hypot(dx,dz);
+   if(d>r)return;
+   if(!p.active||p.controlled||p.struck!==undefined||p.combatDead||p.flee)return;
+   if(Math.abs((p.height??0)-(state.y??0))>YIELD.level)return;
+   if((p.runnerUntil??0)>crowd.time)return;
    const inCone=along<=YIELD.ahead&&Math.abs(side)<=YIELD.lane;
    // Facing the player: their heading points back along the line to the player.
    const facing=d>1e-6&&(-(Math.sin(p.heading)*dx+Math.cos(p.heading)*dz)/d)>=YIELD.facing;
    const oncoming=!inCone&&d<=YIELD.oncoming&&facing&&(p.speed??0)>.1;
-   if(!inCone&&!oncoming)continue;
+   if(!inCone&&!oncoming)return;
    // Which way: off the player's line on the side they are already on. Someone walking
    // straight at the player picks a side by who they are, so two people never mirror each
    // other into the same gap.
@@ -64,8 +76,10 @@ export function yieldToPlayer(crowd,state){
    const distance=Math.min(YIELD.clear,Math.max(YIELD.step[0]+(YIELD.step[1]-YIELD.step[0])*unit(p.id,11),
     YIELD.body+.1-Math.abs(side)));
    if(crowd.flee(p,uz*pick+ux*.15,-ux*pick+uz*.15,{urgency:0,dodge:true,from:state,speed:1.1,distance,voice:false}))count++;
-  }
- }
+ };
+ if(near)for(const p of near)consider(p);
+ else for(let x=Math.floor((state.x-r)/2);x<=Math.floor((state.x+r)/2);x++)for(let z=Math.floor((state.z-r)/2);z<=Math.floor((state.z+r)/2);z++)
+  for(const p of crowd.grid.get(x+','+z)??[])consider(p);
  crowd.stats.yielded=(crowd.stats.yielded??0)+count;
  return count;
 }
