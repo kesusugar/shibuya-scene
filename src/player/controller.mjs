@@ -267,10 +267,12 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    const wanted=len>0&&!attacking?(state.running?PLAYER.run:PLAYER.walk)*Math.min(1,len):0;
    // Where the body is being asked to go, in world terms. Forward is where the camera looks;
    // strafing is perpendicular to it, so a diagonal input walks diagonally rather than
-   // sidestepping, and the figure turns to face it.
+   // sidestepping, and the figure turns to face it. The camera looking along (sin h, cos h)
+   // has its right at (-cos h, sin h): at heading 0 it looks toward +z and the right of the
+   // screen is world -x. Strafe +1 ("right" on the pad, D, the stick) must go there.
    const s=Math.sin(state.heading),c=Math.cos(state.heading);
    let course=state.course??state.heading;
-   if(len>0)course=Math.atan2((fz*s+fx*c)/len,(fz*c-fx*s)/len);
+   if(len>0)course=Math.atan2((fz*s-fx*c)/len,(fz*c+fx*s)/len);
    state.course=course;
 
    // Turning costs speed. Without this a hard reversal happens at full pace and the feet are
