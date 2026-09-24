@@ -1,6 +1,6 @@
 # Plan: the player's own drift car, Japanese police, sirens, and a ☆1–☆5 wanted level
 
-Status: **Step H** on `claude/looks-fleet-4` (§9p), **W1 + W3** on `claude/looks-fleet-5` (§9q), 2026-09-25; W steps follow on stacked branches. Originally: Written 2026-09-24 on `master` `e1e136e` (after PR #23).
+Status: **Step H** on `claude/looks-fleet-4` (§9p), **W1 + W3** on `claude/looks-fleet-5` (§9q), **W2** on `claude/looks-fleet-6` (§9r), 2026-09-25; W steps follow on stacked branches. Originally: Written 2026-09-24 on `master` `e1e136e` (after PR #23).
 It adds to `docs/PLAN-LOOKS-AND-FLEET.md` and depends on its Step B (traffic on the loft in
 `BatchedMesh`) and Step C (new mob types, including `police`). The work happens in a local
 Claude CLI session so it can be checked on the real device. Read `AGENTS.md`, `CLAUDE.md` and
