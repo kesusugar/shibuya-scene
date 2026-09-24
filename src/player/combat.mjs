@@ -20,6 +20,7 @@ import {blowOn,RESPONSE} from '../life/temperament.mjs';
 // Player crowd contact, Step E: four blows either way. The player's punch and a pedestrian's
 // both take 25 of 100, so whoever takes the fourth first goes down (was 34, and 14-18).
 export const COMBAT=Object.freeze({range:1.75,notice:4.5,playerDamage:25,npcDamage:25,
+ officerDamage:15,   // PLAN-POLICE W2: an officer's baton, 15 a hit
  attackSeconds:.42,npcWindup:.55,npcCooldown:1.05,hostileSeconds:14,
  // How wide a swing reaches, in radians either side of where the body is facing. A punch is
  // not a radius: something directly behind you cannot be hit.
@@ -309,7 +310,9 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null}={}){
    // stopped to fight. Someone on a track or a crossing keeps going, and picks the fight up
    // when they are off it, while the hostility window lasts.
    const hostiles=nearby(crowd,state.x,state.z,COMBAT.notice)
-    .filter(p=>eligible(p,crowd)&&p.combatTarget==='player'&&p.combatUntil>crowd.time&&!onRails(p));
+    .filter(p=>eligible(p,crowd)&&p.combatTarget==='player'&&p.combatUntil>crowd.time&&!onRails(p)
+     // Officers (PLAN-POLICE W2) close in, grab and use the baton in src/police/units.mjs.
+     &&!p.officer);
    for(const p of hostiles){
     const d=Math.hypot(state.x-p.x,state.z-p.z);
     p.heading=angleTo(p,state);p.state='fighting';p.speed=0;
@@ -339,7 +342,7 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null}={}){
       if(p.npcSwing.elapsed>=windup&&before<activeEnd&&!p.npcSwing.hitConsumed){
        p.npcSwing.hitConsumed=true;
        if(Math.hypot(state.x-p.x,state.z-p.z)<=COMBAT.range&&
-          player.hurt?.(COMBAT.npcDamage,'fight'))stats.npcHits++;
+          player.hurt?.(p.officer?COMBAT.officerDamage:COMBAT.npcDamage,p.officer?'police':'fight'))stats.npcHits++;
       }
       if(p.npcSwing.elapsed>=duration){
        p.npcSwing=null;p.combatNext=crowd.time+COMBAT.npcCooldown+(p.id%4)*.12;

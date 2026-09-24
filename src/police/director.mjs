@@ -3,6 +3,7 @@
 // already has; the rules live in wanted.mjs and siren.mjs, which are pure.
 import {createWanted,WANTED} from './wanted.mjs';
 import {createSirens,createLoudspeaker} from './siren.mjs';
+import {createPoliceUnits} from './units.mjs';
 
 export const POLICE = Object.freeze({
  respondRange: 300,        // m: patrol cars this close run their sirens while the player is wanted
@@ -21,10 +22,18 @@ export function officersSee(pool, x, z, except = null, range = WANTED.sightRange
  return false;
 }
 
-export function createPoliceDirector({getAudioContext = () => null, getAudioBus = () => null,
+/** Officers on foot who can see a point. */
+export function officersOnFootSee(officers, x, z, range = WANTED.sightRange) {
+ for (const p of officers ?? []) if (p.active && !p.combatDead && Math.hypot(p.x - x, p.z - z) <= range) return true;
+ return false;
+}
+
+export function createPoliceDirector({getAudioContext = () => null, getAudioBus = () => null, koban = /** @type {{x:number,z:number}|null} */ (null),
                                       speech = globalThis.speechSynthesis,
                                       Utterance = globalThis.SpeechSynthesisUtterance} = {}) {
  const wanted = createWanted();
+ const units = createPoliceUnits(koban ? {koban} : {});
+ let lastBlowAt = -1;
  const sirens = createSirens(getAudioContext, getAudioBus);
  const speaker = createLoudspeaker(speech, Utterance);
  let deaths = 0, lastRam = -Infinity, taken = new WeakSet(), time = 0;
@@ -32,7 +41,7 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
  const sources = [];
 
  const api = {
-  wanted, sirens,
+  wanted, sirens, units,
   /** A carjack finished; an officer nearby makes it a crime. */
   carjack(slot, traffic) {
    if (!slot) return;
@@ -42,7 +51,8 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
    * One frame. `player` is the on-foot state, `car` the player's vehicle object (or null),
    * `driving` whether the player is in it, `melee` the combat stats, `traffic` / `crowd` the sims.
    */
-  frame(dt, {player, car = null, driving = false, melee = null, traffic = null, crowd = null, listener = null}) {
+  frame(dt, {player, car = null, driving = false, melee = null, traffic = null, crowd = null, listener = null,
+              visible = () => false, hurt = null}) {
    time += dt;
    const me = driving && car ? car.state : player;
    const pool = traffic?.pool ?? [];
@@ -70,6 +80,13 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
     taken.add(car.state.slot);
     wanted.crime('policeCarTaken', {x: car.state.x, z: car.state.z, t: time});
    }
+   // Blows on an officer (W2): assault, or a kill.
+   const blow = melee?.lastBlow;
+   if (blow && blow.time !== lastBlowAt) {
+    lastBlowAt = blow.time;
+    const victim = crowd?.pool?.[blow.victim];
+    if (victim?.officer) wanted.crime(blow.fatal ? 'officerKill' : 'officerAssault', {x: victim.x, z: victim.z, t: time});
+   }
    const rammed = car?.state?.rammed;
    if (rammed) {
     car.state.rammed = null;
@@ -80,9 +97,16 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
    }
 
    // --- what the police know --------------------------------------------------------------
-   const seen = officersSee(pool, me.x, me.z, except);
-   const snap = wanted.update(dt, {x: me.x, z: me.z, t: time, seen});
+   const seen = officersSee(pool, me.x, me.z, except) || officersOnFootSee(units.officers, me.x, me.z);
+   let snap = wanted.update(dt, {x: me.x, z: me.z, t: time, seen});
    if (player && player.alive === false && snap.stars) wanted.clear('death');
+
+   // --- units (W2) ----------------------------------------------------------------------------
+   const attacking = !!melee && melee.phase !== undefined && melee.phase !== 'idle';
+   const u = units.update(dt, {stars: wanted.state.stars, traffic, crowd, me, visible, attacking, driving,
+    carSpeed: car?.state?.speed ?? 0, alive: player?.alive !== false, hurt: amount => hurt?.(amount, 'police')});
+   let arrested = false;
+   if (u.result === 'arrested') {arrested = true; wanted.clear('arrested'); snap = wanted.snapshot();}
 
    // --- sirens and lamps --------------------------------------------------------------------
    sources.length = 0;
@@ -102,7 +126,7 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
    sirens.update(dt, sources, ear);
    if (responding && sources.some(s => s.id !== except?.id && Math.hypot(s.x - me.x, s.z - me.z) <= POLICE.speakRange))
     speaker.say(driving ? '前の車、止まりなさい' : 'そこの人、止まりなさい', time);
-   return snap;
+   return {...snap, arrested, units: {cars: u.cars, officers: u.officers, yielded: u.yielded}};
   },
   /** H in a patrol car: siren and lamps on or off. Returns false if this car has none. */
   toggleSiren(car) {
@@ -111,7 +135,7 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
    return true;
   },
   clear(reason) {wanted.clear(reason);},
-  dispose() {sirens.dispose();}
+  dispose(traffic, crowd) {sirens.dispose(); units.dispose(traffic, crowd);}
  };
  return api;
 }

@@ -154,12 +154,24 @@ const pick=(h,shift,list)=>list[(h>>>shift)%list.length];
 const spread=(h,shift)=>(((h>>>shift)&255)/255)*2-1;
 
 /**
+ * PLAN-POLICE W2: officers. An officer is a pedestrian re-drawn with `appearanceId` in this range,
+ * so the uniform is still a pure function of the id the renderers are given: navy top and trousers,
+ * black shoes, no pattern, the body and hair of the pedestrian they were. No badge or emblem.
+ */
+export const OFFICER_BASE=0x100000;
+export const UNIFORM=Object.freeze({top:0x1f2c47,bottom:0x1a2233,shoe:0x121316});
+
+/**
  * The appearance of citizen `id`. Pure: same id, same result, forever.
  *
  * `baseHeight` is the height their life archetype asks for (an adult, a kid, a tourist); the
  * appearance scales it rather than replacing it, so a child stays child-sized.
  */
 export function appearanceOf(id,baseHeight=1.76){
+ if(id>=OFFICER_BASE){
+  const look=appearanceOf(id-OFFICER_BASE,baseHeight);
+  return {...look,id,top:UNIFORM.top,bottom:UNIFORM.bottom,shoe:UNIFORM.shoe,topPattern:0,bottomPattern:0,uniform:true};
+ }
  const h=hash(id),g=hash2(id);
  const archetype=ARCHETYPES[h%ARCHETYPES.length];
  const height=Math.min(APPEARANCE.maxHeight,Math.max(APPEARANCE.minHeight,
@@ -206,6 +218,8 @@ export function deduplicate(looks){
  const out=new Map();
  for(const look of ordered){
   let top=look.top,attempts=0;
+  // A uniform is the same on everyone who wears it (W2): never re-coloured.
+  if(look.uniform){out.set(look.id,look);continue;}
   while(taken.has(`${look.archetype.id}|${top}`)&&attempts<TOPS.length){
    top=TOPS[(TOPS.indexOf(top)+1)%TOPS.length];attempts++;
   }
