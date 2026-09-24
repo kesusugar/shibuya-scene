@@ -26,9 +26,17 @@ const NAMES={paint:'vehicle-paint',glass:'vehicle-glass',dark:'vehicle-dark',pla
 const WHEELS=['rearLeftWheel','rearRightWheel','frontLeftWheel','frontRightWheel'];
 /** Kept from the previous model, because the vehicle transition already opens doors by this name. */
 const doorName=side=>`player-vehicle-door-${side}`;
+/** Step H: the pop-up lamp hinges. Fully open is a quarter turn about x. */
+const popupName=side=>`player-vehicle-popup-${side}`;
+export const POPUP=Object.freeze({open:Math.PI/2,rate:3.2,lampsOn:.45});
+/**
+ * Up or down. day-night.mjs ramps every head lamp's emissive by name at dusk (the day value is
+ * the material's own .14, night about six times that), so the lamps being lit IS night.
+ */
+export const popupTarget=lampLevel=>lampLevel>POPUP.lampsOn?1:0;
 const SEATS=['driverSeat','driverDoor','driverEntry','driverExit'];
 
-function materialsFor(paintColour){
+function materialsFor(paintColour,rimColour=0x9aa4ab){
  return {
   paint:new MeshStandardMaterial({color:paintColour,roughness:.34,metalness:.42}),
   // Glass is transparent enough to show the cabin behind it and glossy enough to catch a
@@ -42,7 +50,7 @@ function materialsFor(paintColour){
   lamp:new MeshStandardMaterial({color:0xfff2d6,emissive:0xffe5ae,emissiveIntensity:.14}),
   tail:new MeshStandardMaterial({color:LAMP.off,emissive:LAMP.off,emissiveIntensity:.25}),
   tyre:new MeshStandardMaterial({color:0x0e1114,roughness:.96,metalness:0}),
-  rim:new MeshStandardMaterial({color:0x9aa4ab,roughness:.31,metalness:.78})
+  rim:new MeshStandardMaterial({color:rimColour,roughness:.31,metalness:.78})
  };
 }
 
@@ -55,6 +63,8 @@ function wrap(type,root,materials,{owned,dimensions,anchors}){
  for(const [name,node] of Object.entries(wheels))
   if(!node)throw new Error(`vehicle asset ${type} has no ${name}`);
  const doors=[-1,1].map(side=>({side,pivot:root.getObjectByName(doorName(side))})).filter(d=>d.pivot);
+ const popups=[-1,1].map(side=>root.getObjectByName(popupName(side))).filter(Boolean);
+ let popupPhase=0;
  let disposed=false,triangles=0;
  const geometries=new Set();
  root.traverse(o=>{if(!o.isMesh)return;geometries.add(o.geometry);
@@ -70,6 +80,14 @@ function wrap(type,root,materials,{owned,dimensions,anchors}){
   setDoor(side,phase){
    const open=Math.max(0,Math.min(1,phase??0));
    for(const door of doors)door.pivot.rotation.y=door.side*(door.side===side?open:0)*1.05;
+  },
+  /** Step H: does this body have pop-up lamps, and how far up are they (0 shut, 1 open)? */
+  get popups(){return popups.length?popupPhase:null;},
+  /** How bright the head lamps are right now (day-night owns this). */
+  get lampLevel(){return materials.lamp.emissiveIntensity;},
+  setPopups(phase){
+   popupPhase=Math.max(0,Math.min(1,phase??0));
+   for(const pivot of popups)pivot.rotation.x=-POPUP.open*popupPhase;
   },
   /** Brake beats nothing, an indicator beats a brake. */
   setRear(brake,indicator){
@@ -93,7 +111,7 @@ function wrap(type,root,materials,{owned,dimensions,anchors}){
 /** Build one from the shape generator. This is what the bake script runs. */
 export function createVehicleAsset(type,{detail=1,paint=null}={}){
  const shape=buildVehicleShape(type,{detail});
- const materials=materialsFor(paint??VEHICLES[type].color);
+ const materials=materialsFor(paint??VEHICLES[type].color,VEHICLES[type].rim);
  const root=new Group();root.name='vehicle-'+type;
  // The shell hangs off its own node so body lean can be applied without tilting the wheels,
  // which stay on the road because the suspension already told them where the road is.
@@ -112,6 +130,12 @@ export function createVehicleAsset(type,{detail=1,paint=null}={}){
  for(const name of SEATS){
   const node=new Object3D();node.name=name;node.position.fromArray(shape.anchors[name]);root.add(node);
  }
+ for(const {side,hinge,pod,face} of shape.popups??[]){
+  const pivot=new Group();pivot.name=popupName(side);pivot.position.fromArray(hinge);
+  const shell=new Mesh(pod,materials.paint);shell.name=NAMES.paint;
+  const lamp=new Mesh(face,materials.lamp);lamp.name=NAMES.lamp;
+  pivot.add(shell,lamp);body.add(pivot);
+ }
  for(const {side,hinge,panel} of shape.doors??[]){
   const pivot=new Group();pivot.name=doorName(side);pivot.position.fromArray(hinge);
   pivot.add(new Mesh(panel,materials.paint));body.add(pivot);
@@ -128,7 +152,7 @@ export function createVehicleAsset(type,{detail=1,paint=null}={}){
  * generator uses, which is also what stops the baked path and the live path drifting apart.
  */
 export function adoptVehicleAsset(type,root,{paint=null,dimensions=null,anchors=null}={}){
- const materials=materialsFor(paint??VEHICLES[type].color);
+ const materials=materialsFor(paint??VEHICLES[type].color,VEHICLES[type].rim);
  const byName=new Map(Object.entries(NAMES).map(([part,name])=>[name,part]));
  root.traverse(o=>{
   if(!o.isMesh)return;

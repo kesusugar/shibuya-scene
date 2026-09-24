@@ -32,6 +32,11 @@ export const AUDIO = Object.freeze({
  rampMs: 60             // parameter smoothing, so speed changes glide instead of stepping
 });
 
+/** The engine note a car asks for, filled in from the default one. Pure, for tests. */
+export function engineVoice(voice) {
+ return {idleHz: voice?.idleHz ?? AUDIO.idleHz, revHz: voice?.revHz ?? AUDIO.revHz, wave: voice?.wave ?? 'sawtooth'};
+}
+
 export function createPlayerAudio() {
  let ctx = null, engine = null, failed = false;
 
@@ -108,11 +113,15 @@ export function createPlayerAudio() {
    * Track the car. `load` is throttle, so a car labouring up to speed sounds different from
    * one coasting at the same speed, which is most of what makes an engine readable.
    */
-  engine(speed, topSpeed, load = 0, damage = 0) {
+  engine(speed, topSpeed, load = 0, damage = 0, voice = null) {
    if (!ctx || !engine) return;
    const t = Math.min(1, Math.abs(speed) / Math.max(1, topSpeed));
    const wear=Math.max(0,Math.min(1,damage));
-   const hz = (AUDIO.idleHz + (AUDIO.revHz - AUDIO.idleHz) * t)*(1-wear*.08);
+   // Step H: a car may bring its own voice (VEHICLES.ownCar.engine): a higher, buzzier,
+   // rotary-like note. Synthesised, like every engine here.
+   const v = engineVoice(voice), wave = v.wave;
+   if (engine.a.type !== wave) {engine.a.type = wave; engine.b.type = wave;}
+   const hz = (v.idleHz + (v.revHz - v.idleHz) * t)*(1-wear*.08);
    const when = ctx.currentTime, ramp = AUDIO.rampMs / 1000;
    engine.a.frequency.setTargetAtTime(hz, when, ramp);
    engine.b.frequency.setTargetAtTime(hz*(1+wear*.025*Math.sin(ctx.currentTime*23)), when, ramp);

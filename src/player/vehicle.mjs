@@ -19,8 +19,15 @@ import {bounds, inPolygon} from '../geo/core.mjs';
 import {worldAnchor} from '../traffic/vehicle-anchors.mjs';
 import {vehicleImpact, slowBy} from './vehicle-impact.mjs';
 
+/**
+ * PLAN-POLICE-AND-OWN-CAR Step H: the player's own car. It is lost when it is gone from the
+ * pool, has been left more than `lostDistance` away, or was left wrecked; after `returnDelay`
+ * seconds of being lost it is parked again at the nearest legal spot near the player.
+ */
+export const OWN = Object.freeze({lostDistance: 160, returnDelay: 6, wrecked: .95});
+
 export const CAR = Object.freeze({
- type: 'sedan',
+ type: 'ownCar',
  accel: 6.5, brake: 11, drag: 1.4,      // m/s^2
  reverseMax: 4.5,                        // reverse is slower than forward, as it should be
  steer: 1.9,                             // rad/s at full lock
@@ -184,15 +191,51 @@ export function createPlayerVehicle(sim, ctx) {
   }
   return m;
  };
- const offLanes = (x, z, heading) => {
+ /**
+  * Somewhere a car of `type` may be parked near `x,z`: road under all four corners and road
+  * ahead, out of every traffic lane if possible. Always measured with that car's own body, not
+  * whichever car the player happens to be holding.
+  */
+ const roadFor = (x, z, heading, type) => {
   probe.x = x; probe.z = z; probe.heading = heading;
-  return [[x, z], ...corners(probe, def.width, def.length, 0)].every(([px, pz]) => laneClearance(px, pz) > CAR.parkClear);
+  return safePose(sim.graph.ctx, probe, type, .05);
  };
- /** Road-only test, still used when parking the car so it starts on the carriageway. */
- const onRoadPose = (x, z, heading) => {
+ const lanesClearFor = (x, z, heading, type) => {
+  const d = VEHICLES[type];
   probe.x = x; probe.z = z; probe.heading = heading;
-  return safePose(sim.graph.ctx, probe, state.type, .05);
+  return [[x, z], ...corners(probe, d.width, d.length, 0)].every(([px, pz]) => laneClearance(px, pz) > CAR.parkClear);
  };
+ const findParking = (x, z, type = CAR.type) => {
+  // Search outward for somewhere the car legally fits, since the player is on a pavement
+  // and the car needs road under all four corners. The heading has to have road *ahead* of
+  // it too: picking the first of eight that merely fits parks the car facing a kerb, and it
+  // then cannot pull away.
+  // First out of every traffic lane; only if there is no such room nearby, anywhere legal.
+  for (const clearOfTraffic of [true, false])
+  for (let r = 3; r <= 40; r += 1.5) for (let i = 0; i < 16; i++) {
+   const a = i * Math.PI / 8, px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r;
+   if (onCrossing(px, pz)) continue;
+   for (let h = 0; h < 16; h++) {
+    const ph = h * Math.PI / 8;
+    if (!roadFor(px, pz, ph, type)) continue;
+    if (!roadFor(px + Math.sin(ph) * 6, pz + Math.cos(ph) * 6, ph, type)) continue;   // road ahead
+    if (clearOfTraffic && !lanesClearFor(px, pz, ph, type)) continue;
+    return {x: px, z: pz, heading: ph};
+   }
+  }
+  return null;
+ };
+
+ /** Stand a pool slot, parked, at a pose, as the player's own car. */
+ const park = (slot, x, z, heading) => {
+  Object.assign(slot, {
+   active: true, controlled: false, parked: true, service: false, platoon: undefined, owned: true,
+   type: CAR.type, x, z, heading, speed: 0, brake: false, blinker: 0, doorPhase: 0,
+   lane: 0, transition: -1, next: -1, progress: 0, age: 0, stuck: 0, junction: null
+  });
+  slot.locks?.clear?.(); slot.passed?.clear?.(); slot.yellowStops?.clear?.();
+ };
+ let own = null, ownLostFor = 0, ownDamage = 0;
 
  const api = {
   state, get def(){return def;},
@@ -200,34 +243,46 @@ export function createPlayerVehicle(sim, ctx) {
   spawn(x, z, heading = 0) {
    const slot = state.slot ?? sim.pool.find(v => !v.active);
    if (!slot) return false;
-   // Search outward for somewhere the car legally fits, since the player is on a pavement
-   // and the car needs road under all four corners. The heading has to have road *ahead* of
-   // it too: picking the first of eight that merely fits parks the car facing a kerb, and it
-   // then cannot pull away.
-   // First out of every traffic lane; only if there is no such room nearby, anywhere legal.
-   for (const clearOfTraffic of [true, false])
-   for (let r = 3; r <= 40; r += 1.5) for (let i = 0; i < 16; i++) {
-    const a = i * Math.PI / 8, px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r;
-    if (onCrossing(px, pz)) continue;
-    for (let h = 0; h < 16; h++) {
-     const ph = h * Math.PI / 8;
-     if (!onRoadPose(px, pz, ph)) continue;
-     if (!onRoadPose(px + Math.sin(ph) * 6, pz + Math.cos(ph) * 6, ph)) continue;   // road ahead
-     if (clearOfTraffic && !offLanes(px, pz, ph)) continue;
-     state.slot = slot; state.x = px; state.z = pz; state.heading = ph; state.course = ph;
-     impactCooldown=0; resetDynamics(state); state.speed = 0; state.steering = 0; state.type = CAR.type; state.damage = 0; state.stalled = false;
-     def = VEHICLES[CAR.type];
-     Object.assign(slot, {
-      active: true, controlled: true, parked: true, service: false, platoon: undefined,
-      type: CAR.type, x: px, z: pz, heading: ph, speed: 0, brake: false, blinker: 0,
-      lane: 0, transition: -1, next: -1, progress: 0, age: 0, stuck: 0, junction: null
-     });
-     slot.locks?.clear?.(); slot.passed?.clear?.(); slot.yellowStops?.clear?.();
-     state.active = true;
-     return true;
-    }
+   const spot = findParking(x, z);
+   if (!spot) return false;
+   const {x: px, z: pz, heading: ph} = spot;
+   state.slot = slot; state.x = px; state.z = pz; state.heading = ph; state.course = ph;
+   impactCooldown=0; resetDynamics(state); state.speed = 0; state.steering = 0; state.type = CAR.type; state.damage = 0; state.stalled = false;
+   def = VEHICLES[CAR.type];
+   park(slot, px, pz, ph);
+   slot.controlled = true;
+   own = slot; ownLostFor = 0; ownDamage = 0;
+   state.active = true;
+   return true;
+  },
+
+  /** The player's own car's slot, or null. */
+  get own() {return own;},
+
+  /**
+   * Bring the player's own car back when it is lost. Returns true on the frame it reappears.
+   * The scene calls it only while the player is on foot -- never while driving or getting in or
+   * out -- so the car is never moved from under them.
+   */
+  keepOwn(dt, x, z) {
+   const gone = !own || !own.active || !own.owned || own.type !== CAR.type;
+   const far = !gone && Math.hypot(own.x - x, own.z - z) > OWN.lostDistance;
+   const wrecked = !gone && ownDamage >= OWN.wrecked;
+   if (!gone && !far && !wrecked) {ownLostFor = 0; return false;}
+   ownLostFor += dt;
+   if (ownLostFor < OWN.returnDelay) return false;
+   const spot = findParking(x, z);
+   if (!spot) return false;
+   const slot = !gone ? own : sim.pool.find(v => !v.active);
+   if (!slot) return false;
+   if (!gone && slot !== state.slot) {slot.playerVisual = false;}
+   park(slot, spot.x, spot.z, spot.heading);
+   if (state.slot === slot) {
+    state.x = spot.x; state.z = spot.z; state.heading = spot.heading; state.course = spot.heading;
+    state.speed = 0; state.damage = 0; resetDynamics(state);
    }
-   return false;
+   own = slot; ownLostFor = 0; ownDamage = 0;
+   return true;
   },
 
   /**
@@ -277,6 +332,7 @@ export function createPlayerVehicle(sim, ctx) {
   reserve(slot) {
    if (!slot) return false;
    if (slot === state.slot) return true;
+   if (state.slot === own) ownDamage = state.damage;   // left wrecked, it will be replaced
    if (state.slot) {state.slot.playerVisual = false; state.slot.controlled = false; state.slot.parked = true; state.slot.speed = 0;}
    sim.releasePermits?.(slot);
    impactCooldown=0; state.slot = slot; state.type = slot.type; def = VEHICLES[slot.type]; resetDynamics(state);

@@ -116,11 +116,21 @@ const SILHOUETTE={
   house:[[-.300,.720,.78],[-.240,.840,.84],[-.190,.930,.88],[-.130,.985,.90],[ .000,1.000,.905],
          [ .060,.990,.90],[ .140,.900,.87],[ .200,.800,.83],[ .240,.720,.78]],
   floor:.140, arch:.330, axle:.310, plate:'both'
+ },
+ // PLAN-POLICE-AND-OWN-CAR Step H: the player's own car. A low 1990s-style Japanese sports
+ // fastback: a low rounded nose (the lamps pop up out of it), a long sloping backlight and a
+ // short tail. A class of car, not a copy of one.
+ fastback:{
+  belt:[[-.500,.560,.84],[-.470,.650,.93],[-.430,.690,.98],[-.360,.700,1],[-.200,.705,1],
+        [ .050,.705,1],[ .180,.685,1],[ .280,.625,.99],[ .380,.560,.96],[ .460,.490,.90],[ .500,.430,.80]],
+  house:[[-.400,.695,.76],[-.330,.800,.82],[-.240,.910,.87],[-.150,.975,.89],[-.050,1.000,.895],
+         [ .040,.990,.89],[ .120,.900,.86],[ .180,.800,.82],[ .220,.700,.78]],
+  floor:.110, arch:.340, axle:.310, plate:'both'
  }
 };
 const STYLE={taxi:'sedan',sedan:'sedan',kei:'hatch',van:'onebox',bus:'onebox',keiTruck:'cabover',
  longVan:'semibonnet',minivan:'minivan',tallKei:'tallbox',cityTaxi:'mpv',truck2t:'cabover',
- police:'sedan',coupe:'coupe'};
+ police:'sedan',coupe:'coupe',ownCar:'fastback'};
 /** The silhouettes, for tests: every lofted type must name one. */
 export const SILHOUETTES=Object.freeze(Object.keys(SILHOUETTE));
 export const STYLES=Object.freeze({...STYLE});
@@ -344,6 +354,42 @@ export function buildVehicleShape(type,{detail=1}={}){
   lightbar=[0,H*topF+.12,mid*L];
  }
 
+ // --- Step H: body kit and pop-up lamps (dark panels, so the two-tone needs no shader) ------------
+ // Black bonnet and lower panels on an orange body: a bonnet skin over the belt from the screen
+ // base to the nose, side skirts between the arches, a front lip and a small rear wing.
+ const popups=[];
+ if(d.kit){
+  const screen=profile.house[profile.house.length-1][0];
+  const bonnet=[];const span=Math.max(6,Math.round(10*detail));
+  for(let i=0;i<=span;i++){
+   const f=lerp(screen,.497,i/span),z=f*L,[beltF,widthF]=at(profile.belt,f);
+   bonnet.push({z,ring:panelRing(W/2*widthF*.90,H*beltF-.012,H*beltF+.010,round*.5)});
+  }
+  parts.dark.push(loft(bonnet));
+  for(const side of [-1,1]){
+   const skirt=new BoxGeometry(.05,H*.085,axleZ*2-radius*2.6);
+   skirt.translate(side*(W/2*.985),H*profile.arch*.78,0);parts.dark.push(skirt);
+  }
+  const lip=new BoxGeometry(W*.84,.045,.14);lip.translate(0,H*profile.floor*.9,L*.5-.03);parts.dark.push(lip);
+  const [tailBeltF]=at(profile.belt,-.46);
+  const wing=new BoxGeometry(W*.78,.03,.20);wing.translate(0,H*tailBeltF+.13,-L*.455);parts.dark.push(wing);
+  for(const side of [-1,1]){
+   const post=new BoxGeometry(.04,.13,.06);post.translate(side*W*.30,H*tailBeltF+.06,-L*.455);parts.dark.push(post);
+  }
+ }
+ if(d.popups){
+  // Each pod hinges at its rear top edge on the bonnet. Closed, its top is flush with the bonnet
+  // and the lamp face, on its underside, is hidden inside the nose. Lifted by a quarter turn
+  // (hinge rotation.x = -PI/2) the pod stands up and the face looks straight ahead.
+  const f=.40,[beltF,widthF]=at(profile.belt,f);
+  for(const side of [-1,1]){
+   const w=W*widthF*.20,len=.26,h=.10;
+   const pod=bare(new BoxGeometry(w,h,len));pod.translate(0,-h/2,len/2);
+   const face=bare(new BoxGeometry(w*.86,.02,len*.78));face.translate(0,-h-.006,len/2);
+   popups.push({side,hinge:[side*W*widthF*.30,H*beltF+.012,(f*L)-len/2],pod,face});
+  }
+ }
+
  // --- pillars and window frame ---------------------------------------------------------------
  // Without these the greenhouse is one continuous pane and reads as a black box sitting on the
  // car. Painted posts at the screen edges and one in the middle, plus a strip along the belt,
@@ -415,10 +461,25 @@ export function buildVehicleShape(type,{detail=1}={}){
  for(const side of [-1,1]){
   // Headlights sit just under the bonnet edge, not halfway down the bumper, and they are
   // narrower than the grille between them -- a pair of wide cream slabs reads as a light bar.
-  const head=new BoxGeometry(W*noseWidth*.22,H*.070,.06);
-  head.translate(side*W*noseWidth*.335,H*noseBelt-H*.075,noseZ-.025);parts.lamp.push(head);
-  const lamp=new BoxGeometry(W*tailWidth*.22,H*.085,.055);
-  lamp.translate(side*W*tailWidth*.355,H*tailBelt-H*.085,tailZ+.02);parts.tail.push(lamp);
+  if(d.popups){
+   // Pop-up lamps: the nose keeps only a slim turn lamp in the bumper; the head lamps live in
+   // pods on hinges (`popups` below) that rise out of the bonnet.
+   const turn=new BoxGeometry(W*noseWidth*.16,H*.035,.05);
+   turn.translate(side*W*noseWidth*.36,H*profile.arch*1.25,noseZ-.02);parts.lamp.push(turn);
+  }else{
+   const head=new BoxGeometry(W*noseWidth*.22,H*.070,.06);
+   head.translate(side*W*noseWidth*.335,H*noseBelt-H*.075,noseZ-.025);parts.lamp.push(head);
+  }
+  if(d.roundTails){
+   // Two round lamps a side.
+   for(const k of [.24,.40]){
+    const lamp=new CylinderGeometry(H*.052,H*.052,.05,14);lamp.rotateX(Math.PI/2);
+    lamp.translate(side*W*tailWidth*k,H*tailBelt-H*.075,tailZ+.02);parts.tail.push(lamp);
+   }
+  }else{
+   const lamp=new BoxGeometry(W*tailWidth*.22,H*.085,.055);
+   lamp.translate(side*W*tailWidth*.355,H*tailBelt-H*.085,tailZ+.02);parts.tail.push(lamp);
+  }
  }
  // The plate belongs on the bumper, not floating on the body between the lights.
  for(const [where,z,widthF] of [['front',noseZ-.005,noseWidth],['rear',tailZ+.005,tailWidth]]){
@@ -519,6 +580,6 @@ export function buildVehicleShape(type,{detail=1}={}){
   geometry[name]=list.length===1?list[0]:mergeGeometries(list,false);
   if(list.length>1)list.forEach(g=>g.dispose());
  }
- return {geometry,wheel:{rubber:wheelRubber,rim:wheelRim,radius,width},anchors,doors,
+ return {geometry,wheel:{rubber:wheelRubber,rim:wheelRim,radius,width},anchors,doors,popups,
   dimensions:{length:L,width:W,height:H,wheelbase:axleZ*2,radius}};
 }

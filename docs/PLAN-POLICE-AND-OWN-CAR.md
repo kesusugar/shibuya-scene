@@ -1,6 +1,6 @@
 # Plan: the player's own drift car, Japanese police, sirens, and a ☆1–☆5 wanted level
 
-Status: **PLAN, not implemented.** Written 2026-09-24 on `master` `e1e136e` (after PR #23).
+Status: **Step H implemented** on `claude/looks-fleet-4` (2026-09-25, `docs/GTA-FIDELITY-STATUS.md` §9p); W steps follow on stacked branches. Originally: Written 2026-09-24 on `master` `e1e136e` (after PR #23).
 It adds to `docs/PLAN-LOOKS-AND-FLEET.md` and depends on its Step B (traffic on the loft in
 `BatchedMesh`) and Step C (new mob types, including `police`). The work happens in a local
 Claude CLI session so it can be checked on the real device. Read `AGENTS.md`, `CLAUDE.md` and

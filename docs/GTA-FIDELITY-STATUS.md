@@ -4849,6 +4849,47 @@ types and exports did not exist; the guard's label test fails without fictional 
 - The opening scene holds 12–14 staged cars depending on the seed, one fewer than before on
   average.
 
+## 9p. Police plan, Step H — the player's own car, "Kaze FR" (branch `claude/looks-fleet-4`, on `claude/looks-fleet-3`)
+
+**Plan:** `docs/PLAN-POLICE-AND-OWN-CAR.md` Step H (takes over `heroWide` from PLAN-LOOKS Step D).
+
+**What changed.**
+- **Shape.** A `fastback` loft silhouette: a low nose that slopes to the bumper, a long sloping
+  backlight and a short tail. The kit is geometry in the dark part — a bonnet skin that follows
+  the belt from the screen to the nose, side skirts between the arches, a front lip and a small
+  wing — so the orange-and-black two-tone needs no shader and looks the same in traffic and
+  close up. Round tail lamps (two a side), dark rims (`VEHICLES.ownCar.rim`), and no badge or text.
+- **Pop-up lamps.** Two pods hinged at their rear top edge on the bonnet. Shut, the top is flush and
+  the lamp face (on the pod's underside) is hidden; a quarter turn stands the pod up and the face
+  looks ahead. On the close-up model they follow the head lamps: `day-night.mjs` ramps the lamp
+  emissive at dusk, and `popupTarget(level)` opens them above 0.45 (day .14, night ~0.84), moving
+  at 3.2 rad/s. The traffic batch draws the car with its pods shut.
+- **Ownership.** `CAR.type` is `ownCar` (weight 0, `owned`). Traffic never spawns it (the initial
+  one-of-each spawn skips weight-0 types), never drives it, and `setTier` never despawns an
+  `owned` slot. `spawn` parks it near the player as before; `keepOwn(dt, x, z)`, called every
+  on-foot frame, parks it again near the player 6 s after it is gone from the pool, left more than
+  160 m away, or left with damage ≥ 0.95 (`OWN`). The parking search (`findParking`) always uses
+  the own car's body, not whichever car the player holds.
+- **Handling and sound.** `steer .74, grip 7.5, slide 1.5` (sedan .62 / 13 / 2.8); the engine
+  takes an optional voice (`engineVoice`): 74–236 Hz square waves against the default 46–132 Hz
+  saws. Synthesised; nothing recorded.
+- **Not done:** the neon underglow (optional in the plan).
+
+**Device check** (`evidence/police-own-car/step-h/`, HIGH night): the player starts with the own car
+36 m away, F gets in (occupancy PLAYER SEATED), 406 draw calls in the car, 0 errors. The kit,
+wing and round tail lamps are visible; the pods rising is covered by the test, not seen from the
+chase camera.
+
+**Tests.** `tests/own-car.test.mjs` (6): anchors, doors, pods, parts, fixed paint, close-up pack;
+the pods rise and the lamp faces forward open and down shut, and are up at night and down by
+day; the drift tune slides more than the sedan under the same handbrake turn; traffic never spawns
+it and a tier change never despawns it; walked 200 m away it returns near the player only after
+the delay, and rebuilt when despawned; the engine voice. Fails on the code before (no `ownCar`,
+`POPUP`, `OWN`, `engineVoice`).
+
+**Limitations.** The drift and the engine note need a person at the wheel. The pods are a box
+shape. The implementation commit also carries the regenerated `src/player/generated/vehicles.mjs`.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
