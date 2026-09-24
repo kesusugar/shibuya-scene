@@ -56,6 +56,8 @@ const files=[
  'tests/core-readability.test.mjs',
  'tests/headlight-glows.test.mjs',
  'tests/traffic-fleet.test.mjs',
+ 'tests/fleet-types.test.mjs',
+ 'tests/name-guard.test.mjs',
  'tests/high-graphics.test.mjs',
  'tests/lightboxes.test.mjs',
  'tests/network-startup.test.mjs',

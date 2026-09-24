@@ -25,7 +25,7 @@ export const FLEET_PARTS=Object.freeze(['body','glass','dark','front','rear']);
  */
 export const LIVERY=Object.freeze({
  none:  Object.freeze({id:0}),
- police:Object.freeze({id:1,lower:0x121417,second:0xf1f1ec,band:.70}),
+ police:Object.freeze({id:1,lower:0x121417,second:0xf1f1ec,band:.58}),
  taxiTwoTone:Object.freeze({id:2,lower:0xe7b823,second:0x2f6b45,band:.73}),
  bus:   Object.freeze({id:3,lower:0x2f7d4f,second:0xe9e2c8,band:.40}),
  taxiCream:Object.freeze({id:4,lower:0xe8e1cf,second:0x7a1f2b,band:.73})
