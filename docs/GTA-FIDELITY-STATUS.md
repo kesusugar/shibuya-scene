@@ -19,7 +19,8 @@ in use now is a placeholder for the pipeline, not the final visual asset.
 ## 2. Branch and HEAD
 
 - Current work lands on `master` through PRs: #19 (RUN 10–11), #20 (crowd realism, §9i) and
-  #21 (RUN 12, the final RUN, §9j, branch `claude/happy-tesla-dkn52d`). The historical working
+  #21 (RUN 12, the final RUN, §9j, branch `claude/happy-tesla-dkn52d`). The punch fix found on
+  real hardware after that (§9k) is on the same branch, restarted from `master` `c1b89c6`. The historical working
   branch **`claude/gta-fidelity-upgrade`** is merged and no longer where work happens.
 - RUN 10.1 handoff HEAD: **`76dc411`**. RUN 10.2–10.5 follow it on this branch; RUN 11 starts
   from `b037bc8` (§9h). Use `git log -1` for the current HEAD. Older HEAD lines and the old
@@ -2118,6 +2119,80 @@ night: **0 console errors, 0 exceptions, no error banner.** The only warning is 
 
 **RUN 12 COMPLETE. This was the final RUN of the GTA Fidelity plan; RUN 13 and 14 are folded in. What is left is the real-device checks above and the limitations listed with them.**
 
+## 9k. After RUN 12 — the punch goes at the person (branch `claude/happy-tesla-dkn52d`, from `master` `c1b89c6`)
+
+**Found on real hardware.** The user's real-device check (a Claude CLI driving Chrome on a
+second PC, after PR #21) reported that the punch looked like a sideways swing, arms opening
+out to the sides instead of going at the person in front. Measured on the player's own figure,
+standing, at the jab's peak:
+
+| | Fist sideways | Fist forward | Fist height |
+| --- | --- | --- | --- |
+| The clip on its own (`Punch_Jab`) | 0.09 m | 0.76 m | 1.39 m |
+| The game before this fix | **0.60 m** | 0.23 m | 1.06 m |
+| The game after this fix | 0.07 m | 0.77 m | 1.26 m |
+
+The cross was worse before the fix: its fist ended 0.64 m out to the side and 3 cm *behind* the body.
+
+**Three causes. None of them was in the clips.**
+- **The swing was averaged with the idle.** The punch went through the mixer at weight 1 on
+  top of a gait blend that already summed to 1, and three.js averages every action that
+  animates a bone. The arm was therefore half punch and half hanging at the side: on its own,
+  this put the fist 0.45 m sideways.
+  - Now a swing *takes* its weight from the gait (`STRIKE` in `src/player/figure.mjs`). The
+    total stays 1, the swing fades in over 0.08 s and out over 0.3 s, and during the swing
+    the figure is the clip.
+  - Other overlays (Hit, Startle, Guard, vehicle entry) still blend the old way. They were not
+    reported and are not changed here.
+- **The added torso twist ran the wrong way.** RUN 11.2 added `spine.rotateY(±.24k)` and
+  `chest.rotateY(±.2k)`. A positive yaw pulls the left shoulder *back*, so a left jab swung
+  outward; on its own the twist moved the fist 28 cm off its line.
+  - The clips already turn the shoulders into the punch, so the twist is gone.
+  - The forward lean stays, reduced from 0.2 to 0.13 rad. At 0.2 the body read as hunched over.
+- **The body did not face what it hit.** Standing, the figure only turns to the camera once
+  the view is 0.95 rad (54°) away, and the hit arc measured from `bodyHeading`, which is
+  updated only while walking. The live run below started with the figure 70° off the camera
+  line. Now:
+  - A swing locks on to the nearest person within 2.4 m and 1.2 rad of where the player is
+    looking (standing) or going (moving); `COMBAT.lockRange` and `lockArc` in
+    `src/player/combat.mjs`.
+  - The body turns onto that person at 14 rad/s. The aim follows them through the wind-up and
+    is then fixed. `attackHeading` and `bodyHeading` are the same value, so the hit arc
+    measures from the aim.
+  - A swing plants the feet: the player brakes to a stop, and input does not turn the body
+    until the fist is back. The clip is a standing punch, and a body carried along under it
+    skates.
+
+**Evidence.**
+- `qa/gta-upgrade/punchbench.html` renders the player's figure (the game's own update) and a
+  target, freezing both swings at their peak from the side and from behind.
+- `evidence/run12-punch/punch-before.png` and `punch-after.png` are its output on the code
+  before and after this fix.
+- **Live headless (HIGH, day, player mode).**
+  - A punch locked onto a nearby pedestrian, and the body turned onto the aim exactly:
+    figure yaw −3.430 against an aim of 2.853, the same angle.
+  - At the peak the fist was 0.77 m forward and 0.08 m to the side, and the hit landed.
+  - 0 errors, 0 exceptions.
+- `tests/punch-aim.test.mjs` has seven tests. Each fails on the code before the fix:
+  - fist in front for both clips, standing and walking;
+  - no torso twist;
+  - lock-on turns the swing and lands the hit;
+  - standing swings go where the camera looks;
+  - the aim tracks through the wind-up and then holds;
+  - the feet plant;
+  - a reset mid-swing hands the whole body back to the gait (caught during this fix: the weights
+    outlived `reset()` and blended toward the bind pose).
+- **Gates:** typecheck clean; `npm test` 503 tests, 498 pass, 5 skipped, 0 fail;
+  `npm run test:ci` 0 fail.
+
+**Still not done.**
+- **No lunge.** A hit still registers up to `COMBAT.range` (1.75 m, centre to centre) while
+  the fist reaches about 0.9 m. At the far end of the range the victim reacts to a fist that
+  stopped short. Closing that needs a step-in clip; sliding the planted feet forward would
+  trade one visible fault for another.
+- **Not seen at a real frame rate.** Headless runs at 0.1 fps. The swing needs to be watched
+  on real hardware.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
@@ -2222,6 +2297,13 @@ proportions, pose, material and visual bugs are reviewed from screenshots.
 
 Each of these cost real time to find. They are recorded so the next session recognises the
 symptom instead of rediscovering the cause.
+
+**After RUN 12: a one-shot layered on the gait at full weight is only half of itself.**
+three.js averages every action that animates a bone. A punch at weight 1 over a gait blend
+that sums to 1 put the fist 0.6 m out to the side. A swing must take its weight from the gait
+(`STRIKE`, §9k). Any extra spine yaw on an extended arm swings the fist off its line, and a
+positive yaw on this rig pulls the left shoulder back. `tests/punch-aim.test.mjs` measures
+the fist on the real figure.
 
 **RUN 12: a GLSL snippet without a trailing newline.** A shader string prepended to a three.js
 shader that opens with `#define` glued the two into `}#define STANDARD`, and the asphalt failed to
