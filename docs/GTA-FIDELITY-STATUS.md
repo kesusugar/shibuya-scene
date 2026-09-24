@@ -20,7 +20,8 @@ in use now is a placeholder for the pipeline, not the final visual asset.
 
 - Current work lands on `master` through PRs: #19 (RUN 10–11), #20 (crowd realism, §9i) and
   #21 (RUN 12, the final RUN, §9j, branch `claude/happy-tesla-dkn52d`). The punch fix found on
-  real hardware after that (§9k) is on the same branch, restarted from `master` `c1b89c6`. The historical working
+  real hardware after that (§9k) is on the same branch, restarted from `master` `c1b89c6`. Player crowd contact,
+  four-blow fights and the left/right fix (§9l) are on `claude/player-crowd-contact`, from `master` `3e15698`. The historical working
   branch **`claude/gta-fidelity-upgrade`** is merged and no longer where work happens.
 - RUN 10.1 handoff HEAD: **`76dc411`**. RUN 10.2–10.5 follow it on this branch; RUN 11 starts
   from `b037bc8` (§9h). Use `git log -1` for the current HEAD. Older HEAD lines and the old
@@ -2193,6 +2194,124 @@ The cross was worse before the fix: its fist ended 0.64 m out to the side and 3 
 - **Not seen at a real frame rate.** Headless runs at 0.1 fps. The swing needs to be watched
   on real hardware.
 
+## 9l. The player bumps into people, fights to four blows, and steers the right way (branch `claude/player-crowd-contact`, from `master` `3e15698`)
+
+**Plan:** `docs/PLAN-PLAYER-CROWD-CONTACT.md`. Implemented in a local Claude CLI session on the
+user's Windows PC and checked there in Chrome (HIGH, day). No physics engine, and no
+pedestrian-versus-pedestrian collision, as decided.
+
+**What changed, in the plan's order.**
+- **Step 0, left and right (`1789913`).** The course sent strafe +1 toward world +x at heading 0,
+  where the follow camera's right is world −x, so the touch pad, A/D and the stick all walked
+  mirrored. The strafe term is flipped in `controller.step()`; the input sources are untouched.
+  The car was already right (right input lowers the heading); both are pinned by
+  `tests/steer-direction.test.mjs`, which takes the right vector from the game's own cameras.
+- **Step A, contact (`a060c54`).** New `src/player/crowd-contact.mjs`, pure:
+  - `bodiesNear` reads the crowd's own 2 m grid, 3×3 cells, and skips the player's slot, the down,
+    the dead, and anyone more than 1.2 m above or below.
+  - `resolveStep` opens an existing overlap (the player takes at most a third), removes the part
+    of the step that would press into a body (a slide), tries the step turned a little either
+    side when blocked head-on, and when boxed in still moves the player at 0.45 m/s.
+  - It runs in `controller.step()` before `advance()` (walls), through an optional `bodies` hook
+    wired to the life system's simulation. With no crowd the step is identical, frame for frame.
+- **Step B, giving way (`a76a6c3`).** `yieldToPlayer` extends `reactToRunner`, which it still
+  calls at a run. A walking player's cone (1.6 m, 0.7 m either side) and anyone walking squarely
+  at them within 2 m step aside with the slow car's dodge flee: 0.35–0.5 m by id, or enough to
+  clear the shoulder (at most 0.8 m) for someone right on the line; an oncoming walker on the
+  line picks the side by id.
+- **Step C, the bump (`e5f8bb6`).** A light flinch (0.25 s) or, at ≥ 3.7 m/s, a strong one and a
+  ~0.6 m stagger off rails; a dodge for anyone on rails; ~30% of ids say something, a sprint bump
+  a low pain voice and the body thud at low gain; the player loses 40% of their pace on the
+  frame; a small camera knock through the feedback bus (`player_bump`). One draw from the
+  simulation's seeded rng starts a fight 30% of the time, through `melee.provoke()`, which is the
+  same `engage()` a punch uses and counts no swing, hit or witness. The HQ body flinches and then
+  looks at the player (`blow` response `'look'`: LOOK is the state that turns the head; the plan
+  said `'backoff'`, which does not).
+- **Step E, health (`a758742`).**
+  - Both sides do 25 (`COMBAT.playerDamage` 34 → 25, `npcDamage` 14–18 → 25): four blows.
+  - Everyone punched fights back; temperament still decides what witnesses do.
+  - **The kerb rule now holds for the Scramble cast.** `onRails` (exported from `combat.mjs`) is a
+    crossing, or a cast member walking the track. Before, `choreographed` alone counted, and since
+    the cast is always cast, a punched cast member never fought back anywhere. At a kerb the
+    choreography now holds a hostile cast member, and whatever combat moves them is kept as their
+    flee offset, so they walk back to their slot afterwards.
+  - A traffic car on foot takes 25, throws the player 1–1.5 m through `advance()`, gives control
+    back after 1 s, and has a 1.5 s grace; only the hit that reaches 0 is a death.
+  - The dashboard health bar (`role=meter`, the number beside it, green / amber at half / red on
+    the last quarter), and a game-over dialog (「ゲームオーバー」, 「もう一度」 → `revive()` at 100).
+    It is a dialog, not `role=alert`, which is the error banner.
+
+**Found on the device check, and fixed (`50cc98e`, `e90b84f`).**
+- **People walked through the player** (minimum gap 0.14 m on the first live walk). A dodge is a
+  request; the cast walking a track through the player, someone squaring up, someone fleeing or in
+  cooldown did not act on it, and the cast's flee offset closes back onto the track line. Now:
+  - whoever is still inside the player's circle after the step is moved out by their share
+    (`pushOut`), only onto ground `fleeAllowed` permits, and for the cast through the flee offset;
+  - at ~6 fps the crowd takes several 30 Hz steps after the player's step and walked back in before
+    it was drawn. `CrowdSimulation.update` calls an optional `postUpdate(dt)` after its steps; the
+    scene sets it to `player.settleCrowd()` each on-foot frame (cleared at the start of every
+    frame), which moves out whoever the crowd walked in.
+- **A fight froze a crossing.** `simulation.move` stopped anyone with a live `combatTarget` where
+  they stood, crossing or not. An ordinary walker admitted to a crossing but still on its pavement
+  end could be punched or provoked, and held the signal group for 14 s. They now keep walking and
+  fight at the far kerb.
+- **A stopped car kept hitting.** A van stopped on the player and took 25 each time the grace ran
+  out (100 → 50 in 2.5 s), because the throw was along the car's heading. A car under 1.5 m/s no
+  longer hits (the old code killed the player for walking into a car waiting at a light), and the
+  throw goes sideways out of the car's path.
+
+**Cost.** `qa/gta-upgrade/contact-cost.mjs`: 1,978 walkers, the hero cast mid-crossing, the player
+walking 600 frames through the densest 4 m cell; the contact step plus the give-way, per frame.
+The first measurement was 0.081 ms mean / 0.219 ms p95 against the plan's 0.05 / 0.15. Hot, the
+same calls take ~16 µs; the rest was reading flags off ~50 large pedestrian objects, twice, with
+cold caches. `771c735` rejects by distance first, gathers the people round the player once a frame
+(`contact.nearby`, shared with the give-way), and gives way once per crowd step (the crowd only
+moves on its 30 Hz step). Five runs after that, on this PC with Chrome open: **mean 0.049–0.062 ms,
+p95 0.136–0.168 ms** — on the target at best and up to ~25% over it. Machine-dependent; not a
+performance acceptance. These runs predate `50cc98e`, which adds the push-out and the settle pass
+(both read the frame's `nearby` list; no extra grid scan). In the browser, walking in the crowd was
+not slower than standing in it (6.7 / 7.4 fps against 6.3 / 7.2), and the contact step measured
+0.03–0.15 ms in ~150 ms frames.
+
+**Device check** (`evidence/player-contact/device-check.json`, with three screenshots).
+- **60 s walk**, steered into the densest people every 2 s, HP topped up so fights did not end it:
+  - first 40 s, on the pedestrian green: **minGap 0.552 m**, trapped 1.5 s;
+  - whole 60 s (the last 20 s after the green, into kerb crowds packed on the cast's 0.32 m slot
+    grid): **minGap 0.496 m, trappedSeconds 6.1 s**. The minGap target (0.5) is met on the green
+    and missed by 4 mm overall; **trappedSeconds (< 1.5) is missed**: packed kerbs are shoved
+    through at 0.45 m/s.
+  - 178 bumps, 49 fights (28%, against 30%), signals kept cycling (the end-of-phase hold was six
+    cast members still walking, 6–40 m away, the normal clear-out).
+- **Left and right:** D walks along the camera's right (1.00), A along its left (−0.92); in the car,
+  W+D turns right (heading −2.89 rad, 14.3 m to the right) and W+A left.
+- **Four blows both ways:** the HP bar went 100 → 75 (green) → 50 (amber) → 25 (red) → 0 and the
+  game-over dialog came up; 「もう一度」 revived at 100. An isolated pedestrian went
+  100 → 75 → 50 → 25 → 0 and down on the fourth punch.
+- **Cars:** four hits, 100 → 75 → 50 → 25 → 0, thrown 1.28 / 1.40 / 1.49 m, no second hit inside
+  3 s, then 「車に轢かれました（taxi）」.
+- **Console:** 0 errors, 0 exceptions, no `[role=alert]` banner. Two three.js program-log
+  **warnings** (D3D `X4122 ... cannot be represented accurately in double precision`), not errors;
+  this branch changes no shader, and they were not traced further.
+
+**Tests.** `tests/steer-direction.test.mjs`, `tests/crowd-contact.test.mjs` and
+`tests/player-health.test.mjs` are new and registered. Each behaviour test failed on the code
+before its change; the no-crowd, buffer, LOD and wall-throw tests are guards and pass on both.
+Tests that encoded the old rules were updated and say so: the diagonal-course test in
+`locomotion.test.mjs` (the old sign), the temperament test in `combat.test.mjs` (everyone fights
+now), and the punch count in `player-experience.test.mjs` (four, not three).
+
+**Still not done / limitations.**
+- **Walking into a dense crowd is deadly.** 30% of bumps start a fight and every fighter does 25,
+  so the first live walk (before HP top-up) lost all 100 HP in about 8 s; the 60 s walk lost 275 HP
+  in its last 20 s. This is the rule as asked; whether to cap attackers or lower the chance is the
+  user's call.
+- trappedSeconds in packed kerb crowds (above); the bench is at or up to ~25% over its target.
+- The touch pad and the phone cost are not checked here (the phone check is after merge).
+- The contact uses the simulated positions (`p.x/p.z`). On the first device walk the drawn
+  (`renderX/renderZ`) and simulated minimum gaps were identical; the final walk measured the
+  simulated ones only. Colliding against the drawn positions was not needed.
+- The two shader warnings above.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
@@ -2297,6 +2416,28 @@ proportions, pose, material and visual bugs are reviewed from screenshots.
 
 Each of these cost real time to find. They are recorded so the next session recognises the
 symptom instead of rediscovering the cause.
+
+**Player crowd contact (§9l): a dodge is a request, not a guarantee.** People who do not act on it
+(the cast walking a track through the player, a fighter, someone fleeing or in cooldown) walked
+straight through the player, and at a low frame rate the crowd's own 30 Hz steps walked them back
+in after the player's step and before the frame was drawn. Whoever is inside the player's circle is
+moved out (`pushOut`), and again after the crowd's update (`CrowdSimulation.postUpdate` →
+`player.settleCrowd`). Test at clamped 0.1 s frames, not only at 60 Hz.
+
+**Player crowd contact (§9l): a live `combatTarget` froze a pedestrian on a crossing.**
+`simulation.move` stopped anyone hostile where they stood. Combat never stops someone on rails
+itself, but the simulation did, and one held group freezes every signal. Never stop anyone with
+`p.crossing` for a fight. Likewise `choreographed` is not the same as "on the track": the cast is
+always cast, so treating it as on rails meant a punched cast member never fought back anywhere
+(`onRails` in `combat.mjs`).
+
+**Player crowd contact (§9l): a stopped car hit the player every time the grace ran out.** The
+throw went along the car's heading and left the player in front of it. A car has to be moving
+(≥ 1.5 m/s) to hit, and the throw goes out of its path.
+
+**Player crowd contact (§9l): left and right were mirrored on foot.** At heading 0 the follow camera
+looks toward +z and its right is world −x. Derive a screen direction from the camera, never by hand
+(`tests/steer-direction.test.mjs`).
 
 **After RUN 12: a one-shot layered on the gait at full weight is only half of itself.**
 three.js averages every action that animates a bone. A punch at weight 1 over a gait blend

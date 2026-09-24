@@ -1,6 +1,8 @@
 # Plan: the player bumps into people, fights to four blows, and steers the right way
 
-Status: **PLAN, not implemented.** Written 2026-09-24, after PR #22 (master `3e15698`). The
+Status: **implemented** on `claude/player-crowd-contact` (2026-09-24/25); what was done, what was
+found on the device and what missed its target are in `docs/GTA-FIDELITY-STATUS.md` §9l. Written
+2026-09-24, after PR #22 (master `3e15698`). The
 work itself happens in a local Claude CLI session on the user's PC, so that it can be checked
 on the real device (Chrome + phone). Read `AGENTS.md`, `CLAUDE.md` and
 `docs/GTA-FIDELITY-STATUS.md` (§9j, §9k, §16a) first.

@@ -149,3 +149,13 @@ Chrome is absent here: real WebGL day/night, startup, first-drive and device FPS
 remain OPEN. This is tooling completion, not stage 7 visual acceptance.
 See `docs/CLAUDE-CODE-HANDOFF-2026-09-20.md` for all commits, transfer instructions,
 validation commands, limitations and next implementation priorities.
+
+## Player crowd contact — 2026-09-24
+
+The player now collides with pedestrians (no physics engine; `src/player/crowd-contact.mjs`),
+people give way to a walking player, 30% of bumps start a fight, both sides take 25 per blow from
+100 HP (four blows), every punched person hits back, a traffic car does 25 instead of killing, and
+the dashboard shows a health bar with a game-over dialog. Left and right on foot were mirrored and
+are fixed. Checked in Chrome on the user's PC at HIGH by day; the contact bench is at or up to ~25%
+over its target, and trappedSeconds in packed kerb crowds missed its target. Details, evidence and
+limitations: `docs/GTA-FIDELITY-STATUS.md` §9l and `evidence/player-contact/`.
