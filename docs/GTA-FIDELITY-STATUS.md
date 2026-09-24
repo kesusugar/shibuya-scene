@@ -4890,6 +4890,57 @@ the delay, and rebuilt when despawned; the engine voice. Fails on the code befor
 **Limitations.** The drift and the engine note need a person at the wheel. The pods are a box
 shape. The implementation commit also carries the regenerated `src/player/generated/vehicles.mjs`.
 
+## 9q. Police plan, W1 + W3 — the wanted level, the siren and the roof bar (branch `claude/looks-fleet-5`, on `claude/looks-fleet-4`)
+
+**Plan:** `docs/PLAN-POLICE-AND-OWN-CAR.md` W1, W3 and the HUD half of W4.
+
+**What changed.**
+- **`src/police/wanted.mjs`** (pure). The crime table in one `WANTED` object: the 2nd fight kill ☆1;
+  a run-over kill ☆1 at once and a 2nd inside 60 s ☆2; punching an officer ☆1 or +1; ramming a
+  patrol car or 4 kills ☆2; taking a patrol car, killing an officer or 8 kills ☆3; 15 kills,
+  2 officers or 90 s at ☆3 ☆4; 25 kills or 4 officers ☆5; a carjack an officer sees ☆1. A crime
+  an officer (for now: a patrol car within 45 m) sees is known at once; one only civilians saw is
+  reported after 4–8 s (fixed by the crime id) and dropped if every listed witness is gone; one
+  nobody saw is unknown. Run-overs, a stolen patrol car, rams and crimes against officers are
+  known at once. Escape is GTA V's: solid while seen (`lastSeen` follows the player), flashing
+  while not, a search circle of 60/90/120/160/200 m on `lastSeen`, and 12/18/25/35/45 s outside it
+  unseen clears the level. Being seen restarts the clock. Arrest, death and respawn clear it.
+- **`src/police/siren.mjs`.** The Japanese electronic wail: a triangle sweep 650 → 1450 → 650 Hz,
+  1.6 s each way, eased at the ends; a 0.34 s yelp; a Doppler factor from the closing speed. Two
+  oscillators (saw + square) through a band-pass into an HRTF panner at the car, on the sound
+  bank's effects bus (`bank.bus`, new), so its master and safety compressor hold. Only the two
+  nearest sirens within 260 m get a voice. The loudspeaker says 「そこの人、止まりなさい」 /
+  「前の車、止まりなさい」 through `speechSynthesis` in `ja-JP` at most every 8 s, and is silent when
+  there is no Japanese voice.
+- **Lamps.** A patrol car with `siren` flashes its roof bar (and its rear lamps, as real ones do)
+  at 2.4 Hz through the rear batch colour; the close-up model does the same through `setRear`.
+  **No point lights:** the plan allowed two within the night budget, but adding lights changes the
+  light count every lit material is compiled for, and the HIGH budget is already at 6. The bar
+  is emissive and blooms.
+- **`src/police/director.mjs`** wires it: fight kills (from `melee.snapshot().npcDeaths`, witnesses
+  = people within 25 m), run-overs (`impacts` of kind `runover`, once per body), rams (the patrol
+  car the player's car touched, `state.rammed`, ≥ 2 m/s), a stolen patrol car (once per slot), and a
+  carjack. While the player is wanted, patrol cars within 300 m run their sirens (they do not
+  chase yet: W2). **H** in a stolen patrol car toggles its siren instead of the horn.
+- **HUD.** Five stars above the speed readout beside the health bar, solid or flashing
+  (`prefers-reduced-motion` stops the flash), and a 2.5 s banner 「手配度 ☆N」 when a level is
+  reached.
+
+**Device check** (`evidence/police-own-car/w1-w3/`, HIGH night): a run-over fed to the director gave
+☆1, the star and banner, two responding patrol cars with sirens (two voices running) and the roof
+bar lit red on the wet road; 0 errors. The siren was not listened to.
+
+**Tests.** `tests/wanted.test.mjs` (12): every row of the table, the user's three rules, the officer
+assault step, reported versus seen and a cancelled report, solid/flashing and the escape per star
+(not inside the circle, not before its time), being seen restarts it, 90 s at ☆3, clearing on
+arrest/death/respawn, the sweep period and range, the nearest two, silence without audio or a
+Japanese voice, and the director end to end (two fight kills → ☆1 and a responding siren; a
+run-over once per body; a stolen patrol car ☆3 and H). New modules, so they fail on the code before.
+
+**Limitations.** "Seen" is distance to a patrol car; there is no line-of-sight test yet and no foot
+officers (W2). Civilian witnesses are a count, so a report is never cancelled in the game (the
+module supports ids). The siren's sound is unheard and untuned.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
@@ -5006,6 +5057,8 @@ still at 16 attributes; the top and bottom colours are 7 bits a channel with a 3
 Unpack with power-of-two divisions after `floor(v+0.5)`, never by dividing by a non-power of two.
 
 **Looks B (§9n): a fragment snippet guarded by a vertex-only macro.** three defines `USE_BATCHING_COLOR` for the vertex stage only; the fragment stage gets `USE_COLOR_ALPHA`. Code guarded by the vertex macro in a fragment shader silently compiles out. `tests/traffic-fleet.test.mjs` checks the livery snippet.
+
+**Police W3 (§9q): do not add point lights for sirens.** Every lit material is compiled for the scene's light count; two more lights recompile everything and exceed the HIGH night budget (6). The roof bar is emissive.
 
 **Player crowd contact (§9l): a dodge is a request, not a guarantee.** People who do not act on it
 (the cast walking a track through the player, a fighter, someone fleeing or in cooldown) walked
