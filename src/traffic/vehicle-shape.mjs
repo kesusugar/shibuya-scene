@@ -64,7 +64,9 @@ const SILHOUETTE={
         [ .330,.585,1],[ .400,.575,.99],[ .430,.520,.96],[ .470,.480,.91],[ .500,.420,.83]],
   house:[[-.470,.590,.83],[-.452,.770,.90],[-.436,.905,.94],[-.400,.978,.958],[ .120,1.000,.962],
          [ .300,.998,.958],[ .378,.950,.935],[ .430,.820,.88],[ .466,.600,.82]],
-  floor:.120, arch:.300, axle:.320, plate:'both'
+  // A van's roof is steel almost to its ends: the panel covers everything above 94% height, or
+  // the greenhouse top between the screens reads as a glass roof (Looks B, found on the device).
+  floor:.120, arch:.300, axle:.320, plate:'both', roof:.94
  },
  // Cab over the front axle, flat deck behind it.
  cabover:{
@@ -72,7 +74,7 @@ const SILHOUETTE={
         [ .250,.700,1],[ .392,.690,.99],[ .460,.618,.93],[ .500,.510,.82]],
   house:[[ .072,.700,.86],[ .096,.868,.92],[ .120,.962,.95],[ .180,1.000,.962],[ .330,.998,.958],
          [ .400,.944,.93],[ .452,.800,.86],[ .486,.690,.80]],
-  floor:.170, arch:.330, axle:.315, plate:'rear'
+  floor:.170, arch:.330, axle:.315, plate:'rear', roof:.94
  }
 };
 const STYLE={taxi:'sedan',sedan:'sedan',kei:'hatch',van:'onebox',bus:'onebox',keiTruck:'cabover'};
@@ -261,7 +263,7 @@ export function buildVehicleShape(type,{detail=1}={}){
  // would lay paint across both screens; pinching it to nothing at the ends, as a first attempt
  // did, collapses the ring into a self-intersecting sliver.
  {
-  const flat=profile.house.filter(([,y])=>y>=.985);
+  const flat=profile.house.filter(([,y])=>y>=(profile.roof??.985));
   const from=flat.length?flat[0][0]:houseFrom,to=flat.length?flat[flat.length-1][0]:houseTo;
   const roofStations=[];
   const span=Math.max(4,Math.round(8*detail));
