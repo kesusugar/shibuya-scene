@@ -18,9 +18,8 @@ happens in a local Claude CLI session so it can be checked on the real device. R
 - **The loudspeaker sounds like a machine.** It is the browser's `speechSynthesis`
   (`createLoudspeaker` in `src/police/siren.mjs`; lines in `src/police/director.mjs`). The user
   wants a real man's voice, a patrol officer calling out, half-shouting.
-- **The user cannot record a voice,** so it is generated with a Japanese speech synthesiser.
-  - The crowd's in-browser formant speech (`src/player/voices.mjs`) is good for short cries. It
-    is not intelligible enough for sentences, so it is not used for this.
+- **The user cannot record a voice,** and VOICEVOX did not sound right to them. So the voice is
+  short shouts from the crowd's formant synthesiser; see Step V.
 - **Kaze FR lacks detail against the reference photo.** The user agreed to the analysis below
   (2026-09-24/25). Everything stays "〜風" (`PLAN-LOOKS-AND-FLEET.md` §0):
   - the name guard applies;
@@ -61,74 +60,74 @@ happens in a local Claude CLI session so it can be checked on the real device. R
 - **Device check.** Screenshots day and night, near (5 m) and far (40 m), beside a taxi and a
   sedan. It must read black-and-white at a glance.
 
-## 2. Step V: a human-sounding police loudspeaker (medium)
+## 2. Step V: a human-sounding police loudspeaker (small to medium)
 
-### V1. Generate the lines offline with VOICEVOX
+**Changed 2026-09-25 (the user's call).** VOICEVOX was tried by the user and did not sound
+right. Instead, the officers get **short shouts built with the crowd's own formant synthesiser**
+(`src/player/voices.mjs`), played through a megaphone chain. It has no asset, no external tool
+and no licence question.
 
-- The user installs and runs VOICEVOX (a free Japanese TTS app). Its local engine listens on
-  `http://127.0.0.1:50021`.
-- **`scripts/generate-police-voice.mjs`** (a dev tool, not shipped):
-  - it calls `POST /audio_query?speaker=<id>&text=<line>` and then `POST /synthesis`;
-  - it writes WAVs into `assets/audio/upstream/police/`, which is git-ignored like the other
-    upstream audio.
-- **Voice choice.**
-  - Pick 2 male voices, with an energetic or harsh style where the character has one, so there
-    are two officers.
-  - **Read each character's terms before use.** Record in the lock file:
-    - the terms URL and the terms text or version date;
-    - whether a credit is required, and its exact form (e.g. `VOICEVOX:<キャラ名>`);
-    - that it may be used in a publicly hosted game.
-  - Use only characters whose terms allow this; if unsure, skip the character. Show the credit in
-    `docs/AUDIO-ASSETS.md` and in an in-game credits line.
-- **Performance**, the "half-shouting" feel, per line in the lock file:
-  - volume and intonation up (`volumeScale` about 1.3–1.5, `intonationScale` about 1.3–1.6);
-  - a little faster (`speedScale` about 1.1–1.2);
-  - pitch slightly up (`pitchScale` about +0.02 to +0.05);
-  - pauses shortened (`prePhonemeLength` and `postPhonemeLength` low).
-  - Tune by ear on the device. The CLI proposes values, and the user judges.
-- **Lines**, 2–3 takes each, differing in voice, style and parameters:
+- **Be honest about what this buys** (the module's own header says so):
+  - formant synthesis gives a human-sounding cry with the right vowels and rhythm, not a clearly
+    intelligible word;
+  - a real patrol-car loudspeaker is itself distorted and hard to make out. That, plus the siren
+    and the chase context, is what makes 「ト・マ・レ」 read as 「止まれ！」.
+  - Keep lines short. Long sentences expose the synthesis.
 
-  | Aimed at | Lines |
+### V1. Police lines in the formant synthesiser
+
+- **Lines**, chosen for how well the existing phoneme set can say them:
+
+  | Line | What it needs |
   | --- | --- |
-  | a driving player | 「前の車、止まりなさい！」「そこの車、左に寄せて止まりなさい！」「止まりなさい！止まれ！」 |
-  | a player on foot | 「警察だ、止まりなさい！」「そこの人、止まれ！」「動くな！」 |
-  | an arrest | 「確保！」 |
+  | 「こらー！」 | `k` onset plus o, a (existing) |
+  | 「待てー！」 | new `m` onset, then `t` (existing) |
+  | 「止まれ！」 | `t`, new `m`, new `r` (a tap) |
+  | 「止まりなさーい！」 (optional) | also a new `s`. Keep it only if it survives the device check, otherwise drop it |
 
-- **Lock file** `assets/audio/police-voice.lock.json`, which makes the lines reproducible:
-  - the engine and app version;
-  - per line: speaker id, style, text, every parameter, and the SHA-256 of the WAV;
-  - the terms record above.
-- **Convert.** Run the WAVs through the existing `scripts/convert-audio.mjs`:
-  - trim silence, normalise to the one-shot target;
-  - write MP3 into `public/audio/`;
-  - add them to `manifest.json` as a new kind `police-voice`, with 1 voice for this kind and the
-    global caps unchanged.
+- **New onsets** in `ONSETS`, in the same style as today's:
+  - `m`: a nasal like `n`, with a lower second formant and a short hum before the vowel;
+  - `r`: the Japanese flap, a very short (about 15–25 ms) closure dip with no burst, between
+    vowels;
+  - `s`: a fricative, high-pass noise at about 4–6 kHz for 60–90 ms before the vowel.
+- **Police personas.** Two adult male throats (a lower base pitch, formants scaled for a longer
+  vocal tract), deterministic by car id like the crowd's personas.
+  - The contour is a shout: a strong onset, a raised peak and a falling end, with the last vowel
+    stretched for 「ー」.
+  - A new `kind: 'police'` so the crowd never uses these lines, and the police never uses the
+    crowd's lines.
+- **Tests.**
+  - Every police line is built only from defined vowels and onsets.
+  - The new onsets produce their intended shape: `m` and `n` have no noise burst, `s` has
+    high-frequency noise and `r` is shorter than 30 ms.
+  - The police kind is separate from the crowd's kinds.
 
-### V2. Play them like a real patrol car loudspeaker (runtime)
+### V2. Play them like a patrol car loudspeaker (runtime)
 
-- **A megaphone chain in the sound bank** (`src/audio/bank.mjs`), applied only to
-  `police-voice`:
+- **The megaphone chain,** only for `kind: 'police'`:
   - a band-pass of about 350–3,500 Hz;
   - mild saturation (a `WaveShaperNode`);
   - a short slapback echo for the street, about 70–110 ms at low level;
-  - a synthesised mic "click" or brief feedback blip before each line;
+  - a synthesised mic click before each line;
   - through the HRTF panner at the car, like the siren.
   - The siren ducks by about 6 dB while a line plays.
 - **When.**
   - Only while pursuing with the siren on, the car within 40 m of the player, and at most one line
-    every 8 s across all cars.
-  - Choose the driving or on-foot set from the player's state, and never repeat the last take.
-  - 「確保！」 plays on arrest.
-- **Fallback.**
-  - If the clips have not loaded, stay silent. Do not fall back to `speechSynthesis`, which is
-    what sounded like a machine.
-  - Keep `speechSynthesis` only behind `?voice=tts` for debugging, or remove it.
+    every 6–8 s across all cars.
+  - Driving player: 「止まれ！」 and 「止まりなさーい！」. On foot: 「こらー！」, 「待てー！」 and
+    「止まれ！」.
+  - Never repeat the last line.
+- **Remove the machine voice.**
+  - `speechSynthesis` (`createLoudspeaker` in `src/police/siren.mjs`) is no longer used in play.
+  - Keep it only behind `?voice=tts` for comparison, or delete it.
 - **Tests.**
-  - The lock file names terms, credit and SHA-256 for every clip.
-  - The manifest has a `police-voice` kind.
-  - Selection follows the driving/on-foot state, never repeats a take, and waits 8 s.
-  - The megaphone chain is built only for that kind.
-  - With no clips, silence and no `speechSynthesis` call.
+  - The selection follows the driving/on-foot state, never repeats a line and keeps the gap.
+  - The megaphone chain is built only for the police kind.
+  - `speechSynthesis` is never called without `?voice=tts`.
+- **Device check.** The user listens: can 「止まれ！」 and 「こらー！」 be recognised in a chase?
+  - If not after tuning, the fallback is a paid, commercially licensed TTS (ElevenLabs or
+    OpenAI) or a commissioned voice actor.
+  - Either one only changes where the audio comes from. The playback in V2 stays.
 
 ## 3. Step K: Kaze FR in detail (large; two PRs)
 
@@ -196,8 +195,7 @@ geometry and a better material than traffic.
 ## 4. Order and commits
 
 1. Step P: the patrol car look. One PR.
-2. Step V: V1 and V2 together. One PR. The user must have VOICEVOX running and must choose the
-   voices after reading their terms. The CLI stops and asks at that point if they are not chosen.
+2. Step V: V1 and V2 together. One PR. The user judges the result by ear.
 3. Step K1. One PR.
 4. Step K2. One PR.
 
