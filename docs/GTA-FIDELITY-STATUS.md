@@ -2312,6 +2312,66 @@ now), and the punch count in `player-experience.test.mjs` (four, not three).
   simulated ones only. Colliding against the drawn positions was not needed.
 - The two shader warnings above.
 
+## 9m. Looks and fleet, Step A — patterns on clothes (branch `claude/looks-fleet-1`, from `master` `9435b53`)
+
+**Plan:** `docs/PLAN-LOOKS-AND-FLEET.md` Step A. Implemented autonomously in a local Claude CLI
+session on the user's Windows PC and checked there in Chrome (HIGH, day and night).
+
+**What changed.**
+- **`src/life/garment-pattern.mjs` (new).** Seven patterns: solid, border, pinstripe, check,
+  two-tone open jacket, denim and a small print. One GLSL function, `garmentPattern(base, id, p)`,
+  drawn on the **bind-pose position** (before skinning), so a stripe is on the cloth and never
+  slides across a walking body. Both CC0 rigs are authored at ~1.8 m in model units, y up, facing
+  +z, so bind-pose metres are already body-relative; the per-person height scale then scales the
+  stripes with the person. Every pattern fades to its flat colour once a pixel covers a good part
+  of its period (`fwidth`), which removes moiré at distance.
+- **No new attribute.** The top and bottom colours drop to 7 bits a channel and carry a 3-bit
+  pattern id in the top bits (`packGarment`): still < 2^24, so float-exact. Skin, hair and shoe
+  keep their 8-bit packing. Colour error ≤ 1/255. The HQ fragment shader unpacks with
+  power-of-two divisions after rounding (`floor(v+0.5)`), so varying interpolation cannot flip
+  the id.
+- **Recipe (`appearance.mjs`).** `patternOf(id)` picks a top and bottom pattern with weights by
+  life archetype (`PATTERN_WEIGHTS`): office workers solid and pinstripe, young people border,
+  check and print, older people solid, joggers plain. The life archetype is read from the id the
+  way `CrowdSimulation.spawn` assigns it (`styleOf`), because the HQ layer only has the id and the
+  RUN 6.8 rule is that a look is a pure function of it. `deduplicate` still moves only a shirt
+  colour, never a pattern.
+- **Near characters (`character-asset.mjs`).** The RUN 6.8 garment material embeds the same GLSL
+  string, with a `uPattern` uniform. The player's `WARDROBE` stays solid, so the red top stays
+  findable.
+
+**Found on the device check, and fixed.** At night about eight near humanoids around the player
+wore the player's red top. `dressCitizen`'s `onBeforeCompile` read the palette the material was
+**constructed** with; the near pool recolours a slot as soon as it hands it out, often before the
+material's first compile, and `recolour` only updates uniforms that already exist. So anyone
+handed a slot before its first frame was drawn in `WARDROBE` (red). The compile now reads the
+palette as it is at compile time (`material.userData.palette`). This predates Step A.
+
+**Device check** (`evidence/looks-fleet/step-a/`, baseline in `evidence/looks-fleet/baseline/`).
+- A/B in one session, `?qa=1&tier=high&time=day&camera=street`: 5.5 fps / 345 draw calls with
+  Step A, 5.5 fps / 343 with the Step A shaders stashed. No measurable cost. (The same URL ran at
+  8.8 fps earlier in the night; fps between sessions on this PC is noise, compare within one.)
+- Night street, player mode: 5.2 fps, 479 draw calls, 8 near humanoids, no `[role=alert]`,
+  0 console errors from the page loads after the fix.
+- Screenshots: patterns on bodies next to the player by day, the red-top bug and its fix at night,
+  and distant figures fading to flat colour.
+
+**Tests.** `tests/garment-pattern.test.mjs` (10, registered in `test:ci`): pure by id, shares
+within ±3% per life archetype (200,000 ids), pack/unpack for every palette colour × every id,
+the HQ crowd writes the id, HQ and near embed the identical GLSL string and use the bind-pose
+position, every preprocessor line starts its line, the crowd attribute set is unchanged (≤ 16
+slots), the player stays solid, `deduplicate` keeps patterns, and a slot recoloured before its
+first compile is drawn in the new colours. The last one fails on the old `onBeforeCompile`; the
+rest fail on the pre-Step-A code (the module did not exist).
+
+**Not done / limitations.**
+- Shimmer was judged from stills at ~5 fps, not watched at 60 fps. The phone and MEDIUM on the
+  device are not checked.
+- The print dots and check squares are drawn in the bind-pose x–y plane, so they stretch on the
+  sides of the body (where the surface faces x). Stripes along y are unaffected.
+- The open-jacket panel is a band at |x| < 6 cm on the front; on the long-hair body it can meet
+  the hair.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
@@ -2416,6 +2476,16 @@ proportions, pose, material and visual bugs are reviewed from screenshots.
 
 Each of these cost real time to find. They are recorded so the next session recognises the
 symptom instead of rediscovering the cause.
+
+**Looks A (§9m): a pooled material compiled with its construction palette.** `dressCitizen`'s
+`onBeforeCompile` built its uniforms from the palette the material was created with, and
+`recolour` only updates uniforms that exist. The near pool recolours a slot before its first
+compile, so those people were drawn in the default (the player's red top). Build uniforms from
+the palette as it is at compile time. `tests/garment-pattern.test.mjs` recolours before compiling.
+
+**Looks A (§9m): a pattern id rides in the packed colour, not a new attribute.** The crowd is
+still at 16 attributes; the top and bottom colours are 7 bits a channel with a 3-bit pattern id.
+Unpack with power-of-two divisions after `floor(v+0.5)`, never by dividing by a non-power of two.
 
 **Player crowd contact (§9l): a dodge is a request, not a guarantee.** People who do not act on it
 (the cast walking a track through the player, a fighter, someone fleeing or in cooldown) walked
