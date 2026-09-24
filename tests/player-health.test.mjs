@@ -201,3 +201,20 @@ test('an ordinary walker admitted to a crossing is not frozen there by a fight',
  assert.ok(p.edge!==edge||p.progress>start+1,`frozen on the crossing (progress ${start.toFixed(2)} -> ${p.progress.toFixed(2)})`);
  assert.notEqual(p.state,'fighting');
 });
+
+// Found on the device check: a van stopped on the player and took 25 every 1.5 s.
+test("a stopped car does not hit, and a hit throws the player out of the car's path",()=>{
+ const p=realPlayer();
+ assert.equal(p.knockDown({type:'van',x:0,z:-1.5,heading:0,speed:0}),false,'a stopped van hit the player');
+ assert.equal(p.knockDown({type:'van',x:0,z:-1.5,heading:0,speed:1}),false,'a van creeping at 1 m/s hit the player');
+ assert.equal(p.state.health,100);
+ // Hit dead centre by a car driving +z, and a little to its right (-x is the car's right).
+ for(const [x0,expectSide] of [[0,null],[-.3,-1],[.3,1]]){
+  const q=realPlayer();Object.assign(q.state,{x:x0});
+  assert.equal(q.knockDown({type:'sedan',x:0,z:-1.5,heading:0,speed:9}),true);
+  for(let f=0;f<60;f++)q.step(1/60);
+  const out=Math.abs(q.state.x);
+  assert.ok(out>=1-.05,`still in the car's path: ${q.state.x.toFixed(2)} m across`);
+  if(expectSide)assert.equal(Math.sign(q.state.x),expectSide,'thrown across the car to the other side');
+ }
+});

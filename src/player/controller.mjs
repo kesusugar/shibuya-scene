@@ -42,7 +42,10 @@ export const PLAYER = Object.freeze({
  // health, not a death, unless it was the last quarter. The player is thrown 1-1.5 m (more the
  // faster the car), through `advance()` so never into a wall, over `throwSeconds`, and gets
  // control back after `stun`. `carGrace` stops one car hitting again on the next frame.
- carDamage: 25, carGrace: 1.5, thrown: [1, 1.5], throwSeconds: .35, stun: 1
+ carDamage: 25, carGrace: 1.5, thrown: [1, 1.5], throwSeconds: .35, stun: 1,
+ // Found on the device check: a van stopped on the player and hit again every time the grace
+ // ran out. A car has to be moving to hit anyone, and the throw goes out of its path.
+ carHitSpeed: 1.5
 });
 
 /** Furthest the player may stand from the middle, matching the modelled extent. */
@@ -360,15 +363,18 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    */
   knockDown(vehicle) {
    if (!state.alive || (state.carGrace ?? 0) > 0) return false;
+   if (vehicle && Number.isFinite(vehicle.speed) && Math.abs(vehicle.speed) < PLAYER.carHitSpeed) return false;
    state.carGrace = PLAYER.carGrace;
    state.health = Math.max(0, state.health - PLAYER.carDamage);
    state.hitBy = vehicle?.type ?? 'vehicle';
    if (state.health <= 0) {state.alive = false; state.runOver = 0; return true;}
-   // Thrown away from the car, leaning the way it was going.
-   const h = vehicle?.heading ?? 0, v = Math.abs(vehicle?.speed ?? 0);
-   let dx = state.x - (vehicle?.x ?? state.x) + Math.sin(h) * Math.min(1, v / 6), dz = state.z - (vehicle?.z ?? state.z) + Math.cos(h) * Math.min(1, v / 6);
-   const l = Math.hypot(dx, dz);
-   if (l > 1e-6) {dx /= l; dz /= l;} else {dx = Math.sin(h); dz = Math.cos(h);}
+   // Thrown out of the car's path: sideways, on the side the player is already on, and a little
+   // the way the car was going. Straight ahead would leave the player in front of it.
+   const h = vehicle?.heading ?? 0, v = Math.abs(vehicle?.speed ?? 0), fx = Math.sin(h), fz = Math.cos(h);
+   const across = (state.x - (vehicle?.x ?? state.x)) * fz - (state.z - (vehicle?.z ?? state.z)) * fx;
+   const side = Math.abs(across) > .05 ? Math.sign(across) : 1;
+   let dx = fz * side + fx * .45 * Math.sign(vehicle?.speed ?? 1), dz = -fx * side + fz * .45 * Math.sign(vehicle?.speed ?? 1);
+   const l = Math.hypot(dx, dz); dx /= l; dz /= l;
    const distance = PLAYER.thrown[0] + (PLAYER.thrown[1] - PLAYER.thrown[0]) * Math.min(1, v / 10);
    const push = 2 * distance / PLAYER.throwSeconds;
    state.knockX = dx * push; state.knockZ = dz * push; state.knockLeft = PLAYER.throwSeconds;
