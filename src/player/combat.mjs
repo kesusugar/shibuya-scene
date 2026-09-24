@@ -23,6 +23,10 @@ export const COMBAT=Object.freeze({range:1.75,notice:4.5,playerDamage:34,npcDama
  // How wide a swing reaches, in radians either side of where the body is facing. A punch is
  // not a radius: something directly behind you cannot be hit.
  arc:1.05,
+ // Who a swing is thrown AT, picked when it starts: the nearest person within this far and
+ // this wide of where the player is looking or going. The body turns onto them and follows
+ // them through the wind-up, so a punch goes at a person rather than at a compass heading.
+ lockRange:2.4,lockArc:1.2,
  // What a punch does to the people who see it, and how far that carries. Bounded on purpose:
  // one punch must not empty the crossing.
  witnessRadius:11,witnessSeverity:.72});
@@ -163,13 +167,39 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null}={}){
   stats.witnessEvents++;stats.witnesses+=n;
  }
 
+ /**
+  * Where the player means to punch: forward is where they are going when they move, and
+  * where the camera looks when they stand (the figure faces the camera standing, too).
+  */
+ const forwardOf=state=>(state.speed??0)>.16?(state.bodyHeading??state.heading??0):(state.heading??state.bodyHeading??0);
+
+ /** The person a swing is thrown at, or null. Nearest and most in front, as `choose`. */
+ function lockOn(crowd,state){
+  const forward=forwardOf(state);let best=null,score=Infinity;
+  for(const p of nearby(crowd,state.x,state.z,COMBAT.lockRange)){
+   if(!eligible(p,crowd))continue;
+   const d=Math.hypot(p.x-state.x,p.z-state.z);
+   if(d>COMBAT.lockRange)continue;
+   const a=Math.abs(turn(forward,angleTo(state,p)));
+   if(a>COMBAT.lockArc)continue;
+   const s=d+a*.65;
+   if(s<score){score=s;best=p;}
+  }
+  return best;
+ }
+
+ /** Face the swing: the aim is what the figure turns onto and what the hit arc measures from. */
+ function aimAt(state,heading){state.attackHeading=heading;state.bodyHeading=heading;}
+
  /** One swing's worth of state. The clip decides its own timing; see attack-timing.mjs. */
- function start(player){
+ function start(player,crowd){
   const name=ATTACKS[swingIndex%ATTACKS.length].name;
   swingIndex++;
   const timing=attackOf(name);
-  swing={id:swingIndex,name,timing,elapsed:0,phase:PHASE.WINDUP,hitConsumed:false};
+  const state=player.state,aim=crowd?lockOn(crowd,state):null;
+  swing={id:swingIndex,name,timing,elapsed:0,phase:PHASE.WINDUP,hitConsumed:false,aim};
   stats.swings++;
+  aimAt(state,aim?angleTo(state,aim):forwardOf(state));
   // The renderer plays the clip for as long as the clip lasts, not for a fixed 0.42 s.
   player.startAttack?.(timing.duration,name);
   return swing;
@@ -179,7 +209,7 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null}={}){
   request(){if(!disposed)pending=true;},
   get phase(){return swing?swing.phase:PHASE.IDLE;},
   get swing(){return swing&&{id:swing.id,name:swing.name,phase:swing.phase,
-   elapsed:Number(swing.elapsed.toFixed(3)),hitConsumed:swing.hitConsumed};},
+   elapsed:Number(swing.elapsed.toFixed(3)),hitConsumed:swing.hitConsumed,aim:swing.aim?.id??null};},
 
   update(dt,crowd,player){
    if(disposed||!crowd||!player?.state)return stats;
@@ -191,7 +221,7 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null}={}){
    // stack punches, and a press during recovery is dropped rather than queued.
    if(pending){
     pending=false;
-    if(state.alive&&!swing){start(player);onEvent?.('punch_swing',{x:state.x,z:state.z,intensity:.6});}
+    if(state.alive&&!swing){start(player,crowd);onEvent?.('punch_swing',{x:state.x,z:state.z,intensity:.6});}
    }
    // Staggers: a blown-back step, a fraction of a second long, only where the walkable context
    // allows it and never for anyone on a crossing or on the choreographed track.
@@ -210,6 +240,13 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null}={}){
    }
 
    if(swing){
+    // Through the wind-up the aim follows its person, so someone stepping aside is still who
+    // the fist goes at. Once the fist is travelling, the line is fixed.
+    if(swing.aim&&swing.elapsed<swing.timing.windup){
+     const p=swing.aim;
+     if(eligible(p,crowd)&&Math.hypot(p.x-state.x,p.z-state.z)<=COMBAT.lockRange+.5)aimAt(state,angleTo(state,p));
+     else swing.aim=null;
+    }
     const before=swing.elapsed;
     swing.elapsed+=Math.max(0,dt);
     const {windup,activeEnd,duration}=swing.timing;

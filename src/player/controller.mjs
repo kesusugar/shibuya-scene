@@ -260,7 +260,11 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    const len = Math.hypot(fx, fz);
    state.running = running;
    state.moving = len > 0;
-   const wanted=len>0?(state.running?PLAYER.run:PLAYER.walk)*Math.min(1,len):0;
+   // A swing plants the feet: the clip is a standing punch, and a body carried along under it
+   // skates. The body stops (at the ordinary braking rate) and faces the swing's aim, which
+   // combat owns, until the fist is back.
+   const attacking=(state.attackTime??0)>0;
+   const wanted=len>0&&!attacking?(state.running?PLAYER.run:PLAYER.walk)*Math.min(1,len):0;
    // Where the body is being asked to go, in world terms. Forward is where the camera looks;
    // strafing is perpendicular to it, so a diagonal input walks diagonally rather than
    // sidestepping, and the figure turns to face it.
@@ -293,7 +297,7 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
     state.speed=Math.min(state.speed,moved);
    }
    // The figure turns the body; this is only what it is turning towards.
-   if(len>0)state.bodyHeading=turnToward(state.bodyHeading??course,course,dt);
+   if(len>0&&!attacking)state.bodyHeading=turnToward(state.bodyHeading??course,course,dt);
    state.y = ctx.height(state.x, state.z);
   },
 

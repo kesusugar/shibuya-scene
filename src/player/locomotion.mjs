@@ -256,14 +256,15 @@ export function createBodyFacing(initial=0){
   get lean(){return lean;},
   get pivoting(){return pivoting;},
   reset(to=0){heading=to;lean=0;pivoting=false;},
-  update(desired,speed,dt){
+  /** `turnRate` overrides the gait's own rates and the standing dead band (a swing's aim). */
+  update(desired,speed,dt,turnRate=undefined){
    const step=Math.max(0,Math.min(.1,dt));
    const error=turnTo(heading,desired);
    const moving=speed>LOCOMOTION.idleSpeed;
-   if(moving)pivoting=false;
+   if(moving||turnRate!==undefined)pivoting=false;
    else if(Math.abs(error)>LOCOMOTION.pivotStart)pivoting=true;
    else if(Math.abs(error)<LOCOMOTION.pivotStop)pivoting=false;
-   const rate=moving?LOCOMOTION.turnRate:(pivoting?LOCOMOTION.pivotRate:0);
+   const rate=turnRate??(moving?LOCOMOTION.turnRate:(pivoting?LOCOMOTION.pivotRate:0));
    const applied=clamp(error,-rate*step,rate*step);
    heading+=applied;
    // Lean comes from how fast the body is turning and how fast it is going: a turn at a
