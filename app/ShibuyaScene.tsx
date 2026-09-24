@@ -563,9 +563,9 @@ export default function Home(){
    // the vehicle call back into the app.
    if(carSpeedLast>1&&Math.abs(c.speed)<carSpeedLast*.3){if(!soundscape?.crash(c.x,c.z,carSpeedLast/Math.max(1,playerCar.def.speed)*1.6))playerAudio?.impact(carSpeedLast,playerCar.def.speed);vehicleEffects?.impact(c);shake=Math.min(1,shake+.2);}
    carSpeedLast=Math.abs(c.speed);
-   playerAudio?.engine(c.speed,playerCar.def.speed,Math.max(0,drive.forward),c.damage);
+   playerAudio?.engine(c.speed,playerCar.def.speed,Math.max(0,drive.forward),c.damage,playerCar.def.engine);
    if(playerCar.state.damage!==damageLast){damageLast=playerCar.state.damage;setCarDamage(damageLast);}}
-  else{player.step(dt);{const s=lifeEntry.hooks.current?.sim;if(s)s.postUpdate=(d:number)=>player.settleCrowd(d);}if(player.state.alive)combatDeathReported=false;yieldToPlayer(lifeEntry.hooks.current?.sim,player.state,player.contact.nearby);const combat=melee.update(dt,lifeEntry.hooks.current?.sim,player);if(combat.hits>meleeHitsLast){meleeHitsLast=combat.hits;}playerFigure?.update(player.state,dt);groundPlayerShadow();
+  else{player.step(dt);playerCar?.keepOwn?.(dt,player.state.x,player.state.z);{const s=lifeEntry.hooks.current?.sim;if(s)s.postUpdate=(d:number)=>player.settleCrowd(d);}if(player.state.alive)combatDeathReported=false;yieldToPlayer(lifeEntry.hooks.current?.sim,player.state,player.contact.nearby);const combat=melee.update(dt,lifeEntry.hooks.current?.sim,player);if(combat.hits>meleeHitsLast){meleeHitsLast=combat.hits;}playerFigure?.update(player.state,dt);groundPlayerShadow();
    if(!player.state.alive&&!combatDeathReported){combatDeathReported=true;setPlayerHit(player.state.hitBy??'fight');}
    playerMarker?.update(player.state,dt,PLAYER_HEIGHT);
    // Nothing on screen said where the car was: the orange cone is over the player, so a

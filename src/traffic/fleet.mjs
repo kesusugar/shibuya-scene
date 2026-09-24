@@ -89,6 +89,8 @@ function pickShare(list,u){
  */
 export function paintOf(id,type){
  const h=hash(id,0x5bd1e995),u=(h&0xffff)/65536,shade=h>>>16;
+ // The player's own car is always its own colour.
+ if(VEHICLES[type]?.owned)return {hex:VEHICLES[type].color,livery:0,band:0,name:'own'};
  const fixed=VEHICLES[type]?.livery;
  if(fixed){const l=LIVERY[fixed];return {hex:l.lower,livery:l.id,band:l.band,name:fixed};}
  if(type==='taxi'||type==='cityTaxi'){
@@ -168,6 +170,8 @@ export function fleetGeometry(type){
  // The door panels sit a centimetre inside the flank for the player's opening doors; a traffic
  // car never opens one, so they are left out.
  shape.doors.forEach(d=>d.panel.dispose());
+ // Pop-up lamp pods, closed: flush with the bonnet. They only open on the player's close-up model.
+ for(const p of shape.popups??[]){parts.body.push(p.pod.translate(...p.hinge));p.face.dispose();}
  const extra=VEHICLES[type]?.roofSign;
  if(extra){
   const sign=new BoxGeometry(.56,.2,.26);sign.deleteAttribute('uv');

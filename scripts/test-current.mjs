@@ -58,6 +58,7 @@ const files=[
  'tests/traffic-fleet.test.mjs',
  'tests/fleet-types.test.mjs',
  'tests/name-guard.test.mjs',
+ 'tests/own-car.test.mjs',
  'tests/high-graphics.test.mjs',
  'tests/lightboxes.test.mjs',
  'tests/network-startup.test.mjs',

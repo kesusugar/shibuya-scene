@@ -8,7 +8,7 @@
 // in the runtime that loaded the baked result -- and they had drifted over whether body roll
 // feeds wheel height. There is one now, and the generator is a generator.
 import {Group,ObjectLoader} from 'three';
-import {adoptVehicleAsset} from './vehicle-asset.mjs';
+import {adoptVehicleAsset,popupTarget,POPUP} from './vehicle-asset.mjs';
 import {createVehicleShadows} from '../traffic/vehicle-shadow.mjs';
 import vehiclePack from './generated/vehicles.mjs';
 
@@ -85,6 +85,11 @@ export function createVehicleVisual({onAssetReady=null}={}){
    // the city whose lights disagree with its own AI record.
    asset.setRear(!!state.slot?.brake,state.slot?.blinker??0);
    asset.setDoor(state.doorSide,state.doorPhase);
+   // Step H: pop-up lamps rise when the lamps are lit and fold away by day.
+   if(asset.popups!==null){
+    const target=popupTarget(asset.lampLevel),step=POPUP.rate*dt;
+    asset.setPopups(asset.popups+Math.max(-step,Math.min(step,target-asset.popups)));
+   }
 
    // Grounding. The shadow mesh is a child of this root, which is already at the vehicle and
    // turned to its heading, so local y of zero is the road and the contacts are body-frame.
