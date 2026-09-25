@@ -47,6 +47,11 @@ const POSES=[
   run(f,s){for(let i=0;i<30;i++)f.update(s,dt);s.shotLeft=.633;for(let i=0;i<6;i++){f.update(s,dt);s.shotLeft-=dt;}}},
  {id:'pistol-reload',label:'pistol reload, half way',state:{weapon:'pistol'},
   run(f,s){s.reloadLeft=1.667;for(let i=0;i<50;i++){f.update(s,dt);s.reloadLeft-=dt;}}},
+ // W3: an officer's revolver (the near-humanoid pool carries only this), aimed and fired.
+ {id:'revolver-aim',label:'officer: revolver aimed (W3)',carry:['revolver'],state:{weapon:'revolver',aim:1,aimHeading:0},
+  run(f,s){for(let i=0;i<30;i++)f.update(s,dt);}},
+ {id:'revolver-shot',label:'officer: revolver shot, at the recoil',carry:['revolver'],state:{weapon:'revolver',aim:1,aimHeading:0},
+  run(f,s){for(let i=0;i<30;i++)f.update(s,dt);s.shotLeft=.633;for(let i=0;i<6;i++){f.update(s,dt);s.shotLeft-=dt;}}},
  ...(window.WEAPON_POSES??[])
 ].filter(p=>!only||p.id===only);
 
@@ -63,7 +68,7 @@ function stage(pose){
  scene.add(new T.Mesh(new T.PlaneGeometry(20,20).rotateX(-Math.PI/2),new T.MeshStandardMaterial({color:0x555b66})));
  // A target 6 m ahead at chest height, for the aim poses.
  const target=new T.Mesh(new T.SphereGeometry(.08,12,8),new T.MeshBasicMaterial({color:0xffc04a}));target.position.set(...(pose.target??[0,1.35,6]));scene.add(target);
- const figure=createPlayerFigure(asset,{top:0xc94d38},{weapons:['pistol','katana']});scene.add(figure.root);
+ const figure=createPlayerFigure(asset,pose.carry?{top:0x1d2a44,bottom:0x1a2238}:{top:0xc94d38},{weapons:pose.carry??['pistol','katana']});scene.add(figure.root);
  const state={x:0,y:0,z:0,heading:0,bodyHeading:0,speed:0,alive:true,attackTime:0,attackDuration:0,
   aimTarget:{x:0,y:1.35,z:6},...pose.state};
  for(let i=0;i<50;i++)figure.update(state,dt);

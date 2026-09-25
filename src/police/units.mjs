@@ -266,6 +266,9 @@ export function createPoliceUnits({koban = {x: 48.5, z: 20.4}, buildBudget = 150
   p.combatTarget = 'player'; p.combatUntil = crowd.time + 5; p.combatHealth ??= 100;
   const d = Math.hypot(me.x - p.x, me.z - p.z);
   p.heading = Math.atan2(me.x - p.x, me.z - p.z); p.state = 'fighting';
+  // PLAN-WEAPONS W3: an officer covering an armed player with a revolver holds where they are
+  // (guns.mjs sets `gunHold`) instead of walking into arm's reach. Unarmed, they close to arrest.
+  if (p.gunHold) {p.speed = 0; return;}
   // The baton, for a player who is fighting back.
   p.batonNext ??= 0;
   if (attacking && d <= UNITS.batonReach && crowd.time >= p.batonNext) {p.batonNext = crowd.time + UNITS.batonEvery; hurt?.(COMBAT.officerDamage);}

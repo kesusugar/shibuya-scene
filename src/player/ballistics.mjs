@@ -87,11 +87,14 @@ export function lineOfSight(solid, a, b, {step = .5, skipStart = .4, skipEnd = .
  *
  * Returns {kind: 'none'|'wall'|'ground'|'car'|'person', distance, point, target, zone}, where
  * zone is 'head' or 'body' for a person.
+ * @param {any} options
+ * @returns {{kind:string, distance:number, target:any, zone:string|null, point:{x:number,y:number,z:number}, dir:{x:number,y:number,z:number}}}
  */
 export function castShot({from, dir, range = 60, solid = () => false, ground = null, cars = [], dimsOf = () => null,
                           people = [], skip = null, bodyOf = null}) {
  const len = Math.hypot(dir.x, dir.y, dir.z) || 1;
  const d = {x: dir.x / len, y: dir.y / len, z: dir.z / len};
+ /** @type {any} */
  let best = {kind: 'none', distance: range, target: null, zone: null};
 
  // Walls and the ground: march, then bisect to the surface.

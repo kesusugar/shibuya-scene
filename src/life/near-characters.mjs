@@ -191,7 +191,9 @@ export function createNearCharacters(tier='high',{ctx=null}={}){
     // Foot IK only for humanoid slots inside the budget, and only when a ground query exists.
     // RUN 5's solver is not changed for this; it is given or not given a context.
     const wantsIK=wantHuman&&!!ctx&&slots.filter(s=>s.ik).length<limitFor(NEAR_IK_LIMITS);
-    const figure=createPlayerFigure(source,undefined,{...(wantsIK?{ctx}:{}),variant});
+    // PLAN-WEAPONS W3: a humanoid can be an officer, and an officer at ☆3 draws a revolver. The
+    // mesh is built hidden and costs nothing until it is drawn.
+    const figure=createPlayerFigure(source,undefined,{...(wantsIK?{ctx}:{}),variant,weapons:wantHuman?['revolver']:null});
     root.add(figure.root);
     if(wantHuman&&!humanTrianglesPerRig)humanTrianglesPerRig=measure(figure.root);
     slots.push({figure,id:null,elapsed:0,human:wantHuman,ik:wantsIK,variant});
@@ -304,7 +306,10 @@ export function createNearCharacters(tier='high',{ctx=null}={}){
     const state={trafficReaction:reaction,threatHeading:p.lifeThreatHeading??p.threatHeading,x:p.renderX??p.x,y:p.height??0,z:p.renderZ??p.z,heading:p.heading,speed:slot.moving?slot.pace:0,alive:true,animationPhase:Math.abs(p.id)*.137,attackTime:p.combatAction>0?Math.min(.42,p.combatAction*.42):0,
      // RUN 11.2: being hit shows as a hit, for as long as the blow holds them.
      hurtTime:p.hurtUntil>clock?p.hurtUntil-clock:0,hurtDuration:p.hurtDuration??.34,
-     hurtX:p.hurtX??0,hurtZ:p.hurtZ??0,hurtStrong:!!p.hurtStrong};
+     hurtX:p.hurtX??0,hurtZ:p.hurtZ??0,hurtStrong:!!p.hurtStrong,
+     // An officer's revolver (src/police/guns.mjs): drawn, aimed at the player, and its recoil.
+     ...(p.officer&&p.gunDrawn?{weapon:'revolver',aim:p.gunAim??0,aimTarget:p.gunTarget,
+      aimHeading:p.gunTarget?Math.atan2(p.gunTarget.x-(p.renderX??p.x),p.gunTarget.z-(p.renderZ??p.z)):p.heading,shotLeft:p.gunShotLeft??0}:{})};
     if(slot.elapsed>=interval){slot.figure.update(state,Math.min(.1,slot.elapsed));slot.elapsed=0;}
     else slot.figure.root.position.set(state.x,state.y,state.z);
    }

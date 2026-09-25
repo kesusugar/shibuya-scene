@@ -44,7 +44,13 @@ export const ONSETS = {
  r: {gap: .02, ms: 0, type: null, hz: 0, level: 0},
  // A fricative lower than an /s/ would be, which is what turns しゃ into a soft rather than a
  // hissy syllable.
- sh: {gap: 0, ms: 85, type: 'bandpass', hz: 3500, level: .5}
+ sh: {gap: 0, ms: 85, type: 'bandpass', hz: 3500, level: .5},
+ // PLAN-WEAPONS W3: the consonants of 「銃を捨てろ」 and 「撃つぞ」. `j` is a short voiced
+ // affricate (a closure, then a low hiss), `s` the plain hiss, higher than `sh`, and `z` a voiced
+ // buzz: a short closure and a quieter, lower hiss.
+ j: {gap: .022, ms: 45, type: 'bandpass', hz: 2700, level: .42},
+ s: {gap: 0, ms: 75, type: 'highpass', hz: 4600, level: .42},
+ z: {gap: .016, ms: 55, type: 'bandpass', hz: 3900, level: .32}
 };
 
 /**
@@ -118,7 +124,15 @@ export const POLICE_LINES = Object.freeze([
   bend: [1.05, 1.32, .85]},
  {tag: '確保！', kind: 'police', situation: 'arrest',
   segs: [{v: 'a', ms: 90, on: 'k'}, {v: 'u', ms: 80, on: 'k'}, {v: 'o', ms: 300, on: 'h'}],
-  bend: [1.08, 1.35, .8]}
+  bend: [1.08, 1.35, .8]},
+ // PLAN-WEAPONS W3: an officer with a revolver drawn. 「銃を捨てろ！」 (juu o sutero) to an armed
+ // player, and 「撃つぞ！」 (utsu zo) with the warning shot. Shouted, not through the loudspeaker.
+ {tag: '銃を捨てろ！', kind: 'police', situation: 'dropGun',
+  segs: [{v: 'u', ms: 150, on: 'j'}, {v: 'o', ms: 80}, {v: 'u', ms: 60, on: 's'}, {v: 'e', ms: 80, on: 't'}, {v: 'o', ms: 270, on: 'r'}],
+  bend: [1.04, 1.32, .82]},
+ {tag: '撃つぞ！', kind: 'police', situation: 'warn',
+  segs: [{v: 'u', ms: 80}, {v: 'u', ms: 70, on: 't'}, {v: 'o', ms: 320, on: 'z'}],
+  bend: [1.06, 1.4, .8]}
 ]);
 
 /** The police line for a situation, or null. Deterministic: the situation names the line. */

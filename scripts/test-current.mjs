@@ -60,6 +60,7 @@ const files=[
  'tests/name-guard.test.mjs',
  'tests/weapons.test.mjs',
  'tests/pistol.test.mjs',
+ 'tests/police-guns.test.mjs',
  'tests/own-car.test.mjs',
  'tests/kaze-detail.test.mjs',
  'tests/wanted.test.mjs',

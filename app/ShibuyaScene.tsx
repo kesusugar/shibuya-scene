@@ -59,7 +59,8 @@ import {createCrowdVoices,prioritise} from '../src/player/voices.mjs';
 import {createMeleeCombat} from '../src/player/combat.mjs';
 import {createArsenal} from '../src/player/arsenal.mjs';
 import {createGunfire} from '../src/audio/gunfire.mjs';
-import {lineOfSight,peopleAlong} from '../src/player/ballistics.mjs';
+import {lineOfSight,peopleAlong,castShot} from '../src/player/ballistics.mjs';
+import {WEAPONS} from '../src/player/weapons.mjs';
 import {BLOOM_KICK} from '../src/fidelity/pipeline.mjs';
 import {ARCHETYPES as CROWD_ARCHETYPES} from '../src/life/config.mjs';
 import {createFeedbackBus} from '../src/app/feedback-bus.mjs';
@@ -647,8 +648,19 @@ export default function Home(){
   playUI?.update(playElapsed,player.state,playerCar?.state,driving,playerReach,frameHits);
   if(arsenal)playUI?.setWeapon(arsenal.snapshot(),{aiming:player.state.aim>0&&!driving,locked:player.state.aimLock!=null});
   if(police){policeFrustum.setFromProjectionMatrix(policeMatrix.multiplyMatrices(view.projectionMatrix,view.matrixWorldInverse));
-   const w=police.frame(dt,{player:player.state,car:playerCar,driving,melee:melee.snapshot(),weapons:arsenal?.snapshot()??null,traffic:trafficEntry.hooks.current?.sim,crowd:crowdSim,listener:{x:view.position.x,z:view.position.z,vx:0,vz:0},visible:inView,hurt:(n:number,src:string)=>{if(!driving)player.hurt?.(n,src);}});
+   const w=police.frame(dt,{player:player.state,car:playerCar,driving,melee:melee.snapshot(),weapons:arsenal?.snapshot()??null,solid:weaponWorld.solid,traffic:trafficEntry.hooks.current?.sim,crowd:crowdSim,listener:{x:view.position.x,z:view.position.z,vx:0,vz:0},visible:inView,hurt:(n:number,src:string)=>{if(!driving)player.hurt?.(n,src);}});
    playUI?.setWanted(w,dt);(window as any).__SHIBUYA_POLICE__=police;
+   // PLAN-WEAPONS W3: an officer's revolver -- the flash, the round's streak and where it went, the
+   // recorded revolver shot with the street's echo. A hit on the player bleeds and knocks the view.
+   for(const e of w.gunfire??[]){if(e.kind!=='warn'&&e.kind!=='shot')continue;
+    const dx=e.to.x-e.from.x,dy=e.to.y-e.from.y,dz=e.to.z-e.from.z,l=Math.hypot(dx,dy,dz)||1,dir={x:dx/l,y:dy/l,z:dz/l};
+    arsenal?.effects.muzzle(e.from.x,e.from.y,e.from.z,dir);
+    let end=e.to;
+    if(e.kind==='shot'&&!e.hit){const r=castShot({from:e.from,dir,range:WEAPONS.revolver.range,solid:weaponWorld.solid,ground:weaponWorld.ground,cars:weaponWorld.cars,dimsOf:weaponWorld.dimsOf});
+     end=r.point;if(r.kind!=='none')arsenal?.effects.burst(end.x,end.y,end.z,{count:8,nx:-dir.x,nz:-dir.z});}
+    if(e.kind==='shot')arsenal?.effects.tracer(e.from,end);
+    gunfire?.shot(e.from.x,e.from.y,e.from.z,Math.atan2(dir.x,dir.z),{kind:'revolver',hit:e.kind==='shot'&&!e.hit?{kind:'wall',point:end}:null});
+    if(e.hit&&!driving){weaponWorld.bleed({x:player.state.x,y:0,z:player.state.z},dir);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_PUNCH*1.4);}}
    // W2: 逮捕. Out of the car at once, frozen, and the game-over dialog with its own message;
    // 「もう一度」 wakes the player at the koban with the stars cleared.
    if(w.arrested&&!arrestedPending){arrestedPending=true;

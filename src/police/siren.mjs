@@ -223,6 +223,40 @@ export function createMegaphone(getContext, getBus) {
 }
 
 /**
+ * An officer on foot shouting (PLAN-WEAPONS W3): 「銃を捨てろ！」 and 「撃つぞ！」, the same formant
+ * voice as the loudspeaker but dry -- no band-pass, no saturation, no slapback -- from where the
+ * officer stands. A line is not repeated within `gap` seconds, and only one shout rings at once.
+ */
+export function createOfficerVoice(getContext, getBus, {gap = 3} = {}) {
+ let ctx = null, busyUntil = -Infinity, disposed = false;
+ const last = new Map();
+ const stats = {played: 0, skipped: 0};
+ return {
+  stats,
+  shout(situation, officerId, x, z, time) {
+   if (disposed) return null;
+   const line = policeLine(situation);
+   if (!line) {stats.skipped++; return null;}
+   if (time < busyUntil || time - (last.get(situation) ?? -Infinity) < gap) {stats.skipped++; return null;}
+   const bus = getBus?.();
+   if (!ctx) ctx = getContext?.();
+   if (!ctx || !bus || ctx.state === 'closed') return null;
+   const built = synthesizePoliceLine(ctx, line, policePersona(officerId + 5000), {at: ctx.currentTime + .02, level: .9});
+   if (!built) return null;
+   const panner = ctx.createPanner();
+   panner.panningModel = 'HRTF'; panner.distanceModel = 'inverse';
+   panner.refDistance = 4; panner.maxDistance = 80; panner.rolloffFactor = 1.1;
+   if (panner.positionX) {panner.positionX.value = x; panner.positionY.value = 1.65; panner.positionZ.value = z;}
+   else panner.setPosition?.(x, 1.65, z);
+   built.out.connect(panner); panner.connect(bus);
+   busyUntil = time + (built.duration ?? .6); last.set(situation, time); stats.played++;
+   return line;
+  },
+  dispose() {disposed = true;}
+ };
+}
+
+/**
  * The loudspeaker, through the browser's own speech in Japanese. At most one line every
  * `SIREN.speechEvery` seconds, and silent -- not an error -- when there is no speech engine or no
  * Japanese voice.

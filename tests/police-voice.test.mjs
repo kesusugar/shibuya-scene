@@ -5,7 +5,8 @@ import {VOWELS, ONSETS, LINES, POLICE_LINES, policeLine, policePersona, synthesi
  from '../src/player/voices.mjs';
 
 test('every police line is built only from defined vowels and onsets, and is its own kind',()=>{
- assert.equal(POLICE_LINES.length, 6);
+ // Eight since PLAN-WEAPONS W3 added 「銃を捨てろ！」 and 「撃つぞ！」 (was six).
+ assert.equal(POLICE_LINES.length, 8);
  for (const l of POLICE_LINES) {
   assert.equal(l.kind, 'police', l.tag);
   assert.ok(l.tag && l.segs.length, l.tag);
