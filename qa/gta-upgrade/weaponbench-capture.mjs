@@ -1,6 +1,8 @@
 // Capture qa/gta-upgrade/weaponbench.html in headless Chrome (PLAN-WEAPONS evidence).
 //
-//   node qa/gta-upgrade/weaponbench-capture.mjs [out.png] [query]
+//   node qa/gta-upgrade/weaponbench-capture.mjs [out.png] [query] [page]
+//
+// `page` is another bench in qa/gta-upgrade/ that reports the same way (cmu-weaponbench.html).
 //
 // Serves the repository root on a free local port, opens the bench, waits for it to report
 // ready, and writes the screenshot plus every console message and exception to `<out>.json`.
@@ -12,7 +14,7 @@ import {spawn} from 'node:child_process';
 import {rmSync} from 'node:fs';
 import {findChrome} from '../../scripts/lib/headless-chrome.mjs';
 
-const out=process.argv[2]??'weaponbench.png',query=process.argv[3]??'';
+const out=process.argv[2]??'weaponbench.png',query=process.argv[3]??'',bench=process.argv[4]??'weaponbench.html';
 const TYPES={'.html':'text/html','.js':'text/javascript','.mjs':'text/javascript','.json':'application/json','.glb':'model/gltf-binary','.png':'image/png'};
 const server=createServer(async(req,res)=>{
  const path=normalize(decodeURIComponent(new URL(req.url,'http://x').pathname)).replace(/^([/\\])+/,'');
@@ -20,7 +22,7 @@ const server=createServer(async(req,res)=>{
  catch{res.writeHead(404);res.end();}
 });
 await new Promise(r=>server.listen(0,'127.0.0.1',r));
-const url=`http://127.0.0.1:${server.address().port}/qa/gta-upgrade/weaponbench.html${query?'?'+query:''}`;
+const url=`http://127.0.0.1:${server.address().port}/qa/gta-upgrade/${bench}${query?'?'+query:''}`;
 
 const dir=join(process.env.TMPDIR??'/tmp',`weaponbench-${process.pid}`);
 const chrome=spawn(findChrome(),['--headless=new','--no-sandbox','--use-angle=swiftshader','--enable-unsafe-swiftshader',
@@ -39,11 +41,11 @@ const call=(method,params={})=>new Promise(r=>{const id=++n;pending.set(id,r);ws
 await call('Runtime.enable');await call('Page.enable');
 await call('Emulation.setDeviceMetricsOverride',{width:1280,height:2600,deviceScaleFactor:1,mobile:false});
 await call('Page.navigate',{url});
-let ready=false,bench=null;
+let ready=false,report=null;
 for(let i=0;i<240&&!ready;i++){
  await new Promise(r=>setTimeout(r,500));
  const m=await call('Runtime.evaluate',{expression:'document.title==="ready"?JSON.stringify(window.__BENCH__):null',returnByValue:true});
- bench=m.result?.result?.value;ready=!!bench;
+ report=m.result?.result?.value;ready=!!report;
 }
 // Crop to the bench's canvas.
 const size=(await call('Runtime.evaluate',{expression:'JSON.stringify([document.querySelector("canvas")?.width??1280,document.querySelector("canvas")?.height??720])',returnByValue:true})).result.result.value;
@@ -53,7 +55,7 @@ const shot=await call('Page.captureScreenshot',{format:'png',clip:{x:0,y:0,width
 await mkdir(dirname(out)||'.',{recursive:true});
 await writeFile(out,Buffer.from(shot.result.data,'base64'));
 const errors=log.filter(l=>l.type==='error'||l.type==='exception');
-await writeFile(out.replace(/\.png$/,'')+'.json',JSON.stringify({url:url.replace(/127\.0\.0\.1:\d+/,'<local>'),ready,bench:bench&&JSON.parse(bench),
+await writeFile(out.replace(/\.png$/,'')+'.json',JSON.stringify({url:url.replace(/127\.0\.0\.1:\d+/,'<local>'),ready,bench:report&&JSON.parse(report),
  console:log,errors:errors.length},null,1)+'\n');
 console.log(`${out}: ready=${ready}, ${log.length} console messages, ${errors.length} errors`);
 for(const l of errors)console.log('  ',l.type,l.text.slice(0,300));
