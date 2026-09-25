@@ -11,7 +11,7 @@
 // An asset can be built from the shape generator or adopted from a scene graph that was baked
 // offline, and both produce the same object, so the bake script and the game share one
 // definition of what the graph looks like instead of two copies that drift.
-import {Group,Mesh,MeshStandardMaterial,Object3D} from 'three';
+import {Group,Mesh,MeshStandardMaterial,MeshPhysicalMaterial,Object3D} from 'three';
 import {buildVehicleShape} from '../traffic/vehicle-shape.mjs';
 import {VEHICLES} from '../traffic/config.mjs';
 
@@ -37,9 +37,14 @@ export const POPUP=Object.freeze({open:Math.PI/2,rate:3.2,lampsOn:.45});
 export const popupTarget=lampLevel=>lampLevel>POPUP.lampsOn?1:0;
 const SEATS=['driverSeat','driverDoor','driverEntry','driverExit'];
 
-function materialsFor(paintColour,rimColour=0x9aa4ab){
+function materialsFor(paintColour,rimColour=0x9aa4ab,clearcoat=false){
  return {
-  paint:new MeshStandardMaterial({color:paintColour,roughness:.34,metalness:.42}),
+  // Step K2: Kaze FR alone gets a clearcoat physical material -- one extra reflective layer over
+  // the base coat, which is what a fresh orange respray actually is, and what makes a paint job
+  // read as "car paint" rather than "painted plastic" under a moving environment reflection.
+  paint:clearcoat
+   ?new MeshPhysicalMaterial({color:paintColour,roughness:.22,metalness:.55,clearcoat:1,clearcoatRoughness:.08})
+   :new MeshStandardMaterial({color:paintColour,roughness:.34,metalness:.42}),
   // Glass is transparent enough to show the cabin behind it and glossy enough to catch a
   // street light, which is what keeps it separate from near-black paint after dark. It writes
   // depth on purpose: a car's glasshouse is a closed tube, and sorting its two sides per frame
@@ -117,7 +122,7 @@ function wrap(type,root,materials,{owned,dimensions,anchors}){
 /** Build one from the shape generator. This is what the bake script runs. */
 export function createVehicleAsset(type,{detail=1,paint=null}={}){
  const shape=buildVehicleShape(type,{detail});
- const materials=materialsFor(paint??VEHICLES[type].color,VEHICLES[type].rim);
+ const materials=materialsFor(paint??VEHICLES[type].color,VEHICLES[type].rim,VEHICLES[type].clearcoat);
  const root=new Group();root.name='vehicle-'+type;
  // The shell hangs off its own node so body lean can be applied without tilting the wheels,
  // which stay on the road because the suspension already told them where the road is.
@@ -158,7 +163,7 @@ export function createVehicleAsset(type,{detail=1,paint=null}={}){
  * generator uses, which is also what stops the baked path and the live path drifting apart.
  */
 export function adoptVehicleAsset(type,root,{paint=null,dimensions=null,anchors=null}={}){
- const materials=materialsFor(paint??VEHICLES[type].color,VEHICLES[type].rim);
+ const materials=materialsFor(paint??VEHICLES[type].color,VEHICLES[type].rim,VEHICLES[type].clearcoat);
  const byName=new Map(Object.entries(NAMES).map(([part,name])=>[name,part]));
  root.traverse(o=>{
   if(!o.isMesh)return;
