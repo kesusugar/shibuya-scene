@@ -34,7 +34,7 @@ export const VEHICLES={
  // never spawns or drives one. Orange with a black bonnet and kit (`kit`), pop-up lamps, round
  // tail lamps, dark rims, and a drift tune: more lock, less lateral grip, a longer handbrake slide.
  ownCar:{width:1.76,length:4.3,height:1.23,speed:14,accel:2.6,brake:4.8,weight:0,color:0xe0661c,name:'Kaze FR',
-  owned:true,kit:true,popups:true,roundTails:true,rim:0x25282c,steer:.74,grip:7.5,slide:1.5,
+  owned:true,kit:true,popups:true,roundTails:true,rim:0x25282c,steer:.74,grip:7.5,slide:1.5,track:.55,
   engine:{idleHz:74,revHz:236,wave:'square'}}
 };
 export const MAJOR=new Set(['trunk','primary','secondary','tertiary','trunk_link','primary_link','secondary_link','tertiary_link']);
