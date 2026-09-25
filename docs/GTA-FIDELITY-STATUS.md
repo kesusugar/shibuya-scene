@@ -5190,6 +5190,91 @@ had to be added to `scripts/test-current.mjs`'s explicit list — see §16a.
   several patrol cars converging, which one "speaks" can jump between frames if their distances cross.
   Not perceptible against the plan's ≥6 s gap in practice, but worth knowing.
 
+## 9w. Police voice/Kaze detail, Step K1 — Kaze FR's proportions, sections, cabin, wheels (branch `claude/police-voice-kaze-3`, on `claude/police-voice-kaze-2`)
+
+**Plan:** `docs/PLAN-POLICE-VOICE-KAZE-DETAIL.md` Step K1.
+
+**What changed (`src/traffic/vehicle-shape.mjs`, `src/traffic/config.mjs`, `qa/gta-upgrade/
+carbench.html`, `.gitignore`).**
+- **Proportions.** `SILHOUETTE.fastback.axle` moved from `.310` to `.2826`, which is the plan's
+  2.43 m wheelbase on a 4.30 m body (`VEHICLES.ownCar.length/width/height` already matched the
+  plan's numbers exactly and were not touched). Front overhang comes out at 0.935 m against the
+  plan's "about 0.85 m" — the axle position is shared symmetrically with the rear in this loft
+  (front and rear overhang are equal), so hitting the wheelbase number exactly means the overhang
+  is close but not exact; not worth an asymmetric-axle rework for a single "about" figure.
+- **16 belt stations, 13 house stations** (was 11 and 9). The belt table's width column now
+  swells to a full 1.00 at both wheel arches and pinches to .94 at the waist between them — the
+  coke-bottle the plan asks for, entirely in a column the loft already had; the house table adds
+  a flat run at the roof's centre (a canopy) where the previous 9 points had none.
+- **Fender peaks.** `bodyRing()` gained a `dip` parameter: two points down the centreline that
+  sit `dip` below the fender-top crease, defaulting to 0 (so every other silhouette's flat bonnet
+  top is untouched — a test pins this). `fastback.fenderPeak: {at:.28, span:.22, amount:.055}`
+  drives it, centred on the front axle, so Kaze FR alone gets the classic two-fenders-over-a-low-
+  bonnet cross-section the reference photo has and the plan's Step P/K1 note calls out by name.
+- **Wheels hidden under a skirt, found on the device.** The shared wheel-anchor formula tucks a
+  wheel's centre in from the outer skin by 80% of the wheel's own width
+  (`W/2 - width*.80`); on a body this low, that buries most of the wheel behind the arch wall
+  instead of exposing it (side render: the wheel read as a thin dark crescent, not a wheel). A new
+  per-type `track` field (`d.track`, default `.80`, unused by anyone else) lets `ownCar` use `.55`
+  instead, moving the wheel a further 5 cm toward the outer skin without clipping through the
+  painted flank. **Honest result:** the geometry measurement (below) confirms 63% of the wheel's
+  height is unobstructed by paint, clearing the plan's 60% bar, and a second render after the fix
+  still *reads* the wheel as mostly hidden from a straight side angle -- 63% of a circle bounded by
+  a horizontal sill line is a narrower-looking crescent than 63% of a rectangle would be, and 5 cm
+  is small next to the car's ~2 m width. The number is real and tested; whether it *looks* enough
+  like an exposed wheel is worth the user's own eyes on a clean `carbench` capture, not just this
+  session's render (see Limitations).
+- **Not changed, and out of Step K1's scope:** the black pillars/roof panel (they are still
+  painted the body colour; K2 owns paint, including making them separate dark panels rather than
+  colour alone, per its own point 7); a dark brake disc behind the spokes (the wheel is one shared
+  geometry across every vehicle type and the close-up rim/tyre split has no third "disc" slot —
+  worth a future step, not part of the plan's K1 test list).
+
+**Device check.** Rendered `ownCar` through the real production path (`createVehicleAsset`,
+unmodified) in a same-origin dev-server page, side and front-3/4 views, before and after the
+`track` fix. The front view shows the fender-peak dip as a faint wave along the top edge of the
+black lower bumper/bonnet lip — the geometry does what §9w's belt-table note says. The wheel is the
+honest miss: the grid render before the fix (`before-track-fix-grid.jpg`) shows it almost entirely
+hidden behind the flank, and a second render after the fix (`side-front3q-after-track-fix.jpg`)
+still reads it as mostly hidden from a straight side angle, even though a direct vertex query
+confirms the sill sits at 63% of the wheel's diameter (see `evidence/kaze-detail/step-k1/
+metrics.json`) — a circular wheel cropped by a horizontal sill line shows less area than a
+rectangle cropped the same way, and this session's 5 cm track move is modest next to a ~2 m car.
+`qa/gta-upgrade/carbench.html` (side/front/front-¾/rear-¾, day and night, 1280×720, cost readout) is
+added per the plan, following `vehiclebench.html`'s pattern — **this dev server 404s every path
+under `/qa/` this session** (only `/`, `/src/**` etc. resolve; `punchbench.html` and the existing
+`vehiclebench.html` do too, so this is a pre-existing environment/routing limitation, not something
+this step broke), so the renders above were captured by importing the same modules into an
+already-loaded page instead. The machine's free memory (~2 GB of 16 GB, same as §9v) made the
+renderer time out repeatedly under Chrome automation, so these are two renders that succeeded out
+of several attempts, not a systematic sweep — the `carbench` file itself is untested by a real page
+load this session and should be opened once routing/resources allow it, and the wheel is worth the
+user's own eyes before deciding whether `track` needs to move further.
+
+**Tests.** `tests/kaze-detail.test.mjs` (6): the four headline dimensions (length, width, height,
+wheelbase, wheel diameter) are within 3% of the plan's numbers; the body has at least 15 authored
+stations; the fender peaks stand higher than the bonnet valley at the front axle; every other
+silhouette keeps an exactly flat bonnet (the dip is opt-in); the arch cut-out exposes at least 60%
+of the front wheel's height from the side; the front wheels sit at the new wheelbase. New file, so
+it had to be added to `scripts/test-current.mjs`'s explicit list (§16a, found in Step V) or
+`test:ci` would silently never run it. All fail on the code before (`SILHOUETTE_TABLES` did not
+exist; the old axle/track numbers do not clear the ±3%/60% bars).
+
+**Limitations.**
+- No real page-load device check this session (see above) — `carbench.html` itself should be
+  opened once the dev-server routing or the machine's memory allows it, and the renders in
+  `evidence/kaze-detail/step-k1/` are a same-origin substitute captured through injected modules,
+  not the bench file itself.
+- **The wheel reads as more hidden than the 63%-exposure number suggests.** A tested, geometry-true
+  number is not the same as a convincing photo; if the user's own look at `carbench` agrees it still
+  reads wrong, the next lever is `VEHICLES.ownCar.track` (currently `.55`, default `.80`) moved
+  further, or narrowing the floor pan near the axle instead of just moving the wheel outward — not
+  attempted here, since it touches the shared `bodyRing`/`sillAt` floor-width logic more deeply.
+- The front overhang (0.935 m vs "about 0.85 m") and the reference-photo checklist items the plan
+  mentions (items 1–9 of an analysis this session did not have the source text for) were judged
+  from the plan's own K1 prose, not a side-by-side photo comparison.
+- Black pillars/roof, the wing, mirrors, lamps, paint and the triangle/draw-call budget are K2.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
@@ -5452,6 +5537,14 @@ run by `test:ci` or `npm test` until it is added to that list. Two new files
 (`tests/police-voice.test.mjs`, `tests/police-loudspeaker.test.mjs`) passed on their own but did not
 change the CI test count until added. Always diff the `test:ci` test count before and after adding a
 test file, not just its own green run.
+
+**Police voice/Kaze Step K1 (§9w): `.gitignore` allowlists `qa/gta-upgrade/*` by filename.** A new
+QA bench file there is silently untracked until its name is added (`!/qa/gta-upgrade/<file>.html`),
+the same shape of trap as the test-file list above: `git status` shows nothing wrong because there
+is nothing to show. Also worth knowing: geometry changes to `src/traffic/vehicle-shape.mjs` are read
+by `bake:static` (the traffic fleet, not just `bake:playable`'s close-up pack) — `tests/static-key
+.test.mjs` and `tests/static-models.test.mjs` catch a stale bake, but only if the bake is rerun
+before the PR, not just the playable pack.
 
 ## 17. Files that matter
 
