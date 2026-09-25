@@ -22,7 +22,8 @@ export const LAMP=Object.freeze({off:0x4a1216,brake:0xff2a22,indicator:0xffa32b}
 // records shadow-casting at registration; matching the names traffic already uses means the
 // player's car lights up on exactly the curve every other car does, with no second tuning pass.
 const NAMES={paint:'vehicle-paint',glass:'vehicle-glass',dark:'vehicle-dark',plate:'vehicle-plate',
- lamp:'traffic-player-front',tail:'traffic-player-rear',tyre:'vehicle-tyre',rim:'vehicle-rim'};
+ lamp:'traffic-player-front',tail:'traffic-player-rear',tyre:'vehicle-tyre',rim:'vehicle-rim',
+ lightbar:'vehicle-lightbar'};
 const WHEELS=['rearLeftWheel','rearRightWheel','frontLeftWheel','frontRightWheel'];
 /** Kept from the previous model, because the vehicle transition already opens doors by this name. */
 const doorName=side=>`player-vehicle-door-${side}`;
@@ -50,7 +51,12 @@ function materialsFor(paintColour,rimColour=0x9aa4ab){
   lamp:new MeshStandardMaterial({color:0xfff2d6,emissive:0xffe5ae,emissiveIntensity:.14}),
   tail:new MeshStandardMaterial({color:LAMP.off,emissive:LAMP.off,emissiveIntensity:.25}),
   tyre:new MeshStandardMaterial({color:0x0e1114,roughness:.96,metalness:0}),
-  rim:new MeshStandardMaterial({color:rimColour,roughness:.31,metalness:.78})
+  rim:new MeshStandardMaterial({color:rimColour,roughness:.31,metalness:.78}),
+  // Step P: the patrol car's light-bar lens, close up. This model has no siren state to flash
+  // by, so it sits at its dark-red resting colour (matching the traffic batch's own at-rest
+  // tint) rather than the leaked default material an unmatched part used to fall back to.
+  lightbar:new MeshStandardMaterial({color:0x2a0605,roughness:.4,metalness:.05,
+   emissive:0x7a0d08,emissiveIntensity:.3})
  };
 }
 

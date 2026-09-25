@@ -83,8 +83,11 @@ test('the patrol car is black and white with a red roof bar, and nothing written
  assert.equal(p.livery,LIVERY.police.id);
  const shape=buildVehicleShape('police');
  assert.ok(shape.anchors.lightbar,'no light bar anchor for the siren');
- const box=new Box3().setFromBufferAttribute(shape.geometry.tail.attributes.position);
+ // Step P: the bar is its own part, not the tail lamp, so the siren can flash it independently.
+ const box=new Box3().setFromBufferAttribute(shape.geometry.lightbar.attributes.position);
  assert.ok(box.max.y>VEHICLES.police.height,'the light bar is not on the roof');
+ const tailBox=new Box3().setFromBufferAttribute(shape.geometry.tail.attributes.position);
+ assert.ok(tailBox.max.y<VEHICLES.police.height,'the tail lamps should not reach the roof any more');
  assert.equal(buildVehicleShape('sedan').anchors.lightbar,undefined);
 });
 

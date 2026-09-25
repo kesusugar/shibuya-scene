@@ -5042,6 +5042,79 @@ The orange widebody became the player's own car (§9p). The other two:
   player can take both, they slide more than the sedan and rev higher; the big wing and no bonnet
   skin. `ui-commercial-mobility` (the opening staging) still passes with the two extra parked cars.
 
+## 9u. Police voice/Kaze detail, Step P — the patrol car reads as a Japanese black-and-white (branch `claude/police-voice-kaze`, from `master` `b2a39ef`)
+
+**Plan:** `docs/PLAN-POLICE-VOICE-KAZE-DETAIL.md` Step P.
+
+**Diagnosis.** The livery band was a height *fraction* (`LIVERY.police.band` in `src/traffic/fleet.mjs`)
+multiplied by the vehicle's height to get a metres threshold the body shader splits on
+(`liveryCode`, `FLEET_LIVERY_GLSL`). At `.58` that threshold (0.853 m on a 1.47 m-tall patrol car)
+sat well below the sedan silhouette's real beltline (`SILHOUETTE.sedan.belt` reaches 1.110 m across
+the doors, `src/traffic/vehicle-shape.mjs`) — deep in the lower door. The car was mostly the upper
+(white) colour with a thin black sliver at the rocker: not black-and-white, closer to a plain pale
+car, which read as "grey" rather than a crisp two-tone. The shader/batching pipeline itself
+(`installLivery`, the `USE_COLOR_ALPHA`-not-`USE_BATCHING_COLOR` guard from §16a/§9n) was already
+correct — this was purely the wrong threshold. A second, smaller effect was found and left
+unfixed: see Limitations.
+
+**What changed.**
+- **Livery band.** `LIVERY.police.band` is now `.74` (band 1.088 m, within 2 cm of the sedan
+  profile's actual beltline at the car's centre). Black now covers the bonnet front, doors, boot
+  sides and both bumpers (which live in the same `paint`/body group, so they fall out of this fix
+  automatically); white covers the doors' top edge, pillars and roof.
+- **Light bar.** The flat `BoxGeometry` plank pushed into the `tail` part is replaced with a
+  roof-width bar on a low dark mount (`parts.dark`): two 12-segment `CylinderGeometry` lens
+  sections (rounded, not boxy) in a new sixth fleet batch (`lightbar`, `src/traffic/fleet.mjs`
+  `FLEET_PARTS`), either side of a clear/white centre section that shares the existing headlamp
+  batch (`lamp`/`front`, always lit, never flashing). A pair of small cylinder lamps low in the
+  front grille share the `lightbar` batch. `render.mjs`'s `sync()` gives `meshes.lightbar` its own
+  per-instance colour (`flashPhase()`-driven red flash while `v.siren`, a dim red rest state)
+  independent of `meshes.rear`, so the siren no longer ties the light bar to the tail lamp's colour.
+- **Draw calls.** `traffic-fleet-lightbar` is a new BatchedMesh, contributed to only by the police
+  type (like `glass` already skips the scooter) — `stats.batches` goes up by exactly 1 for the
+  whole fleet, the plan's allowed budget.
+
+**Tests.** `tests/traffic-fleet.test.mjs` (11, 4 new/changed): the livery band sits within 0.15 m of
+the profile's real beltline vertex and above 55% of the vehicle's height (not down in the door);
+the light bar geometry has more than 150 vertices (a rounded cylinder, not a handful of box
+corners), sits above the roof, and is not part of `tail`; the fleet still draws in exactly 6
+batches (was 5) both directly and through `buildTraffic`'s `stats.batches`. All four fail against
+the pre-fix code (checked with `git stash` before writing the fix).
+
+**Device check.** Traffic spawns police at only 1.5/100 weight and the Scramble camera keeps every
+car small, so the precise colour comparison was done by rendering the exact production code
+(`buildVehicleShape`, `fleetGeometry`, `installLivery`, `paintOf`, `liveryCode`, unmodified) under
+the exact `DAY_NIGHT` day/night light constants, standalone, in a same-origin dev-server page — see
+`evidence/police-voice-kaze/step-p/metrics.json` for the numbers and
+`day-and-night-near-far-taxi-sedan.jpg` for a live in-game render beside a taxi and a sedan. A
+single-pixel vertical probe through the door and roof: day, door `rgb(0,0,0)` / roof
+`rgb(210,208,203)` — crisp black-and-white; night, door `rgb(0,0,0)` / roof `rgb(96,98,98)` — the
+split is in the right place and the roof is clearly not black, but it is a mid-grey rather than a
+crisp white (see Limitations). The live app was reloaded at HIGH/night with the new code active
+through HMR: 0 console errors, drawCalls 269, scene otherwise unchanged.
+
+**Limitations.**
+- **Traffic paint is not registered for night emission.** `src/environment/day-night.mjs`'s
+  `installNightEmission`/`DayNightSystem.register()` only matches building, window, ground, sign
+  and train mesh names — nothing under `traffic-fleet-*`. At night every traffic material gets only
+  the global 8%-intensity key light and 22%-intensity hemisphere fill with no per-material
+  compensation, so the police livery's white now sits at the correct height but renders at about
+  38% of its daytime brightness (a visible light grey, not a crisp white) — see the probe numbers
+  above. This is a second, smaller contributor to the original "looks grey at night" report,
+  separate from the beltline bug, and is **not fixed in this step**: it would mean either adding
+  traffic to the night-emission registry or giving the livery shader its own night boost, and
+  either changes how every other traffic colour reads at night too, which deserves its own look
+  rather than folding into this PR. Flagged for the user's own eyes.
+- No live screenshot of a spawned patrol car at the Scramble crossing was captured (police is rare
+  in ordinary traffic; forcing its spawn weight up on the shared dev session was tried, then
+  reverted, without a clean screenshot landing before time ran out — see the standalone render
+  instead).
+- The player's own close-up vehicle asset (`src/player/vehicle-asset.mjs`, used if the player ever
+  drives a stolen patrol car up close) has no livery mechanism at all — it paints the whole body one
+  flat colour (`VEHICLES.police.color`, near-black). This predates Step P and is out of its scope
+  (Step P is the traffic-rendered patrol car only, per the plan), but is worth a future step if the
+  player drives a stolen patrol car often enough to notice.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
@@ -5289,6 +5362,14 @@ seconds. Check the fresh case before blaming the harness.
   freeze every signal on the map through the crossing-clear hold.
 - **Timing a live check on wall time under SwiftShader.** `FrameGate` clamps each frame to
   0.1 s, and at 0.2 fps a 14 s wall window is about 0.3 s of simulation.
+
+**Police voice/Kaze Step P (§9u): a livery band is a fraction of height, not of the profile.**
+`LIVERY.police.band` was `.58` of `VEHICLES.police.height`, but the sedan silhouette's beltline
+(where the plan wants black-below/white-above to split) is at `.755` of height at the car's centre
+— a different number living in a different table (`SILHOUETTE.sedan.belt` in
+`vehicle-shape.mjs`, not `VEHICLES`). Tuning the band against the vehicle's overall height alone
+put the split well down in the door. Check a livery band against the actual profile vertex it is
+meant to land on, not just against a plausible-looking fraction.
 
 ## 17. Files that matter
 

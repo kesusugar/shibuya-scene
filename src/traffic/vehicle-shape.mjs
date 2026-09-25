@@ -272,7 +272,7 @@ export function buildVehicleShape(type,{detail=1}={}){
  const d=VEHICLES[type],profile=SILHOUETTE[STYLE[type]??'sedan'];
  const L=d.length,W=d.width,H=d.height;
  const radius=wheelRadius(type);
- const parts={paint:[],glass:[],rubber:[],rim:[],lamp:[],tail:[],dark:[],plate:[]};
+ const parts={paint:[],glass:[],rubber:[],rim:[],lamp:[],tail:[],dark:[],plate:[],lightbar:[]};
  const round=Math.min(.09,W*.055);
 
  // --- lower body -------------------------------------------------------------------------
@@ -355,12 +355,33 @@ export function buildVehicleShape(type,{detail=1}={}){
   lightbar=[-W*widthF*.2,H*topF+.12,(mid+.06)*L];
  }
  if(d.lightbar){
+  // Step P: a roof-width bar on a low mount, not a flat plank flush with the roof. The mount is
+  // `dark`, plain, unlit. The lens is rounded (a cylinder on its side, not a box) and split into
+  // three sections: two red segments in their own `lightbar` batch, so the siren can flash them
+  // without them being the tail lamp (the old plank was `tail`, so it was always exactly the
+  // tail lamp's colour and never its own fitting), and a clear/white centre in the existing
+  // headlamp batch (`lamp`), always lit, never flashing.
   const flat=profile.house.filter(([,y])=>y>=.985);
   const mid=flat.length?(flat[0][0]+flat[flat.length-1][0])/2:0;
   const [topF,widthF]=at(profile.house,mid);
-  const bar=new BoxGeometry(W*widthF*.78,.11,.30);
-  bar.translate(0,H*topF+.06,mid*L);parts.tail.push(bar);
-  lightbar=[0,H*topF+.12,mid*L];
+  const barY=H*topF+.075,barWidth=W*widthF*.72,barZ=mid*L;
+  const mount=new BoxGeometry(barWidth*.9,.045,.15);
+  mount.translate(0,H*topF+.03,barZ);parts.dark.push(mount);
+  const segLen=barWidth*.30,radius=.072,segments=12;
+  for(const side of [-1,1]){
+   const seg=new CylinderGeometry(radius,radius,segLen,segments);seg.rotateZ(Math.PI/2);
+   seg.translate(side*(barWidth/2-segLen/2),barY,barZ);parts.lightbar.push(seg);
+  }
+  const centre=new CylinderGeometry(radius*.86,radius*.86,barWidth*.34,segments);
+  centre.rotateZ(Math.PI/2);centre.translate(0,barY,barZ);parts.lamp.push(centre);
+  lightbar=[0,barY+radius,barZ];
+  // A pair of small red lamps low in the grille, in the same batch as the roof lens so they
+  // flash together.
+  const [,frontWidthF]=at(profile.belt,.5);
+  for(const side of [-1,1]){
+   const glamp=new CylinderGeometry(.028,.028,.05,10);glamp.rotateX(Math.PI/2);
+   glamp.translate(side*W*frontWidthF*.30,H*profile.arch*1.05,L*.5-.045);parts.lightbar.push(glamp);
+  }
  }
 
  // --- Step H: body kit and pop-up lamps (dark panels, so the two-tone needs no shader) ------------

@@ -9,6 +9,7 @@ import {restoreGroundModel} from '../src/ground/model.mjs';
 import {restoreTrafficGraph} from '../src/traffic/graph.mjs';
 import {FLEET_PARTS,PAINT_MIX,PAINT_CLASS,TAXI_SCHEMES,LIVERY,paintOf,fleetGeometry,FLEET_LIVERY_GLSL} from '../src/traffic/fleet.mjs';
 import {noAO} from '../src/fidelity/pipeline.mjs';
+import {buildVehicleShape} from '../src/traffic/vehicle-shape.mjs';
 
 const data=JSON.parse(readFileSync('public/data/shibuya-scene-data.json'));
 const pack=JSON.parse(readFileSync('public/data/shibuya-static-models.json'));
@@ -55,19 +56,23 @@ test('every lofted type has body, glass, dark, front and rear',()=>{
  }
 });
 
-test('traffic draws in five batches whatever the number of types, named as day-night expects',()=>{
+test('traffic draws in six batches whatever the number of types, named as day-night expects',()=>{
  const t=traffic('high');
  t.update(1/30);
  const meshes=trafficMeshes(t.root);
- assert.equal(meshes.length,5,meshes.map(m=>m.name).join());
+ // Step P: the patrol car's light-bar lens is a sixth, optional batch (like `glass` already
+ // skips the scooter, this one is skipped by every type but the patrol car) -- the plan allows
+ // at most one extra draw call for all police cars together, spent here.
+ assert.equal(meshes.length,6,meshes.map(m=>m.name).join());
  assert.ok(meshes.every(m=>m.isBatchedMesh));
  // Before Step B this was one InstancedMesh per type and part: 34 at HIGH.
  const before=Object.keys(VEHICLES).length*5-1;
  assert.ok(meshes.length<=before);
  assert.ok(meshes.some(m=>/^traffic-.*-front$/.test(m.name)),'day-night ramps the headlamps by this name');
  assert.ok(meshes.some(m=>/^traffic-.*-rear$/.test(m.name)),'day-night ramps the tail lamps by this name');
+ assert.ok(meshes.some(m=>m.name==='traffic-fleet-lightbar'),'the patrol car has its own light-bar batch');
  for(const m of meshes)if(/-(front|rear)$/.test(m.name))assert.ok(noAO(m),`${m.name} lost its no-AO exemption`);
- assert.ok(t.stats.batches<=38);
+ assert.ok(t.stats.batches<=39);
  t.dispose();
 });
 
@@ -109,4 +114,37 @@ test('the livery band is written into the body shader, and every directive start
 test('a car keeps its paint when it re-spawns as the same type',()=>{
  const a=paintOf(12,'taxi'),b=paintOf(12,'taxi');
  assert.equal(a.hex,b.hex);assert.equal(a.livery,b.livery);
+});
+
+// PLAN-POLICE-VOICE-KAZE-DETAIL Step P: the patrol car reads as a Japanese black-and-white.
+test('the police livery band sits at the beltline, not down in the door',()=>{
+ const shape=buildVehicleShape('police',{detail:0});
+ const pos=shape.geometry.paint;
+ let beltY=-Infinity;
+ for(let i=0;i<pos.attributes.position.count;i++){
+  if(Math.abs(pos.attributes.position.getZ(i))<.05)beltY=Math.max(beltY,pos.attributes.position.getY(i));
+ }
+ const h=VEHICLES.police.height,bandY=LIVERY.police.band*h;
+ assert.ok(Math.abs(bandY-beltY)<.15,`band ${bandY.toFixed(3)} vs the actual beltline ${beltY.toFixed(3)}`);
+ assert.ok(bandY>h*.55,'the band must not sit down in the lower door');
+});
+
+test('the light bar is rounded, sits above the roof, and is not the tail lamp',()=>{
+ const shape=buildVehicleShape('police',{detail:0});
+ const h=VEHICLES.police.height;
+ assert.ok(shape.anchors.lightbar[1]>h*.95,'the light bar must sit above the roof');
+ const g=fleetGeometry('police');
+ assert.ok(g.lightbar,'the patrol car has no light-bar batch');
+ assert.ok(g.lightbar.attributes.position.count>0);
+ // A box loft (the old flat plank) has a handful of vertices; a cylinder with more than 8
+ // radial segments, three of them merged (two lens segments and two grille lamps), does not.
+ assert.ok(g.lightbar.attributes.position.count>150,`too few vertices to be rounded: ${g.lightbar.attributes.position.count}`);
+});
+
+test('the light bar costs the plan\'s allowed one extra draw call, not more',()=>{
+ const t=traffic('high');
+ t.update(1/30);
+ const meshes=trafficMeshes(t.root);
+ assert.equal(meshes.length,6);
+ t.dispose();
 });
