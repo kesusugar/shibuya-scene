@@ -690,6 +690,9 @@ export default function Home(){
    // PLAN-WEAPONS W3: an officer's revolver -- the flash, the round's streak and where it went, the
    // recorded revolver shot with the street's echo. A hit on the player bleeds and knocks the view.
    for(const e of w.gunfire??[]){if(e.kind!=='warn'&&e.kind!=='shot')continue;
+    // The flash from the drawn revolver's own muzzle when a near body draws the officer; the
+    // director's estimate (in front of the chest) otherwise.
+    if(lifeEntry.hooks.current?.muzzleOf?.(e.officer.id,weaponMuzzle,weaponBarrel)){const lift=e.to.y-e.from.y;e.from={x:weaponMuzzle.x,y:weaponMuzzle.y,z:weaponMuzzle.z};if(e.kind==='warn')e.to={x:e.from.x,y:e.from.y+lift,z:e.from.z};}
     const dx=e.to.x-e.from.x,dy=e.to.y-e.from.y,dz=e.to.z-e.from.z,l=Math.hypot(dx,dy,dz)||1,dir={x:dx/l,y:dy/l,z:dz/l};
     arsenal?.effects.muzzle(e.from.x,e.from.y,e.from.z,dir);
     let end=e.to;

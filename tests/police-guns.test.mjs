@@ -130,3 +130,11 @@ test('the director draws, warns and fires through its frame, and a hit hurts the
  assert.ok(events.some(e=>e.kind==='shot'),'never fired on an armed player at ☆3');
  assert.ok(hurt>0,'a hit did not hurt the player');
 });
+
+test('an officer drawn by a near body reports the drawn revolver\'s muzzle; nobody else does',async()=>{
+ const {createNearCharacters}=await import('../src/life/near-characters.mjs');
+ const {Vector3}=await import('three');
+ const near=createNearCharacters('high',{});
+ assert.equal(near.muzzleOf(1,new Vector3(),new Vector3()),false,'a citizen the pool is not holding has no muzzle');
+ near.dispose();
+});

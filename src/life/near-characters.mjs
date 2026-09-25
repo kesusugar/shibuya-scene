@@ -319,6 +319,8 @@ export function createNearCharacters(tier='high',{ctx=null}={}){
   /** The reaction word a held citizen's body is showing this frame, or null. For QA. */
   /** The clip a held citizen's body is playing (overlay first), or null. For QA. */
   actionOf(id){return slots.find(x=>x.id===id)?.figure.action??null;},
+  /** PLAN-WEAPONS W3: where a held citizen's drawn gun's muzzle is, into two Vector3s; false if none. */
+  muzzleOf(id,point,direction){const s=slots.find(x=>x.id===id&&x.human);return s?.figure.weapons?.muzzle(point,direction)??false;},
   reactionOf(id){return slots.find(x=>x.id===id)?.reaction??null;},
   /** The measured pace a held citizen's legs are driven by, for QA: {speed, moving}. */
   paceOf(id){const s=slots.find(x=>x.id===id);return s?{speed:s.pace??0,moving:!!s.moving}:null;},
