@@ -59,6 +59,9 @@ import {createCrowdVoices,prioritise} from '../src/player/voices.mjs';
 import {createMeleeCombat} from '../src/player/combat.mjs';
 import {createArsenal} from '../src/player/arsenal.mjs';
 import {createGunfire} from '../src/audio/gunfire.mjs';
+import {lineOfSight,peopleAlong} from '../src/player/ballistics.mjs';
+import {BLOOM_KICK} from '../src/fidelity/pipeline.mjs';
+import {ARCHETYPES as CROWD_ARCHETYPES} from '../src/life/config.mjs';
 import {createFeedbackBus} from '../src/app/feedback-bus.mjs';
 import {createVehicleTransition} from '../src/player/vehicle-transition.mjs';
 import {boxOverlap} from '../src/traffic/path.mjs';
@@ -189,7 +192,29 @@ export default function Home(){
    entry:{x:door.x,z:door.z,heading:door.heading},
    seat:{x:a.seat.x,z:a.seat.z,heading:entry.slot.heading}},entry.slot);
  };
- const attack=()=>{if(playerMode&&!driving&&!vehicleTransition.active&&player?.state.alive)melee.request();};
+ const attack=()=>{if(!(playerMode&&!driving&&!vehicleTransition.active&&player?.state.alive))return;
+  // PLAN-WEAPONS W2: with the pistol out the attack button is the trigger; on a phone (no pointer
+  // lock, no mouse to aim with) it locks on (R16).
+  if(arsenal?.trigger({touch:touchEnabled&&document.pointerLockElement!==canvas}))return;
+  melee.request();};
+ // PLAN-WEAPONS W2: the collision world a bullet sees, read through the live hooks every call.
+ const weaponMuzzle=new THREE.Vector3(),weaponBarrel=new THREE.Vector3(),viewDirection=new THREE.Vector3();
+ const weaponWorld:any={
+  solid:(x:number,z:number)=>!!lifeEntry.hooks.current?.network?.ctx?.solid?.(x,z,.05),
+  ground:(x:number,z:number)=>lifeEntry.hooks.current?.network?.ctx?.height?.(x,z)??0,
+  get cars(){return (trafficEntry.hooks.current?.sim?.pool??[]).filter((v:any)=>v.active);},
+  dimsOf:(v:any)=>(VEHICLES as any)[v.type]??null,
+  people:(from:any,dir:any,range:number,wide=false)=>{const sim=lifeEntry.hooks.current?.sim;if(!sim)return [];
+   if(!wide)return peopleAlong(sim.grid,from,dir,range);
+   const out:any[]=[];for(const p of sim.pool)if(p.active&&Math.hypot(p.x-from.x,p.z-from.z)<=range)out.push(p);return out;},
+  bodyOf:(p:any)=>({y:p.height??0,height:(CROWD_ARCHETYPES as any)[p.archetype]?.height??1.76}),
+  // Children are never combat targets in this game (combat.mjs `eligible`); a bullet is not stopped by one either.
+  skip:(p:any)=>!p.active||p.controlled||p.struck!==undefined||p.combatDead||p.archetype==='kid',
+  clear:(a:any,p:any)=>lineOfSight(weaponWorld.solid,a,p),
+  get crowd(){return lifeEntry.hooks.current?.sim??null;},
+  wound:(p:any,hit:any)=>melee.wound(lifeEntry.hooks.current?.sim,player,p,hit),
+  bleed:(pt:any,dir:any)=>{const sim=lifeEntry.hooks.current?.sim;sim?.splashes?.push({x:pt.x,y:weaponWorld.ground(pt.x,pt.z),z:pt.z,dx:dir.x*2,dz:dir.z*2,scale:.55,life:.4});},
+  muzzle:(figure:any)=>figure?.weapons?.muzzle(weaponMuzzle,weaponBarrel)?{x:weaponMuzzle.x,y:weaponMuzzle.y,z:weaponMuzzle.z}:null};
  // PLAN-WEAPONS W1: 1/2/3, the wheel and the pad's weapon button. Not mid-swing, not in a car.
  const weaponBusy=()=>melee.phase!=='idle'||!!vehicleTransition.active||!player?.state.alive;
  const selectWeapon=(n:number)=>{if(playerMode&&arsenal?.select(n,{busy:weaponBusy(),driving}))touchPad?.setWeapon(arsenal.current);};
@@ -203,18 +228,19 @@ export default function Home(){
   a.x=player.state.x;a.z=player.state.z;a.heading=player.state.heading;a.speed=player.state.speed;
   a.lod='near';a.animationTime=(a.animationTime??0)+dt;a.height=player.state.y;};
  const releaseCrowdSlot=()=>{const a=crowdSlot();if(!a)return;a.controlled=false;a.active=false;a.mode='ambient';};
+ let aimCamera=0;
  const applyPlayerCamera=(dt:number)=>{const ctx=lifeEntry.hooks.current?.network?.ctx??null;// RUN 9: once the body is IN the car, frame the car, not the body. Following the player
   // through the doorway put the eye a few metres behind a point that is inside the vehicle,
   // so the camera sat on the roof and the whole entry was shot from inside the bodywork.
   // `seated` arrives before `driving` does -- control transfers at the end of the sequence,
   // and the camera has to move at the start of the seat, not after the door shuts.
   const inCar=(driving||transitionSeated)&&playerCar;
-  const state=inCar?playerCar.state:player.state;const desired=inCar?vehicleCamera(state,followPose,ctx):playerCamera(state,followPose,ctx);const c:any={...followCamera.update(desired,{x:state.x,y:state.y+(driving?CAR.eye:PLAYER.eye),z:state.z},ctx,dt,driving?'drive':'walk')};
+  const state=inCar?playerCar.state:player.state;aimCamera+=(((!inCar&&player.state.aim>0)?1:0)-aimCamera)*(1-Math.exp(-10*dt));const desired=inCar?vehicleCamera(state,followPose,ctx):playerCamera(state,followPose,ctx,aimCamera);const c:any={...followCamera.update(desired,{x:state.x,y:state.y+(driving?CAR.eye:PLAYER.eye),z:state.z},ctx,dt,driving?'drive':'walk')};
   if(shake>.002){const t=performance.now()/1000;
    // Two frequencies that do not divide into each other, so it reads as a knock rather than
    // a hum, and it only moves the eye -- the look-at point stays put or the view swims.
    c.x+=Math.sin(t*37)*shake*SHAKE_SCALE*SHAKE_THROW;c.y+=Math.sin(t*53)*shake*SHAKE_SCALE*SHAKE_THROW*.6;c.z+=Math.cos(t*43)*shake*SHAKE_SCALE*SHAKE_THROW;}
-  const targetFov=driving?61+Math.min(10,Math.abs(state.speed)*.7):50;const nextFov=view.fov+(targetFov-view.fov)*(1-Math.exp(-3*dt));if(Math.abs(nextFov-view.fov)>.01){view.fov=nextFov;view.updateProjectionMatrix();}
+  const targetFov=driving?61+Math.min(10,Math.abs(state.speed)*.7):50-(50-PLAYER.aimFov)*aimCamera;const nextFov=view.fov+(targetFov-view.fov)*(1-Math.exp(-3*dt));if(Math.abs(nextFov-view.fov)>.01){view.fov=nextFov;view.updateProjectionMatrix();}
   view.position.set(c.x,c.y,c.z);view.lookAt(c.tx,c.ty,c.tz);
   controls.target.set(c.tx,c.ty,c.tz);};
  // A vehicle box over the player is a knock-down. The traffic simulation's own overlap test
@@ -395,7 +421,13 @@ export default function Home(){
    soundscape=createSoundscape(soundBank,{scramble:SCRAMBLE_EAR});}
   // PLAN-POLICE W1/W3: the wanted level, the patrol cars' sirens and lamps.
   // PLAN-WEAPONS: fists, pistol and katana; the gunfire and the katana's clank on the same bus.
-  if(!arsenal){arsenal=createArsenal();groups.dynamic.add(arsenal.effects.root);}
+  if(!arsenal){arsenal=createArsenal({
+   // W2: every shot is heard (recorded CC0 gunshot + the street's slapback), knocks the camera a
+   // little and blooms its frame; the HQ crowd sees it through the bounded witness pass.
+   onShot:(shot:any)=>{gunfire?.shot(shot.from.x,shot.from.y,shot.from.z,shot.heading,{kind:'pistol',hit:shot.hit});
+    soundBank?.duck?.(.5,1.4);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_SHOT);},
+   onWitness:(event:any)=>lifeEntry.hooks.current?.witness?.(event)??0});
+   groups.dynamic.add(arsenal.effects.root);}
   if(!gunfire)gunfire=createGunfire(()=>playerAudio?.context??null,()=>soundBank,{solid:(x:number,z:number)=>!!lifeEntry.hooks.current?.network?.ctx?.solid?.(x,z,.1)});
   if(!police)police=createPoliceDirector({getAudioContext:()=>playerAudio?.context??null,getAudioBus:()=>soundBank?.bus??null,koban:KOBAN});
   void soundBank.load();
@@ -410,7 +442,7 @@ export default function Home(){
   touchPad?.setDriving(false);touchPad?.show();
   const sim=trafficEntry.hooks.current?.sim;
   if(sim&&!playerCar){playerCar=createPlayerVehicle(sim,ctx);if(!playerCar.spawn(player.state.x,player.state.z))console.warn('[Player] no room to park the car');}
-  playerMode=true;combatDeathReported=false;controls.enabled=false;player.attach(canvas,{onExit:()=>exitPlayer(),onDrive:()=>toggleDrive(),onAttack:()=>attack(),onWeapon:(n:number)=>selectWeapon(n),onWeaponCycle:(d:number)=>cycleWeapon(d),onHorn:()=>{if(driving&&playerCar&&!police?.toggleSiren(playerCar))soundscape?.horn(playerCar.state.x,playerCar.state.z);}});setPlayerHit(null);setMode('player');
+  playerMode=true;combatDeathReported=false;controls.enabled=false;player.attach(canvas,{onExit:()=>exitPlayer(),onDrive:()=>toggleDrive(),onAttack:()=>attack(),onWeapon:(n:number)=>selectWeapon(n),onWeaponCycle:(d:number)=>cycleWeapon(d),onAim:(on:boolean)=>arsenal?.aim(on&&!driving),onReload:()=>{if(!driving)arsenal?.reload();},onHorn:()=>{if(driving&&playerCar&&!police?.toggleSiren(playerCar))soundscape?.horn(playerCar.state.x,playerCar.state.z);}});setPlayerHit(null);setMode('player');
   (window as any).__SHIBUYA_PLAYER__=player;(window as any).__SHIBUYA_CAR__=playerCar;
   // Foot IK is invisible from outside: a solver that never ran and a solver that ran and
   // declined to move anything look identical on screen. Under ?qa=1 the figure and the
@@ -476,7 +508,7 @@ export default function Home(){
  // RUN 11.4: a person is not a wall. Per-person shake used to be multiplied by how many were hit
  // in the frame, so a crowd pinned the camera at full shake (0.42 m of throw). Now one bounded
  // knock per frame of contact, and a smaller, sharper one for a landed punch.
- const SHAKE_BUMP=.05,SHAKE_PER_HIT=.12,SHAKE_PERSON_MAX=.45,SHAKE_PUNCH=.07,SHAKE_PUNCH_MAX=.25,SHAKE_FALL=2.6,SHAKE_THROW=.42;
+ const SHAKE_SHOT=.06,SHAKE_BUMP=.05,SHAKE_PER_HIT=.12,SHAKE_PERSON_MAX=.45,SHAKE_PUNCH=.07,SHAKE_PUNCH_MAX=.25,SHAKE_FALL=2.6,SHAKE_THROW=.42;
  // RUN 12.5: the OS "reduce motion" setting quarters every camera knock; ?shake=0 removes it.
  const SHAKE_SCALE=params.get('shake')==='0'?0:(typeof matchMedia==='function'&&matchMedia('(prefers-reduced-motion: reduce)').matches?.25:1);
  let shake=0,lastAccidentWitness=-Infinity;
@@ -501,7 +533,9 @@ export default function Home(){
    // that want to know, not a second voice.
   }
  });
- let lastPlayTick=performance.now();let qaReadyRef=false;const frame=(now:number)=>{if(disposed)return;const dt=frameGate.step(now);if(dt===null){raf=requestAnimationFrame(frame);return;}const frameStart=performance.now(),updateStart=frameStart;const playElapsed=document.hidden?0:Math.max(0,(now-lastPlayTick)/1000);lastPlayTick=now;frameHits=0;{const s=lifeEntry.hooks.current?.sim;if(s)s.postUpdate=null;}if(playerMode&&player)player.updateInput(dt);if(playerMode&&player)arsenal?.frame(dt,{player,driving:driving||!!vehicleTransition.active});if(playerMode&&player){
+ let lastPlayTick=performance.now();let qaReadyRef=false;const frame=(now:number)=>{if(disposed)return;const dt=frameGate.step(now);if(dt===null){raf=requestAnimationFrame(frame);return;}const frameStart=performance.now(),updateStart=frameStart;const playElapsed=document.hidden?0:Math.max(0,(now-lastPlayTick)/1000);lastPlayTick=now;frameHits=0;{const s=lifeEntry.hooks.current?.sim;if(s)s.postUpdate=null;}if(playerMode&&player)player.updateInput(dt);if(playerMode&&player){view.getWorldDirection(viewDirection);arsenal?.frame(dt,{player,figure:playerFigure,driving:driving||!!vehicleTransition.active,world:weaponWorld,
+  camera:{position:view.position,direction:viewDirection},touch:touchEnabled&&document.pointerLockElement!==canvas,time:lifeEntry.hooks.current?.sim?.time??0});
+  BLOOM_KICK.value=arsenal?.effects.kick??0;}else BLOOM_KICK.value=0;if(playerMode&&player){
   if(vehicleTransition.active){const pose=vehicleTransition.update(dt);if(pose){
     // The DOOR comes from the stage, not from the overall phase. `sin(phase * PI)` opened the
     // panel as the player started walking and had it shut again by the time they sat down,
@@ -611,8 +645,9 @@ export default function Home(){
     player:driving?null:player.state,car:driving?playerCar?.state:null,people:crowdSim?.pool,cars:trafficEntry.hooks.current?.sim?.pool,
     pedestrianGreen:crowdSim?.signals?.phase?.()[0]==='PEDESTRIAN'});}
   playUI?.update(playElapsed,player.state,playerCar?.state,driving,playerReach,frameHits);
+  if(arsenal)playUI?.setWeapon(arsenal.snapshot(),{aiming:player.state.aim>0&&!driving,locked:player.state.aimLock!=null});
   if(police){policeFrustum.setFromProjectionMatrix(policeMatrix.multiplyMatrices(view.projectionMatrix,view.matrixWorldInverse));
-   const w=police.frame(dt,{player:player.state,car:playerCar,driving,melee:melee.snapshot(),traffic:trafficEntry.hooks.current?.sim,crowd:crowdSim,listener:{x:view.position.x,z:view.position.z,vx:0,vz:0},visible:inView,hurt:(n:number,src:string)=>{if(!driving)player.hurt?.(n,src);}});
+   const w=police.frame(dt,{player:player.state,car:playerCar,driving,melee:melee.snapshot(),weapons:arsenal?.snapshot()??null,traffic:trafficEntry.hooks.current?.sim,crowd:crowdSim,listener:{x:view.position.x,z:view.position.z,vx:0,vz:0},visible:inView,hurt:(n:number,src:string)=>{if(!driving)player.hurt?.(n,src);}});
    playUI?.setWanted(w,dt);(window as any).__SHIBUYA_POLICE__=police;
    // W2: 逮捕. Out of the car at once, frozen, and the game-over dialog with its own message;
    // 「もう一度」 wakes the player at the koban with the stars cleared.

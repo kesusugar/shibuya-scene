@@ -37,6 +37,16 @@ const POSES=[
  {id:'katana-cut',label:`katana cut at its peak (${SWORD.peak}s of ${SWORD.duration}s)`,state:{weapon:'katana'},
   run(f,s){s.attackName='SwordAttack';s.attackDuration=s.attackTime=SWORD.duration;
    while(SWORD.duration-s.attackTime<SWORD.peak){f.update(s,dt);s.attackTime=Math.max(0,s.attackTime-dt);}}},
+ // W2: the pistol. The target (the yellow ball) is 6 m ahead at chest height; the red line is the
+ // muzzle ray, drawn to the target's distance.
+ {id:'pistol-aim',label:'pistol aimed, standing',state:{weapon:'pistol',aim:1,aimHeading:0},run(f,s){for(let i=0;i<30;i++)f.update(s,dt);}},
+ {id:'pistol-aim-walk',label:'pistol aimed while walking, target 45° left of the walk',
+  state:{weapon:'pistol',aim:1,speed:1.4,aimHeading:Math.PI/4,aimTarget:{x:6*Math.sin(Math.PI/4),y:1.35,z:6*Math.cos(Math.PI/4)}},
+  target:[6*Math.sin(Math.PI/4),1.35,6*Math.cos(Math.PI/4)],run(f,s){for(let i=0;i<47;i++)f.update(s,dt);}},
+ {id:'pistol-shoot',label:'pistol shot, at the recoil (0.1 s in)',state:{weapon:'pistol',aim:1,aimHeading:0},
+  run(f,s){for(let i=0;i<30;i++)f.update(s,dt);s.shotLeft=.633;for(let i=0;i<6;i++){f.update(s,dt);s.shotLeft-=dt;}}},
+ {id:'pistol-reload',label:'pistol reload, half way',state:{weapon:'pistol'},
+  run(f,s){s.reloadLeft=1.667;for(let i=0;i<50;i++){f.update(s,dt);s.reloadLeft-=dt;}}},
  ...(window.WEAPON_POSES??[])
 ].filter(p=>!only||p.id===only);
 
@@ -52,7 +62,7 @@ function stage(pose){
  const rim=new T.DirectionalLight(0xbfd4ff,1.2);rim.position.set(-4,3,-5);scene.add(rim);
  scene.add(new T.Mesh(new T.PlaneGeometry(20,20).rotateX(-Math.PI/2),new T.MeshStandardMaterial({color:0x555b66})));
  // A target 6 m ahead at chest height, for the aim poses.
- const target=new T.Mesh(new T.SphereGeometry(.08,12,8),new T.MeshBasicMaterial({color:0xffc04a}));target.position.set(0,1.35,6);scene.add(target);
+ const target=new T.Mesh(new T.SphereGeometry(.08,12,8),new T.MeshBasicMaterial({color:0xffc04a}));target.position.set(...(pose.target??[0,1.35,6]));scene.add(target);
  const figure=createPlayerFigure(asset,{top:0xc94d38},{weapons:['pistol','katana']});scene.add(figure.root);
  const state={x:0,y:0,z:0,heading:0,bodyHeading:0,speed:0,alive:true,attackTime:0,attackDuration:0,
   aimTarget:{x:0,y:1.35,z:6},...pose.state};
@@ -66,7 +76,7 @@ function stage(pose){
  if(held!==null)line+=`  | grip-to-palm ${(held*100).toFixed(1)} cm`;
  const m=new T.Vector3(),d=new T.Vector3();
  if(figure.weapons.muzzle(m,d)){
-  const to=new T.Vector3(0,1.35,6).sub(m),along=to.dot(d),miss=to.clone().addScaledVector(d,-along).length();
+  const to=target.position.clone().sub(m),along=to.dot(d),miss=to.clone().addScaledVector(d,-along).length();
   line+=`  | muzzle ray passes ${(miss*100).toFixed(1)} cm from the target`;
   // The line of fire, drawn out to the target's distance.
   const ray=new T.Mesh(new T.CylinderGeometry(.004,.004,along,5).rotateX(Math.PI/2).translate(0,0,along/2),new T.MeshBasicMaterial({color:0xff5a4a}));

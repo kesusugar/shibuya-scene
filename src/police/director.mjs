@@ -24,6 +24,7 @@ export const POLICE = Object.freeze({
  ramSpeed: 2,              // m/s: slower than this, touching a patrol car is not ramming it
  ramRepeat: 3,             // s between two rams counting twice
  speakRange: 35,           // m: the loudspeaker is used when a siren car is this close
+ gunfireRange: 40,         // m: civilians this close hear a shot (PLAN-WEAPONS R14)
  // W4 balance: while wanted, a crowd bump may start a fight only while fewer than this many
  // civilians are already fighting the player. Police plus a mob made a dense Scramble unwinnable.
  bumpFightCap: 2
@@ -62,7 +63,7 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
  const megaphone = createMegaphone(getAudioContext, getAudioBus);
  const speaker = createLoudspeaker(speech, Utterance);
  const ttsMode = useTTS();
- let deaths = 0, lastRam = -Infinity, taken = new WeakSet(), time = 0;
+ let deaths = 0, lastRam = -Infinity, taken = new WeakSet(), time = 0, shotsSeen = 0, lastShooting = -Infinity;
  const runovers = new Set();
  const sources = [];
 
@@ -78,7 +79,7 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
    * `driving` whether the player is in it, `melee` the combat stats, `traffic` / `crowd` the sims.
    */
   frame(dt, {player, car = null, driving = false, melee = null, traffic = null, crowd = null, listener = null,
-              visible = () => false, hurt = null}) {
+              visible = () => false, hurt = null, weapons = null}) {
    time += dt;
    const me = driving && car ? car.state : player;
    const pool = traffic?.pool ?? [];
@@ -94,9 +95,32 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
      if (!p.active || p.combatDead || p.fatal) continue;
      if (Math.hypot(p.x - player.x, p.z - player.z) <= POLICE.witnessRange && ++witnesses >= 3) break;
     }
-    wanted.crime('meleeKill', {x: player.x, z: player.z, t: time, witnesses,
-     seenByOfficer: officersSee(pool, player.x, player.z, except)});
+    // PLAN-WEAPONS §2: a kill with the pistol or the katana is a weapon kill (at least ☆2).
+    const armed = melee?.lastBlow?.weapon === 'pistol' || melee?.lastBlow?.weapon === 'katana';
+    wanted.crime(armed ? 'weaponKill' : 'meleeKill', {x: player.x, z: player.z, t: time, witnesses,
+     seenByOfficer: officersSee(pool, player.x, player.z, except) || officersOnFootSee(units.officers, player.x, player.z)});
    }
+   // Gunfire (PLAN-WEAPONS §2): heard by everyone near, reported like any other crime, or known at
+   // once if an officer is in sight. One report per burst.
+   const shots = weapons?.shots ?? 0;
+   if (shots < shotsSeen) shotsSeen = shots;
+   if (shots > shotsSeen) {
+    shotsSeen = shots;
+    if (time - lastShooting > 3) {
+     lastShooting = time;
+     let witnesses = 0;
+     for (const p of crowd?.pool ?? []) {
+      if (!p.active || p.combatDead || p.fatal || p.officer) continue;
+      if (Math.hypot(p.x - player.x, p.z - player.z) <= POLICE.gunfireRange && ++witnesses >= 3) break;
+     }
+     wanted.crime('shooting', {x: player.x, z: player.z, t: time, witnesses,
+      seenByOfficer: officersSee(pool, player.x, player.z, except) || officersOnFootSee(units.officers, player.x, player.z)});
+    }
+   }
+   // A drawn weapon in an officer's sight: ☆1, once.
+   const drawn = !driving && (weapons?.current === 'pistol' || weapons?.current === 'katana');
+   if (drawn && wanted.state.stars < 1 && (officersSee(pool, player.x, player.z, except) || officersOnFootSee(units.officers, player.x, player.z)))
+    wanted.crime('weaponSeen', {x: player.x, z: player.z, t: time, seenByOfficer: true});
    for (const e of car?.impacts ?? []) {
     if (e.kind !== 'runover' || runovers.has(e.id)) continue;
     runovers.add(e.id);

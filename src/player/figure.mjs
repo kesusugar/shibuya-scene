@@ -4,6 +4,7 @@ import {buildGaitSpace,createGaitBlend,createBodyFacing,LOCOMOTION} from './loco
 import {createFootIK} from './foot-ik.mjs';
 import {attackOf} from './attack-timing.mjs';
 import {createWeaponRig} from './weapon-mesh.mjs';
+import {createAimLayer} from './aim-layer.mjs';
 import pack from './generated/character.mjs';
 
 export const FIGURE=Object.freeze({height:1.76,shirt:0xc94d38,trousers:0x263443,skin:0xdfb994,hair:0x25282a,cycle:1.55});
@@ -22,6 +23,8 @@ const SWINGS=new Set([...PUNCHES,'SwordAttack']);
  */
 const STANCE={katana:'SwordIdle',pistol:'PistolIdle',revolver:'PistolIdle'};
 const STANCE_FADE=.25;
+/** Aiming: the turn rate onto the aim, and how far the upper body twists before the legs follow. */
+const GUN_TURN=10,GUN_TWIST=1.75;
 
 /**
  * How a swing takes the body over, and how fast the body turns onto its target.
@@ -112,10 +115,11 @@ const UNGROUNDED=new Set(['Fall','Death','Enter','Exit','Drive']);
 /**
  * @param {any} [asset]
  * @param {any} [palette]
- * @param {{ctx?:any, variant?:any, weapons?:string[]|null}} [options] `weapons`: what the body
+ * @param {{ctx?:any, variant?:any, weapons?:string[]|null, aimCorrection?:boolean}} [options] `weapons`: what the body
  *   carries (PLAN-WEAPONS), drawn in the hand when `state.weapon` names it and stowed otherwise.
+ *   `aimCorrection` false leaves the aim pose uncorrected (for the R1 test's comparison only).
  */
-export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=null,variant=null,weapons=null}={}){
+export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=null,variant=null,weapons=null,aimCorrection=true}={}){
  // `variant` names an appearance archetype (RUN 6.8). Assets with one look ignore it.
  const instance=asset.instance(palette,variant),root=instance.root;
  const mixer=new AnimationMixer(root),actions={};
@@ -155,6 +159,9 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
  // What the body carries (null: nothing, as for every pedestrian). Built on the Idle pose just
  // set, which is the pose the carry positions in weapon-mesh.mjs were placed against.
  const weaponRig=weapons?.length?createWeaponRig(root,{carry:weapons}):null;
+ // PLAN-WEAPONS W2: a gun is aimed by an upper-body layer with a muzzle correction (aim-layer.mjs).
+ const aimLayer=weaponRig&&weapons.some(w=>w==='pistol'||w==='revolver')
+  ?createAimLayer(root,instance.clips,weaponRig,{correction:aimCorrection}):null;
 
  /** Play a one-shot or a held pose over the legs, or hand the body back to the gait. */
  function setOverlay(next,state){
@@ -247,10 +254,17 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
    // tracks it through the wind-up (`attackHeading`), and the body turns onto it fast enough
    // to be square before the fist is out.
    const aiming=(state.attackTime>0||Number.isFinite(state.attackHold)&&strike.SwordAttack>0)&&Number.isFinite(state.attackHeading);
-   const desired=aiming?state.attackHeading:speed>LOCOMOTION.idleSpeed
-    ?(state.bodyHeading??state.heading??0)
+   // PLAN-WEAPONS R2: a gun is aimed left and right by turning. Standing, the body turns onto the
+   // aim; walking, the legs keep facing the way they walk (there are no strafe clips) and the aim
+   // layer turns the upper body, unless the aim is behind the walk, when the body turns round.
+   const gunAim=(state.aim>0||(state.shotLeft??0)>0)&&Number.isFinite(state.aimHeading);
+   const walkHeading=state.bodyHeading??state.heading??0;
+   const behind=gunAim&&Math.abs(Math.atan2(Math.sin(state.aimHeading-walkHeading),Math.cos(state.aimHeading-walkHeading)))>GUN_TWIST;
+   const turnToAim=gunAim&&(speed<=LOCOMOTION.idleSpeed||behind);
+   const desired=aiming?state.attackHeading:turnToAim?state.aimHeading:speed>LOCOMOTION.idleSpeed
+    ?walkHeading
     :(state.heading??state.bodyHeading??0);
-   facing.update(desired,speed,dt,aiming?STRIKE.turnRate:undefined);
+   facing.update(desired,speed,dt,aiming?STRIKE.turnRate:turnToAim?GUN_TURN:undefined);
    root.position.set(state.x,state.y,state.z);
    root.rotation.set(0,facing.heading,facing.lean,'YXZ');
    if(state.trafficReaction==='look'&&Number.isFinite(state.threatHeading)&&head)
@@ -283,6 +297,9 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
    root.updateMatrixWorld(true);
    // The weapon in the hand, and the rest where they are carried (PLAN-WEAPONS R3).
    weaponRig?.show(state.weapon??null);
+   // The gun arm over whatever the legs are doing, pointed at the target (R1). Not during a
+   // swing, a fall or a car.
+   if(aimLayer&&!SWINGS.has(overlay)&&!UNGROUNDED.has(overlay))aimLayer.update(state,dt);
 
    // Feet last, on top of the finished pose, because it corrects what the animation produced
    // rather than producing it. A teleport or a state where the feet are not on anything drops
@@ -299,7 +316,7 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
    mixer.stopAllAction();
    for(const action of Object.values(actions))action.reset();
    overlay=null;previousAttack=0;seeded=false;dominant='Idle';strike.Punch=strike.PunchCross=strike.SwordAttack=0;
-   stance.SwordIdle=stance.PistolIdle=0;
+   stance.SwordIdle=stance.PistolIdle=0;aimLayer?.reset();
    gait.reset();facing.reset(0);
    for(const name of GAIT)actions[name]?.play().setEffectiveWeight(0);
    for(const name of GAIT)if(actions[name])actions[name].paused=true;
@@ -309,6 +326,8 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
   },
   /** PLAN-WEAPONS: the carried weapons, or null on a body that carries none. */
   get weapons(){return weaponRig;},
+  /** PLAN-WEAPONS W2: the aim layer (weight, and how far the muzzle ray passed from the target). */
+  get aim(){return aimLayer;},
   recolour(palette){instance.recolour(palette);},
   setHeight(metres){instance.setHeight(metres);},
   /** RUN 6.8: how broad this body is. A no-op on an asset that has one build. */

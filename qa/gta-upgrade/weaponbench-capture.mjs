@@ -24,7 +24,7 @@ const url=`http://127.0.0.1:${server.address().port}/qa/gta-upgrade/weaponbench.
 
 const dir=join(process.env.TMPDIR??'/tmp',`weaponbench-${process.pid}`);
 const chrome=spawn(findChrome(),['--headless=new','--no-sandbox','--use-angle=swiftshader','--enable-unsafe-swiftshader',
- '--remote-debugging-port=0',`--user-data-dir=${dir}`,'--window-size=1280,1400','about:blank'],{stdio:['ignore','ignore','pipe']});
+ '--remote-debugging-port=0',`--user-data-dir=${dir}`,'--window-size=1280,2600','about:blank'],{stdio:['ignore','ignore','pipe']});
 const endpoint=await new Promise((resolve,reject)=>{let text='';chrome.stderr.on('data',d=>{text+=d;const m=/DevTools listening on (ws:\/\/\S+)/.exec(text);if(m)resolve(m[1]);});
  chrome.on('exit',()=>reject(new Error('Chrome exited: '+text.slice(-400))));});
 const port=new URL(endpoint).port;
@@ -37,7 +37,7 @@ ws.addEventListener('message',e=>{const m=JSON.parse(e.data);
  if(m.method==='Runtime.exceptionThrown')log.push({type:'exception',text:m.params.exceptionDetails.exception?.description??m.params.exceptionDetails.text});});
 const call=(method,params={})=>new Promise(r=>{const id=++n;pending.set(id,r);ws.send(JSON.stringify({id,method,params}));});
 await call('Runtime.enable');await call('Page.enable');
-await call('Emulation.setDeviceMetricsOverride',{width:1280,height:1400,deviceScaleFactor:1,mobile:false});
+await call('Emulation.setDeviceMetricsOverride',{width:1280,height:2600,deviceScaleFactor:1,mobile:false});
 await call('Page.navigate',{url});
 let ready=false,bench=null;
 for(let i=0;i<240&&!ready;i++){

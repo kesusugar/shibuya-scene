@@ -7,6 +7,9 @@ import {OutputPass} from 'three/addons/postprocessing/OutputPass.js';
 import {ShaderPass} from 'three/addons/postprocessing/ShaderPass.js';
 import {Pass,FullScreenQuad} from 'three/addons/postprocessing/Pass.js';
 const vertex='varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position.xy,0.,1.);}';
+// PLAN-WEAPONS R12: a muzzle flash lights nothing (no point light; the night light budget), but
+// the frame of a shot blooms a little more: `value` 0..1 is set by the scene for that frame.
+export const BLOOM_KICK={value:0,strength:.35,threshold:1.6};
 export const FIDELITY={dpr:1.5,shadow:4096,aoScale:.5,radius:2.5,thickness:1.5,samples:12,blend:.85,denoiseRings:2,denoiseSamples:12,exposureDay:.74,exposureNight:.86,environmentDay:.3,environmentNight:.12,bloomStrength:.35,bloomThreshold:4.2};
 export const noAO=o=>!!o.userData.noAO||/^(signs-(print|led|heroScreen)|s13-|s163-halo|traffic-.*-(front|rear)|s9-signal-lenses)/.test(o.name)||o.material?.isShaderMaterial;
 export function configureAO(ao){
@@ -34,5 +37,5 @@ export function createFidelityPipeline(renderer,scene,camera){
  const bloom=new SoftBloomPass(),grade=new ShaderPass(NightGrade),smaa=new SMAAPass(),output=new OutputPass();
  // Installed Three r185 SMAA expects linear-sRGB; ACES + output conversion happen once, last.
  const passes=[beauty,ao,bloom,grade,smaa,output];for(const p of passes)composer.addPass(p);composer.setPixelRatio(1);const size=new Vector2();let w=0,h=0,disposed=false;
- return {composer,ao,bloom,grade,smaa,passes,render(night){if(disposed)return;renderer.getDrawingBufferSize(size);if(size.x!==w||size.y!==h){w=size.x;h=size.y;composer.setSize(w,h);}bloom.enabled=true;bloom.strength=FIDELITY.bloomStrength;bloom.threshold=FIDELITY.bloomThreshold;grade.uniforms.night.value=night?1:0;const auto=renderer.info.autoReset,target=renderer.getRenderTarget();renderer.info.autoReset=false;if(auto)renderer.info.reset();try{composer.render();}finally{renderer.info.autoReset=auto;renderer.setRenderTarget(target);}},dispose(){if(disposed)return;disposed=true;passes.forEach(p=>p.dispose?.());composer.dispose();}};
+ return {composer,ao,bloom,grade,smaa,passes,render(night){if(disposed)return;renderer.getDrawingBufferSize(size);if(size.x!==w||size.y!==h){w=size.x;h=size.y;composer.setSize(w,h);}bloom.enabled=true;bloom.strength=FIDELITY.bloomStrength+BLOOM_KICK.value*BLOOM_KICK.strength;bloom.threshold=FIDELITY.bloomThreshold-BLOOM_KICK.value*BLOOM_KICK.threshold;grade.uniforms.night.value=night?1:0;const auto=renderer.info.autoReset,target=renderer.getRenderTarget();renderer.info.autoReset=false;if(auto)renderer.info.reset();try{composer.render();}finally{renderer.info.autoReset=auto;renderer.setRenderTarget(target);}},dispose(){if(disposed)return;disposed=true;passes.forEach(p=>p.dispose?.());composer.dispose();}};
 }

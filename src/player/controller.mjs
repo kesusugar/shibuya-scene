@@ -35,6 +35,9 @@ export const PLAYER = Object.freeze({
  dragLook: 2.2,
  pitchLimit: 1.15,     // keeps the follow camera out of the ground and off the zenith
  followBack: 4.6, followUp: 2.1, followLerp: 9,
+ // PLAN-WEAPONS R17: aiming pulls the camera in over the right shoulder, on the same wall-clipped
+ // arm. `aimSide` is metres to the right.
+ aimBack: 2.1, aimUp: .45, aimSide: .62, aimFov: 40,
  // Where a session starts. Chosen by sampling the walkable surface: full kerb height, so
  // it is pavement rather than a gap between solids, and 27 m out with the crossing in view.
  start: [12, 24], startHeading: Math.atan2(-12, -24),
@@ -313,7 +316,8 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    }
    const {forward: fz, strafe: fx, running} = api.input();
    const len = Math.hypot(fx, fz);
-   state.running = running;
+   // PLAN-WEAPONS: aiming is a walk; the gun is not carried at a run.
+   state.running = running && !((state.aim ?? 0) > 0);
    state.moving = len > 0;
    // A swing plants the feet: the clip is a standing punch, and a body carried along under it
    // skates. The body stops (at the ordinary braking rate) and faces the swing's aim, which
@@ -424,17 +428,21 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
  * than through the wall. The look-at point does not move with it: the arm changes length,
  * never direction, so the view does not swing when a wall is brushed.
  */
-export function playerCamera(state, out = {}, ctx = null) {
+export function playerCamera(state, out = {}, ctx = null, aim = 0) {
  const s = Math.sin(state.heading), c = Math.cos(state.heading), cp = Math.cos(state.pitch);
  const eye = state.y + PLAYER.eye;
- const back = PLAYER.followBack * cp;
- const wantX = state.x - s * back, wantZ = state.z - c * back;
- const wantY = eye + PLAYER.followUp + PLAYER.followBack * Math.sin(state.pitch);
+ // `aim` 0..1 blends the follow arm into the shoulder arm (R17).
+ const k = Math.max(0, Math.min(1, aim)), arm = PLAYER.followBack + (PLAYER.aimBack - PLAYER.followBack) * k;
+ const up = PLAYER.followUp + (PLAYER.aimUp - PLAYER.followUp) * k, side = PLAYER.aimSide * k;
+ const back = arm * cp;
+ // The camera's right is (-cos h, sin h) (see step()).
+ const wantX = state.x - s * back - c * side, wantZ = state.z - c * back + s * side;
+ const wantY = eye + up + arm * Math.sin(state.pitch);
  out.x = wantX; out.y = wantY; out.z = wantZ;
- clipCameraArm({x:state.x,y:eye,z:state.z},out,ctx,out);
- const ahead = 1.8;
- out.tx = state.x + s * cp * ahead;
+ clipCameraArm({x:state.x - c * side,y:eye,z:state.z + s * side},out,ctx,out);
+ const ahead = 1.8 + 6 * k;
+ out.tx = state.x - c * side + s * cp * ahead;
  out.ty = eye + Math.sin(state.pitch) * ahead;
- out.tz = state.z + c * cp * ahead;
+ out.tz = state.z + s * side + c * cp * ahead;
  return out;
 }
