@@ -2,9 +2,18 @@
 // look like (PLAN-POLICE-AND-OWN-CAR W1 and W3). The scene hands this one object the systems it
 // already has; the rules live in wanted.mjs and siren.mjs, which are pure.
 import {createWanted,WANTED} from './wanted.mjs';
-import {createSirens,createLoudspeaker} from './siren.mjs';
+import {createSirens,createLoudspeaker,createMegaphone,MEGAPHONE} from './siren.mjs';
 import {createPoliceUnits} from './units.mjs';
 import {VEHICLES} from '../traffic/config.mjs';
+
+/**
+ * PLAN-POLICE-VOICE-KAZE-DETAIL Step V2: the loudspeaker is the formant-synthesised megaphone by
+ * default. `speechSynthesis` (`createLoudspeaker`) is kept only for an `?voice=tts` comparison
+ * run; a plain Node environment has no `location`, so this reads false there, never throws.
+ */
+const useTTS = () => {
+ try {return new URLSearchParams(location.search).get('voice') === 'tts';} catch {return false;}
+};
 
 /** Is this traffic slot a police vehicle (patrol car, unmarked car, riot transport)? */
 export const isPolice = v => !!VEHICLES[v?.type]?.police;
@@ -50,13 +59,15 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
  const units = createPoliceUnits(koban ? {koban} : {});
  let lastBlowAt = -1;
  const sirens = createSirens(getAudioContext, getAudioBus);
+ const megaphone = createMegaphone(getAudioContext, getAudioBus);
  const speaker = createLoudspeaker(speech, Utterance);
+ const ttsMode = useTTS();
  let deaths = 0, lastRam = -Infinity, taken = new WeakSet(), time = 0;
  const runovers = new Set();
  const sources = [];
 
  const api = {
-  wanted, sirens, units,
+  wanted, sirens, units, megaphone,
   /** A carjack finished; an officer nearby makes it a crime. */
   carjack(slot, traffic) {
    if (!slot) return;
@@ -139,8 +150,33 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
    }
    const ear = listener ?? {x: me.x, z: me.z, vx: 0, vz: 0};
    sirens.update(dt, sources, ear);
-   if (responding && sources.some(s => s.id !== except?.id && Math.hypot(s.x - me.x, s.z - me.z) <= POLICE.speakRange))
-    speaker.say(driving ? '前の車、止まりなさい' : 'そこの人、止まりなさい', time);
+
+   // --- loudspeaker (Step V2) -----------------------------------------------------------------
+   if (ttsMode) {
+    if (responding && sources.some(s => s.id !== except?.id && Math.hypot(s.x - me.x, s.z - me.z) <= POLICE.speakRange))
+     speaker.say(driving ? '前の車、止まりなさい' : 'そこの人、止まりなさい', time);
+   } else {
+    const near = sources.filter(s => s.id !== except?.id && Math.hypot(s.x - me.x, s.z - me.z) <= MEGAPHONE.range);
+    if (arrested) {
+     // Outside the gap rule, once per arrest: whichever car is closest says it.
+     const car0 = near[0] ?? sources[0];
+     if (car0) megaphone.speak(['arrest'], car0.id, car0.x, car0.z, time, {force: true, duck: sirens.duck});
+    } else if (responding && near.length) {
+     const car0 = near.reduce((a, b) =>
+      Math.hypot(a.x - me.x, a.z - me.z) <= Math.hypot(b.x - me.x, b.z - me.z) ? a : b);
+     const officerClose = !driving && [...units.officers].some(p =>
+      p.active && !p.combatDead && Math.hypot(p.x - me.x, p.z - me.z) <= 3);
+     if (officerClose || units.arrest.foot > 0) {
+      megaphone.speak(['freeze'], car0.id, car0.x, car0.z, time, {duck: sirens.duck});
+     } else if (driving) {
+      const stopped = Math.abs(car?.state?.speed ?? 0) < 1.5;
+      const situations = stopped && units.arrest.car > 0 ? ['getOut'] : ['stop', 'stopCar'];
+      megaphone.speak(situations, car0.id, car0.x, car0.z, time, {duck: sirens.duck});
+     } else {
+      megaphone.speak(['chase', 'stop'], car0.id, car0.x, car0.z, time, {duck: sirens.duck});
+     }
+    }
+   }
    return {...snap, arrested, units: {cars: u.cars, officers: u.officers, yielded: u.yielded}};
   },
   /** H in a patrol car: siren and lamps on or off. Returns false if this car has none. */
@@ -152,7 +188,7 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
   clear(reason) {wanted.clear(reason);},
   /** W4: the crowd-bump fight cap, for the scene's bump callback. */
   allowBumpFight(crowd) {return allowBumpFight(wanted.state.stars, crowd?.pool, crowd?.time ?? 0);},
-  dispose(traffic, crowd) {sirens.dispose(); units.dispose(traffic, crowd);}
+  dispose(traffic, crowd) {sirens.dispose(); megaphone.dispose(); units.dispose(traffic, crowd);}
  };
  return api;
 }
