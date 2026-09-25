@@ -5275,6 +5275,77 @@ exist; the old axle/track numbers do not clear the ±3%/60% bars).
   from the plan's own K1 prose, not a side-by-side photo comparison.
 - Black pillars/roof, the wing, mirrors, lamps, paint and the triangle/draw-call budget are K2.
 
+## 9x. Police voice/Kaze detail, Step K2 — Kaze FR's parts, paint, lamps (branch `claude/police-voice-kaze-4`, on `claude/police-voice-kaze-3`)
+
+**Plan:** `docs/PLAN-POLICE-VOICE-KAZE-DETAIL.md` Step K2.
+
+**What changed (`src/traffic/vehicle-shape.mjs`, `src/traffic/config.mjs`, `src/player/vehicle-asset.mjs`).**
+- **Parts, all in `buildVehicleShape`'s `d.kit` block.** End plates on the rear wing (two thin dark
+  panels at the blade's own ends — a wing without them reads as a shelf, not an aerofoil). A modest
+  side intake behind each front wheel (a small recessed dark box, deliberately smaller than a real
+  kit's). A large black front opening with a lip (a wide dark panel low on the nose, on top of the
+  lip Step H already had). A rear diffuser (a panel plus four ribs) and two exhaust tips (small dark
+  cylinders) at the tail. Slim clear fixed lamps under the pop-up pods, in the `lamp`/`front` batch
+  so they ramp with every other head lamp at dusk. Body-colour door mirrors and round tail lamps
+  were already there from Step H and are unchanged.
+- **Black roof and pillars, as separate panels, not colour.** A new `blackRoof` flag
+  (`d.kit===true||d.kit?.roof`) moves the roof loft and the three pillar posts from `parts.paint`
+  into `parts.dark` for whichever kit says so — the own car, not the hero cars (§9t already decided
+  they keep no black bonnet either, so they get no black roof by the same logic). Confirmed by a
+  test that checks the actual highest point of each geometry group, not just a vertex count (a
+  vertex-count comparison against a sedan would have passed even before this change, since the own
+  car's `dark` group is already bigger than a sedan's for unrelated kit-panel reasons — caught while
+  writing the test, not left in).
+- **Paint.** `VEHICLES.ownCar.color` is now `0xf39a1d` (the plan's orange, was `0xe0661c`).
+  `materialsFor` in `vehicle-asset.mjs` takes a `clearcoat` flag; when the vehicle definition sets
+  `clearcoat:true` (only `ownCar` does), the paint material is a `MeshPhysicalMaterial` with
+  `clearcoat:1` instead of the `MeshStandardMaterial` every other type gets. It reflects the scene's
+  environment map the same way any `MeshPhysicalMaterial` does — no extra wiring needed, since the
+  game already sets one.
+- **Budget, honestly.** Triangles: 5,916 for the whole close-up car, comfortably inside the plan's
+  60k. **Draw calls: 20, not the plan's 10.** Six body-part meshes (paint/glass/dark/plate/front/
+  rear) plus four independently-steered-and-suspended wheels (2 meshes each: tyre, rim) plus two
+  hinged pop-up pods (2 meshes each: shell, lamp) plus two hinged doors add up to 20, and this was
+  already the count before Step K2 — none of this step's additions cost a new mesh (everything above
+  merges into an existing part). Closing the gap to 10 would mean sharing one mesh across wheels,
+  pods and doors that currently move independently (steering angle, suspension travel, hinge angle),
+  which needs a different technique (instancing with per-instance bone/morph state, or a skinned
+  rig) rather than more geometry work, and was not attempted here — see Limitations.
+
+**Device check.** Measured (not estimated) via `createVehicleAsset('ownCar')` traversal, matching
+the method `carbench.html`/`vehiclebench.html` already use (`renderer.info.render.calls`/triangle
+count would give the same number, since there is one draw call per `Mesh` in this non-batched
+close-up model). The same renderer instability noted in §9w applied again this session; the paint
+material and new parts were confirmed structurally (the tests below) and via the same same-origin
+injected-module technique as §9w, not a full `carbench` page load.
+
+**Tests.** `tests/kaze-detail.test.mjs` grows from 6 to 10: the wing sits behind the rear axle and
+below the roof peak (computed from the actual belt/house tables, not a repeated magic number); the
+own car alone gets `0xf39a1d` and a `MeshPhysicalMaterial` with `clearcoat:1` (a sedan does not); the
+roof and pillars reach `dark`'s highest point and drop out of `paint`'s (a sedan's roof stays in
+`paint`, for contrast); the whole car holds the 60k triangle budget, and the 20-draw-call count is
+pinned as a regression guard, explicitly labelled as not meeting the plan's number rather than
+silently passed. All new/changed assertions confirmed failing against the code before (`git stash`):
+the paint-material and dark-roof tests failed outright; the wing-position test already passed before
+K2 (the wing's own position did not move in this step, only its end plates were added) and is kept
+as the plan's literal K1+K2 test bullet.
+
+**Limitations.**
+- **The 10-draw-call target is not met (20).** See "Budget, honestly" above. A future step could
+  merge the four wheels into one skinned/instanced mesh and the two doors and two pop-ups into their
+  own, which would plausibly reach 6 (body parts) + 3 (wheels, doors, pops) = 9, but that changes how
+  RUN 10/11's steering, suspension and hinge code addresses these parts and was judged too large to
+  fold into this step.
+- No real `carbench.html` page load this session (§9w's dev-server routing/memory limitation still
+  applies); the paint/parts changes were confirmed structurally and via injected modules, not a
+  fresh render set.
+- §9w's wheel-exposure honesty note stands: the geometry clears 60%, the visual read is still worth
+  the user's own eyes.
+- Not done: the drift-feel and night-drive in-game check the plan's device-check section asks for
+  ("a night drive, lamps, reflections, and the drift feel unchanged") — the handling numbers
+  (`steer`, `grip`, `slide`) were not touched by K1 or K2, so there is no code reason to expect a
+  change, but this was not driven and felt on the device this session.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle

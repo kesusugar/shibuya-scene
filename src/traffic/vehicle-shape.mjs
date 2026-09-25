@@ -291,6 +291,10 @@ export function buildVehicleShape(type,{detail=1}={}){
  const radius=wheelRadius(type);
  const parts={paint:[],glass:[],rubber:[],rim:[],lamp:[],tail:[],dark:[],plate:[],lightbar:[]};
  const round=Math.min(.09,W*.055);
+ // PLAN-POLICE-VOICE-KAZE-DETAIL Step K2: the roof and pillars are recessed dark panels rather
+ // than the body colour, for whichever kit says so (`kit:true`, the own car, or `kit.roof`) --
+ // not the hero cars, which the plan (§9t) already decided keep no black bonnet either.
+ const blackRoof=d.kit===true||d.kit?.roof;
 
  // --- lower body -------------------------------------------------------------------------
  const axleZ=L*profile.axle,archSpan=radius*1.28;
@@ -353,7 +357,7 @@ export function buildVehicleShape(type,{detail=1}={}){
    const w=W/2*widthF*.93-round*1.5;
    roofStations.push({z,ring:panelRing(Math.max(.02,w),H*topF-.05,H*topF+.006,round*.6)});
   }
-  parts.paint.push(loft(roofStations));
+  (blackRoof?parts.dark:parts.paint).push(loft(roofStations));
  }
 
  // --- Looks C: a cargo box, and the patrol car's roof light bar --------------------------------
@@ -427,9 +431,36 @@ export function buildVehicleShape(type,{detail=1}={}){
   const [tailBeltF]=at(profile.belt,-.46);
   // A big wing stands higher and wider on taller posts.
   const big=kit.wing==='big',rise=big?.24:.13;
-  const wing=new BoxGeometry(W*(big?.92:.78),.035,big?.26:.20);wing.translate(0,H*tailBeltF+rise,-L*.455);parts.dark.push(wing);
+  const wingWidth=W*(big?.92:.78),wingZ=-L*.455;
+  const wing=new BoxGeometry(wingWidth,.035,big?.26:.20);wing.translate(0,H*tailBeltF+rise,wingZ);parts.dark.push(wing);
   for(const side of [-1,1]){
-   const post=new BoxGeometry(.04,rise,.06);post.translate(side*W*.30,H*tailBeltF+rise/2-.005,-L*.455);parts.dark.push(post);
+   const post=new BoxGeometry(.04,rise,.06);post.translate(side*W*.30,H*tailBeltF+rise/2-.005,wingZ);parts.dark.push(post);
+  }
+  // Step K2: end plates -- a wing without them reads as a shelf, not an aerofoil.
+  for(const side of [-1,1]){
+   const plate=new BoxGeometry(.015,big?.20:.12,big?.28:.22);
+   plate.translate(side*wingWidth*.5,H*tailBeltF+rise*.55,wingZ);parts.dark.push(plate);
+  }
+  // Step K2: the own car only, past here -- a modest generic side intake, a large front opening,
+  // a rear diffuser and two exhaust tips. Not the hero cars' partial kit, whose look (§9t) the
+  // plan does not ask to change.
+  if(d.kit===true){
+   for(const side of [-1,1]){
+    const intake=new BoxGeometry(.03,H*.09,.34);
+    intake.translate(side*(W/2*.99),H*profile.arch*1.05,axleZ-radius*1.7);parts.dark.push(intake);
+   }
+   const [,noseWidthK2]=at(profile.belt,.5);
+   const opening=new BoxGeometry(W*noseWidthK2*.62,H*.135,.05);
+   opening.translate(0,H*profile.arch*1.12,L*.5-.06);parts.dark.push(opening);
+   const diffuser=new BoxGeometry(W*.80,.05,.16);
+   diffuser.translate(0,H*profile.floor*1.05,-L*.5+.05);parts.dark.push(diffuser);
+   for(let i=-1;i<=1;i+=2)for(const fin of [W*.15,W*.30]){
+    const rib=new BoxGeometry(.02,.045,.15);rib.translate(i*fin,H*profile.floor*1.05,-L*.5+.05);parts.dark.push(rib);
+   }
+   for(const side of [-1,1]){
+    const tip=new CylinderGeometry(.045,.045,.10,10);tip.rotateX(Math.PI/2);
+    tip.translate(side*W*.22,H*profile.floor*.95,-L*.5-.03);parts.dark.push(tip);
+   }
   }
  }
  if(d.popups){
@@ -442,6 +473,12 @@ export function buildVehicleShape(type,{detail=1}={}){
    const pod=bare(new BoxGeometry(w,h,len));pod.translate(0,-h/2,len/2);
    const face=bare(new BoxGeometry(w*.86,.02,len*.78));face.translate(0,-h-.006,len/2);
    popups.push({side,hinge:[side*W*widthF*.30,H*beltF+.012,(f*L)-len/2],pod,face});
+  }
+  // Step K2: slim clear fixed lamps below the pop-up pods, on the bumper -- lit at night the same
+  // way the turn lamp beside them is (day-night ramps the whole `front` part's emissive intensity).
+  for(const side of [-1,1]){
+   const fixed=new BoxGeometry(W*widthF*.14,.025,.045);
+   fixed.translate(side*W*widthF*.30,H*profile.arch*.92,(f*L)-.02);parts.lamp.push(fixed);
   }
  }
 
@@ -464,7 +501,7 @@ export function buildVehicleShape(type,{detail=1}={}){
     // than proud of it at one end and buried at the other.
     const post=new BoxGeometry(.05,height,thickness);
     post.translate(side*W/2*widthF*.955,H*(topF+beltF)/2,f*L);
-    parts.paint.push(post);
+    (blackRoof?parts.dark:parts.paint).push(post);
    }
   }
   // The belt strip closes the bottom of the glass, so the window has a sill to sit on.

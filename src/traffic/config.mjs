@@ -33,9 +33,11 @@ export const VEHICLES={
  // PLAN-POLICE-AND-OWN-CAR Step H: the player's own drift fastback. Weight 0 and `owned`: traffic
  // never spawns or drives one. Orange with a black bonnet and kit (`kit`), pop-up lamps, round
  // tail lamps, dark rims, and a drift tune: more lock, less lateral grip, a longer handbrake slide.
- ownCar:{width:1.76,length:4.3,height:1.23,speed:14,accel:2.6,brake:4.8,weight:0,color:0xe0661c,name:'Kaze FR',
-  owned:true,kit:true,popups:true,roundTails:true,rim:0x25282c,steer:.74,grip:7.5,slide:1.5,track:.55,
-  engine:{idleHz:74,revHz:236,wave:'square'}}
+ // PLAN-POLICE-VOICE-KAZE-DETAIL Step K2: the plan's orange, and a clearcoat physical material
+ // (materialsFor in vehicle-asset.mjs) instead of the standard paint every other type gets.
+ ownCar:{width:1.76,length:4.3,height:1.23,speed:14,accel:2.6,brake:4.8,weight:0,color:0xf39a1d,name:'Kaze FR',
+  owned:true,kit:true,clearcoat:true,popups:true,roundTails:true,rim:0x25282c,steer:.74,grip:7.5,slide:1.5,
+  track:.55,engine:{idleHz:74,revHz:236,wave:'square'}}
 };
 export const MAJOR=new Set(['trunk','primary','secondary','tertiary','trunk_link','primary_link','secondary_link','tertiary_link']);
 export const DRIVEABLE=new Set([...MAJOR,'residential','unclassified','service','living_street']);
