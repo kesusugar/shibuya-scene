@@ -49,7 +49,12 @@ export function createPlayUI(network,parent,{onExit,onDrive}={}){
   weaponLabel.textContent=w.current==='pistol'?`${NAMES.pistol} ${w.reloading?'装填中':`${w.rounds}/${w.magazine}`}`:(NAMES[w.current]??w.current);
   crosshair.hidden=!(aiming&&w.current==='pistol');crosshair.dataset.locked=String(!!locked);
  }
- return {mission,setWanted,setWeapon,show(){visible=true;root.hidden=false;clock=1;},hide(){visible=false;root.hidden=true;marker.hide();mission.cancel();},
+ /** C1: the controls line follows the device in use (keyboard, or the pad's own button names). */
+ const hint=query('.play-hint'),mapBox=query('.play-map');
+ function setControls(text){if(!disposed&&hint)hint.textContent=text;}
+ /** C2: − on the pad shows or hides the map. */
+ function toggleMap(){if(!disposed&&mapBox)mapBox.hidden=!mapBox.hidden;}
+ return {mission,setWanted,setWeapon,setControls,toggleMap,show(){visible=true;root.hidden=false;clock=1;},hide(){visible=false;root.hidden=true;marker.hide();mission.cancel();},
   update(dt,position,car,driving,entry,hits=0){if(disposed||!visible)return;current=position;mission.tick(dt,position,{driving,alive:position.alive,hits});const s=mission.snapshot();
    if(s.target)marker.update({x:s.target.x,z:s.target.z,y:network.ctx.height(s.target.x,s.target.z)},dt,2.4);else marker.hide();
    clock+=dt;if(clock<.2)return;clock=0;draw(position,car,s.target);

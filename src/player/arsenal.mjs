@@ -17,6 +17,8 @@ export const ARSENAL = Object.freeze({
  // Soft lock-on with a mouse: a person whose chest is this close to the crosshair ray (radians)
  // and this near is aimed at instead of the point behind them.
  softLock: .05, softRange: 40,
+ // A pad's stick is coarser than a mouse (C3): its soft lock is a little wider.
+ padLock: .12,
  // A phone aims by lock-on only (R16): the nearest person this far and this wide of the view.
  touchLock: .52, touchRange: 30,
  // A click without aiming raises the gun first; the shot waits for the aim, up to this long.
@@ -75,10 +77,10 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
   return hit;
  }
  /** Soft lock (mouse) or lock-on (touch): the person the aim should snap to, or null. */
- function lockTarget(player, camera, world, touch) {
+ function lockTarget(player, camera, world, touch, pad = false) {
   const s = player.state, o = camera?.position ?? {x: s.x, y: s.y + 1.5, z: s.z};
   const d = camera?.direction ?? {x: Math.sin(s.heading), y: 0, z: Math.cos(s.heading)};
-  const range = touch ? ARSENAL.touchRange : ARSENAL.softRange, limit = touch ? ARSENAL.touchLock : ARSENAL.softLock;
+  const range = touch ? ARSENAL.touchRange : ARSENAL.softRange, limit = touch ? ARSENAL.touchLock : pad ? ARSENAL.padLock : ARSENAL.softLock;
   let best = null, score = Infinity;
   for (const p of world.people(o, d, range, touch)) {
    if (!aliveTarget(p) || p.archetype === 'kid') continue;
@@ -181,7 +183,7 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
    * `camera` {position, direction} is the view's centre ray; without one the aim is straight
    * ahead. `touch` means aiming is lock-on only (R16).
    */
-  frame(dt, {player, figure = null, driving = false, world = null, camera = null, touch = false, time = 0} = {}) {
+  frame(dt, {player, figure = null, driving = false, world = null, camera = null, touch = false, pad = false, time = 0} = {}) {
    inventory.update(dt);
    if (driving && !wasDriving) {inventory.holster(); aimHeld = false; pendingShot = 0;}
    if (!driving && wasDriving) inventory.unholster();
@@ -199,7 +201,7 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
    if (!gun || !world) {if (!gun) s.aim = 0; return;}
    if (s.aim || s.shotLeft > 0) {
     // What the crosshair is on: the person the lock picks, or the first thing on the camera ray.
-    const lock = lockTarget(player, camera, world, touch);
+    const lock = lockTarget(player, camera, world, touch, pad);
     let point;
     if (lock) point = {x: lock.x, y: lock.y, z: lock.z};
     else if (camera) point = cameraPoint(camera, world, WEAPONS.pistol.range).point;

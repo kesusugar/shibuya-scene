@@ -176,3 +176,11 @@ body.tc-on .player-hint{display:none}
 .play-crosshair::after{left:0;top:12px;width:26px;height:2px}
 .play-crosshair i{position:absolute;left:10px;top:10px;width:6px;height:6px;border-radius:50%;background:#0000}
 .play-crosshair[data-locked="true"]::before,.play-crosshair[data-locked="true"]::after{background:#ff5a4a}
+
+/* PLAN-PERFORMANCE P0: the ?perf= panel. */
+.perf-overlay{position:fixed;right:8px;top:64px;z-index:60;width:330px;max-height:80vh;overflow:auto;padding:8px 10px;background:#07111aee;border:1px solid #f2a25c88;border-radius:10px;color:#e8eef5;font:11px/1.45 ui-monospace,monospace}
+.perf-overlay header{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px}
+.perf-overlay pre{margin:0;white-space:pre-wrap}
+.perf-overlay button{padding:3px 8px;background:#152230;border:1px solid #f2a25c88;border-radius:8px;color:#f6e6d6;font:inherit;cursor:pointer}
+.perf-result{margin-top:6px;border-top:1px solid #34495a;padding-top:6px}
+.perf-result button{margin:6px 6px 0 0}

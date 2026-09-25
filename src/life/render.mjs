@@ -76,7 +76,7 @@ export function buildCrowd(data,options={}){
  const network=options.network??buildPedestrianNetwork(data,{ground,generic,core,street,detail}),sim=options.sim??new CrowdSimulation(network,options),root=new Group();root.name='r1-crowd';
  const material=new MeshStandardMaterial({color:0xffffff,roughness:.9}),headMaterial=new MeshStandardMaterial({color:0xffffff,roughness:.7}),hairMaterial=new MeshStandardMaterial({color:0xffffff,roughness:.8});
  installGait(material);
- let playerFocus=null;const nearCharacters=options.nearRigs===false?null:createNearCharacters(options.tier??'high',{ctx:network.ctx});if(nearCharacters)root.add(nearCharacters.root);
+ let playerFocus=null,nearPaused=false;const nearCharacters=options.nearRigs===false?null:createNearCharacters(options.tier??'high',{ctx:network.ctx});if(nearCharacters)root.add(nearCharacters.root);
  // RUN 10: awareness is no longer a module of its own here. The one authority is the mass
  // layer's typed-array pass (src/life/hq-awareness.mjs), which is bounded by the crowd grid.
  // What used to sit on this line was the RUN 7 WIP, walking all ~1,978 pedestrians EVERY
@@ -117,7 +117,8 @@ export function buildCrowd(data,options={}){
  function sync(dt=0){
   // Perception first: the figures below render whatever state it leaves behind.
   if(perceive&&playerFocus)hq?.awareness(playerFocus,dt);
-  const near=nearCharacters?.update(sim.pool,playerFocus,dt,sim.time)??new Set();
+  // PLAN-PERFORMANCE P0: the sweep can pause the near characters to measure what they cost.
+  const near=nearPaused?new Set():nearCharacters?.update(sim.pool,playerFocus,dt,sim.time)??new Set();
   // The near pool is drawn with real skeletons and is therefore EXCLUDED from the mass crowd,
   // so it has no typed-array state to read. It gets the same rule applied directly, over at
   // most eight people -- one implementation of what counts as threatening, two storages. The
@@ -208,6 +209,7 @@ export function buildCrowd(data,options={}){
   setHQCamera(p){hqCamera=p;},
   setHQBudget(n){hq?.setBudget(n);hqStats.budget=n;nearCharacters?.setHQCovered(!!hq&&n>0);},
   get hqCrowd(){return hq;},
+  setNearPaused(v){nearPaused=!!v;if(nearCharacters)nearCharacters.root.visible=!v;},
   /** The near pool, for QA: which body and which reaction a held citizen shows. */
   get nearCharacters(){return nearCharacters;},
   // The humanoid arrives late, exactly as it does for the player. Until it does the near

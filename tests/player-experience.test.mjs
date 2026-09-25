@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {radial,INPUT} from '../src/player/input-map.mjs';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {SpatialIndex} from '../src/geo/core.mjs';
@@ -45,7 +46,9 @@ test('pad look advances once per elapsed time; diagnostic input reads have no si
  Object.defineProperty(globalThis,'navigator',{configurable:true,value:{getGamepads:()=>[{connected:true,axes:[0,0,.5,0],buttons:[]}]}});
  try{
   const run=hz=>{const p=createPlayer(flat,{heading:0});p.attach(new EventTarget());for(let i=0;i<hz;i++){p.updateInput(1/hz);p.input();p.input();p.input();}p.detach();return p.state.heading;};
-  assert.ok(Math.abs(run(30)-run(120))<1e-9);assert.ok(Math.abs(run(60)+PLAYER.padLook*.5)<1e-9);
+  // PLAN-PERFORMANCE-AND-PAD C3: the stick now goes through a radial deadzone and a response curve
+  // (input-map.mjs), so half a throw turns slower than half speed; still once per elapsed time.
+  assert.ok(Math.abs(run(30)-run(120))<1e-9);assert.ok(Math.abs(run(60)+PLAYER.padLook*radial(.5,0,{curve:INPUT.lookCurve}).x)<1e-9);
  }finally{globalThis.window=oldWindow;globalThis.document=oldDocument;if(oldNavigator)Object.defineProperty(globalThis,'navigator',oldNavigator);else delete globalThis.navigator;}
 });
 test('walking respects analogue input and does not animate running through walls',()=>{

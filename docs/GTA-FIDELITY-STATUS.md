@@ -5538,6 +5538,78 @@ here), and the officer (behind the camera at the moment of the still). No frame 
 name guard 2). Before the build, `test:ci` alone reports 2 failures that need `dist/`
 (`rendered-html`, the catalog utilities); they are the same on `master` and pass under `npm test`.
 
+## 9ac. Performance P0 — an on-device profiler and an automatic A/B sweep (branch `claude/shibuya-weapons-implementation-28u1y1`, restarted from `master` `01a3be3`)
+
+**Plan:** `docs/PLAN-PERFORMANCE-AND-PAD.md` (approved 2026-09-25): the target is 60 fps on the
+user's Windows PC in Chrome (HIGH today: 6–7 fps, §9h/§9l). The cloud only has SwiftShader, so
+P0 is the instrument and P1–P4 wait for the user's measurement.
+
+**What changed (`b349b1a`).**
+- `?perf=1`: an overlay (`src/quality/perf-overlay.mjs`) with fps and frame interval (mean, p95),
+  CPU frame time split by section — every scene module's update (`ModuleSystem.probe`), the
+  player's frame, the late player work (audio, HUD, police), seated drivers, camera, render — GPU
+  frame time where `EXT_disjoint_timer_query_webgl2` exists, draw calls and triangles.
+- `?perf=sweep` (or the overlay's button): baseline, then shadow, GTAO, bloom, SMAA, all post, the
+  road mirror, the crowd, the HQ crowd, the near characters, traffic, trains, signs, streetscape,
+  nightglow, buildings and rendering itself each switched off in turn, then baseline again
+  (`src/quality/perf-sweep.mjs`); the costs table on screen and a JSON to save or copy.
+  `?off=a,b` holds features off for a manual A/B. `?sweep=` / `?sweepFrames=` shorten it.
+- Switching off is live and reversible: modules are paused (`ModuleSystem.paused`), not disposed,
+  and their root hidden; passes via `PIPELINE_OFF`; the shadow map stops updating; the HQ budget
+  goes to 0 and back; the near characters pause (`setNearPaused`). The JSON records per feature
+  whether its root could be hidden, so a module with no root is reported as update-only.
+- Nothing runs without `?perf=`.
+
+**Headless check (`bff6455`).** A short sweep on the real scene ran end to end: overlay, costs
+table, JSON, 0 console errors; the GPU timer query was available (SwiftShader). Its timings are
+software rendering and are not used. One figure does not depend on the renderer: **10.35 M
+triangles at the scramble camera, HIGH, day** — more than twice the 4.5 M recorded in RUN 6.
+
+**Tests.** `tests/perf-probe.test.mjs` (6): frame statistics; sections add up and the interval is
+the fps; the GPU timer is a silent no-op without the extension; the module system times and pauses
+modules without disposing them; the sweep's order, reset and cost against the two baselines;
+the pass switches default on. Fails before (no modules, no probe or pause).
+
+## 9ad. Controller C1–C4 — the Switch Pro Controller (same branch)
+
+**What changed (`2eb5ace`).**
+- `src/player/input-map.mjs`: the pad as actions, polled once a frame. Chrome and Edge present the
+  Switch Pro Controller in the positional standard mapping (Nintendo A on the right = index 1,
+  B at the bottom = index 0), so one GTA-style layout serves it and any standard pad; only the HUD's
+  names change (`GLYPHS`). The layout (approved): ZR fire / throttle, ZL aim / brake, B run, A
+  reload, Y roll, X get in / out, L / R weapons (R handbrake in a car), left-stick press crouch /
+  horn, d-pad up siren, − map, + menu. The old fixed indices (0 drive, 2 attack, 3 cycle, 4 aim,
+  5 roll, triggers) are gone.
+- Feel (C3): ZL/ZR on the Switch Pro are digital, so throttle and brake ramp (0.3 s up, 0.15 s
+  down); analogue triggers pass through. Sticks have a radial deadzone (0.16, full at 0.94) and the
+  camera a response curve (1.6). `?padLook=` (≤ 3) and `?invertY=1` are kept in this browser.
+  While a pad aims, the soft lock-on is 0.12 rad (a mouse keeps 0.05).
+- Rumble (C4) on shots, cuts, damage and crashes through `vibrationActuator` ('dual-rumble'),
+  spaced 60 ms; nothing where the browser exposes none.
+- The HUD's controls line follows the last device used; `?pad=1` names every index as the Switch
+  button and says whether the pad was recognised.
+- A pad outside the standard mapping keeps its sticks, and no button is read.
+
+**Headless check (`bff6455`).** A scripted fake Switch Pro Controller in the real scene: recognised
+as `switch`, R switched to the pistol, ZL held aimed (aim weight > 0.9), ZR fired one shot and
+issued a dual-rumble effect (strong 0.35, weak 0.75, 90 ms); the HUD read 「ZR 攻撃 · ZL 構える ·
+L/R 武器 · A 装填 · Y 回避 · B 走る · X 乗る …」; 0 console errors. **Not checked: a real controller.**
+Whether this Chrome exposes rumble for it, and how the sticks and the ramp feel, are the device
+check.
+
+**Tests.** `tests/input-map.test.mjs` (11): recognition; every foot and car binding; a held button
+fires once; the ramp and analogue pass-through; the radial deadzone and curve; a raw pad; the HUD
+names; rumble spacing and absence; and through the controller: ZR attacks, ZL aims while held, R
+cycles, B runs; in a car X gets out and ZR ramps `input().forward`, R is the handbrake; the right
+stick turns the camera; the settings persist. `player-experience`'s pad-look test now expects the
+curved stick (said in the test). Fails before (no module).
+
+**Gates at `bff6455`.** `npm run typecheck` clean; `npm test` **691 tests, 686 pass, 0 fail, 5 skipped**
+(674 before: +6 perf probe, +11 input map).
+
+**Limitations.** C5 (gyro aim through WebHID) is not done. Joy-Con pairs are recognised by name
+but untested. Steam Input can capture the controller before Chrome sees it.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
