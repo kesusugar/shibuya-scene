@@ -1,0 +1,16 @@
+{
+ "url": "http://<local>/qa/gta-upgrade/cmu-weaponbench.html?only=rifle-raise&times=0.5,3.2,4.2",
+ "ready": true,
+ "bench": {
+  "clips": [
+   "rifle-raise"
+  ],
+  "lines": [
+   "three-quarter front (player's right) / right side; columns are clip time",
+   "long gun (proxy 仮): CMU 80_03 raise and hold (source 1.9-7.0 s): 0.50s 3.20s 4.20s | measured {\"leftMissCm\":3.1,\"wristTurnMaxDeg\":{\"right\":110,\"left\":101},\"handsApartSourceM\":0.442,\"handsApartTargetM\":0.46,\"wristBendDeg\":{\"right\":{\"median\":78,\"max\":110},\"left\":{\"median\":38,\"max\":67}}}"
+  ],
+  "calls": 11
+ },
+ "console": [],
+ "errors": 0
+}

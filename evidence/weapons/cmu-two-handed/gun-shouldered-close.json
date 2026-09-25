@@ -1,0 +1,16 @@
+{
+ "url": "http://<local>/qa/gta-upgrade/cmu-weaponbench.html?only=rifle-shouldered&times=0,1.2,2.4",
+ "ready": true,
+ "bench": {
+  "clips": [
+   "rifle-shouldered"
+  ],
+  "lines": [
+   "three-quarter front (player's right) / right side; columns are clip time",
+   "short gun (proxy 仮): 80_03 hold, stock in the shoulder, levelled (source 4.2-6.8 s): 0.00s 1.20s 2.40s | measured {\"leftMissCm\":0,\"wristTurnMaxDeg\":{\"right\":65,\"left\":47},\"handsApartSourceM\":0.437,\"handsApartTargetM\":0.28,\"wristBendDeg\":{\"right\":{\"median\":93,\"max\":95},\"left\":{\"median\":51,\"max\":52}}}"
+  ],
+  "calls": 10
+ },
+ "console": [],
+ "errors": 0
+}
