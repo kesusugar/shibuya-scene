@@ -52,6 +52,9 @@ next-env.d.ts
 !/qa/gta-upgrade/sync-cost.mjs
 !/qa/gta-upgrade/contact-cost.mjs
 !/qa/gta-upgrade/punchbench.html
+!/qa/gta-upgrade/weaponbench.html
+!/qa/gta-upgrade/weaponbench-capture.mjs
+!/qa/gta-upgrade/sword-timing.mjs
 !/qa/gta-upgrade/locomotionbench.html
 !/qa/gta-upgrade/footikbench.html
 !/qa/gta-upgrade/footik-contact.mjs

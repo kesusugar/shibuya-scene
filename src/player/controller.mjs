@@ -126,7 +126,10 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    * leaves no way out at all; `onExit` is called so Escape leaves play entirely. `onDrive`
    * is the get-in/get-out key.
    */
-  attach(element, {onExit, onDrive, onAttack, onHorn} = {}) {
+  // PLAN-WEAPONS: 1/2/3 and the wheel pick a weapon (`onWeapon(slot)`, `onWeaponCycle(step)`),
+  // R reloads, the right mouse button held aims (`onAim(true|false)`). On a pad: Y cycles, LB
+  // held aims, X is the attack (fire with the pistol out).
+  attach(element, {onExit, onDrive, onAttack, onHorn, onWeapon, onWeaponCycle, onReload, onAim} = {}) {
    if (detach) return;
    const down = (e) => {
     if (e.repeat) return;
@@ -137,18 +140,28 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
     if (k === 'f') {onDrive?.(); e.preventDefault(); return;}
     if (k === 'e') {onAttack?.(); e.preventDefault(); return;}
     if (k === 'h') {onHorn?.(); e.preventDefault(); return;}   // RUN 12.1: the horn, while driving
+    if (k === '1' || k === '2' || k === '3') {onWeapon?.(Number(k)); e.preventDefault(); return;}
+    if (k === 'r') {onReload?.(); e.preventDefault(); return;}
     if (!'wasd'.includes(k) && k !== 'shift' && k !== ' ') return;
     keys.add(k === ' ' ? 'shift' : k); e.preventDefault();
    };
    const up = (e) => {const k = e.key.toLowerCase(); keys.delete(k === ' ' ? 'shift' : k);};
-   const blur = () => {keys.clear(); touch.forward = 0; touch.strafe = 0; touch.running = false;};
+   const blur = () => {keys.clear(); touch.forward = 0; touch.strafe = 0; touch.running = false; onAim?.(false);};
    const move = (e) => {
     if (document.pointerLockElement !== element) return;
     state.heading -= e.movementX * PLAYER.look;
     state.pitch = Math.max(-PLAYER.pitchLimit, Math.min(PLAYER.pitchLimit, state.pitch - e.movementY * PLAYER.look));
    };
    const click = (e) => {if (e.pointerType === 'touch') return; if (document.pointerLockElement !== element) element.requestPointerLock?.()?.catch?.(()=>{});};
-   const punch = e => {if(e.button===0&&document.pointerLockElement===element){onAttack?.();e.preventDefault();}};
+   const punch = e => {if(document.pointerLockElement!==element)return;
+    if(e.button===0){onAttack?.();e.preventDefault();}
+    else if(e.button===2){onAim?.(true);e.preventDefault();}};
+   const release = e => {if(e.button===2)onAim?.(false);};
+   const menu = e => e.preventDefault();
+   // The wheel steps through the weapons, one notch at a time however fast it spins.
+   let wheelAt = 0;
+   const wheel = e => {if(document.pointerLockElement!==element)return;e.preventDefault();
+    const now=performance.now();if(now-wheelAt<120)return;wheelAt=now;onWeaponCycle?.(Math.sign(e.deltaY)||1);};
    // Touch looks by dragging the scene itself. It belongs on the canvas rather than on a
    // full-screen overlay: an overlay wide enough to catch every drag also swallows every
    // button the page already has, and the canvas is exactly the region that should turn.
@@ -167,14 +180,17 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    };
    const touchEnd = e => {if (e.pointerId === touchId) {touchId = null; touchLast = null;}};
    // Edge-detected, because a held button would otherwise fire get-in/get-out every frame.
-   let padPrev = {drive: false, exit: false, attack: false};
+   let padPrev = {drive: false, exit: false, attack: false, cycle: false, aim: false};
    padPoll = (dt) => {
     const pad = gamepad(); if (!pad) return;
     const drive = pad.buttons[0]?.pressed ?? false, exit = pad.buttons[9]?.pressed ?? false, attack=pad.buttons[2]?.pressed??false;
+    const cycle = pad.buttons[3]?.pressed ?? false, aim = pad.buttons[4]?.pressed ?? false;
     if (drive && !padPrev.drive) onDrive?.();
     if (exit && !padPrev.exit) {keys.clear(); onExit?.();}
     if(attack&&!padPrev.attack)onAttack?.();
-    padPrev = {drive, exit, attack};
+    if(cycle&&!padPrev.cycle)onWeaponCycle?.(1);
+    if(aim!==padPrev.aim)onAim?.(aim);
+    padPrev = {drive, exit, attack, cycle, aim};
     const look = pad.axes[2] ?? 0, pitch = pad.axes[3] ?? 0;
     if (Math.abs(look) > PLAYER.padDeadzone) state.heading -= look * PLAYER.padLook * dt;
     if (Math.abs(pitch) > PLAYER.padDeadzone)
@@ -183,12 +199,15 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    window.addEventListener('keydown', down); window.addEventListener('keyup', up);
    window.addEventListener('blur', blur);
    element.addEventListener('mousemove', move); element.addEventListener('click', click);element.addEventListener('mousedown',punch);
+   element.addEventListener('mouseup',release);element.addEventListener('contextmenu',menu);element.addEventListener('wheel',wheel,{passive:false});
    element.addEventListener('pointerdown', touchStart); element.addEventListener('pointermove', touchMove);
    for (const type of ['pointerup', 'pointercancel']) element.addEventListener(type, touchEnd);
    detach = () => {
     window.removeEventListener('keydown', down); window.removeEventListener('keyup', up);
     window.removeEventListener('blur', blur);
     element.removeEventListener('mousemove', move); element.removeEventListener('click', click);element.removeEventListener('mousedown',punch);
+    element.removeEventListener('mouseup',release);element.removeEventListener('contextmenu',menu);element.removeEventListener('wheel',wheel);
+    onAim?.(false);
     element.removeEventListener('pointerdown', touchStart); element.removeEventListener('pointermove', touchMove);
     for (const type of ['pointerup', 'pointercancel']) element.removeEventListener(type, touchEnd);
     if (document.pointerLockElement === element) document.exitPointerLock?.();

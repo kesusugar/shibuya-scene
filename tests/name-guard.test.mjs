@@ -59,3 +59,35 @@ test('the guard itself catches a real name',()=>{
  assert.ok(re.test('const van = "HiAce"'.toLowerCase()));
  assert.ok(!/\bSkyline\b/.test('the city skyline'));
 });
+
+// PLAN-WEAPONS §2: generic shapes only -- a pistol, a revolver, a katana. No real gun maker or
+// model, in any language, anywhere in shipped code.
+const GUNS=['glock','smith & wesson','smith and wesson','s&w','new nambu','nambu','beretta','colt','walther',
+ 'sig sauer','ruger','makarov','tokarev','desert eagle','magnum','chiefs special','heckler','kimber','taurus',
+ 'ニューナンブ','グロック','ベレッタ','コルト','ワルサー','スミス&ウェッソン','スミス＆ウェッソン','マグナム'];
+// Words that are also ordinary elsewhere: SAKURA is a common name, and a reconstructed Center-gai
+// sign already reads サクラ美容外科 (a fictional clinic). As a revolver's model name it is banned
+// in the weapon code, which is where it could only mean the gun. So are model codes like M360.
+const WEAPON_FILES=/(weapon|ballistic|arsenal|gunfire|police)/;
+const WEAPON_ONLY=[/sakura/i,/サクラ/,/\bM ?360J?\b/,/\bM ?37\b/,/\bP ?226\b/,/\bG ?17\b/];
+
+test('no real gun maker or model name in src/ or app/ (PLAN-WEAPONS §2)',()=>{
+ const hits=[];
+ for(const file of [...files('src'),...files('app')]){
+  const text=readFileSync(file,'utf8'),lower=text.toLowerCase();
+  for(const word of GUNS){
+   const re=new RegExp(`(^|[^a-z0-9])${word.replace(/[.*+?^${}()|[\]\\&]/g,'\\$&')}($|[^a-z0-9])`,'i');
+   if(/^[\x00-\x7f]+$/.test(word)?re.test(lower):text.includes(word))hits.push(`${file}: ${word}`);
+  }
+  if(WEAPON_FILES.test(file))for(const re of WEAPON_ONLY)if(re.test(text))hits.push(`${file}: ${re}`);
+ }
+ assert.deepEqual(hits,[],'real gun names in shipped code:\n'+hits.join('\n'));
+});
+
+test('the gun guard catches a real name and covers the weapon code',()=>{
+ const re=new RegExp('(^|[^a-z0-9])s&w($|[^a-z0-9])','i');
+ assert.ok(re.test('a s&w revolver'));
+ assert.ok(WEAPON_ONLY[0].test('const model="SAKURA"'));
+ for(const f of ['src/player/weapons.mjs','src/player/weapon-mesh.mjs','src/player/ballistics.mjs','src/audio/gunfire.mjs'])
+  assert.ok(WEAPON_FILES.test(f),`${f} is not covered by the weapon-only names`);
+});

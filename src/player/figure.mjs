@@ -3,15 +3,25 @@ import {bakedCitizen} from './character-asset.mjs';
 import {buildGaitSpace,createGaitBlend,createBodyFacing,LOCOMOTION} from './locomotion.mjs';
 import {createFootIK} from './foot-ik.mjs';
 import {attackOf} from './attack-timing.mjs';
+import {createWeaponRig} from './weapon-mesh.mjs';
 import pack from './generated/character.mjs';
 
 export const FIGURE=Object.freeze({height:1.76,shirt:0xc94d38,trousers:0x263443,skin:0xdfb994,hair:0x25282a,cycle:1.55});
 
-const looping=new Set(['Idle','Walk','Run','Sprint','Death','Guard','Drive']);
+const looping=new Set(['Idle','Walk','Run','Sprint','Death','Guard','Drive','SwordIdle','PistolIdle','CrouchWalk']);
 /** Clips the gait blend owns. Anything else is a one-shot the state machine plays over it. */
 const GAIT=new Set(['Idle','Walk','Run','Sprint']);
-/** The swings. They own the whole body while they play; see STRIKE. */
+/** The fists' swings. They own the whole body while they play; see STRIKE. */
 const PUNCHES=new Set(['Punch','PunchCross']);
+/** Every swing that takes the body over, the katana's cut included (PLAN-WEAPONS W1). */
+const SWINGS=new Set([...PUNCHES,'SwordAttack']);
+/**
+ * PLAN-WEAPONS W1: holding a weapon changes how the body stands. The weapon's idle takes the
+ * Idle share of the gait blend, faded over `STANCE_FADE` s, so standing still with a katana out
+ * is Sword_Idle and walking is still the walk.
+ */
+const STANCE={katana:'SwordIdle',pistol:'PistolIdle',revolver:'PistolIdle'};
+const STANCE_FADE=.25;
 
 /**
  * How a swing takes the body over, and how fast the body turns onto its target.
@@ -66,7 +76,7 @@ export function characterAction(state){
  if(state.hurtTime>0)return 'Hit';
  if(state.trafficReaction==='guard')return 'Guard';
  if(state.trafficReaction==='startle')return 'Startle';
- if(state.attackTime>0)return state.attackName==='PunchCross'?'PunchCross':'Punch';
+ if(state.attackTime>0)return state.attackName==='PunchCross'?'PunchCross':state.attackName==='SwordAttack'?'SwordAttack':'Punch';
  return null;
 }
 
@@ -99,7 +109,13 @@ export function bakedAsset(){return baked??=bakedCitizen(pack);}
  */
 const UNGROUNDED=new Set(['Fall','Death','Enter','Exit','Drive']);
 
-export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=null,variant=null}={}){
+/**
+ * @param {any} [asset]
+ * @param {any} [palette]
+ * @param {{ctx?:any, variant?:any, weapons?:string[]|null}} [options] `weapons`: what the body
+ *   carries (PLAN-WEAPONS), drawn in the hand when `state.weapon` names it and stowed otherwise.
+ */
+export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=null,variant=null,weapons=null}={}){
  // `variant` names an appearance archetype (RUN 6.8). Assets with one look ignore it.
  const instance=asset.instance(palette,variant),root=instance.root;
  const mixer=new AnimationMixer(root),actions={};
@@ -118,7 +134,9 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
  // has eleven bones and none of these names, so it simply goes without.
  const footIK=asset.legBones?createFootIK(root,{bones:asset.legBones,ctx}):null;
  let overlay=null,previousAttack=0,disposed=false,seeded=false,dominant='Idle';
- const strike={Punch:0,PunchCross:0};
+ const strike={Punch:0,PunchCross:0,SwordAttack:0};
+ // PLAN-WEAPONS: how far each weapon stance has faded in.
+ const stance={SwordIdle:0,PistolIdle:0};
  // A jump in world position is a teleport, not a stride. Locked feet have to be forgotten or
  // one gets dragged across the city on the next frame.
  let lastX=null,lastZ=null;
@@ -132,18 +150,22 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
  for(const name of GAIT)actions[name]?.play().setEffectiveWeight(0);
  for(const name of GAIT)if(actions[name])actions[name].paused=true;
  if(actions.Idle){actions.Idle.paused=false;actions.Idle.setEffectiveWeight(1);}
+ for(const name of Object.keys(stance))actions[name]?.play().setEffectiveWeight(0);
  mixer.update(0);
+ // What the body carries (null: nothing, as for every pedestrian). Built on the Idle pose just
+ // set, which is the pose the carry positions in weapon-mesh.mjs were placed against.
+ const weaponRig=weapons?.length?createWeaponRig(root,{carry:weapons}):null;
 
  /** Play a one-shot or a held pose over the legs, or hand the body back to the gait. */
  function setOverlay(next,state){
-  const restart=(next==='Punch'||next==='PunchCross')&&(state.attackTime??0)>previousAttack+.01;
+  const restart=SWINGS.has(next)&&(state.attackTime??0)>previousAttack+.01;
   if(next===overlay&&!restart)return;
   // A swing's weight is not the mixer's to fade: it is set every frame against the gait (see
   // STRIKE), so it neither fades in over the legs nor out to nothing.
-  if(overlay&&actions[overlay]&&!PUNCHES.has(overlay))actions[overlay].fadeOut(next==='Fall'?.06:.14);
+  if(overlay&&actions[overlay]&&!SWINGS.has(overlay))actions[overlay].fadeOut(next==='Fall'?.06:.14);
   if(next&&actions[next]){
    const action=actions[next];
-   if(PUNCHES.has(next))action.reset().play();
+   if(SWINGS.has(next))action.reset().play();
    else action.reset().setEffectiveWeight(1).fadeIn(overlay?.14:.1).play();
   }
   overlay=next&&actions[next]?next:null;
@@ -164,15 +186,23 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
    // A swing takes its share from the gait rather than being averaged with it (STRIKE).
    const requested=characterAction(state);
    let swung=0;
-   for(const name of PUNCHES){
+   for(const name of SWINGS){
     const on=requested===name&&actions[name]?1:0,rate=dt/(on?STRIKE.fadeIn:STRIKE.fadeOut);
     strike[name]+=Math.max(-rate,Math.min(rate,on-strike[name]));
     actions[name]?.setEffectiveWeight(strike[name]);swung+=strike[name];
    }
    const share=Math.max(0,1-swung);
+   // The weapon's stance takes the Idle share (STANCE); with nothing out it fades back to Idle.
+   const held=STANCE[state.weapon]??null;let stood=0;
+   for(const name of Object.keys(stance)){
+    const on=held===name&&actions[name]?1:0,rate=dt/STANCE_FADE;
+    stance[name]+=Math.max(-rate,Math.min(rate,on-stance[name]));stood+=stance[name];
+   }
+   const idleShare=(weights.get('Idle')??0)*share;
+   for(const name of Object.keys(stance))actions[name]?.setEffectiveWeight(idleShare*stance[name]);
    for(const name of GAIT){
     const action=actions[name];if(!action)continue;
-    const weight=(weights.get(name)??0)*share;
+    const weight=(weights.get(name)??0)*share*(name==='Idle'?Math.max(0,1-stood):1);
     action.setEffectiveWeight(weight);
     if(name==='Idle'){action.paused=false;action.timeScale=1;continue;}
     const time=gait.timeFor(name);
@@ -191,12 +221,14 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
    if(overlay){
     const action=actions[overlay],duration=action.getClip().duration;
     let time=null;
-    if(overlay==='Punch'||overlay==='PunchCross'){
+    if(SWINGS.has(overlay)){
      // The player's swing carries its real length: play the clip at its own speed, so the
      // frame the fist is out is the frame the hit test runs (attack-timing.mjs measured both).
      // NPC swings come in as the old 0.42 s pulse and keep that mapping.
      const total=state.attackDuration>0?state.attackDuration:.42;
      time=state.attackDuration>0?duration*(1-state.attackTime/total):duration-state.attackTime*(duration/.42);
+     // A katana cut that met a wall holds the frame it met it on (combat.mjs cut()).
+     if(overlay==='SwordAttack'&&Number.isFinite(state.attackHold))time=state.attackHold*duration;
     }
     if(overlay==='Hit'){const total=state.hurtDuration>0?state.hurtDuration:.34;
      time=state.hurtTime>0?duration*(1-state.hurtTime/total):duration/2;}
@@ -214,7 +246,7 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
    // A swing faces what it is thrown at: combat picks the target when the swing starts and
    // tracks it through the wind-up (`attackHeading`), and the body turns onto it fast enough
    // to be square before the fist is out.
-   const aiming=state.attackTime>0&&Number.isFinite(state.attackHeading);
+   const aiming=(state.attackTime>0||Number.isFinite(state.attackHold)&&strike.SwordAttack>0)&&Number.isFinite(state.attackHeading);
    const desired=aiming?state.attackHeading:speed>LOCOMOTION.idleSpeed
     ?(state.bodyHeading??state.heading??0)
     :(state.heading??state.bodyHeading??0);
@@ -249,6 +281,8 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
     head?.rotateX(-snap*k*back);head?.rotateZ(-snap*k*across*.8);
    }
    root.updateMatrixWorld(true);
+   // The weapon in the hand, and the rest where they are carried (PLAN-WEAPONS R3).
+   weaponRig?.show(state.weapon??null);
 
    // Feet last, on top of the finished pose, because it corrects what the animation produced
    // rather than producing it. A teleport or a state where the feet are not on anything drops
@@ -264,13 +298,17 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
    footIK?.reset();
    mixer.stopAllAction();
    for(const action of Object.values(actions))action.reset();
-   overlay=null;previousAttack=0;seeded=false;dominant='Idle';strike.Punch=strike.PunchCross=0;
+   overlay=null;previousAttack=0;seeded=false;dominant='Idle';strike.Punch=strike.PunchCross=strike.SwordAttack=0;
+   stance.SwordIdle=stance.PistolIdle=0;
    gait.reset();facing.reset(0);
    for(const name of GAIT)actions[name]?.play().setEffectiveWeight(0);
    for(const name of GAIT)if(actions[name])actions[name].paused=true;
    if(actions.Idle){actions.Idle.paused=false;actions.Idle.setEffectiveWeight(1);}
+   for(const name of Object.keys(stance))actions[name]?.play().setEffectiveWeight(0);
    mixer.update(0);
   },
+  /** PLAN-WEAPONS: the carried weapons, or null on a body that carries none. */
+  get weapons(){return weaponRig;},
   recolour(palette){instance.recolour(palette);},
   setHeight(metres){instance.setHeight(metres);},
   /** RUN 6.8: how broad this body is. A no-op on an asset that has one build. */
@@ -281,6 +319,7 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
   dispose(){
    if(disposed)return;disposed=true;
    mixer.stopAllAction();mixer.uncacheRoot(root);
+   weaponRig?.dispose();
    instance.dispose();
   }
  };
