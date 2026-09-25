@@ -5610,6 +5610,41 @@ curved stick (said in the test). Fails before (no module).
 **Limitations.** C5 (gyro aim through WebHID) is not done. Joy-Con pairs are recognised by name
 but untested. Steam Input can capture the controller before Chrome sees it.
 
+## 9ae. After the device check of §9ac/§9ad — the measurement button, the patrol-car ram, the officer's muzzle (same branch, from `master` `d3b4785`)
+
+The user's check on the Windows PC (Chrome, HIGH): the Switch Pro Controller "works quite well";
+the scene ran at **13.1 fps** at the scramble camera (the header's own counter, one screenshot,
+not a sweep); and there was **no 「JSON を保存」**.
+
+- **No save button (`2b7dcf8`, `9c6a342`).** The panel only existed with `?perf=` in the URL, and
+  its save button stayed hidden until a sweep had finished. Now 詳細設定 has a 「パフォーマンス計測
+  （約2分）」 button that starts the sweep without any URL and returns to the full scene view first
+  (the inspection layout shrinks the canvas); the save and copy buttons are always visible,
+  disabled until the result exists; and the JSON downloads by itself when the sweep ends.
+  Headless: the button flow brings the panel up, the sweep starts, 0 console errors
+  (`evidence/perf-pad/p0-button.png`).
+- **Rammed by a patrol car, the player's car stopped (`553307b`).** A chasing patrol car stopped
+  4.5 m centre to centre — inside two car half-lengths — so it sat pressed into the player's car,
+  and the player's move test refused every move, away from it included (the car reported
+  `stalled`). Now the player's car may always move *out of* an overlap it is already in (a move
+  that increases the distance to that car); driving further into any car is still a contact. And
+  a patrol car stops at both half-lengths plus 1.2 m and never steps into the player's box.
+  Standing still next to it for 3 s is still the in-car arrest. `tests/police-ram.test.mjs` (3):
+  two fail on the old code with exactly the device symptom (0.00 m moved; the patrol car inside
+  the player's car).
+- **The officer's flash (`5e5030a`)** now starts at the drawn revolver's own muzzle when a near
+  humanoid draws the officer (`near-characters muzzleOf`), the estimate only otherwise.
+
+**Checked and not possible with these clips: the two-handed katana (R4 option (b)).** Measured
+through `Sword_Idle` and the whole cut, the handle is 0.73–1.02 m from the left shoulder; the left
+arm reaches 0.48 m (upper arm 0.243 + forearm 0.236). No IK can close that without moving the
+torso and the right arm, which would change the measured cut. It needs a two-handed sword clip.
+Quaternius' Universal Animation Library 2 (CC0, same skeleton, a sword theme) might have one, but
+it has no pinned source in `assets/character/upstream.lock.json` (§9h, `docs/RUN5-5-ANIMATION`), so
+adding it is an asset decision for the user, not something to fetch from an unverified mirror.
+
+**Gates at `9c6a342`.** `npm run typecheck` clean; `npm test` **695 tests, 690 pass, 0 fail, 5 skipped**.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
