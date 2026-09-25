@@ -11,6 +11,7 @@
 
 import {clipCameraArm} from './camera.mjs';
 import {createCrowdContact} from './crowd-contact.mjs';
+import {createInputMap,createRumble} from './input-map.mjs';
 
 // The camera arm. Solids are tested at the camera's own height rather than on the ground,
 // so it is a facade that pulls the camera in and not a bollard it is sailing well above.
@@ -57,6 +58,22 @@ export const PLAYER = Object.freeze({
  carHitSpeed: 1.5
 });
 
+/**
+ * C3: the pad's camera speed and invert-Y, from `?padLook=1.3&invertY=1` (kept in this browser's
+ * storage once given, so they stick between sessions). Defaults: 1 and off.
+ */
+export function padSettings(search = typeof location !== 'undefined' ? location.search : '', storage = safeStorage()) {
+ let saved = {};
+ try {saved = JSON.parse(storage?.getItem('shibuya.pad') ?? '{}') ?? {};} catch {}
+ const q = new URLSearchParams(search);
+ const look = Number(q.get('padLook') ?? saved.look ?? 1);
+ const invertY = (q.get('invertY') ?? String(saved.invertY ?? 0)) === '1';
+ const out = {look: Number.isFinite(look) && look > 0 ? Math.min(3, look) : 1, invertY};
+ if (q.has('padLook') || q.has('invertY')) try {storage?.setItem('shibuya.pad', JSON.stringify({look: out.look, invertY: out.invertY ? 1 : 0}));} catch {}
+ return out;
+}
+function safeStorage() {try {return typeof localStorage !== 'undefined' ? localStorage : null;} catch {return null;}}
+
 /** Furthest the player may stand from the middle, matching the modelled extent. */
 const LIMIT = 244;
 
@@ -95,6 +112,11 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
  };
  const keys = new Set();
  let padPoll = null;
+ // PLAN-PERFORMANCE-AND-PAD C1-C4: the pad through one positional layout (input-map.mjs), read
+ // once a frame in updateInput(); `padFrame` is what input() merges with the keys.
+ const inputMap = createInputMap(), rumble = createRumble();
+ let padFrame = null, lastDevice = 'keyboard', padProfile = null;
+ const settings = padSettings();
  // On-screen controls, for a phone. Held as axes rather than as synthetic key events so a
  // finger can be half-way down a throttle, and so releasing the screen cannot leave a key
  // stuck the way a lost keyup does.
@@ -139,7 +161,10 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
   // R reloads, the right mouse button held aims (`onAim(true|false)`). On a pad: Y cycles, LB
   // held aims, X is the attack (fire with the pistol out).
   // W4: Q rolls, C crouches (on a pad RB and the right stick's click).
-  attach(element, {onExit, onDrive, onAttack, onHorn, onWeapon, onWeaponCycle, onReload, onAim, onRoll, onCrouch} = {}) {
+  // C1-C4: `driving()` says which half of the pad layout applies; `onSiren`, `onHornOnly` and
+  // `onMap` are the pad's d-pad up, left-stick press in a car, and −.
+  attach(element, {onExit, onDrive, onAttack, onHorn, onWeapon, onWeaponCycle, onReload, onAim, onRoll, onCrouch,
+                   onSiren, onHornOnly, onMap, driving = () => false} = {}) {
    if (detach) return;
    const down = (e) => {
     if (e.repeat) return;
@@ -161,6 +186,7 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    const blur = () => {keys.clear(); touch.forward = 0; touch.strafe = 0; touch.running = false; onAim?.(false);};
    const move = (e) => {
     if (document.pointerLockElement !== element) return;
+    lastDevice = 'mouse';
     state.heading -= e.movementX * PLAYER.look;
     state.pitch = Math.max(-PLAYER.pitchLimit, Math.min(PLAYER.pitchLimit, state.pitch - e.movementY * PLAYER.look));
    };
@@ -191,25 +217,32 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
     touchLast = {x: e.clientX, y: e.clientY};
    };
    const touchEnd = e => {if (e.pointerId === touchId) {touchId = null; touchLast = null;}};
-   // Edge-detected, because a held button would otherwise fire get-in/get-out every frame.
-   let padPrev = {drive: false, exit: false, attack: false, cycle: false, aim: false, roll: false, crouch: false};
+   // The pad, as actions: one poll a frame, edges fired once, held states kept for input().
+   let padAim = false;
    padPoll = (dt) => {
-    const pad = gamepad(); if (!pad) return;
-    const drive = pad.buttons[0]?.pressed ?? false, exit = pad.buttons[9]?.pressed ?? false, attack=pad.buttons[2]?.pressed??false;
-    const cycle = pad.buttons[3]?.pressed ?? false, aim = pad.buttons[4]?.pressed ?? false;
-    const roll = pad.buttons[5]?.pressed ?? false, crouch = pad.buttons[11]?.pressed ?? false;
-    if (roll && !padPrev.roll) onRoll?.();
-    if (crouch && !padPrev.crouch) onCrouch?.();
-    if (drive && !padPrev.drive) onDrive?.();
-    if (exit && !padPrev.exit) {keys.clear(); onExit?.();}
-    if(attack&&!padPrev.attack)onAttack?.();
-    if(cycle&&!padPrev.cycle)onWeaponCycle?.(1);
-    if(aim!==padPrev.aim)onAim?.(aim);
-    padPrev = {drive, exit, attack, cycle, aim, roll, crouch};
-    const look = pad.axes[2] ?? 0, pitch = pad.axes[3] ?? 0;
-    if (Math.abs(look) > PLAYER.padDeadzone) state.heading -= look * PLAYER.padLook * dt;
-    if (Math.abs(pitch) > PLAYER.padDeadzone)
-     state.pitch = Math.max(-PLAYER.pitchLimit, Math.min(PLAYER.pitchLimit, state.pitch - pitch * PLAYER.padLook * dt));
+    const pad = gamepad();
+    const mode = driving() ? 'car' : 'foot';
+    const f = inputMap.poll(pad, dt, mode);
+    padFrame = pad ? f : null; padProfile = f.profile;
+    if (!pad) return;
+    if (f.pressed.length || Math.hypot(f.move.x, f.move.y) > 0 || Math.hypot(f.look.x, f.look.y) > 0 || f.throttle > 0 || f.brake > 0) lastDevice = 'pad';
+    for (const action of f.pressed) {
+     if (action === 'fire') onAttack?.();
+     else if (action === 'reload') onReload?.();
+     else if (action === 'roll') onRoll?.();
+     else if (action === 'enter' || action === 'exit') onDrive?.();
+     else if (action === 'weaponPrev') onWeaponCycle?.(-1);
+     else if (action === 'weaponNext') onWeaponCycle?.(1);
+     else if (action === 'crouch') onCrouch?.();
+     else if (action === 'horn') (onHornOnly ?? onHorn)?.();
+     else if (action === 'siren') (onSiren ?? onHorn)?.();
+     else if (action === 'map') onMap?.();
+     else if (action === 'menu') {keys.clear(); onExit?.();}
+    }
+    if (f.aim !== padAim) {padAim = f.aim; onAim?.(f.aim);}
+    const k = PLAYER.padLook * settings.look * dt;
+    if (f.look.x) state.heading -= f.look.x * k;
+    if (f.look.y) state.pitch = Math.max(-PLAYER.pitchLimit, Math.min(PLAYER.pitchLimit, state.pitch - f.look.y * k * (settings.invertY ? -1 : 1)));
    };
    window.addEventListener('keydown', down); window.addEventListener('keyup', up);
    window.addEventListener('blur', blur);
@@ -270,19 +303,19 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    let running = keys.has('shift') || touch.running;
    if (Math.abs(touch.forward) > Math.abs(fz)) fz = touch.forward;
    if (Math.abs(touch.strafe) > Math.abs(fx)) fx = touch.strafe;
-   const pad = gamepad();
-   if (pad) {
-    const dead = v => Math.abs(v) < PLAYER.padDeadzone ? 0 : v;
-    const px = dead(pad.axes[0] ?? 0), pz = dead(-(pad.axes[1] ?? 0));
-    // Triggers drive: right is throttle, left is brake and reverse.
-    const rt = pad.buttons[7]?.value ?? 0, lt = pad.buttons[6]?.value ?? 0;
-    const drive = dead(rt - lt);
-    const wants = Math.abs(pz) > Math.abs(drive) ? pz : drive;
+   // The pad (C1-C3): the stick through a radial deadzone; in a car ZR/ZL ramped into throttle and
+   // brake, R the handbrake; on foot B held runs.
+   let handbrake = false;
+   const f = padFrame;
+   if (f) {
+    const drive = f.throttle - f.brake;
+    const wants = Math.abs(f.move.y) > Math.abs(drive) ? f.move.y : drive;
     if (Math.abs(wants) > Math.abs(fz)) fz = wants;
-    if (Math.abs(px) > Math.abs(fx)) fx = px;
-    running = running || (pad.buttons[10]?.pressed ?? false) || (pad.buttons[1]?.pressed ?? false);
+    if (Math.abs(f.move.x) > Math.abs(fx)) fx = f.move.x;
+    running = running || f.run;
+    handbrake = f.handbrake;
    }
-   return {forward: fz, strafe: fx, running, handbrake: keys.has(' ') || running};
+   return {forward: fz, strafe: fx, running, handbrake: keys.has(' ') || running || handbrake};
   },
   /**
    * Set by the on-screen controls. Merged with the keys and the pad on the same rule the pad
@@ -459,7 +492,12 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    if(!state.alive||state.hurtTime>0)return false;state.health=Math.max(0,state.health-Math.max(0,amount));state.hurtTime=.34;
    if(state.health<=0){state.alive=false;state.runOver=0;state.hitBy=source;}return true;
   },
-  revive() {return api.place();}
+  revive() {return api.place();},
+  /** C4: rumble the pad for an event ('shot', 'cut', 'hurt', 'crash'); nothing without one. */
+  rumble(kind, scale = 1) {return rumble.play(gamepad(), kind, undefined, scale);},
+  /** C1: 'keyboard', 'mouse' or 'pad' -- whichever moved last -- and the pad's profile. */
+  get lastDevice() {return lastDevice;},
+  get padProfile() {return padProfile;}
  };
  return api;
 }

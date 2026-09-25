@@ -59,6 +59,7 @@ import {createCrowdVoices,prioritise} from '../src/player/voices.mjs';
 import {createMeleeCombat} from '../src/player/combat.mjs';
 import {createArsenal} from '../src/player/arsenal.mjs';
 import {createGunfire} from '../src/audio/gunfire.mjs';
+import {controlHints} from '../src/player/input-map.mjs';
 import {lineOfSight,peopleAlong,castShot} from '../src/player/ballistics.mjs';
 import {WEAPONS} from '../src/player/weapons.mjs';
 import {BLOOM_KICK,PIPELINE_OFF} from '../src/fidelity/pipeline.mjs';
@@ -232,7 +233,7 @@ export default function Home(){
   a.x=player.state.x;a.z=player.state.z;a.heading=player.state.heading;a.speed=player.state.speed;
   a.lod='near';a.animationTime=(a.animationTime??0)+dt;a.height=player.state.y;};
  const releaseCrowdSlot=()=>{const a=crowdSlot();if(!a)return;a.controlled=false;a.active=false;a.mode='ambient';};
- let aimCamera=0;
+ let aimCamera=0,healthLast=100,hintKey='';
  const applyPlayerCamera=(dt:number)=>{const ctx=lifeEntry.hooks.current?.network?.ctx??null;// RUN 9: once the body is IN the car, frame the car, not the body. Following the player
   // through the doorway put the eye a few metres behind a point that is inside the vehicle,
   // so the camera sat on the roof and the whole entry was shot from inside the bodywork.
@@ -429,7 +430,7 @@ export default function Home(){
    // W2: every shot is heard (recorded CC0 gunshot + the street's slapback), knocks the camera a
    // little and blooms its frame; the HQ crowd sees it through the bounded witness pass.
    onShot:(shot:any)=>{gunfire?.shot(shot.from.x,shot.from.y,shot.from.z,shot.heading,{kind:'pistol',hit:shot.hit});
-    soundBank?.duck?.(.5,1.4);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_SHOT);},
+    soundBank?.duck?.(.5,1.4);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_SHOT);player?.rumble?.('shot');},
    onWitness:(event:any)=>lifeEntry.hooks.current?.witness?.(event)??0});
    groups.dynamic.add(arsenal.effects.root);}
   if(!gunfire)gunfire=createGunfire(()=>playerAudio?.context??null,()=>soundBank,{solid:(x:number,z:number)=>!!lifeEntry.hooks.current?.network?.ctx?.solid?.(x,z,.1)});
@@ -446,7 +447,9 @@ export default function Home(){
   touchPad?.setDriving(false);touchPad?.show();
   const sim=trafficEntry.hooks.current?.sim;
   if(sim&&!playerCar){playerCar=createPlayerVehicle(sim,ctx);if(!playerCar.spawn(player.state.x,player.state.z))console.warn('[Player] no room to park the car');}
-  playerMode=true;combatDeathReported=false;controls.enabled=false;player.attach(canvas,{onExit:()=>exitPlayer(),onDrive:()=>toggleDrive(),onAttack:()=>attack(),onWeapon:(n:number)=>selectWeapon(n),onWeaponCycle:(d:number)=>cycleWeapon(d),onAim:(on:boolean)=>arsenal?.aim(on&&!driving),onReload:()=>{if(!driving)arsenal?.reload();},onRoll:()=>{if(playerMode&&!driving&&!vehicleTransition.active&&melee.phase==='idle')player?.roll();},onCrouch:()=>{if(playerMode&&!driving&&!vehicleTransition.active)player?.crouch();},onHorn:()=>{if(driving&&playerCar&&!police?.toggleSiren(playerCar))soundscape?.horn(playerCar.state.x,playerCar.state.z);}});setPlayerHit(null);setMode('player');
+  playerMode=true;combatDeathReported=false;controls.enabled=false;player.attach(canvas,{onExit:()=>exitPlayer(),onDrive:()=>toggleDrive(),onAttack:()=>attack(),onWeapon:(n:number)=>selectWeapon(n),onWeaponCycle:(d:number)=>cycleWeapon(d),onAim:(on:boolean)=>arsenal?.aim(on&&!driving),onReload:()=>{if(!driving)arsenal?.reload();},onRoll:()=>{if(playerMode&&!driving&&!vehicleTransition.active&&melee.phase==='idle')player?.roll();},
+   // C1-C4: the pad's own buttons for the siren (d-pad up), the horn alone (left stick in a car) and the map (−).
+   driving:()=>driving,onSiren:()=>{if(driving&&playerCar)police?.toggleSiren(playerCar);},onHornOnly:()=>{if(driving&&playerCar)soundscape?.horn(playerCar.state.x,playerCar.state.z);},onMap:()=>playUI?.toggleMap?.(),onCrouch:()=>{if(playerMode&&!driving&&!vehicleTransition.active)player?.crouch();},onHorn:()=>{if(driving&&playerCar&&!police?.toggleSiren(playerCar))soundscape?.horn(playerCar.state.x,playerCar.state.z);}});setPlayerHit(null);setMode('player');
   (window as any).__SHIBUYA_PLAYER__=player;(window as any).__SHIBUYA_CAR__=playerCar;
   // Foot IK is invisible from outside: a solver that never ran and a solver that ran and
   // declined to move anything look identical on screen. Under ?qa=1 the figure and the
@@ -547,7 +550,7 @@ export default function Home(){
    case 'punch_swing':if(!soundscape?.event(e,who))playerAudio?.swing(e.intensity);break;
    case 'punch_hit':if(!soundscape?.event(e,who))playerAudio?.punchHit(e.intensity);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_PUNCH*(.6+.4*e.intensity));break;
    // PLAN-WEAPONS W1: the katana. A cut lands like a heavy blow; steel on a wall clanks and sparks.
-   case 'blade_hit':if(!soundscape?.event({...e,kind:'punch_hit'},who))playerAudio?.punchHit(1);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_PUNCH*1.2);break;
+   case 'blade_hit':player?.rumble?.('cut');if(!soundscape?.event({...e,kind:'punch_hit'},who))playerAudio?.punchHit(1);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_PUNCH*1.2);break;
    case 'blade_clank':arsenal?.event(e);gunfire?.clank(e.x,1.2,e.z);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_PUNCH);break;
    case 'player_bump':soundscape?.event(e,who);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_BUMP*e.intensity);break;
    case 'vehicle_impact':if(!soundscape?.event(e,who))playerAudio?.bodyImpact(e.intensity);break;
@@ -563,7 +566,7 @@ export default function Home(){
  if(perfMode&&!perfProbe&&renderer){perfProbe=createPerfProbe({gl:renderer.getContext()});(system as any).probe=perfProbe;perfOverlay=createPerfOverlay({onSweep:startPerfSweep});(window as any).__SHIBUYA_PERF__=perfProbe;
   const off=new Set((params.get('off')??'').split(',').filter(Boolean));if(off.size)applyPerfOff(off);}
  perfProbe?.frameStart();perfProbe?.begin('player');if(playerMode&&player)player.updateInput(dt);if(playerMode&&player){view.getWorldDirection(viewDirection);arsenal?.frame(dt,{player,figure:playerFigure,driving:driving||!!vehicleTransition.active,world:weaponWorld,
-  camera:{position:view.position,direction:viewDirection},touch:touchEnabled&&document.pointerLockElement!==canvas,time:lifeEntry.hooks.current?.sim?.time??0});
+  camera:{position:view.position,direction:viewDirection},touch:touchEnabled&&document.pointerLockElement!==canvas,pad:player.lastDevice==='pad',time:lifeEntry.hooks.current?.sim?.time??0});
   BLOOM_KICK.value=arsenal?.effects.kick??0;}else BLOOM_KICK.value=0;if(playerMode&&player){
   if(vehicleTransition.active){const pose=vehicleTransition.update(dt);if(pose){
     // The DOOR comes from the stage, not from the overall phase. `sin(phase * PI)` opened the
@@ -645,7 +648,7 @@ export default function Home(){
    // draining it here keeps the simulation free of anything that draws.
    // An impact is a step that lost its speed: compare before and after rather than having
    // the vehicle call back into the app.
-   if(carSpeedLast>1&&Math.abs(c.speed)<carSpeedLast*.3){if(!soundscape?.crash(c.x,c.z,carSpeedLast/Math.max(1,playerCar.def.speed)*1.6))playerAudio?.impact(carSpeedLast,playerCar.def.speed);vehicleEffects?.impact(c);shake=Math.min(1,shake+.2);}
+   if(carSpeedLast>1&&Math.abs(c.speed)<carSpeedLast*.3){if(!soundscape?.crash(c.x,c.z,carSpeedLast/Math.max(1,playerCar.def.speed)*1.6))playerAudio?.impact(carSpeedLast,playerCar.def.speed);vehicleEffects?.impact(c);shake=Math.min(1,shake+.2);player?.rumble?.('crash',Math.min(1,carSpeedLast/12));}
    carSpeedLast=Math.abs(c.speed);
    playerAudio?.engine(c.speed,playerCar.def.speed,Math.max(0,drive.forward),c.damage,playerCar.def.engine);
    if(playerCar.state.damage!==damageLast){damageLast=playerCar.state.damage;setCarDamage(damageLast);}}
@@ -675,6 +678,9 @@ export default function Home(){
     pedestrianGreen:crowdSim?.signals?.phase?.()[0]==='PEDESTRIAN'});}
   playUI?.update(playElapsed,player.state,playerCar?.state,driving,playerReach,frameHits);
   if(arsenal)playUI?.setWeapon(arsenal.snapshot(),{aiming:player.state.aim>0&&!driving,locked:player.state.aimLock!=null});
+  // C4: losing health shakes the pad; C1: the HUD's hints follow the pad in use.
+  if((player.state.health??100)<healthLast)player.rumble?.('hurt');healthLast=player.state.health??100;
+  {const profile=player.lastDevice==='pad'?player.padProfile:'keyboard',key=profile+(driving?':car':':foot');if(key!==hintKey){hintKey=key;playUI?.setControls?.(controlHints(profile,driving));}}
   if(police){policeFrustum.setFromProjectionMatrix(policeMatrix.multiplyMatrices(view.projectionMatrix,view.matrixWorldInverse));
    const w=police.frame(dt,{player:player.state,car:playerCar,driving,melee:melee.snapshot(),weapons:arsenal?.snapshot()??null,solid:weaponWorld.solid,traffic:trafficEntry.hooks.current?.sim,crowd:crowdSim,listener:{x:view.position.x,z:view.position.z,vx:0,vz:0},visible:inView,hurt:(n:number,src:string)=>{if(!driving)player.hurt?.(n,src);}});
    playUI?.setWanted(w,dt);(window as any).__SHIBUYA_POLICE__=police;
