@@ -25,7 +25,12 @@ export const FLEET_PARTS=Object.freeze(['body','glass','dark','front','rear']);
  */
 export const LIVERY=Object.freeze({
  none:  Object.freeze({id:0}),
- police:Object.freeze({id:1,lower:0x121417,second:0xf1f1ec,band:.58}),
+ // PLAN-POLICE-VOICE-KAZE-DETAIL Step P: .58 was found (device, day and night) to sit well
+ // below the sedan profile's actual beltline (`SILHOUETTE.sedan.belt` reaches .755 across the
+ // doors), deep in the lower door -- so the car was mostly white with a thin black sliver at
+ // the rocker, which read as grey rather than a crisp black-and-white split. .74 sits just under
+ // the door-top beltline, at the real proportion.
+ police:Object.freeze({id:1,lower:0x121417,second:0xf1f1ec,band:.74}),
  taxiTwoTone:Object.freeze({id:2,lower:0xe7b823,second:0x2f6b45,band:.73}),
  bus:   Object.freeze({id:3,lower:0x2f7d4f,second:0xe9e2c8,band:.40}),
  taxiCream:Object.freeze({id:4,lower:0xe8e1cf,second:0x7a1f2b,band:.73}),
@@ -153,10 +158,13 @@ export function installLivery(material){
  */
 export function fleetGeometry(type){
  const shape=buildVehicleShape(type,{detail:0});
- const g=shape.geometry,parts={body:[],glass:[],dark:[],front:[],rear:[]};
+ const g=shape.geometry,parts={body:[],glass:[],dark:[],front:[],rear:[],lightbar:[]};
  const add=(k,geo)=>{if(geo)parts[k].push(geo);};
  add('body',g.paint);add('glass',g.glass);add('dark',g.dark);add('dark',g.plate);
  add('dark',g.rubber);add('dark',g.rim);add('front',g.lamp);add('rear',g.tail);
+ // Step P: the patrol car's light-bar lens is its own batch, not the tail lamp, so the siren can
+ // flash it without also being bound to the tail lamp's colour (or vice versa).
+ add('lightbar',g.lightbar);
  const a=shape.anchors,m=new Matrix4();
  for(const key of ['frontLeftWheel','frontRightWheel','rearLeftWheel','rearRightWheel']){
   const [x,y,z]=a[key];const flip=x<0;
@@ -199,7 +207,10 @@ export function createFleetBatches(types,capacity,materials){
  // BatchedMesh wants every geometry indexed or none; the scooter's box pile is not.
  for(const parts of Object.values(types))for(const g of Object.values(parts))
   if(!g.index)g.setIndex([...Array(g.attributes.position.count).keys()]);
- for(const part of FLEET_PARTS){
+ // Step P: the light-bar lens is a sixth, optional batch -- only types with `d.lightbar` (the
+ // patrol car) contribute geometry to it, exactly like `glass` already skips the scooter. The
+ // plan allows at most one extra draw call for all police cars together, for exactly this.
+ for(const part of [...FLEET_PARTS,'lightbar']){
   let vertices=0,indices=0;
   for(const parts of Object.values(types)){const g=parts[part];if(!g)continue;
    vertices+=g.attributes.position.count;indices+=g.index?g.index.count:g.attributes.position.count;}
