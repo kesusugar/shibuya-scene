@@ -5645,6 +5645,55 @@ adding it is an asset decision for the user, not something to fetch from an unve
 
 **Gates at `9c6a342`.** `npm run typecheck` clean; `npm test` **695 tests, 690 pass, 0 fail, 5 skipped**.
 
+## 9af. The two-handed trial — CMU motion capture for the katana and a shouldered gun (same branch; bench only, not in the game)
+
+The user asked for the two-handed motions §9ae found missing. UAL2 (the user's zip, CC0) has no
+two-handed sword or long-gun clip. The CMU Graphics Lab database does (licence: "may be copied,
+modified, or redistributed without permission"; the acknowledgment to carry if adopted: "The data
+used in this project was obtained from mocap.cs.cmu.edu. The database was created with funding
+from NSF EIA-0196217."). Screened by forward kinematics of the official ASF/AMC, hands apart:
+
+| trial | hands apart | verdict |
+| --- | --- | --- |
+| 02_07 swordplay | 0.14–0.23 m for all 18.8 s | two-handed sword; 6.8–7.6 s is an overhead cut |
+| 02_08, 02_09 swordplay | > 1 m half the time | mixed one/two-handed |
+| 80_03 shooting a gun | 0.44 m, steady, left ahead | long gun, raised and held |
+| 79_96 shooting a gun | 0.35–0.6 m | long gun, less steady |
+| 139_05 Pulling a Gun | left hand down | one-handed pistol |
+
+**What was built (offline + a bench; nothing in `src/` changed).**
+- `scripts/cmu/asf.mjs` reads ASF/AMC (units 1/0.45 inch; a bone's rotation is C·Rz·Ry·Rx·C⁻¹;
+  the zero pose is a T facing +Z, as the game rig is bound).
+- `scripts/cmu/weapon-clip.mjs <cmu dir> <preset> <out>` retargets onto `citizen.glb` and puts both
+  hands on the weapon: the weapon's axis from the SOURCE hands, the right hand turned to hold it
+  (the edge in the plane of the cut for the katana; level for the gun), the left hand placed on
+  the handle / fore-end by two-bone IK. Presets `katana-cut` (02_07 6.2–8.4 s, mirrored — see
+  §16a), `rifle-raise` (80_03 1.9–7.0 s) and `rifle-shouldered` (80_03 4.2–6.8 s with the stock in
+  the shoulder, levelled, both arms by IK). Output in `assets/character/cmu-weapons/` with the
+  source files' SHA-256; the raw CMU files are not committed.
+- `qa/gta-upgrade/cmu-weaponbench.html` plays the clips on the game's humanoid with the game's
+  katana and a grey proxy gun (仮). `?only=<clip>&times=…` for close-ups.
+  `weaponbench-capture.mjs` takes the page name as a third argument.
+
+**Result (`evidence/weapons/cmu-two-handed/`).**
+- **Katana: works.** The arms do not break: right hand at the guard, left hand 0.15 m behind at the
+  pommel end, both wrapped round the handle through the whole cut (left palm off its place by at
+  most 5.2 cm). The overhead cut reads clearly: raised at 0.3–0.95 s, the cut at 1.1 s,
+  follow-through to 1.5 s, back to guard at 2.0 s. Against it: the subject bends deep at the
+  follow-through; the hand speed is about 3–4 m/s (slower than the current one-handed cut); the
+  wrists are 68–77° from rest at median (forearm twist lands in the wrist, since CMU keeps it in
+  `lwrist`).
+- **Gun as captured: hands right, pose not a shooting stance.** Both hands on the gun (3.1 cm), but
+  aimed about 17° up and held in front of the chest, the butt 15–17 cm off the shoulder joint.
+- **Gun shouldered: usable for a short weapon.** Levelled, the butt 5.8 cm from the shoulder joint,
+  both hands on. With the stock at the shoulder the left hand misses the source's 0.46 m fore-end
+  by 13 cm (the arm is 0.48 m), so the support hand is 0.28 m ahead — a submachine gun's length.
+  The gun sits at chin height; the head does not lower to the sights.
+
+Not done, and needed before any of it is in the game: timing (hit frame, reach) measured on the
+clip like `SWORD` (§9y); a loopable hold and a fire recoil for the gun; the walk with the upper
+body layered over it (as the pistol aim is); citizen.glb conversion; a device look. `tests/cmu-weapon-clip.test.mjs` (6).
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
@@ -5953,6 +6002,18 @@ is nothing to show. Also worth knowing: geometry changes to `src/traffic/vehicle
 by `bake:static` (the traffic fleet, not just `bake:playable`'s close-up pack) — `tests/static-key
 .test.mjs` and `tests/static-models.test.mjs` catch a stale bake, but only if the bake is rerun
 before the PR, not just the playable pack.
+
+**The two-handed trial (§9af): two T poses are not the same T.** Copying each bone's turn from
+rest onto the target's rest (RUN 5.6) assumes the rests agree. CMU's ASF rest splays the thighs
+20° out (`axis 0 0 20`, direction 0.34 −0.94 0) where the game rig's legs hang straight: every
+frame came out with the legs crossed by that 20°. Each target bone is now swung onto the source
+bone's rest direction first. The same step is what RUN 5.7's "shoulder 10° high" was.
+
+**The two-handed trial (§9af): check which hand leads on a grip before retargeting a weapon.**
+02_07's subject holds the sword with the LEFT hand at the guard (the left→right hand line points
+back at the chest in 170 of 188 samples). Taking the blade axis as left→right turned the katana
+backwards and the yaw that aligns it turned the whole figure away from the camera. The take is
+mirrored left for right, since the game's katana is in the right hand.
 
 ## 17. Files that matter
 
