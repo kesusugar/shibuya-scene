@@ -137,13 +137,19 @@ export function createPlayerVehicle(sim, ctx) {
   probe.x = x; probe.z = z; probe.heading = heading;
   if(!sim.blocked(probe, state.type, state.slot, CAR.carPad))return true;
   // Only scan the bounded traffic pool after the broad-phase rejects a pose.
+  let overlapped=false;
   for(const v of sim.pool){
    if(!v.active||v===state.slot)continue;
-   const d=VEHICLES[v.type];if(d&&boxOverlap(probe,def,v,d,CAR.carPad)){
-    contact=edgeContact(corners(v,d.width,d.length,CAR.carPad),state);state.rammed=v;break;
-   }
+   const d=VEHICLES[v.type];if(!d||!boxOverlap(probe,def,v,d,CAR.carPad))continue;
+   overlapped=true;
+   // A car already overlapping this one (a patrol car rammed in, a car that pulled into the
+   // player) must not pin it: a move that takes the player further from it is allowed, so the
+   // player can always drive out of a hit. Moving closer, or into a car not already touching, is
+   // still a contact.
+   if(boxOverlap(state,def,v,d,CAR.carPad)&&Math.hypot(x-v.x,z-v.z)>Math.hypot(state.x-v.x,state.z-v.z)+1e-5){state.rammed=v;continue;}
+   contact=edgeContact(corners(v,d.width,d.length,CAR.carPad),state);state.rammed=v;return false;
   }
-  return false;
+  return overlapped;
  };
  /**
   * Is this spot on a pedestrian crossing? RUN 10 browser QA, scenario K: from the player start

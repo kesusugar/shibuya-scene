@@ -4,7 +4,7 @@
 //
 // Nothing appears in view: a patrol car is placed on the lane graph 80–200 m away and outside the
 // camera, an officer is a pedestrian 40–140 m away and out of view who is re-drawn in uniform.
-import {pose} from '../traffic/path.mjs';
+import {pose,boxOverlap} from '../traffic/path.mjs';
 import {VEHICLES} from '../traffic/config.mjs';
 import {OFFICER_BASE} from '../life/appearance.mjs';
 import {COMBAT} from '../player/combat.mjs';
@@ -19,6 +19,7 @@ export const UNITS = Object.freeze({
  chaseSpeed: 13, accel: 5,           // m/s, m/s²
  straightIn: 30,                     // m: the last stretch is driven straight at the player
  stopShort: 4.5,                     // m from the player's centre a patrol car stops
+ carGap: 1.2,                        // m between a patrol car and the player's car, bumper to bumper
  reroute: 2,                         // s between route searches
  officerRun: 3.4,                    // m/s
  giveWayReach: 40, giveWayCone: 1.05,// m ahead of a siren, and the heading difference that counts
@@ -187,8 +188,16 @@ export function createPoliceUnits({koban = {x: 48.5, z: 20.4}, buildBudget = 150
   } else v.speed = Math.max(0, v.speed - UNITS.accel * 2 * dt);
   v.brake = v.speed < want - .3;
   let step = v.speed * dt;
-  if (!P.leaving) step = Math.min(step, Math.max(0, d - UNITS.stopShort));
-  v.x += Math.sin(v.heading) * step; v.z += Math.cos(v.heading) * step;
+  // Stop short of the player. In a car the gap is both bodies' half-lengths and a margin: the old
+  // fixed 4.5 m between centres left a patrol car pressed into the player's car, which then could
+  // not move at all (found on the device: rammed by a patrol car, the player's car stopped).
+  const myDims = me.type ? VEHICLES[me.type] : null, dims = VEHICLES[v.type];
+  const gap = myDims && dims ? Math.max(UNITS.stopShort, (myDims.length + dims.length) / 2 + UNITS.carGap) : UNITS.stopShort;
+  if (!P.leaving) step = Math.min(step, Math.max(0, d - gap));
+  const nx = v.x + Math.sin(v.heading) * step, nz = v.z + Math.cos(v.heading) * step;
+  // And never into the player's car's box, whatever the angle.
+  if (myDims && dims && boxOverlap({x: nx, z: nz, heading: v.heading}, dims, me, myDims, .15)) {v.speed = Math.min(v.speed, 1); return;}
+  v.x = nx; v.z = nz;
  }
 
  /**

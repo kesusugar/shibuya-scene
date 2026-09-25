@@ -64,6 +64,7 @@ const files=[
  'tests/roll-crouch.test.mjs',
  'tests/perf-probe.test.mjs',
  'tests/input-map.test.mjs',
+ 'tests/police-ram.test.mjs',
  'tests/own-car.test.mjs',
  'tests/kaze-detail.test.mjs',
  'tests/wanted.test.mjs',
