@@ -21,7 +21,7 @@
 // the same body yelps in a new register each time sounds broken.
 
 // Neutral adult formants, Hz. Scaled per persona -- a shorter vocal tract lifts all three.
-const VOWELS = {
+export const VOWELS = {
  a: [730, 1090, 2440], i: [270, 2290, 3010], u: [300, 870, 2240],
  e: [530, 1840, 2480], o: [570, 840, 2410], n: [280, 1200, 2400]
 };
@@ -29,13 +29,22 @@ const VOWELS = {
 // What goes in front of a vowel. A stop is a beat of silence and then a burst; an aspirate is
 // just breath. `gap` and `ms` are seconds and milliseconds respectively, which is ugly, but
 // they are read in those units at the two places they are used.
-const ONSETS = {
+export const ONSETS = {
  k: {gap: .026, ms: 14, type: 'highpass', hz: 2600, level: .85},
  t: {gap: .022, ms: 10, type: 'highpass', hz: 3600, level: .75},
  b: {gap: .030, ms: 12, type: 'lowpass', hz: 800, level: .85},
  g: {gap: .026, ms: 12, type: 'lowpass', hz: 1500, level: .75},
  h: {gap: 0, ms: 60, type: 'bandpass', hz: 1400, level: .45},
- n: {gap: .014, ms: 0, type: null, hz: 0, level: 0}   // nasal: a dip, not a burst
+ n: {gap: .014, ms: 0, type: null, hz: 0, level: 0, nasal: true},   // nasal: a hum, not a burst
+ // PLAN-POLICE-VOICE-KAZE-DETAIL Step V1: three onsets for the police lines.
+ // `m`: like `n`, a nasal hum rather than a burst -- see `nasal` below, which plays the hum at
+ // `VOWELS.n` (already the nasal-murmur formant triple) during the gap.
+ m: {gap: .05, ms: 0, type: null, hz: 0, level: 0, nasal: true},
+ // The Japanese flap: a very short closure with no burst at all, between vowels.
+ r: {gap: .02, ms: 0, type: null, hz: 0, level: 0},
+ // A fricative lower than an /s/ would be, which is what turns しゃ into a soft rather than a
+ // hissy syllable.
+ sh: {gap: 0, ms: 85, type: 'bandpass', hz: 3500, level: .5}
 };
 
 /**
@@ -81,6 +90,41 @@ export const LINES = Object.freeze([
  {tag: 'えっ', kind: 'gasp', urgency: [0, 1], level: .7,
   segs: [{v: 'e', ms: 150, on: 'h'}], bend: [1.08, 1.18, 1.1]}
 ]);
+
+/**
+ * PLAN-POLICE-VOICE-KAZE-DETAIL Step V1: the six lines a patrol officer shouts through the
+ * loudspeaker. A separate `kind: 'police'` -- the crowd never draws from this list and the
+ * loudspeaker never draws from `LINES` -- picked by the pursuit situation (V2), not urgency.
+ * Every contour is a shout: a strong onset, a raised peak, and a falling end with the last
+ * vowel stretched for 「ー」.
+ */
+export const POLICE_LINES = Object.freeze([
+ {tag: '止まれ！', kind: 'police', situation: 'stop',
+  segs: [{v: 'o', ms: 90, on: 't'}, {v: 'a', ms: 110, on: 'm'}, {v: 'e', ms: 280, on: 'r'}],
+  bend: [1.05, 1.35, .85]},
+ // Said twice: a lone 「停車」 read stiff on the device (2026-09-25 note).
+ {tag: '停車！停車！', kind: 'police', situation: 'stopCar',
+  segs: [{v: 'e', ms: 120, on: 't'}, {v: 'a', ms: 150, on: 'sh'},
+         {v: 'e', ms: 120, on: 't'}, {v: 'a', ms: 240, on: 'sh'}],
+  bend: [1.05, 1.3, .85]},
+ {tag: '動くな！', kind: 'police', situation: 'freeze',
+  segs: [{v: 'u', ms: 70}, {v: 'o', ms: 90, on: 'g'}, {v: 'u', ms: 70, on: 'k'}, {v: 'a', ms: 240, on: 'n'}],
+  bend: [1.02, 1.28, .82]},
+ {tag: '逃げるな！', kind: 'police', situation: 'chase',
+  segs: [{v: 'i', ms: 80, on: 'n'}, {v: 'e', ms: 90, on: 'g'}, {v: 'u', ms: 70, on: 'r'}, {v: 'a', ms: 250, on: 'n'}],
+  bend: [1.03, 1.3, .82]},
+ {tag: '降りろ！', kind: 'police', situation: 'getOut',
+  segs: [{v: 'o', ms: 90}, {v: 'i', ms: 80, on: 'r'}, {v: 'o', ms: 280, on: 'r'}],
+  bend: [1.05, 1.32, .85]},
+ {tag: '確保！', kind: 'police', situation: 'arrest',
+  segs: [{v: 'a', ms: 90, on: 'k'}, {v: 'u', ms: 80, on: 'k'}, {v: 'o', ms: 300, on: 'h'}],
+  bend: [1.08, 1.35, .8]}
+]);
+
+/** The police line for a situation, or null. Deterministic: the situation names the line. */
+export function policeLine(situation) {
+ return POLICE_LINES.find(l => l.situation === situation) ?? null;
+}
 
 export const VOICE = Object.freeze({
  // Beyond this a shout is not scheduled at all. At 30 m a pedestrian is a few pixels; the
@@ -130,6 +174,17 @@ export function persona(id) {
  };
 }
 
+// PLAN-POLICE-VOICE-KAZE-DETAIL Step V1: two adult male throats, deterministic by car id, the
+// same way a pedestrian's persona is deterministic by their id. A lower base pitch and formants
+// scaled down for a longer vocal tract than the crowd's high voices ever get.
+const POLICE_THROATS = Object.freeze([
+ Object.freeze({f0: 118, formant: .82, rasp: .4}),
+ Object.freeze({f0: 104, formant: .78, rasp: .55})
+]);
+export function policePersona(carId) {
+ return POLICE_THROATS[hash(carId + 70001) < .5 ? 0 : 1];
+}
+
 const lerp = (a, b, t) => a + (b - a) * t;
 
 /** The pitch contour, sampled at `u` through the utterance. */
@@ -176,6 +231,107 @@ export function recordedKind(kind, high) {
  return null;
 }
 
+/** One filtered noise burst: a stop release, or the breath in front of an /h/ or /sh/. */
+function burst(ctx, at, spec, out, level) {
+ if (!spec.type || spec.ms <= 0) return;
+ const frames = Math.max(1, Math.floor(ctx.sampleRate * spec.ms / 1000));
+ const buffer = ctx.createBuffer(1, frames, ctx.sampleRate);
+ const data = buffer.getChannelData(0);
+ for (let i = 0; i < frames; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / frames);
+ const src = ctx.createBufferSource(); src.buffer = buffer;
+ const filter = ctx.createBiquadFilter();
+ filter.type = spec.type; filter.frequency.value = spec.hz; filter.Q.value = 1.4;
+ const gain = ctx.createGain(); gain.gain.value = spec.level * level;
+ src.connect(filter); filter.connect(gain); gain.connect(out);
+ src.start(at);
+ src.onended = () => {try {src.disconnect(); filter.disconnect(); gain.disconnect();} catch {}};
+}
+
+/**
+ * PLAN-POLICE-VOICE-KAZE-DETAIL Step V1: the same glottis-plus-three-formants synthesis
+ * `createCrowdVoices` uses, factored out so the loudspeaker (V2, in `src/police/siren.mjs`) can
+ * build one police line into a caller-supplied node instead of straight to the destination --
+ * the megaphone chain and the HRTF panner live between this and the speakers, and the crowd's
+ * own scheduling (range culling, the concurrent-voice cap, scream headroom) does not apply to a
+ * patrol car's loudspeaker, which has its own gap and repeat rules instead.
+ *
+ * Returns null if the context refuses (matches `createCrowdVoices`'s never-throws contract).
+ */
+export function synthesizePoliceLine(ctx, line, throat, {at, level = 1} = {}) {
+ try {
+  const glottis = ctx.createOscillator(); glottis.type = 'sawtooth';
+  const envelope = ctx.createGain(); envelope.gain.value = 0;
+  const out = ctx.createGain(); out.gain.value = level;
+  const bands = [0, 1, 2].map(i => {
+   const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = [7, 10, 12][i];
+   const g = ctx.createGain(); g.gain.value = [1, .5, .22][i];
+   glottis.connect(f); f.connect(g); g.connect(envelope);
+   return f;
+  });
+  envelope.connect(out);
+
+  const total = line.segs.reduce((s, seg) => s + (seg.on ? ONSETS[seg.on].gap : 0) + seg.ms / 1000, 0);
+  const base = throat.f0;
+  const t0 = at;
+  glottis.frequency.setValueAtTime(base * bendAt(line.bend, 0), t0);
+  bands.forEach((f, i) => f.frequency.setValueAtTime(VOWELS[line.segs[0].v][i] * throat.formant, t0));
+  envelope.gain.setValueAtTime(0, t0);
+
+  let t = t0;
+  line.segs.forEach((seg, index) => {
+   const onset = seg.on ? ONSETS[seg.on] : null;
+   if (onset) {
+    if (onset.gap > 0) {
+     if (onset.nasal) {
+      // A nasal is heard, not silent: a short hum at the nasal formant before the vowel.
+      const hum = VOWELS.n;
+      bands.forEach((f, i) => f.frequency.setValueAtTime(hum[i] * throat.formant, t));
+      envelope.gain.setValueAtTime(0, t);
+      envelope.gain.linearRampToValueAtTime(.3, t + Math.min(.02, onset.gap * .4));
+      envelope.gain.linearRampToValueAtTime(0, t + onset.gap);
+     } else envelope.gain.setValueAtTime(0, t);
+     t += onset.gap;
+    }
+    burst(ctx, t, onset, out, level);
+   }
+   const span = seg.ms / 1000;
+   const u0 = (t - t0) / total, u1 = (t - t0 + span) / total;
+   glottis.frequency.linearRampToValueAtTime(base * bendAt(line.bend, u0), t);
+   glottis.frequency.linearRampToValueAtTime(base * bendAt(line.bend, Math.min(1, u1)), t + span);
+   const from = VOWELS[seg.v], to = VOWELS[seg.glide ?? seg.v];
+   bands.forEach((f, i) => {
+    f.frequency.linearRampToValueAtTime(from[i] * throat.formant, t + Math.min(.03, span * .4));
+    f.frequency.linearRampToValueAtTime(to[i] * throat.formant, t + span);
+   });
+   const nasalOn = seg.on === 'n' || seg.on === 'm';
+   const peak = nasalOn ? .6 : 1;
+   envelope.gain.linearRampToValueAtTime(peak, t + Math.min(.028, span * .45));
+   const last = index === line.segs.length - 1;
+   envelope.gain.linearRampToValueAtTime(last ? peak * .8 : peak * .9, t + span);
+   t += span;
+  });
+  envelope.gain.linearRampToValueAtTime(0, t + VOICE.release);
+
+  glottis.start(t0); glottis.stop(t + VOICE.release + .02);
+  glottis.onended = () => {
+   try {glottis.disconnect(); for (const f of bands) f.disconnect(); envelope.disconnect(); out.disconnect();} catch {}
+  };
+  return {
+   out, duration: t - t0 + VOICE.release,
+   stop(when) {
+    try {
+     envelope.gain.cancelScheduledValues(when);
+     envelope.gain.setValueAtTime(envelope.gain.value, when);
+     envelope.gain.linearRampToValueAtTime(0, when + VOICE.duck);
+     glottis.stop(when + VOICE.duck + .01);
+    } catch {}
+   }
+  };
+ } catch {
+  return null;
+ }
+}
+
 export function createCrowdVoices(getContext, {samples = null} = {}) {
  // What is sounding right now. Held as a list rather than a count because a scream that
  // finds every slot taken does not queue behind the chatter -- it cuts one short and takes
@@ -187,22 +343,6 @@ export function createCrowdVoices(getContext, {samples = null} = {}) {
  // four of twelve, in the same run that ducking was meant to have fixed.
  let lastAlert = -1, lastScream = -1, disposed = false;
  const stats = {played: 0, dropped: 0, culled: 0, ducked: 0};
-
- /** One filtered noise burst: a stop release, or the breath in front of an /h/. */
- const burst = (ctx, at, spec, out, level) => {
-  if (!spec.type || spec.ms <= 0) return;
-  const frames = Math.max(1, Math.floor(ctx.sampleRate * spec.ms / 1000));
-  const buffer = ctx.createBuffer(1, frames, ctx.sampleRate);
-  const data = buffer.getChannelData(0);
-  for (let i = 0; i < frames; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / frames);
-  const src = ctx.createBufferSource(); src.buffer = buffer;
-  const filter = ctx.createBiquadFilter();
-  filter.type = spec.type; filter.frequency.value = spec.hz; filter.Q.value = 1.4;
-  const gain = ctx.createGain(); gain.gain.value = spec.level * level;
-  src.connect(filter); filter.connect(gain); gain.connect(out);
-  src.start(at);
-  src.onended = () => {try {src.disconnect(); filter.disconnect(); gain.disconnect();} catch {}};
- };
 
  return {
   get stats() {return {...stats, active: live.length};},
