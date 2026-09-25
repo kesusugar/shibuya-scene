@@ -48,6 +48,7 @@ next-env.d.ts
 /qa/gta-upgrade/*
 !/qa/gta-upgrade/charbench.html
 !/qa/gta-upgrade/vehiclebench.html
+!/qa/gta-upgrade/carbench.html
 !/qa/gta-upgrade/sync-cost.mjs
 !/qa/gta-upgrade/contact-cost.mjs
 !/qa/gta-upgrade/punchbench.html

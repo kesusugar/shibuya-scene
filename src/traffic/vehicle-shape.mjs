@@ -120,12 +120,23 @@ const SILHOUETTE={
  // PLAN-POLICE-AND-OWN-CAR Step H: the player's own car. A low 1990s-style Japanese sports
  // fastback: a low rounded nose (the lamps pop up out of it), a long sloping backlight and a
  // short tail. A class of car, not a copy of one.
+ //
+ // PLAN-POLICE-VOICE-KAZE-DETAIL Step K1: 16 belt stations and 13 house stations (was 11 and 9),
+ // carrying the coke-bottle in the width column -- swelling to the full 1.00 at both wheel arches,
+ // pinched to .94 at the waist between them -- and a canopy-flat run at the roof's centre in the
+ // house table, where the previous 9 points had none.
  fastback:{
-  belt:[[-.500,.560,.84],[-.470,.650,.93],[-.430,.690,.98],[-.360,.700,1],[-.200,.705,1],
-        [ .050,.705,1],[ .180,.685,1],[ .280,.625,.99],[ .380,.560,.96],[ .460,.490,.90],[ .500,.430,.80]],
-  house:[[-.400,.695,.76],[-.330,.800,.82],[-.240,.910,.87],[-.150,.975,.89],[-.050,1.000,.895],
-         [ .040,.990,.89],[ .120,.900,.86],[ .180,.800,.82],[ .220,.700,.78]],
-  floor:.110, arch:.340, axle:.310, plate:'both'
+  belt:[[-.500,.560,.80],[-.460,.640,.90],[-.410,.680,.96],[-.350,.700,1.00],[-.280,.705,1.00],
+        [-.200,.702,.97],[-.100,.698,.94],[-.020,.698,.94],[ .060,.700,.96],[ .150,.700,.99],
+        [ .230,.690,1.00],[ .300,.660,.99],[ .370,.610,.96],[ .430,.550,.90],[ .470,.490,.84],
+        [ .500,.430,.78]],
+  house:[[-.400,.695,.74],[-.360,.760,.79],[-.310,.840,.83],[-.250,.910,.865],[-.180,.960,.885],
+         [-.110,.988,.895],[-.040,1.000,.898],[ .030,.995,.895],[ .090,.965,.88],[ .150,.905,.855],
+         [ .195,.830,.82],[ .225,.750,.79],[ .250,.680,.76]],
+  floor:.110, arch:.340, axle:.2826, plate:'both',
+  // The classic front-three-quarter cue: two raised fender tops either side of a shallow valley
+  // down the bonnet centreline, centred on the front axle (where the wheel arches actually are).
+  fenderPeak: {at: .28, span: .22, amount: .055}
  }
 };
 const STYLE={taxi:'sedan',sedan:'sedan',kei:'hatch',van:'onebox',bus:'onebox',keiTruck:'cabover',
@@ -134,6 +145,8 @@ const STYLE={taxi:'sedan',sedan:'sedan',kei:'hatch',van:'onebox',bus:'onebox',ke
  heroSilver:'coupe',heroDark:'coupe'};
 /** The silhouettes, for tests: every lofted type must name one. */
 export const SILHOUETTES=Object.freeze(Object.keys(SILHOUETTE));
+/** The authored profile tables, for tests that check a specific silhouette's own numbers. */
+export const SILHOUETTE_TABLES=SILHOUETTE;
 export const STYLES=Object.freeze({...STYLE});
 
 /** Wheel radius, tuned so the tyre fills its arch instead of hanging under a flat sill. */
@@ -217,7 +230,7 @@ function corner(cx,cy,r,from,to,steps){
  * `sill` is where the flank meets the underside, and it is the wheel arch: raising it over an
  * axle cuts the flank away around the wheel while the floor stays where it is.
  */
-function bodyRing(halfWidth,floor,sill,belt,round){
+function bodyRing(halfWidth,floor,sill,belt,round,dip=0){
  const half=[];
  half.push({x:0,y:floor});
  half.push({x:halfWidth*.80,y:floor});
@@ -226,8 +239,12 @@ function bodyRing(halfWidth,floor,sill,belt,round){
  half.push({x:halfWidth,y:sill+(belt-sill)*.34});
  half.push({x:halfWidth,y:belt-round*1.6});
  half.push(...corner(halfWidth-round*.9,belt-round*1.6,round*.9,0,Math.PI/2,2).slice(1));
- half.push({x:halfWidth-round*2.2,y:belt,crease:true});          // beltline
- half.push({x:0,y:belt});
+ half.push({x:halfWidth-round*2.2,y:belt,crease:true});          // beltline / fender top
+ // PLAN-POLICE-VOICE-KAZE-DETAIL Step K1: a shallow valley down the centreline, between the two
+ // fender tops. `dip` is 0 for every silhouette but the fastback's fender-peak stations, which
+ // reproduces the old flat top there exactly -- one extra coplanar point costs nothing to look at.
+ half.push({x:halfWidth*.4,y:belt-dip*.4});
+ half.push({x:0,y:belt-dip});
  // Mirror, skipping the two points that sit on the centreline.
  const ring=[...half];
  for(let i=half.length-2;i>0;i--)ring.push({...half[i],x:-half[i].x});
@@ -290,11 +307,15 @@ export function buildVehicleShape(type,{detail=1}={}){
  };
  const steps=Math.max(16,Math.round(34*detail));
  const bodyStations=[];
+ // Step K1: the fender-peak valley, centred on the front axle -- a class of car whose fenders
+ // stand proud of a low bonnet between them, not a flat deck across the width.
+ const fenderPeak=profile.fenderPeak;
  for(let i=0;i<=steps;i++){
   const f=-.5+i/steps,z=f*L;
   const [beltF,widthF]=at(profile.belt,f);
+  const dip=fenderPeak?H*fenderPeak.amount*Math.sin(Math.max(0,1-Math.abs(f-fenderPeak.at)/fenderPeak.span)*Math.PI/2)**2:0;
   // Extra stations are worth spending near the arches; a coarse sample there flattens them.
-  bodyStations.push({z,ring:bodyRing(W/2*widthF,floorY,Math.min(sillAt(z),H*beltF-H*.07),H*beltF,round)});
+  bodyStations.push({z,ring:bodyRing(W/2*widthF,floorY,Math.min(sillAt(z),H*beltF-H*.07),H*beltF,round,dip)});
  }
  parts.paint.push(loft(bodyStations));
 
@@ -590,12 +611,17 @@ export function buildVehicleShape(type,{detail=1}={}){
 
  }
 
+ // Step K1: how far in from the outer skin a wheel sits, as a multiple of its own width. .80
+ // (every type but the ones that opt into a wider track) tucks it mostly behind the arch wall,
+ // which is fine for a body this box-like but buries a low sports car's wheel under a skirt --
+ // found on the device, comparing Kaze FR's carbench render against the reference photo.
+ const trackInset=d.track??.80;
  const anchors={
   body:[0,0,0],
-  frontLeftWheel:[-(W/2-width*.80),radius,axleZ],
-  frontRightWheel:[ (W/2-width*.80),radius,axleZ],
-  rearLeftWheel: [-(W/2-width*.80),radius,-axleZ],
-  rearRightWheel:[ (W/2-width*.80),radius,-axleZ],
+  frontLeftWheel:[-(W/2-width*trackInset),radius,axleZ],
+  frontRightWheel:[ (W/2-width*trackInset),radius,axleZ],
+  rearLeftWheel: [-(W/2-width*trackInset),radius,-axleZ],
+  rearRightWheel:[ (W/2-width*trackInset),radius,-axleZ],
   // For RUN 10 and RUN 11. Measured from the front axle, which is where a driver sits in any
   // body style: the seat is where the hips end up, the door is the hinge the panel swings on,
   // and entry and exit are where the character stands before and after.

@@ -59,6 +59,7 @@ const files=[
  'tests/fleet-types.test.mjs',
  'tests/name-guard.test.mjs',
  'tests/own-car.test.mjs',
+ 'tests/kaze-detail.test.mjs',
  'tests/wanted.test.mjs',
  'tests/police-units.test.mjs',
  'tests/police-extras.test.mjs',
