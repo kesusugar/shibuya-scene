@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-21",
+ "generated": "2026-09-25",
  "source": "Quaternius Universal Base Characters [Standard] + Universal Animation Library [Standard], CC0-1.0",
  "body": {
   "meshes": 3,
@@ -139,6 +139,66 @@
    "upstream": "Death01",
    "seconds": 2.4,
    "tracks": 50
+  },
+  {
+   "name": "PistolIdle",
+   "upstream": "Pistol_Idle_Loop",
+   "seconds": 1.667,
+   "tracks": 50
+  },
+  {
+   "name": "PistolAimUp",
+   "upstream": "Pistol_Aim_Up",
+   "seconds": 0.167,
+   "tracks": 50
+  },
+  {
+   "name": "PistolAimNeutral",
+   "upstream": "Pistol_Aim_Neutral",
+   "seconds": 0.167,
+   "tracks": 50
+  },
+  {
+   "name": "PistolAimDown",
+   "upstream": "Pistol_Aim_Down",
+   "seconds": 0.167,
+   "tracks": 50
+  },
+  {
+   "name": "PistolShoot",
+   "upstream": "Pistol_Shoot",
+   "seconds": 0.633,
+   "tracks": 50
+  },
+  {
+   "name": "PistolReload",
+   "upstream": "Pistol_Reload",
+   "seconds": 1.667,
+   "tracks": 50
+  },
+  {
+   "name": "SwordIdle",
+   "upstream": "Sword_Idle",
+   "seconds": 1.667,
+   "tracks": 50
+  },
+  {
+   "name": "SwordAttack",
+   "upstream": "Sword_Attack",
+   "seconds": 1.533,
+   "tracks": 50
+  },
+  {
+   "name": "Roll",
+   "upstream": "Roll",
+   "seconds": 1.467,
+   "tracks": 50
+  },
+  {
+   "name": "CrouchWalk",
+   "upstream": "Crouch_Fwd_Loop",
+   "seconds": 2,
+   "tracks": 50
   }
  ],
  "gait": {
@@ -146,7 +206,10 @@
   "Run": 3.7929,
   "Sprint": 8.25,
   "Fall": 0.2708,
-  "Death": 0.2708
+  "Death": 0.2708,
+  "SwordAttack": 0.9786,
+  "Roll": 3.4032,
+  "CrouchWalk": 0.75
  },
  "hybridRun": {
   "stride": 2.6866,
@@ -157,12 +220,12 @@
  },
  "output": {
   "file": "public/data/character/citizen.glb",
-  "bytes": 2260380,
-  "sha256": "5872c91bfedfa7fb3a1c2978b0ffbb66fd9dbccb6a3a2064d544578ab0777592"
+  "bytes": 2767956,
+  "sha256": "3e7089633f8218a83df5975f8dbc6877ed09d3e8640fd0bc6534f82d5c4bfc07"
  },
  "gaitDetail": {
   "samples": 120,
-  "measured": "2026-09-21",
+  "measured": "2026-09-25",
   "ankleHeight": 0.1119,
   "clips": {
    "Walk": {
@@ -219,6 +282,39 @@
     "airborne": 0.742,
     "contactOffset": 0,
     "leftContact": 0.058
+   },
+   "SwordAttack": {
+    "seconds": 1.533,
+    "speed": 0.9786,
+    "stride": 1.501,
+    "step": 0.75,
+    "cadence": 78.3,
+    "duty": 0.35,
+    "airborne": 0.3,
+    "contactOffset": 0.825,
+    "leftContact": 0.783
+   },
+   "Roll": {
+    "seconds": 1.467,
+    "speed": 3.4032,
+    "stride": 4.991,
+    "step": 2.496,
+    "cadence": 81.8,
+    "duty": 0.171,
+    "airborne": 0.658,
+    "contactOffset": 0,
+    "leftContact": 0
+   },
+   "CrouchWalk": {
+    "seconds": 2,
+    "speed": 0.75,
+    "stride": 1.5,
+    "step": 0.75,
+    "cadence": 60,
+    "duty": 0.333,
+    "airborne": 0.333,
+    "contactOffset": 0.492,
+    "leftContact": 0.092
    }
   }
  }

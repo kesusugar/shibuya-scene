@@ -36,7 +36,12 @@ const CLIPS={
  Idle:'Idle_Loop', Walk:'Walk_Loop', Run:'Jog_Fwd_Loop', Sprint:'Sprint_Loop',
  Punch:'Punch_Jab', PunchCross:'Punch_Cross', Hit:'Hit_Chest', Startle:'Hit_Head',
  Guard:'Crouch_Idle_Loop', Enter:'Sitting_Enter', Exit:'Sitting_Exit', Drive:'Driving_Loop',
- Interact:'Interact', Fall:'Death01', Death:'Death01'
+ Interact:'Interact', Fall:'Death01', Death:'Death01',
+ // PLAN-WEAPONS W1: the weapon clips, on the same skeleton. The three aim clips are single
+ // poses (0.17 s) blended by pitch; the pistol clips are two-handed, the sword clips one-handed.
+ PistolIdle:'Pistol_Idle_Loop', PistolAimUp:'Pistol_Aim_Up', PistolAimNeutral:'Pistol_Aim_Neutral',
+ PistolAimDown:'Pistol_Aim_Down', PistolShoot:'Pistol_Shoot', PistolReload:'Pistol_Reload',
+ SwordIdle:'Sword_Idle', SwordAttack:'Sword_Attack', Roll:'Roll', CrouchWalk:'Crouch_Fwd_Loop'
 };
 
 // Attributes nothing samples. Quaternius ships four UV sets for engine-side material layering

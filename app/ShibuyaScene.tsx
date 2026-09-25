@@ -57,6 +57,12 @@ import {createTouchControls,wantsTouch} from '../src/player/touch-controls.mjs';
 import {createBloodMarks} from '../src/life/blood.mjs';
 import {createCrowdVoices,prioritise} from '../src/player/voices.mjs';
 import {createMeleeCombat} from '../src/player/combat.mjs';
+import {createArsenal} from '../src/player/arsenal.mjs';
+import {createGunfire} from '../src/audio/gunfire.mjs';
+import {lineOfSight,peopleAlong,castShot} from '../src/player/ballistics.mjs';
+import {WEAPONS} from '../src/player/weapons.mjs';
+import {BLOOM_KICK} from '../src/fidelity/pipeline.mjs';
+import {ARCHETYPES as CROWD_ARCHETYPES} from '../src/life/config.mjs';
 import {createFeedbackBus} from '../src/app/feedback-bus.mjs';
 import {createVehicleTransition} from '../src/player/vehicle-transition.mjs';
 import {boxOverlap} from '../src/traffic/path.mjs';
@@ -113,12 +119,14 @@ export default function Home(){
  // The player is created once the crowd network is up, since it walks on that context.
  let player:any=null,playerMarker:any=null,carMarker:any=null,playerFigure:any=null,playerShadow:any=null,deferredCharacter:any=null,playerCar:any=null,playerAudio:any=null,crowdVoices:any=null,touchPad:any=null,blood:any=null,driving=false,playerMode=false;const followPose:any={x:0,y:0,z:0,tx:0,ty:0,tz:0};const playerBox={x:0,z:0,heading:0};
  // RUN 12.1: recorded audio. The scramble chirp sits on the crossing's landmark point (渋谷駅前, public/data landmarks.scramble).
- let soundBank:any=null,soundscape:any=null,police:any=null,arrestedPending=false;
+ let soundBank:any=null,soundscape:any=null,police:any=null,arrestedPending=false,arsenal:any=null,gunfire:any=null;
  // PLAN-POLICE W2: the koban at the station, where officers come from and the arrested wake up.
  const KOBAN={x:48.5,z:20.4};
  const policeFrustum=new THREE.Frustum(),policeMatrix=new THREE.Matrix4(),policePoint=new THREE.Vector3();
  const inView=(x:number,z:number)=>policeFrustum.containsPoint(policePoint.set(x,1.5,z))&&Math.hypot(x-view.position.x,z-view.position.z)<260;const earFacing=new THREE.Vector3(),SCRAMBLE_EAR={x:6.54,z:1.99};
  let seatedDrivers:any=null;let seatedHidden=false;let transitionSeated=false;let carjackSide=-1,carjackStage:string|null=null,lastCarjack:any=null;let vehicleVisual:any=null,vehicleEffects:any=null,playUI:any=null,localCrowdClock=0,frameHits=0,combatDeathReported=false;const followCamera=createFollowCamera(),feedback=createFeedbackBus(),melee=createMeleeCombat({
+  // PLAN-WEAPONS W1: the katana's cut goes through the same swing clock as a punch.
+  weapon:()=>arsenal?.current??'fists',
   // RUN 8: a punch is an event the crowd can see. The HQ layer bounds it by its own spatial
   // grid, so this costs the cells around the fight and not the population.
   onWitness:(event:any)=>lifeEntry.hooks.current?.witness?.(event)??0,
@@ -127,7 +135,7 @@ export default function Home(){
   // RUN 11.3: swings, hits and pain, for audio and the camera.
   onEvent:(kind:string,e:any)=>{feedback.emit(kind,lifeEntry.hooks.current?.sim?.time??0,e);}
  }),vehicleTransition=createVehicleTransition();
- const playerSize={width:PLAYER.radius*2,length:PLAYER.radius*2};const PLAYER_HEIGHT=1.76;
+ const playerSize={width:PLAYER.radius*2,length:PLAYER.radius*2};const PLAYER_WEAPONS=['pistol','katana'];const PLAYER_HEIGHT=1.76;
  // Getting in and out begins with the player's parked car, but a stopped traffic slot can
  // later become the controlled one. The slot is reused so traffic still sees its body.
  /**
@@ -185,7 +193,33 @@ export default function Home(){
    entry:{x:door.x,z:door.z,heading:door.heading},
    seat:{x:a.seat.x,z:a.seat.z,heading:entry.slot.heading}},entry.slot);
  };
- const attack=()=>{if(playerMode&&!driving&&!vehicleTransition.active&&player?.state.alive)melee.request();};
+ const attack=()=>{if(!(playerMode&&!driving&&!vehicleTransition.active&&player?.state.alive))return;
+  // PLAN-WEAPONS W2: with the pistol out the attack button is the trigger; on a phone (no pointer
+  // lock, no mouse to aim with) it locks on (R16).
+  if(arsenal?.trigger({touch:touchEnabled&&document.pointerLockElement!==canvas}))return;
+  melee.request();};
+ // PLAN-WEAPONS W2: the collision world a bullet sees, read through the live hooks every call.
+ const weaponMuzzle=new THREE.Vector3(),weaponBarrel=new THREE.Vector3(),viewDirection=new THREE.Vector3();
+ const weaponWorld:any={
+  solid:(x:number,z:number)=>!!lifeEntry.hooks.current?.network?.ctx?.solid?.(x,z,.05),
+  ground:(x:number,z:number)=>lifeEntry.hooks.current?.network?.ctx?.height?.(x,z)??0,
+  get cars(){return (trafficEntry.hooks.current?.sim?.pool??[]).filter((v:any)=>v.active);},
+  dimsOf:(v:any)=>(VEHICLES as any)[v.type]??null,
+  people:(from:any,dir:any,range:number,wide=false)=>{const sim=lifeEntry.hooks.current?.sim;if(!sim)return [];
+   if(!wide)return peopleAlong(sim.grid,from,dir,range);
+   const out:any[]=[];for(const p of sim.pool)if(p.active&&Math.hypot(p.x-from.x,p.z-from.z)<=range)out.push(p);return out;},
+  bodyOf:(p:any)=>({y:p.height??0,height:(CROWD_ARCHETYPES as any)[p.archetype]?.height??1.76}),
+  // Children are never combat targets in this game (combat.mjs `eligible`); a bullet is not stopped by one either.
+  skip:(p:any)=>!p.active||p.controlled||p.struck!==undefined||p.combatDead||p.archetype==='kid',
+  clear:(a:any,p:any)=>lineOfSight(weaponWorld.solid,a,p),
+  get crowd(){return lifeEntry.hooks.current?.sim??null;},
+  wound:(p:any,hit:any)=>melee.wound(lifeEntry.hooks.current?.sim,player,p,hit),
+  bleed:(pt:any,dir:any)=>{const sim=lifeEntry.hooks.current?.sim;sim?.splashes?.push({x:pt.x,y:weaponWorld.ground(pt.x,pt.z),z:pt.z,dx:dir.x*2,dz:dir.z*2,scale:.55,life:.4});},
+  muzzle:(figure:any)=>figure?.weapons?.muzzle(weaponMuzzle,weaponBarrel)?{x:weaponMuzzle.x,y:weaponMuzzle.y,z:weaponMuzzle.z}:null};
+ // PLAN-WEAPONS W1: 1/2/3, the wheel and the pad's weapon button. Not mid-swing, not in a car.
+ const weaponBusy=()=>melee.phase!=='idle'||!!vehicleTransition.active||!player?.state.alive;
+ const selectWeapon=(n:number)=>{if(playerMode&&arsenal?.select(n,{busy:weaponBusy(),driving}))touchPad?.setWeapon(arsenal.current);};
+ const cycleWeapon=(d:number)=>{if(playerMode&&arsenal?.cycle(d,{busy:weaponBusy(),driving}))touchPad?.setWeapon(arsenal.current);};
  const crowdSlot=()=>lifeEntry.hooks.current?.sim?.pool?.[0]??null;
  // Writing the reserved agent before the crowd updates puts the player in the same
  // neighbour grid the pedestrians avoid each other through, so they part around them, and
@@ -195,18 +229,19 @@ export default function Home(){
   a.x=player.state.x;a.z=player.state.z;a.heading=player.state.heading;a.speed=player.state.speed;
   a.lod='near';a.animationTime=(a.animationTime??0)+dt;a.height=player.state.y;};
  const releaseCrowdSlot=()=>{const a=crowdSlot();if(!a)return;a.controlled=false;a.active=false;a.mode='ambient';};
+ let aimCamera=0;
  const applyPlayerCamera=(dt:number)=>{const ctx=lifeEntry.hooks.current?.network?.ctx??null;// RUN 9: once the body is IN the car, frame the car, not the body. Following the player
   // through the doorway put the eye a few metres behind a point that is inside the vehicle,
   // so the camera sat on the roof and the whole entry was shot from inside the bodywork.
   // `seated` arrives before `driving` does -- control transfers at the end of the sequence,
   // and the camera has to move at the start of the seat, not after the door shuts.
   const inCar=(driving||transitionSeated)&&playerCar;
-  const state=inCar?playerCar.state:player.state;const desired=inCar?vehicleCamera(state,followPose,ctx):playerCamera(state,followPose,ctx);const c:any={...followCamera.update(desired,{x:state.x,y:state.y+(driving?CAR.eye:PLAYER.eye),z:state.z},ctx,dt,driving?'drive':'walk')};
+  const state=inCar?playerCar.state:player.state;aimCamera+=(((!inCar&&player.state.aim>0)?1:0)-aimCamera)*(1-Math.exp(-10*dt));const desired=inCar?vehicleCamera(state,followPose,ctx):playerCamera(state,followPose,ctx,aimCamera);const c:any={...followCamera.update(desired,{x:state.x,y:state.y+(driving?CAR.eye:PLAYER.eye),z:state.z},ctx,dt,driving?'drive':'walk')};
   if(shake>.002){const t=performance.now()/1000;
    // Two frequencies that do not divide into each other, so it reads as a knock rather than
    // a hum, and it only moves the eye -- the look-at point stays put or the view swims.
    c.x+=Math.sin(t*37)*shake*SHAKE_SCALE*SHAKE_THROW;c.y+=Math.sin(t*53)*shake*SHAKE_SCALE*SHAKE_THROW*.6;c.z+=Math.cos(t*43)*shake*SHAKE_SCALE*SHAKE_THROW;}
-  const targetFov=driving?61+Math.min(10,Math.abs(state.speed)*.7):50;const nextFov=view.fov+(targetFov-view.fov)*(1-Math.exp(-3*dt));if(Math.abs(nextFov-view.fov)>.01){view.fov=nextFov;view.updateProjectionMatrix();}
+  const targetFov=driving?61+Math.min(10,Math.abs(state.speed)*.7):50-(50-PLAYER.aimFov)*aimCamera;const nextFov=view.fov+(targetFov-view.fov)*(1-Math.exp(-3*dt));if(Math.abs(nextFov-view.fov)>.01){view.fov=nextFov;view.updateProjectionMatrix();}
   view.position.set(c.x,c.y,c.z);view.lookAt(c.tx,c.ty,c.tz);
   controls.target.set(c.tx,c.ty,c.tz);};
  // A vehicle box over the player is a knock-down. The traffic simulation's own overlap test
@@ -346,7 +381,7 @@ export default function Home(){
   if(!player.place()){console.warn('[Player] no standable ground at the start point');return false;}
   if(!playerMarker){playerMarker=createPlayerMarker();groups.dynamic.add(playerMarker.mesh);}
   if(!carMarker){carMarker=createPlayerMarker(MARKER.car);groups.dynamic.add(carMarker.mesh);}
-  if(!playerFigure){playerFigure=createPlayerFigure(undefined,undefined,{ctx});groups.dynamic.add(playerFigure.root);}
+  if(!playerFigure){playerFigure=createPlayerFigure(undefined,undefined,{ctx,weapons:PLAYER_WEAPONS});groups.dynamic.add(playerFigure.root);}
   // The crowd's own contact shadows skip the controlled slot, so the player was the one person
   // in the city standing on nothing. Same module, same single draw call, one instance.
   if(!playerShadow){playerShadow=createContactShadows(1);groups.dynamic.add(playerShadow.mesh);}
@@ -360,7 +395,7 @@ export default function Home(){
    // The same asset the player just took also upgrades the nearest NPCs, so the crowd beside
    // the player stops being a different order of fidelity from the player.
    lifeEntry.hooks.current?.setNearCharacterAsset?.(asset);
-   const next=createPlayerFigure(asset,undefined,{ctx:lifeEntry.hooks.current?.network?.ctx??null});
+   const next=createPlayerFigure(asset,undefined,{ctx:lifeEntry.hooks.current?.network?.ctx??null,weapons:PLAYER_WEAPONS});
    groups.dynamic.add(next.root);
    next.update(player.state,0);
    playerFigure.dispose();playerFigure=next;
@@ -386,6 +421,15 @@ export default function Home(){
   if(!soundBank){soundBank=createSoundBank(()=>playerAudio?.context??null,{base:((import.meta as any).env?.BASE_URL??'/')+'audio/'});
    soundscape=createSoundscape(soundBank,{scramble:SCRAMBLE_EAR});}
   // PLAN-POLICE W1/W3: the wanted level, the patrol cars' sirens and lamps.
+  // PLAN-WEAPONS: fists, pistol and katana; the gunfire and the katana's clank on the same bus.
+  if(!arsenal){arsenal=createArsenal({
+   // W2: every shot is heard (recorded CC0 gunshot + the street's slapback), knocks the camera a
+   // little and blooms its frame; the HQ crowd sees it through the bounded witness pass.
+   onShot:(shot:any)=>{gunfire?.shot(shot.from.x,shot.from.y,shot.from.z,shot.heading,{kind:'pistol',hit:shot.hit});
+    soundBank?.duck?.(.5,1.4);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_SHOT);},
+   onWitness:(event:any)=>lifeEntry.hooks.current?.witness?.(event)??0});
+   groups.dynamic.add(arsenal.effects.root);}
+  if(!gunfire)gunfire=createGunfire(()=>playerAudio?.context??null,()=>soundBank,{solid:(x:number,z:number)=>!!lifeEntry.hooks.current?.network?.ctx?.solid?.(x,z,.1)});
   if(!police)police=createPoliceDirector({getAudioContext:()=>playerAudio?.context??null,getAudioBus:()=>soundBank?.bus??null,koban:KOBAN});
   void soundBank.load();
   // The crowd shares the car's context rather than opening its own: browsers only unlock
@@ -394,19 +438,19 @@ export default function Home(){
   // On a touch device these are the controls, not an extra: there is no keyboard to fall
   // back to. They feed the same axes the keys and the pad feed.
   if(touchEnabled&&!touchPad)touchPad=createTouchControls({
-   onAxes:(axes:any)=>player?.setTouch(axes),onAttack:()=>attack(),
+   onAxes:(axes:any)=>player?.setTouch(axes),onAttack:()=>attack(),onWeapon:()=>cycleWeapon(1),
    onDrive:()=>toggleDrive(),onExit:()=>exitPlayer()});
   touchPad?.setDriving(false);touchPad?.show();
   const sim=trafficEntry.hooks.current?.sim;
   if(sim&&!playerCar){playerCar=createPlayerVehicle(sim,ctx);if(!playerCar.spawn(player.state.x,player.state.z))console.warn('[Player] no room to park the car');}
-  playerMode=true;combatDeathReported=false;controls.enabled=false;player.attach(canvas,{onExit:()=>exitPlayer(),onDrive:()=>toggleDrive(),onAttack:()=>attack(),onHorn:()=>{if(driving&&playerCar&&!police?.toggleSiren(playerCar))soundscape?.horn(playerCar.state.x,playerCar.state.z);}});setPlayerHit(null);setMode('player');
+  playerMode=true;combatDeathReported=false;controls.enabled=false;player.attach(canvas,{onExit:()=>exitPlayer(),onDrive:()=>toggleDrive(),onAttack:()=>attack(),onWeapon:(n:number)=>selectWeapon(n),onWeaponCycle:(d:number)=>cycleWeapon(d),onAim:(on:boolean)=>arsenal?.aim(on&&!driving),onReload:()=>{if(!driving)arsenal?.reload();},onRoll:()=>{if(playerMode&&!driving&&!vehicleTransition.active&&melee.phase==='idle')player?.roll();},onCrouch:()=>{if(playerMode&&!driving&&!vehicleTransition.active)player?.crouch();},onHorn:()=>{if(driving&&playerCar&&!police?.toggleSiren(playerCar))soundscape?.horn(playerCar.state.x,playerCar.state.z);}});setPlayerHit(null);setMode('player');
   (window as any).__SHIBUYA_PLAYER__=player;(window as any).__SHIBUYA_CAR__=playerCar;
   // Foot IK is invisible from outside: a solver that never ran and a solver that ran and
   // declined to move anything look identical on screen. Under ?qa=1 the figure and the
   // surface it queries are reachable, so a check can tell those two apart.
-  if(config.qa){(window as any).__SHIBUYA_FEEDBACK__=feedback;(window as any).__SHIBUYA_AUDIO__=playerAudio;(window as any).__SHIBUYA_SOUNDS__={bank:soundBank,scape:soundscape};(window as any).__SHIBUYA_MELEE__=melee;(window as any).__SHIBUYA_CONTACT__=player.contact.stats;(window as any).__SHIBUYA_FIGURE__=playerFigure;(window as any).__SHIBUYA_CTX__=ctx;(window as any).__SHIBUYA_LIFE__=lifeEntry.hooks.current;(window as any).__SHIBUYA_TRAFFIC__=trafficEntry.hooks.current;}
+  if(config.qa){(window as any).__SHIBUYA_FEEDBACK__=feedback;(window as any).__SHIBUYA_AUDIO__=playerAudio;(window as any).__SHIBUYA_SOUNDS__={bank:soundBank,scape:soundscape};(window as any).__SHIBUYA_MELEE__=melee;(window as any).__SHIBUYA_ARSENAL__=arsenal;(window as any).__SHIBUYA_CONTACT__=player.contact.stats;(window as any).__SHIBUYA_FIGURE__=playerFigure;(window as any).__SHIBUYA_CTX__=ctx;(window as any).__SHIBUYA_LIFE__=lifeEntry.hooks.current;(window as any).__SHIBUYA_TRAFFIC__=trafficEntry.hooks.current;}
   return true;};
- const exitPlayer=()=>{if(!playerMode)return;soundscape?.silence();playUI?.hide();vehicleVisual?.hide();vehicleEffects?.hide();lifeEntry.hooks.current?.setPlayerFocus(null);followCamera.reset();melee.reset();
+ const exitPlayer=()=>{if(!playerMode)return;soundscape?.silence();playUI?.hide();vehicleVisual?.hide();vehicleEffects?.hide();lifeEntry.hooks.current?.setPlayerFocus(null);followCamera.reset();melee.reset();arsenal?.reset();touchPad?.setWeapon('fists');
   // An abandoned carjack must not leave a driver half out of a car, a door hanging open, or a
   // slot frozen out of traffic for the rest of the session.
   {const was=vehicleTransition.cancel();
@@ -430,7 +474,7 @@ export default function Home(){
  const prerequisitesReady=()=>!!renderer&&!renderer.getContext().isContextLost()&&currentTier==='high'&&dayNight.active&&!!fidelity.pipeline&&requiredStages.every(id=>system.entries.get(id)?.status==='ready')&&!!ground&&['buildings','heroes','station','stationDetail','signs','streetscape','traffic','life','trains','construction','nightglow'].every(id=>!!system.entries.get(id)?.hooks.current)&&buildQueue.snapshot().queueLength===0&&!buildQueue.snapshot().activeBuildName;
  const startupBuildComplete=()=>{if(!startup||startupTrace.milestones.sceneBuildCompleteMs!==null)return startupTrace?.milestones.sceneBuildCompleteMs!==null;const latest=new Map<string,any>();for(const record of startupTrace.stages)if(record.endMs!==null)latest.set(record.key,record);const queue=buildQueue.snapshot();const complete=prerequisitesReady()&&startup.openStageCount===0&&queue.queueLength===0&&!queue.activeBuildName&&requiredTimingStages.every(key=>latest.get(key)?.completedSuccessfully);if(complete){startup.completeScene();renderStartupPanel();}return complete;};
  const finalizeStartupTiming=()=>{if(!startup||startupTrace.ready)return;startup.finalize();renderStartupPanel();appendStartupBoundaryDetails();console.info('[Startup Timing Report]',startupTrace);};
- const metricsFor=()=>{const info=renderer?.info,pipeline=fidelity.pipeline,trafficNow=trafficEntry.hooks.current?.stats,trainsNow=trainsEntry.hooks.current;renderer?.getDrawingBufferSize(drawingSize);return {roadReflection:roadReflection?{...roadReflection.stats}:null,tier:currentTier,time:clock.value,camera:publicCameraName(currentCamera),fps:latestFps,dpr:renderer?.getPixelRatio()??null,renderScale:PROFILES[currentTier]?.scale??null,framebufferWidth:renderer?drawingSize.x:null,framebufferHeight:renderer?drawingSize.y:null,triangles:info?.render.triangles??null,drawCalls:info?.render.calls??null,geometries:info?.memory.geometries??null,textures:info?.memory.textures??null,crowdCount:lifeEntry.hooks.current?.stats.total??null,nearCharacters:lifeEntry.hooks.current?.stats.nearCharacters??null,hqCrowd:lifeEntry.hooks.current?.stats.hqCrowd??null,melee:playerMode?melee.snapshot():null,seatedDrivers:seatedDrivers?.inspect()??null,transition:vehicleTransition.active?{kind:vehicleTransition.kind,stage:vehicleTransition.stage}:null,lastCarjack:lastCarjack?{driverId:lastCarjack.driverId,seed:lastCarjack.seed,vehicle:lastCarjack.vehicle,thrown:!!lastCarjack.thrown,pedestrian:lastCarjack.pedestrian?.id??null,reason:lastCarjack.reason??null}:null,occupancy:trafficEntry.hooks.current?.sim?.occupancy?.inspect()??null,movingVehicles:trafficNow?.moving??null,parkedVehicles:trafficNow?.parked??null,bicycles:null,trainCars:trainsNow?Object.values(trainsNow.meshes as Record<string,any>).reduce((n:number,m:any)=>n+(m.count??0),0):null,activePointLights:fidelity.lights.filter((l:any)=>l.visible&&l.intensity>0).length,activeSpotLights:fidelity.spots.filter((l:any)=>l.visible&&l.intensity>0).length,shadowMapSize:dayNight.key.shadow.mapSize.x||null,exposure:renderer?.toneMappingExposure??null,environmentIntensity:scene.environment?scene.environmentIntensity:null,gtaoEnabled:!!pipeline&&pipeline.ao.enabled!==false,bloomEnabled:!!pipeline&&pipeline.bloom.enabled!==false,bloomStrength:pipeline?.bloom.strength??null,bloomThreshold:pipeline?.bloom.threshold??null,smaaEnabled:!!pipeline&&pipeline.smaa.enabled!==false};};
+ const metricsFor=()=>{const info=renderer?.info,pipeline=fidelity.pipeline,trafficNow=trafficEntry.hooks.current?.stats,trainsNow=trainsEntry.hooks.current;renderer?.getDrawingBufferSize(drawingSize);return {roadReflection:roadReflection?{...roadReflection.stats}:null,tier:currentTier,time:clock.value,camera:publicCameraName(currentCamera),fps:latestFps,dpr:renderer?.getPixelRatio()??null,renderScale:PROFILES[currentTier]?.scale??null,framebufferWidth:renderer?drawingSize.x:null,framebufferHeight:renderer?drawingSize.y:null,triangles:info?.render.triangles??null,drawCalls:info?.render.calls??null,geometries:info?.memory.geometries??null,textures:info?.memory.textures??null,crowdCount:lifeEntry.hooks.current?.stats.total??null,nearCharacters:lifeEntry.hooks.current?.stats.nearCharacters??null,hqCrowd:lifeEntry.hooks.current?.stats.hqCrowd??null,melee:playerMode?melee.snapshot():null,weapons:playerMode?arsenal?.snapshot()??null:null,seatedDrivers:seatedDrivers?.inspect()??null,transition:vehicleTransition.active?{kind:vehicleTransition.kind,stage:vehicleTransition.stage}:null,lastCarjack:lastCarjack?{driverId:lastCarjack.driverId,seed:lastCarjack.seed,vehicle:lastCarjack.vehicle,thrown:!!lastCarjack.thrown,pedestrian:lastCarjack.pedestrian?.id??null,reason:lastCarjack.reason??null}:null,occupancy:trafficEntry.hooks.current?.sim?.occupancy?.inspect()??null,movingVehicles:trafficNow?.moving??null,parkedVehicles:trafficNow?.parked??null,bicycles:null,trainCars:trainsNow?Object.values(trainsNow.meshes as Record<string,any>).reduce((n:number,m:any)=>n+(m.count??0),0):null,activePointLights:fidelity.lights.filter((l:any)=>l.visible&&l.intensity>0).length,activeSpotLights:fidelity.spots.filter((l:any)=>l.visible&&l.intensity>0).length,shadowMapSize:dayNight.key.shadow.mapSize.x||null,exposure:renderer?.toneMappingExposure??null,environmentIntensity:scene.environment?scene.environmentIntensity:null,gtaoEnabled:!!pipeline&&pipeline.ao.enabled!==false,bloomEnabled:!!pipeline&&pipeline.bloom.enabled!==false,bloomStrength:pipeline?.bloom.strength??null,bloomThreshold:pipeline?.bloom.threshold??null,smaaEnabled:!!pipeline&&pipeline.smaa.enabled!==false};};
  const frameSamples=createFrameSamples();
  const waitFrames=(count:number)=>waitForRenderedFrames({count,getFrame:()=>renderedFrames,isDisposed:()=>disposed});
  const samplePerformance=async(count=120)=>{frameSamples.begin(count);await waitFrames(count+1);const result=frameSamples.snapshot();if(!result.complete)throw new Error('Incomplete frame sample; keep the tab visible');return result;};
@@ -465,7 +509,7 @@ export default function Home(){
  // RUN 11.4: a person is not a wall. Per-person shake used to be multiplied by how many were hit
  // in the frame, so a crowd pinned the camera at full shake (0.42 m of throw). Now one bounded
  // knock per frame of contact, and a smaller, sharper one for a landed punch.
- const SHAKE_BUMP=.05,SHAKE_PER_HIT=.12,SHAKE_PERSON_MAX=.45,SHAKE_PUNCH=.07,SHAKE_PUNCH_MAX=.25,SHAKE_FALL=2.6,SHAKE_THROW=.42;
+ const SHAKE_SHOT=.06,SHAKE_BUMP=.05,SHAKE_PER_HIT=.12,SHAKE_PERSON_MAX=.45,SHAKE_PUNCH=.07,SHAKE_PUNCH_MAX=.25,SHAKE_FALL=2.6,SHAKE_THROW=.42;
  // RUN 12.5: the OS "reduce motion" setting quarters every camera knock; ?shake=0 removes it.
  const SHAKE_SCALE=params.get('shake')==='0'?0:(typeof matchMedia==='function'&&matchMedia('(prefers-reduced-motion: reduce)').matches?.25:1);
  let shake=0,lastAccidentWitness=-Infinity;
@@ -477,6 +521,9 @@ export default function Home(){
   switch(e.kind){
    case 'punch_swing':if(!soundscape?.event(e,who))playerAudio?.swing(e.intensity);break;
    case 'punch_hit':if(!soundscape?.event(e,who))playerAudio?.punchHit(e.intensity);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_PUNCH*(.6+.4*e.intensity));break;
+   // PLAN-WEAPONS W1: the katana. A cut lands like a heavy blow; steel on a wall clanks and sparks.
+   case 'blade_hit':if(!soundscape?.event({...e,kind:'punch_hit'},who))playerAudio?.punchHit(1);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_PUNCH*1.2);break;
+   case 'blade_clank':arsenal?.event(e);gunfire?.clank(e.x,1.2,e.z);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_PUNCH);break;
    case 'player_bump':soundscape?.event(e,who);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_BUMP*e.intensity);break;
    case 'vehicle_impact':if(!soundscape?.event(e,who))playerAudio?.bodyImpact(e.intensity);break;
    case 'vehicle_runover':if(!soundscape?.event(e,who))playerAudio?.runover(e.intensity);break;
@@ -487,7 +534,9 @@ export default function Home(){
    // that want to know, not a second voice.
   }
  });
- let lastPlayTick=performance.now();let qaReadyRef=false;const frame=(now:number)=>{if(disposed)return;const dt=frameGate.step(now);if(dt===null){raf=requestAnimationFrame(frame);return;}const frameStart=performance.now(),updateStart=frameStart;const playElapsed=document.hidden?0:Math.max(0,(now-lastPlayTick)/1000);lastPlayTick=now;frameHits=0;{const s=lifeEntry.hooks.current?.sim;if(s)s.postUpdate=null;}if(playerMode&&player)player.updateInput(dt);if(playerMode&&player){
+ let lastPlayTick=performance.now();let qaReadyRef=false;const frame=(now:number)=>{if(disposed)return;const dt=frameGate.step(now);if(dt===null){raf=requestAnimationFrame(frame);return;}const frameStart=performance.now(),updateStart=frameStart;const playElapsed=document.hidden?0:Math.max(0,(now-lastPlayTick)/1000);lastPlayTick=now;frameHits=0;{const s=lifeEntry.hooks.current?.sim;if(s)s.postUpdate=null;}if(playerMode&&player)player.updateInput(dt);if(playerMode&&player){view.getWorldDirection(viewDirection);arsenal?.frame(dt,{player,figure:playerFigure,driving:driving||!!vehicleTransition.active,world:weaponWorld,
+  camera:{position:view.position,direction:viewDirection},touch:touchEnabled&&document.pointerLockElement!==canvas,time:lifeEntry.hooks.current?.sim?.time??0});
+  BLOOM_KICK.value=arsenal?.effects.kick??0;}else BLOOM_KICK.value=0;if(playerMode&&player){
   if(vehicleTransition.active){const pose=vehicleTransition.update(dt);if(pose){
     // The DOOR comes from the stage, not from the overall phase. `sin(phase * PI)` opened the
     // panel as the player started walking and had it shut again by the time they sat down,
@@ -597,9 +646,21 @@ export default function Home(){
     player:driving?null:player.state,car:driving?playerCar?.state:null,people:crowdSim?.pool,cars:trafficEntry.hooks.current?.sim?.pool,
     pedestrianGreen:crowdSim?.signals?.phase?.()[0]==='PEDESTRIAN'});}
   playUI?.update(playElapsed,player.state,playerCar?.state,driving,playerReach,frameHits);
+  if(arsenal)playUI?.setWeapon(arsenal.snapshot(),{aiming:player.state.aim>0&&!driving,locked:player.state.aimLock!=null});
   if(police){policeFrustum.setFromProjectionMatrix(policeMatrix.multiplyMatrices(view.projectionMatrix,view.matrixWorldInverse));
-   const w=police.frame(dt,{player:player.state,car:playerCar,driving,melee:melee.snapshot(),traffic:trafficEntry.hooks.current?.sim,crowd:crowdSim,listener:{x:view.position.x,z:view.position.z,vx:0,vz:0},visible:inView,hurt:(n:number,src:string)=>{if(!driving)player.hurt?.(n,src);}});
+   const w=police.frame(dt,{player:player.state,car:playerCar,driving,melee:melee.snapshot(),weapons:arsenal?.snapshot()??null,solid:weaponWorld.solid,traffic:trafficEntry.hooks.current?.sim,crowd:crowdSim,listener:{x:view.position.x,z:view.position.z,vx:0,vz:0},visible:inView,hurt:(n:number,src:string)=>{if(!driving)player.hurt?.(n,src);}});
    playUI?.setWanted(w,dt);(window as any).__SHIBUYA_POLICE__=police;
+   // PLAN-WEAPONS W3: an officer's revolver -- the flash, the round's streak and where it went, the
+   // recorded revolver shot with the street's echo. A hit on the player bleeds and knocks the view.
+   for(const e of w.gunfire??[]){if(e.kind!=='warn'&&e.kind!=='shot')continue;
+    const dx=e.to.x-e.from.x,dy=e.to.y-e.from.y,dz=e.to.z-e.from.z,l=Math.hypot(dx,dy,dz)||1,dir={x:dx/l,y:dy/l,z:dz/l};
+    arsenal?.effects.muzzle(e.from.x,e.from.y,e.from.z,dir);
+    let end=e.to;
+    if(e.kind==='shot'&&!e.hit){const r=castShot({from:e.from,dir,range:WEAPONS.revolver.range,solid:weaponWorld.solid,ground:weaponWorld.ground,cars:weaponWorld.cars,dimsOf:weaponWorld.dimsOf});
+     end=r.point;if(r.kind!=='none')arsenal?.effects.burst(end.x,end.y,end.z,{count:8,nx:-dir.x,nz:-dir.z});}
+    if(e.kind==='shot')arsenal?.effects.tracer(e.from,end);
+    gunfire?.shot(e.from.x,e.from.y,e.from.z,Math.atan2(dir.x,dir.z),{kind:'revolver',hit:e.kind==='shot'&&!e.hit?{kind:'wall',point:end}:null});
+    if(e.hit&&!driving){weaponWorld.bleed({x:player.state.x,y:0,z:player.state.z},dir);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_PUNCH*1.4);}}
    // W2: 逮捕. Out of the car at once, frozen, and the game-over dialog with its own message;
    // 「もう一度」 wakes the player at the koban with the stars cleared.
    if(w.arrested&&!arrestedPending){arrestedPending=true;
@@ -625,8 +686,8 @@ export default function Home(){
   else if(audioWasRunning&&playerMode){ctx.resume?.().catch(()=>{});audioWasRunning=false;}};document.addEventListener('visibilitychange',visibility);
  const lost=(event:Event)=>{event.preventDefault();soundscape?.silence();playerAudio?.silence();playerAudio?.context?.suspend?.().catch(()=>{});setError('WebGL context lost — reload to retry.');};canvas.addEventListener('webglcontextlost',lost);
  const decorationTier=deferredLatest((v:string)=>{if(streetTier!==v){streetTier=v;if(streetEntry.enabled){system.setEnabled('streetscape',false);system.setEnabled('streetscape',true);}}if(signTier!==v){signTier=v;if(signsEntry.enabled){system.setEnabled('signs',false);system.setEnabled('signs',true);}}if(detailTier!==v){detailTier=v;if(detailEntry.enabled){system.setEnabled('stationDetail',false);system.setEnabled('stationDetail',true);}}});
- engine.current={preset,drive:()=>toggleDrive(),player:()=>{if(playerMode)exitPlayer();else enterPlayer();},respawn:()=>{melee.reset();const arrested=arrestedPending;arrestedPending=false;player?.revive();if(arrested&&player)player.place(KOBAN.x+1.5,KOBAN.z+1.5,0);police?.clear('respawn');combatDeathReported=false;setPlayerHit(null);},tier:(v:string)=>{const previousTier=currentTier;startup?.tierChange(previousTier,v,'tier-control');for(const id of ['fidelity','streetscape','signs','stationDetail'])startup?.setReason(id,'tier-change');currentTier=v;currentTrafficTier=v;buildingsTier=v;timingTier=v;frameGate.setTier(v);fidelity.setTier(v);buildQueue.enqueue(()=>measureStage('fidelity','Render Fidelity Prepare',()=>fidelity.prepare()),{key:'fidelity',name:'Render Fidelity Prepare'}).catch(e=>{console.error('[S16.3 Fidelity]',e);setError('HIGH描画の準備に失敗しました。MEDIUMを選択してください。');});buildingsEntry.hooks.current?.setTier(v);setBuildingsReport(buildingsEntry.hooks.current?{...buildingsEntry.hooks.current.stats}:null);trafficEntry.hooks.current?.setTier(v);lifeEntry.hooks.current?.setTier(v);trainsEntry.hooks.current?.setTier(v);nightglowEntry.hooks.current?.setTier(v);constructionEntry.hooks.current?.setTier(v);setConstructionReport(constructionEntry.hooks.current?{...constructionEntry.hooks.current.stats}:null);resize();setTier(v);decorationTier.set(v);},time:(v:string)=>{solar.select(v);setTime(v);},toggle:(id:string,v:boolean)=>{if(playerMode&&['traffic','life','ground'].includes(id))exitPlayer();startup?.setReason(id,'manual-rebuild');const rebuildLife=id==='traffic'&&lifeEntry.enabled;if(rebuildLife){startup?.setReason('life','dependency-rebuild');system.setEnabled('life',false);}system.setEnabled(id,v);if(id==='environment'){nightglowEntry.hooks.current?.refresh();fidelity.refresh();}if(rebuildLife)system.setEnabled('life',true);setModules(system.snapshot());},capture};
- cleanup=()=>{police?.dispose(trafficEntry.hooks.current?.sim,lifeEntry.hooks.current?.sim);police=null;if((window as any).__SHIBUYA_POLICE__)delete (window as any).__SHIBUYA_POLICE__;roadReflection?.dispose();document.removeEventListener('visibilitychange',visibility);seatedDrivers?.dispose();seatedDrivers=null;playUI?.dispose();vehicleVisual?.dispose();vehicleEffects?.dispose();player?.detach();carMarker?.dispose();playerAudio?.dispose();crowdVoices?.dispose();if((window as any).__SHIBUYA_VOICES__===crowdVoices)delete (window as any).__SHIBUYA_VOICES__;touchPad?.dispose();blood?.dispose();if((window as any).__SHIBUYA_BLOOD__===blood)delete (window as any).__SHIBUYA_BLOOD__;diag?.dispose();if((window as any).__SHIBUYA_DIAG__===diag)delete (window as any).__SHIBUYA_DIAG__;playerMarker?.dispose();playerFigure?.dispose();playerShadow?.dispose();deferredCharacter?.dispose();if((window as any).__SHIBUYA_CHARACTER__===deferredCharacter)delete (window as any).__SHIBUYA_CHARACTER__;cancelAnimationFrame(raf);shaderWarmup?.dispose();stopShaderErrors();timingObserver?.disconnect();startupTrace?._removeLifecycle?.();if(qaButtonTimer)window.clearInterval(qaButtonTimer);decorationTier.dispose();buildQueue.dispose();observer.disconnect();unsub();dataAbort.abort();solar.dispose();fidelity.dispose();dayNight.dispose();system.dispose();controls.dispose();canvas.removeEventListener('webglcontextlost',lost);renderer?.dispose();canvas.remove();qaButton?.remove();startupPanel?.remove();if((window as any).__SHIBUYA_QA__===qaApi)delete (window as any).__SHIBUYA_QA__;if((window as any).__SHIBUYA_STARTUP_TIMING__===startupTrace)delete (window as any).__SHIBUYA_STARTUP_TIMING__;engine.current=null;};
+ engine.current={preset,drive:()=>toggleDrive(),player:()=>{if(playerMode)exitPlayer();else enterPlayer();},respawn:()=>{melee.reset();arsenal?.reset();touchPad?.setWeapon('fists');const arrested=arrestedPending;arrestedPending=false;player?.revive();if(arrested&&player)player.place(KOBAN.x+1.5,KOBAN.z+1.5,0);police?.clear('respawn');combatDeathReported=false;setPlayerHit(null);},tier:(v:string)=>{const previousTier=currentTier;startup?.tierChange(previousTier,v,'tier-control');for(const id of ['fidelity','streetscape','signs','stationDetail'])startup?.setReason(id,'tier-change');currentTier=v;currentTrafficTier=v;buildingsTier=v;timingTier=v;frameGate.setTier(v);fidelity.setTier(v);buildQueue.enqueue(()=>measureStage('fidelity','Render Fidelity Prepare',()=>fidelity.prepare()),{key:'fidelity',name:'Render Fidelity Prepare'}).catch(e=>{console.error('[S16.3 Fidelity]',e);setError('HIGH描画の準備に失敗しました。MEDIUMを選択してください。');});buildingsEntry.hooks.current?.setTier(v);setBuildingsReport(buildingsEntry.hooks.current?{...buildingsEntry.hooks.current.stats}:null);trafficEntry.hooks.current?.setTier(v);lifeEntry.hooks.current?.setTier(v);trainsEntry.hooks.current?.setTier(v);nightglowEntry.hooks.current?.setTier(v);constructionEntry.hooks.current?.setTier(v);setConstructionReport(constructionEntry.hooks.current?{...constructionEntry.hooks.current.stats}:null);resize();setTier(v);decorationTier.set(v);},time:(v:string)=>{solar.select(v);setTime(v);},toggle:(id:string,v:boolean)=>{if(playerMode&&['traffic','life','ground'].includes(id))exitPlayer();startup?.setReason(id,'manual-rebuild');const rebuildLife=id==='traffic'&&lifeEntry.enabled;if(rebuildLife){startup?.setReason('life','dependency-rebuild');system.setEnabled('life',false);}system.setEnabled(id,v);if(id==='environment'){nightglowEntry.hooks.current?.refresh();fidelity.refresh();}if(rebuildLife)system.setEnabled('life',true);setModules(system.snapshot());},capture};
+ cleanup=()=>{arsenal?.dispose();arsenal=null;police?.dispose(trafficEntry.hooks.current?.sim,lifeEntry.hooks.current?.sim);police=null;if((window as any).__SHIBUYA_POLICE__)delete (window as any).__SHIBUYA_POLICE__;roadReflection?.dispose();document.removeEventListener('visibilitychange',visibility);seatedDrivers?.dispose();seatedDrivers=null;playUI?.dispose();vehicleVisual?.dispose();vehicleEffects?.dispose();player?.detach();carMarker?.dispose();playerAudio?.dispose();crowdVoices?.dispose();if((window as any).__SHIBUYA_VOICES__===crowdVoices)delete (window as any).__SHIBUYA_VOICES__;touchPad?.dispose();blood?.dispose();if((window as any).__SHIBUYA_BLOOD__===blood)delete (window as any).__SHIBUYA_BLOOD__;diag?.dispose();if((window as any).__SHIBUYA_DIAG__===diag)delete (window as any).__SHIBUYA_DIAG__;playerMarker?.dispose();playerFigure?.dispose();playerShadow?.dispose();deferredCharacter?.dispose();if((window as any).__SHIBUYA_CHARACTER__===deferredCharacter)delete (window as any).__SHIBUYA_CHARACTER__;cancelAnimationFrame(raf);shaderWarmup?.dispose();stopShaderErrors();timingObserver?.disconnect();startupTrace?._removeLifecycle?.();if(qaButtonTimer)window.clearInterval(qaButtonTimer);decorationTier.dispose();buildQueue.dispose();observer.disconnect();unsub();dataAbort.abort();solar.dispose();fidelity.dispose();dayNight.dispose();system.dispose();controls.dispose();canvas.removeEventListener('webglcontextlost',lost);renderer?.dispose();canvas.remove();qaButton?.remove();startupPanel?.remove();if((window as any).__SHIBUYA_QA__===qaApi)delete (window as any).__SHIBUYA_QA__;if((window as any).__SHIBUYA_STARTUP_TIMING__===startupTrace)delete (window as any).__SHIBUYA_STARTUP_TIMING__;engine.current=null;};
  })().catch(e=>{if(!disposed)setError(String(e));});return()=>{disposed=true;cleanup();};},[]);
  const timingMs=(value:number)=>`${(value/1000).toFixed(3)} s`;
  const copyS5Timing=async()=>{if(!s5TimingResult)return;await navigator.clipboard.writeText(JSON.stringify(s5TimingResult,null,2));setS5TimingCopied(true);window.setTimeout(()=>setS5TimingCopied(false),1500);};

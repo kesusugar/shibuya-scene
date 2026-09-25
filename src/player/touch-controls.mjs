@@ -22,10 +22,14 @@ export const wantsTouch = () =>
   (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches));
 
 /**
- * @param {{onAxes?:(axes:any)=>void, onDrive?:()=>void, onAttack?:()=>void, onExit?:()=>void}} [options]
+ * PLAN-WEAPONS R16: a phone has no mouse to aim with, so the weapon button steps through the
+ * weapons and the attack button does what the weapon does -- with the pistol out it fires at
+ * whoever the lock-on picks (the nearest person in the view cone). Its label says which.
+ * @param {{onAxes?:(axes:any)=>void, onDrive?:()=>void, onAttack?:()=>void, onExit?:()=>void, onWeapon?:()=>void}} [options]
  */
-export function createTouchControls({onAxes, onDrive, onAttack, onExit} = {}) {
- if (typeof document === 'undefined') return {show() {}, hide() {}, setDriving() {}, dispose() {}};
+export const ATTACK_LABEL = Object.freeze({fists: '殴る', pistol: '撃つ', katana: '斬る'});
+export function createTouchControls({onAxes, onDrive, onAttack, onExit, onWeapon} = {}) {
+ if (typeof document === 'undefined') return {show() {}, hide() {}, setDriving() {}, setWeapon() {}, dispose() {}};
 
  const root = document.createElement('div');
  root.className = 'tc';
@@ -36,6 +40,7 @@ export function createTouchControls({onAxes, onDrive, onAttack, onExit} = {}) {
    <div class="tc-acts">
      <button type="button" class="tc-run">走る</button>
      <button type="button" class="tc-attack">殴る</button>
+     <button type="button" class="tc-weapon">武器</button>
      <button type="button" class="tc-drive">乗る</button>
      <button type="button" class="tc-exit">観察</button>
    </div>`;
@@ -97,6 +102,8 @@ export function createTouchControls({onAxes, onDrive, onAttack, onExit} = {}) {
  driveBtn.addEventListener('click', e => {e.preventDefault(); onDrive?.();});
  root.querySelector('.tc-attack').addEventListener('click',e=>{e.preventDefault();onAttack?.();});
  root.querySelector('.tc-exit').addEventListener('click', e => {e.preventDefault(); onExit?.();});
+ const weaponBtn = root.querySelector('.tc-weapon');
+ weaponBtn.addEventListener('click', e => {e.preventDefault(); onWeapon?.();});
 
  return {
   show() {root.hidden = false; document.body.classList.add('tc-on');},
@@ -108,8 +115,11 @@ export function createTouchControls({onAxes, onDrive, onAttack, onExit} = {}) {
    driveBtn.classList.remove('far');
    runBtn.hidden = on;
    root.querySelector('.tc-attack').hidden=on;
+   weaponBtn.hidden = on;
    if (on) holdRun(false);
   },
+  /** The weapon out: the attack button's label follows it. */
+  setWeapon(id) {root.querySelector('.tc-attack').textContent = ATTACK_LABEL[id] ?? ATTACK_LABEL.fists;},
 
   /**
    * How far the nearest car is, from `nearestEntry`. A button that does nothing when pressed

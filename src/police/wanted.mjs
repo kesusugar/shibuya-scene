@@ -20,12 +20,15 @@ export const WANTED = Object.freeze({
  reportDelay: [4, 8],          // seconds, fixed per crime by its id
  searchRadius: [0, 60, 90, 120, 160, 200],
  escapeSeconds: [0, 12, 18, 25, 35, 45],
- sightRange: 45                // how far an officer or a patrol car sees a crime or the player
+ sightRange: 45,               // how far an officer or a patrol car sees a crime or the player
+ // PLAN-WEAPONS §2: shooting in public, or killing with a gun or the katana, is at least ☆2; an
+ // officer seeing a drawn weapon is ☆1.
+ weaponCrimeStars: 2, weaponSeenStars: 1
 });
 
 /** The crimes the table knows. */
 export const CRIMES = Object.freeze(['meleeKill', 'runoverKill', 'officerAssault', 'policeRam',
- 'policeCarTaken', 'officerKill', 'carjack']);
+ 'policeCarTaken', 'officerKill', 'carjack', 'shooting', 'weaponKill', 'weaponSeen']);
 
 const hash = id => {let h = Math.imul((id | 0) ^ 0x3c6ef372, 0x85ebca6b); h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35); h ^= h >>> 16; return h >>> 0;};
 /** How long civilians take to report crime `id`. Fixed by the id, so a test can predict it. */
@@ -33,15 +36,17 @@ export const reportDelayOf = id => WANTED.reportDelay[0] + (hash(id) % 1000) / 1
 
 export function createWanted() {
  const crimes = {meleeKills: 0, runoverKills: 0, officerAssaults: 0, officerKills: 0, policeRams: 0,
-  policeCarsTaken: 0, carjacks: 0};
+  policeCarsTaken: 0, carjacks: 0, shootings: 0, weaponKills: 0, weaponsSeen: 0};
  const state = {stars: 0, seen: false, lastSeen: null, escape: 0, atThree: 0, peak: 0,
   rose: 0, roseSeq: 0, cleared: null, crimes, pending: [], runovers: []};
  let nextId = 1;
 
  /** The level the known crimes call for. Officer assaults are handled where they happen. */
  function called(t) {
-  const kills = crimes.meleeKills + crimes.runoverKills;
+  const kills = crimes.meleeKills + crimes.runoverKills + crimes.weaponKills;
   let s = 0;
+  if (crimes.weaponsSeen >= 1) s = Math.max(s, WANTED.weaponSeenStars);
+  if (crimes.shootings >= 1 || crimes.weaponKills >= 1) s = Math.max(s, WANTED.weaponCrimeStars);
   if (crimes.meleeKills >= WANTED.meleeKillsForOne) s = 1;
   if (crimes.runoverKills >= 1) s = Math.max(s, 1);
   const recent = state.runovers.filter(r => t - r <= WANTED.runoverRepeatSeconds).length;
@@ -67,6 +72,9 @@ export function createWanted() {
    case 'policeRam': crimes.policeRams++; break;
    case 'policeCarTaken': crimes.policeCarsTaken++; break;
    case 'carjack': crimes.carjacks++; raise(1); break;
+   case 'shooting': crimes.shootings++; break;
+   case 'weaponKill': crimes.weaponKills++; break;
+   case 'weaponSeen': crimes.weaponsSeen++; break;
   }
   raise(called(c.t));
   // Where the police think the player is: here, unless they can see them anyway.
@@ -85,7 +93,7 @@ export function createWanted() {
    const cid = id ?? nextId++;
    const c = {kind, x, z, t, id: cid};
    // A carjack only counts when an officer sees it (the optional GTA-style row).
-   if (kind === 'carjack' && !seenByOfficer) return 'ignored';
+   if ((kind === 'carjack' || kind === 'weaponSeen') && !seenByOfficer) return 'ignored';
    const immediate = seenByOfficer || kind === 'runoverKill' || kind === 'policeCarTaken' ||
     kind === 'officerAssault' || kind === 'officerKill' || kind === 'policeRam';
    if (immediate) {apply(c); return 'known';}

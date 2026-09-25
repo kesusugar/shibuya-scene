@@ -14,7 +14,8 @@
 // go down. The high-fidelity crowd renderer only shows it. Nothing here reaches into the HQ
 // crowd, and the HQ crowd never decides combat -- it reads `struck` and `combatDead` off the
 // pedestrian, exactly as it already reads them for a car.
-import {ATTACKS,attackOf} from './attack-timing.mjs';
+import {ATTACKS,attackOf,SWORD,swordBearing} from './attack-timing.mjs';
+import {WEAPONS} from './weapons.mjs';
 import {blowOn,RESPONSE} from '../life/temperament.mjs';
 
 // Player crowd contact, Step E: four blows either way. The player's punch and a pedestrian's
@@ -31,7 +32,14 @@ export const COMBAT=Object.freeze({range:1.75,notice:4.5,playerDamage:25,npcDama
  lockRange:2.4,lockArc:1.2,
  // What a punch does to the people who see it, and how far that carries. Bounded on purpose:
  // one punch must not empty the crossing.
- witnessRadius:11,witnessSeverity:.72});
+ witnessRadius:11,witnessSeverity:.72,
+ // PLAN-WEAPONS W1: the katana. Every other cut is played 12% faster (R5: one clip, so the
+ // rhythm varies by speed rather than by a second animation), and a cut that meets a wall or a
+ // car stops where it met it: the clip holds there for `clankHold` s, then hands back to the gait.
+ katanaFast:1.12,clankHold:.16,bodyRadius:.3,katanaWitness:.9,
+ // PLAN-WEAPONS R11: how hard a fatal shot pushes the body, m/s, with no lift. A car's throw is
+ // 2.4 m/s and up; a bullet does not carry a person.
+ shotPush:.7});
 
 export const PHASE=Object.freeze({IDLE:'idle',WINDUP:'windup',ACTIVE:'active',RECOVERY:'recovery'});
 
@@ -78,6 +86,40 @@ function shift(crowd,p,nx,nz){
 const turn=(a,b)=>Math.atan2(Math.sin(b-a),Math.cos(b-a));
 
 /**
+ * The katana's cut against the street, for one step of a swing (PLAN-WEAPONS R6). Pure.
+ *
+ * The blade tip sweeps the measured bearings (attack-timing.mjs SWORD) between clip times `c0`
+ * and `c1`. A solid (wall) or a car on the blade's line, sampled at the tip and half-way along,
+ * stops the cut there: `stop` is the bearing and point where it met it, and nobody past that
+ * point is cut. People are cut if they are within `reach` and inside the swept wedge, widened by
+ * their body radius. Returns {from, to, stop, people}.
+ */
+export function katanaSweep({x,z,heading},c0,c1,{solid=()=>false,car=()=>false,people=[],reach=WEAPONS.katana.reach}={}){
+ const a=Math.max(c0,SWORD.windup),b=Math.min(c1,SWORD.activeEnd);
+ const out={from:null,to:null,stop:null,people:[]};
+ if(!(b>a)&&!(c0<=SWORD.windup&&c1>=SWORD.activeEnd))return out;
+ const from=swordBearing(a),to=swordBearing(b);
+ out.from=from;out.to=to;
+ // March the arc in small steps so a thin wall between two samples is not stepped over.
+ const steps=Math.max(1,Math.ceil(Math.abs(to-from)/.08));
+ let end=to;
+ for(let i=0;i<=steps&&!out.stop;i++){
+  const t=from+(to-from)*i/steps,h=heading+t;
+  for(const r of [SWORD.tipReach,SWORD.tipReach*.6]){
+   const px=x+Math.sin(h)*r,pz=z+Math.cos(h)*r;
+   if(solid(px,pz)||car(px,pz)){out.stop={bearing:t,x:px,z:pz,what:solid(px,pz)?'wall':'car'};end=t;break;}
+  }
+ }
+ const lo=Math.min(from,end),hi=Math.max(from,end);
+ for(const p of people){
+  const d=Math.hypot(p.x-x,p.z-z);if(d>reach||d<1e-3)continue;
+  const rel=turn(heading,angleTo({x,z},p)),w=Math.asin(Math.min(1,COMBAT.bodyRadius/d));
+  if(rel+w>=lo&&rel-w<=hi)out.people.push(p);
+ }
+ return out;
+}
+
+/**
  * @param {object} [options]
  * @param {null|((event:{x:number,z:number,severity:number,radius:number,
  *   attacker:string,victim:number|null,time:number})=>number)} [options.onWitness]
@@ -87,12 +129,14 @@ const turn=(a,b)=>Math.atan2(Math.sin(b-a),Math.cos(b-a));
  *   RUN 11.2: one blow on one victim, so the body drawing them can flinch and follow it up.
  * @param {null|((kind:string,event:{x:number,z:number,intensity:number,id?:number})=>any)} [options.onEvent]
  *   RUN 11.3: swings, hits and pain, for the feedback bus (audio, camera).
+ * @param {()=>string} [options.weapon]
+ *   PLAN-WEAPONS W1: what the player is holding; 'katana' turns a swing into a cut.
  */
-export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null}={}){
+export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapon=()=>'fists'}={}){
  let pending=false,target=null,disposed=false,swingIndex=0;
  let swing=null;                       // the attack in flight, or null
  let lastBlow=null;                    // the most recent landed blow, for QA
- const stats={swings:0,hits:0,misses:0,npcHits:0,npcDeaths:0,witnessEvents:0,witnesses:0,
+ const stats={swings:0,hits:0,misses:0,npcHits:0,npcDeaths:0,witnessEvents:0,witnesses:0,cuts:0,clanks:0,shotHits:0,headshots:0,
   byResponse:{fight:0,flee:0,backoff:0}};
 
  /**
@@ -158,12 +202,14 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null}={}){
   crowd.say?.(p,'alert',.75);
  }
 
- function kill(crowd,p,state){
+ function kill(crowd,p,state,impulse=null){
   p.combatDead=true;p.combatTarget=null;p.combatAction=-1;stats.npcDeaths++;
   const dx=p.x-state.x,dz=p.z-state.z;
   // `strike` is the simulation's own knock-down: it calls `leave` first, so a crossing is
   // released rather than abandoned, and the HQ crowd picks the body up from `struck`.
-  crowd.strike(p,dx,dz,2.4);p.fatal=true;
+  // A shot (PLAN-WEAPONS R11) hands in its own small push along the bullet, with no lift: the
+  // body goes down where it stood instead of being thrown like a car's victim.
+  crowd.strike(p,dx,dz,2.4,impulse);p.fatal=true;
  }
 
  /** Tell whoever is listening that a punch was thrown here. Bounded by the listener. */
@@ -198,16 +244,59 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null}={}){
  /** Face the swing: the aim is what the figure turns onto and what the hit arc measures from. */
  function aimAt(state,heading){state.attackHeading=heading;state.bodyHeading=heading;}
 
+ /**
+  * One step of a katana cut (PLAN-WEAPONS W1). Everyone the blade crosses is cut, once per
+  * swing; a wall or a car on the line stops the blade there with a clank, and the clip holds at
+  * that frame before handing back to the gait.
+  */
+ function cut(crowd,player,before,elapsed){
+  const state=player.state,ctx=crowd.network?.ctx;
+  const people=nearby(crowd,state.x,state.z,WEAPONS.katana.reach).filter(p=>eligible(p,crowd)&&!swing.cut.has(p.id));
+  const r=katanaSweep({x:state.x,z:state.z,heading:state.attackHeading??state.bodyHeading??state.heading},
+   before*swing.rate,elapsed*swing.rate,{people,
+    solid:(x,z)=>!!ctx?.solid?.(x,z,.02),car:(x,z)=>!!crowd.vehicleOverlap?.(x,z,.05)});
+  for(const p of r.people){
+   swing.cut.add(p.id);swing.hitConsumed=true;stats.cuts++;
+   p.combatHealth=(p.combatHealth??100)-WEAPONS.katana.damage;
+   const fatal=p.combatHealth<=0;
+   const blow=blowOn(state,p,{attack:'PunchCross',fatal});
+   p.hurtUntil=crowd.time+blow.hold;p.hurtDuration=blow.hold;
+   {const l=Math.hypot(blow.impulse.x,blow.impulse.z)||1;p.hurtX=blow.impulse.x/l;p.hurtZ=blow.impulse.z/l;p.hurtStrong=true;}
+   stats.hits++;stats.byResponse[RESPONSE.FIGHT]++;
+   if(fatal)kill(crowd,p,state);
+   else{engage(crowd,p,state);if(!onRails(p)){p.staggerX=blow.impulse.x;p.staggerZ=blow.impulse.z;p.staggerLeft=blow.hold;}}
+   onBlow?.({victim:p.id,blow,response:RESPONSE.FIGHT,time:crowd.time});
+   lastBlow={victim:p.id,response:RESPONSE.FIGHT,strength:'strong',quarter:blow.quarter,fatal,time:crowd.time,weapon:'katana'};
+   onEvent?.('blade_hit',{x:p.x,z:p.z,intensity:1,id:p.id});
+   onEvent?.(fatal?'pedestrian_scream':'pain_voice',{x:p.x,z:p.z,intensity:fatal?1:.8,id:p.id});
+   witness(crowd,state,p,COMBAT.katanaWitness);
+  }
+  if(r.stop){
+   swing.stopped=r.stop;stats.clanks++;
+   onEvent?.('blade_clank',{x:r.stop.x,z:r.stop.z,intensity:1,what:r.stop.what});
+   // Hold the clip at the frame the blade met the wall, briefly, then the gait has the body back.
+   state.attackHold=Math.min(SWORD.activeEnd,elapsed*swing.rate)/SWORD.duration;
+   state.attackTime=Math.min(state.attackTime??0,COMBAT.clankHold);
+   swing.elapsed=Math.max(swing.elapsed,swing.timing.duration-COMBAT.clankHold);
+  }
+ }
+
  /** One swing's worth of state. The clip decides its own timing; see attack-timing.mjs. */
  function start(player,crowd){
-  const name=ATTACKS[swingIndex%ATTACKS.length].name;
+  const katana=weapon()==='katana';
+  const name=katana?SWORD.name:ATTACKS[swingIndex%ATTACKS.length].name;
   swingIndex++;
-  const timing=attackOf(name);
+  // A cut plays at 1x or katanaFast; its window and length scale with it. The clip time is
+  // elapsed * rate, which is what the sweep table is indexed by.
+  const rate=katana&&swingIndex%2===0?COMBAT.katanaFast:1;
+  const base=katana?SWORD:attackOf(name);
+  const timing=rate===1?base:{...base,duration:base.duration/rate,windup:base.windup/rate,activeEnd:base.activeEnd/rate,peak:base.peak/rate};
   const state=player.state,aim=crowd?lockOn(crowd,state):null;
-  swing={id:swingIndex,name,timing,elapsed:0,phase:PHASE.WINDUP,hitConsumed:false,aim};
+  swing={id:swingIndex,name,timing,elapsed:0,phase:PHASE.WINDUP,hitConsumed:false,aim,katana,rate,cut:new Set(),stopped:null};
   stats.swings++;
   aimAt(state,aim?angleTo(state,aim):forwardOf(state));
   // The renderer plays the clip for as long as the clip lasts, not for a fixed 0.42 s.
+  state.attackHold=null;
   player.startAttack?.(timing.duration,name);
   return swing;
  }
@@ -268,7 +357,9 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null}={}){
     // coarse steps all produce it, and a punch that silently does nothing when the frame
     // rate dips is worse than one that lands a frame late.
     const crossed=swing.elapsed>=windup&&before<activeEnd;
-    if(crossed&&!swing.hitConsumed&&state.alive){
+    if(swing.katana){
+     if(crossed&&!swing.stopped&&state.alive)cut(crowd,player,before,swing.elapsed);
+    }else if(crossed&&!swing.hitConsumed&&state.alive){
      const p=choose(crowd,state);
      if(p){
       swing.hitConsumed=true;
@@ -301,7 +392,7 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null}={}){
      }
     }
     if(was!==PHASE.IDLE&&swing.phase===PHASE.IDLE){
-     if(!swing.hitConsumed){stats.misses++;witness(crowd,state,null,COMBAT.witnessSeverity*.55);}
+     if(!swing.hitConsumed){stats.misses++;witness(crowd,state,null,COMBAT.witnessSeverity*(swing.katana?.8:.55));}
      swing=null;
     }
    }
@@ -359,13 +450,35 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null}={}){
    * on a crossing or the Scramble cast keeps walking and turns at the kerb, and the fight that
    * follows is the ordinary one. Nothing is counted as a swing, a hit or a witness event.
    */
+  /**
+   * A gunshot on a pedestrian (PLAN-WEAPONS W2, R10/R11). `head` is a hit above the head line,
+   * which takes them down at once; otherwise `damage` comes off their 100. A fatal shot puts
+   * them down with a gentle push along `dir`; a survivor flinches away from the bullet and runs,
+   * unless they are on rails (a crossing, the cast's track), who keep walking -- being stopped
+   * there would hold the signals (§16a). Returns 'killed', 'wounded' or null (not a valid target).
+   */
+  wound(crowd,player,p,{damage=50,head=false,dir={x:0,z:1},weapon='pistol'}={}){
+   if(disposed||!crowd||!p||!eligible(p,crowd))return null;
+   const state=player?.state??{x:p.x-dir.x,z:p.z-dir.z};
+   p.combatHealth=(p.combatHealth??100)-(head?Infinity:damage);
+   const fatal=p.combatHealth<=0,l=Math.hypot(dir.x,dir.z)||1,ux=dir.x/l,uz=dir.z/l;
+   stats.shotHits++;if(head)stats.headshots++;
+   p.hurtUntil=crowd.time+.45;p.hurtDuration=.45;p.hurtX=ux;p.hurtZ=uz;p.hurtStrong=true;
+   if(fatal)kill(crowd,p,state,{x:ux*COMBAT.shotPush,z:uz*COMBAT.shotPush,y:0});
+   else if(!onRails(p)){p.combatTarget=null;crowd.flee?.(p,ux,uz,{urgency:1,from:state});}
+   lastBlow={victim:p.id,response:'shot',strength:'strong',quarter:'front',fatal,time:crowd.time,weapon};
+   onBlow?.({victim:p.id,blow:{hold:.45,fatal,impulse:{x:ux,z:uz},strength:'strong'},response:'backoff',time:crowd.time});
+   onEvent?.('bullet_hit',{x:p.x,z:p.z,intensity:1,id:p.id,head});
+   onEvent?.(fatal?'pedestrian_scream':'pain_voice',{x:p.x,z:p.z,intensity:1,id:p.id});
+   return fatal?'killed':'wounded';
+  },
   provoke(crowd,p,player){
    if(disposed||!crowd||!p||!player?.state?.alive||!eligible(p,crowd))return false;
    if(p.combatTarget==='player'&&p.combatUntil>crowd.time)return false;
    engage(crowd,p,player.state);return true;
   },
   snapshot(){return {...stats,byResponse:{...stats.byResponse},lastBlow,target:target?.id??null,
-   phase:swing?swing.phase:PHASE.IDLE,clip:swing?swing.name:null};},
+   phase:swing?swing.phase:PHASE.IDLE,clip:swing?swing.name:null,stopped:swing?.stopped?.what??null};},
   reset(){pending=false;target=null;swing=null;},
   dispose(){disposed=true;pending=false;target=null;swing=null;}
  };

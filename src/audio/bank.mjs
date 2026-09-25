@@ -20,9 +20,13 @@ export const MIX = Object.freeze({
  // Linear gains per kind, applied on top of the conversion's normalisation.
  swing: .32, punch: .85, body: .9, runover: .55, crash: .95, screech: .5, horn: .55,
  scream: .6, 'scream-low': .6, gasp: .45, pain: .55, 'pain-low': .55, step: .22, ambience: .55, crossing: .3,
+ // PLAN-WEAPONS R13: recorded CC0 gunshots, a revolver and a ricochet.
+ gunshot: 1, 'gunshot-revolver': 1, ricochet: .45,
  master: .9,
  // How many of one kind may ring at once, and in total. The feedback bus already caps starts.
  perKind: 4, total: 18,
+ // Kinds allowed more than perKind: a shot and its three street echoes are four voices.
+ limit: Object.freeze({gunshot: 12, 'gunshot-revolver': 8}),
  detune: .03,               // +/- playback-rate spread
  // Distance model for placed sounds (metres). Inverse falloff, like a real source in the open.
  refDistance: 3, maxDistance: 90, rolloff: 1.1,
@@ -112,18 +116,21 @@ export function createSoundBank(getContext, {base = 'audio/', fetchImpl = global
    * sounds that belong to the listener, like their own fist. Returns false if not played, so
    * the caller can fall back to its synthesised version.
    */
-  play(kind, {x, y = 1.2, z, pan = null, gain = 1, rate = 1, when = 0, onEnd = null} = {}) {
+  play(kind, {x, y = 1.2, z, pan = null, gain = 1, rate = 1, when = 0, onEnd = null, lowpass = 0} = {}) {
    if (!ready || disposed || !ctx || ctx.state !== 'running') {stats.fallback++; return null;}
    const entry = next(kind);
    if (!entry) {stats.fallback++; return null;}
-   if ((live.get(kind) ?? 0) >= MIX.perKind || total >= MIX.total) {stats.dropped++; return null;}
+   if ((live.get(kind) ?? 0) >= (MIX.limit[kind] ?? MIX.perKind) || total >= MIX.total) {stats.dropped++; return null;}
    const src = ctx.createBufferSource(); src.buffer = entry.buffer;
    src.playbackRate.value = rate * (1 + (Math.random() * 2 - 1) * MIX.detune);
    const g = ctx.createGain(); g.gain.value = (MIX[kind] ?? .5) * gain;
+   // `lowpass` (Hz): an echo off a facade has lost its top end (PLAN-WEAPONS R13).
+   let head = g;
+   if (lowpass > 0 && ctx.createBiquadFilter) {const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = lowpass; f.connect(g); head = f;}
    let tail = g;
    if (Number.isFinite(x) && Number.isFinite(z)) {const p = spatial(x, y, z); g.connect(p); tail = p;}
    else if (pan !== null && ctx.createStereoPanner) {const p = ctx.createStereoPanner(); p.pan.value = Math.max(-1, Math.min(1, pan)); g.connect(p); tail = p;}
-   src.connect(g); tail.connect(sfx);
+   src.connect(head); tail.connect(sfx);
    live.set(kind, (live.get(kind) ?? 0) + 1); total++; stats.played++;
    const start = Math.max(ctx.currentTime, when);
    src.start(start, entry.clip.lead ?? 0);
@@ -134,7 +141,7 @@ export function createSoundBank(getContext, {base = 'audio/', fetchImpl = global
     }};
    src.onended = () => {
     live.set(kind, Math.max(0, (live.get(kind) ?? 1) - 1)); total = Math.max(0, total - 1);
-    try {src.disconnect(); g.disconnect(); if (tail !== g) tail.disconnect();} catch {}
+    try {src.disconnect(); g.disconnect(); if (head !== g) head.disconnect(); if (tail !== g) tail.disconnect();} catch {}
     onEnd?.(voice);
    };
    return voice;
