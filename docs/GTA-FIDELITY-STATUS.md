@@ -5346,6 +5346,198 @@ as the plan's literal K1+K2 test bullet.
   (`steer`, `grip`, `slide`) were not touched by K1 or K2, so there is no code reason to expect a
   change, but this was not driven and felt on the device this session.
 
+## 9y. Weapons, W1 — fists / pistol / katana, the weapon rig, the katana, the bench (branch `claude/shibuya-weapons-implementation-28u1y1`, from `master` `7d4637e`)
+
+**Plan:** `docs/PLAN-WEAPONS.md` W1 (imported from `claude/happy-tesla-dkn52d`). Implemented in a
+cloud session with no GPU and no speakers: stills and console errors only (headless Chrome,
+SwiftShader); feel, frame rate and sound are for the device check listed in the PR.
+
+**What changed (`600c938`).**
+- **Clips.** `scripts/convert-character.mjs` adds ten clips from the CC0 Quaternius library that
+  `npm run fetch:character` fetches: `PistolIdle`, `PistolAimUp/Neutral/Down`, `PistolShoot`,
+  `PistolReload`, `SwordIdle`, `SwordAttack`, `Roll`, `CrouchWalk`. Every existing clip, the gait
+  table and `gaitDetail` for Walk/Run/Sprint are byte-for-byte the same values; `analyse-gait.mjs`
+  had to be rerun because the converter rewrites `citizen.json` without `gaitDetail`. The pack
+  grows **2.26 → 2.77 MB** (downloaded only on entering player mode). The HQ crowd atlas is not
+  rebaked: far bodies carry no weapon (plan default).
+- **Inventory** (`src/player/weapons.mjs`): fists / pistol / katana, 1/2/3, the wheel, the pad's Y
+  and a touch button 「武器」. Refused mid-swing, mid-reload and in a car; a car holsters, and
+  stepping out brings back the fists, never the last weapon (R18).
+- **Weapon rig** (`src/player/weapon-mesh.mjs`): generic procedural pistol, revolver, katana,
+  scabbard and holster, one shared vertex-coloured material, one geometry per shape for the scene.
+  The grip frames are measured on `hand_r` (fingers +Y, index +Z, palm −X); the pistol's barrel
+  axis is read off `Pistol_Aim_Neutral` (world forward seen from the hand). Holstered: the pistol at
+  the right hip, the katana on the back; drawn, the scabbard stays on the back. Up to 3 draw calls
+  for the armed player.
+- **The katana** (R4 option (a), R5, R6). `qa/gta-upgrade/sword-timing.mjs` follows the blade tip
+  through `Sword_Attack` at 120 steps: the cut's window is **0.383–0.473 s of 1.533 s**, the tip
+  sweeping from −69° (right, over 2 m up) to +44° (left, at the knee), 1.59 m out; the sampled
+  bearings are `SWORD.sweep`. `combat.mjs katanaSweep` cuts everyone the tip crosses inside the
+  window, once each (50 a cut, two cuts down); a wall or a car on the blade line stops it there
+  with sparks and a synthesised clank, and the clip holds that frame for 0.16 s before the gait
+  takes the body back. Every other cut plays 12% faster. The cut takes the whole body (`STRIKE`,
+  §9k), and the weapon idles take the gait's Idle share.
+- **Bench:** `qa/gta-upgrade/weaponbench.html` (four angles per pose, grip-to-palm and muzzle-ray
+  numbers under each row) and `weaponbench-capture.mjs` (headless PNG + console).
+- **Name guard** (`tests/name-guard.test.mjs`): real gun makers and models in English and Japanese
+  are banned everywhere; `SAKURA`/サクラ and model codes are banned in the weapon code only, because
+  a reconstructed Center-gai sign already reads サクラ美容外科 (a fictional clinic). The freesound
+  titles of the recordings (one says "357 Magnum") are in the audio lock and manifest under
+  `assets/` and `public/`, which the guard does not read; `src/` has no such name.
+
+**Measured.** Grip to palm 0.7 cm (katana), 1.3 cm (pistol, revolver) on the bench; ≤ 3 cm through
+every frame of every weapon clip in the test.
+
+**Tests.** `tests/weapons.test.mjs` (11): the clips exist and SWORD was measured on this pack;
+inventory rules; the magazine and reload length; R3 grip within 3 cm through every frame, and the
+stowed weapons ride their bones while walking; R4 one-handed; R6 no cut outside the window, a wall
+or car stops the blade and nobody past it is cut, the cut lands inside the window in combat and
+hits two people in its arc, two cuts kill, a wall clanks and holds the clip; the fists unchanged.
+All fail before (the modules do not exist). Name guard +2 (a guard: it passes on the old code too).
+
+**Limitations.**
+- **One-handed katana (R4 (a)).** The left hand hangs about 1 m from the handle through the cut,
+  as the clip has it. A two-hand IK is the follow-up if it reads wrong on the device.
+- **One cut, no combo (R5).** The rhythm varies by speed only; a spine twist was not added (§9k: any
+  twist swings the blade off its measured line).
+- The blade passes through bodies (shown as a hit, R6), and through a wall for the 0.16 s hold.
+- In a dense kerb crowd one cut can catch five or six people (measured in the scene: 6).
+
+## 9z. Weapons, W2 — the player's pistol (same branch)
+
+**What changed (`93b83e7`).**
+- **Aim while walking (R1, R2)** — `src/player/aim-layer.mjs`. §9k's lesson applied: the aim pose is
+  **not averaged with the walk**. After the mixer has posed the legs, spine_02 up, both arms and the
+  head are *set* to the aim pose (slerped in by the aim weight alone), pitch-blended between
+  `Pistol_Aim_Up/Neutral/Down` (measured at about +90°, 0°, −90° of barrel pitch); the shot's
+  recoil and the reload ride on it as local deltas. Then **an aim correction** turns spine_01,
+  spine_02 and spine_03, a share each, three passes, until the muzzle ray passes through the
+  target. Standing, the body turns onto the aim; walking, the legs keep to the walk (the library
+  has no strafe clips) and the upper body twists, up to 100°, past which the body turns round.
+  Measured (10 m target, full walk cycle): **with the correction the ray passes within 1 mm at 0°,
+  ±45°, ±90°, walking and standing; without it, 2.6 m (0°) to 10 m (±90°) off while walking** and
+  0.26 m standing.
+- **Where a bullet goes (R7, R8, R10)** — `src/player/ballistics.mjs castShot`: hitscan from the
+  muzzle, no drop; the 2D solid grid marched at 0.25 m and bisected (a building stops a round at
+  any height), the ground, car boxes with their real height, people as vertical capsules
+  (r 0.27 m) with the head above 1.5 m scaled to the person. People come from the crowd's own 2 m
+  grid along the ray. Children are never hit: they are not combat targets in this game
+  (`combat.mjs eligible`), and a round is not stopped by one either.
+- **The pistol** — `src/player/arsenal.mjs`: the aim point is where the camera's centre ray first
+  meets something (≤ 60 m), or, with a mouse, a person within 0.05 rad of it (soft lock); on a
+  phone the attack button locks on to the nearest person in a 30° cone and 30 m (R16). A click
+  without aiming raises the gun and fires when it is up (no hip fire). 8 rounds, R or an empty
+  magazine reloads (`Pistol_Reload`, 1.667 s), refire 0.28 s. 50 to the body, a headshot kills;
+  `combat.wound()` puts a killed body down with a 0.7 m/s push along the bullet and no lift (R11 —
+  a car's throw is 2.4 m/s and up), and a survivor flinches and runs unless on rails.
+- **Flash (R12):** an emissive, additive flash, sparks, dust and a tracer, three draw calls at most
+  and no light; `BLOOM_KICK` in `src/fidelity/pipeline.mjs` raises the bloom for the shot's
+  ~60 ms.
+- **Sound (R13):** five CC0 recordings from Freesound, each licence read on its own page on
+  2026-09-25 and recorded in `assets/audio/upstream.lock.json` with its page, author, bytes and
+  SHA-256: 427592 (michorvath), 253736 (Kodack), 668348 (DeltaCode) as `gunshot`, 683186
+  (Shark_Anthony) as `gunshot-revolver`, 345413 (Artmasterrich) as `ricochet`. Converted by
+  `npm run convert:audio`; **every existing clip came out byte-identical**. `src/audio/gunfire.mjs`
+  adds a synthesised street slapback timed from the actual facade distances left and right
+  (`2d/343` s, low-passed, weaker each bounce), and a ricochet on 35% of wall/car hits. Until the
+  recordings decode, a **synthesised crack plays instead, and it is marked temporary (仮)** in the
+  code. The katana's clank is synthesised.
+- **Panic (R14):** `gunfirePanic` sends the nearest people within 40 m running, at most 60 per shot,
+  and never takes anyone on rails (a crossing, the cast's track) off it; they cry out instead
+  (§16a). The HQ crowd's visual reaction goes through the existing bounded witness pass.
+- **Camera (R17):** aiming pulls the follow arm in to 2.1 m over the right shoulder, FOV 50 → 40,
+  through the same `clipCameraArm`. A crosshair (red when locked) and the magazine in the HUD.
+- **Wanted (§2):** `shooting` (reported like any crime, at once if an officer sees it) and
+  `weaponKill` are at least ☆2; `weaponSeen` — an officer seeing a drawn pistol or katana — is ☆1.
+
+**Tests.** `tests/pistol.test.mjs` (16): R1 at 0°/±45°/±90° walking and standing, and that the
+uncorrected pose misses by metres (so the test would catch a regression); R2 facing rules; R7 a
+building blocks, a car box stops but a shot over its roof goes on, the ground stops, the range
+ends; R10 over the head misses, head and body zones; the grid lookup; R14 the cap, nearest first,
+nobody on rails moved; the pistol end to end (no hip fire, 50 damage, the gentle push, the
+reload, R18); the wanted rules; the shoulder camera; the echo taps. All fail before.
+
+**Limitations.**
+- **Aiming while walking slides nothing but twists a lot.** Without strafe clips the legs walk
+  forward while the chest turns up to 100°; that is what GTA-style strafing would replace.
+- **R8:** low walls, fences, planters and bollards do not stop a round; a building stops it at any
+  height, including over a low roof.
+- The HUD crosshair is the centre of the view; with the shoulder offset the muzzle converges on it
+  (the aim point is the camera ray's hit), so parallax is right only as far as that hit is.
+- Recorded shots are Freesound previews (MP3 at ~128 kbps), as the rest of the bank.
+
+## 9aa. Weapons, W3 — police revolvers (same branch)
+
+**What changed (`5d70b3f`).**
+- **R15** — `src/police/guns.mjs`: ☆1–☆2 batons and the arrest only; at ☆3+ officers within 35 m
+  draw. The **first round of the incident is a warning shot into the air with 「撃つぞ！」**; from
+  1.6 s later an officer fires **only while the player is a threat** — holding a drawn pistol or
+  katana, attacking (a swing, or a shot in the last 2.5 s) or ramming — and covers a player who is
+  not. 「銃を捨てろ！」 to an armed player every 5 s at most. Hit chance 0.72 at point blank falling
+  to 0.12 at 45 m; a hit is 10–15. A five-round cylinder with a 3.5 s reload.
+- **R9:** no shot without a clear line over the same 2D solid grid (`lineOfSight`). The director's
+  `officersSee` and `officersOnFootSee` take the same wall test, so **the police no longer see
+  through buildings** — §9s's limitation. Without a wall test (older callers, tests) they keep the
+  old radius.
+- Officers covering an armed threat stop ~11 m out instead of walking into baton range
+  (`units.mjs`, `gunHold`); an unarmed player is still walked up to and arrested.
+- The revolver is drawn and aimed by near-humanoid officers only, through the same aim layer as the
+  player; the far crowd shows no weapon.
+- **Voices:** 「銃を捨てろ！」 and 「撃つぞ！」 added to `POLICE_LINES` (`kind: 'police'`), with three
+  new onsets (`j`, `s`, `z`), shouted dry from where the officer stands (`createOfficerVoice`),
+  not through the loudspeaker chain.
+- The scene draws each officer round: flash, tracer, sparks where a miss lands, the recorded
+  revolver shot with the street echo; a hit on the player bleeds and knocks the view; in a car a
+  hit marks the car instead.
+
+**Tests.** `tests/police-guns.test.mjs` (10): no draw or shot at ☆1/☆2; at ☆3 draw, a warning shot
+into the air first with 撃つぞ！, then fire at an armed player; an unarmed, still player is covered
+not shot, an attack draws fire; no shot through a building, and the rules resume (warning first)
+out of cover; patrol cars and officers on foot do not see through a building; accuracy and damage;
+clearing holsters and forgets the warning; the two lines; the dry shout's gap and silence without
+audio; the director end to end. `tests/police-voice.test.mjs` now expects eight lines (was six).
+
+**Limitations.**
+- The officer's muzzle is estimated (in front of the chest at 1.42 m), not read from the drawn
+  revolver's mesh, because the pool's figures are not reachable from the director.
+- An officer does not take cover or reposition to find a line; they hold or approach as before.
+- 撃つぞ！/銃を捨てろ！ are the formant synthesiser; how they read is for the ear on the device (§9v's
+  fallback applies: a paid TTS or a voice actor only changes the source).
+
+## 9ab. Weapons, W4 — dodge roll and crouch (same branch)
+
+**What changed (`ca10d2e`).**
+- **Roll** (Q, pad RB): along the input direction, covering the clip's measured travel (4.99 m in
+  1.467 s, from the root-motion library via `gaitDetail`) with a linearly falling push, integrated
+  exactly per frame (the same distance at 30 and 60 Hz); walls stop it; 0.25 s recovery. It owns
+  the whole body (`STRIKE`). Police rounds miss inside the dodge window, 0.08–0.95 s in.
+- **Crouch** (C, pad R3): 0.9 m/s, no running; the gait gives way to Crouch_Idle (a separate copy
+  of the Guard clip, so it never fights the Guard reaction for one action) and Crouch_Fwd_Loop at
+  the pace made. Crouched on foot, the police see the player from 55% of their range.
+
+**Tests.** `tests/roll-crouch.test.mjs` (5): distance and frame-rate independence; direction, walls,
+no chaining; the dodge window and that officers never hit inside it; crouch speed and sight; the
+roll owns the body (hips drop below 0.6 m) and the crouch lowers the hips. All fail before.
+
+**Limitations.** No touch buttons for roll or crouch yet. The roll is not aimed (no shooting
+mid-roll); crouching does not change the NPCs' noticing of the player, only the police's sight.
+
+**Headless check of all four steps (`81baa95`, `evidence/weapons/`).** No GPU and no speakers in
+this session, so stills and console only. `qa/gta-upgrade/weaponbench.html`: every pose from four
+angles, grip to palm 0.7–1.3 cm, muzzle ray 0.0 cm from the target in every aim pose, 0 console
+errors. `qa/gta-upgrade/weapons-scene.mjs` on the real scene (HIGH, day, 960×540, SwiftShader at
+~0.1 fps): player mode by the button, moved to the quietest spot facing a facade 11 m away; katana
+drawn and cut; pistol aimed over the shoulder with the crosshair; three shots, each stopped by the
+facade at 9.65 m; then ☆3 by the police-car rule: an officer drew and fired the warning shot with
+the 撃つぞ！ shout (`guns.snapshot()`: drawn, warnings 1, shouts 1). **21 console messages, 0
+errors.** Not visible in the stills: the muzzle flash (it lives 50 ms, one 0.1 s-clamped frame
+here), and the officer (behind the camera at the moment of the still). No frame rate is reported.
+
+**Gates at `81baa95`.** `npm run typecheck` clean; `npm test` (the portable build, then `test:ci`)
+**674 tests, 669 pass, 0 fail, 5 skipped** (630 before this branch: the four new files add 42 and the
+name guard 2). Before the build, `test:ci` alone reports 2 failures that need `dist/`
+(`rendered-html`, the catalog utilities); they are the same on `master` and pass under `npm test`.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
@@ -5450,6 +5642,44 @@ proportions, pose, material and visual bugs are reviewed from screenshots.
 
 Each of these cost real time to find. They are recorded so the next session recognises the
 symptom instead of rediscovering the cause.
+
+**Weapons W1 (§9y): a new swing name fell through to `Punch`.** `characterAction` maps
+`attackName` by name and defaults to `Punch`; the katana cut played the jab (arm out at shoulder
+height, blade pointing up) until `SwordAttack` was named there too. Every place that names a swing
+(`characterAction`, `SWINGS`, the clip-time scrub) has to learn a new one. The bench showed it at
+once; no unit test did until `tests/weapons.test.mjs` checked `attackName`.
+
+**Weapons W1 (§9y): a rig placed on the bind pose.** The holster and back positions are converted
+into bone space when the weapon rig is built; built before `createPlayerFigure` had set the Idle
+pose, they were computed against the T-pose and the holster sat 9 cm behind the hip. Build
+anything that is placed relative to the body AFTER the first `mixer.update(0)`.
+
+**Weapons W1 (§9y): the converter drops `gaitDetail`.** `npm run convert:character` rewrites
+`citizen.json` without the `gaitDetail` block that `scripts/analyse-gait.mjs` adds. Rerun the
+analysis after every conversion and diff the Walk/Run/Sprint entries.
+
+**Weapons W2 (§9z): an aim layered like a punch misses by metres.** Setting the upper body to the
+aim pose is not enough while walking: the walk still sways the pelvis and spine_01 under it, and at
+10 m that is 2.6 m of miss at 0° and ~10 m at 90°. The muzzle correction (spine_01..03) is what
+makes the aim hold; `tests/pistol.test.mjs` pins both numbers.
+
+**Weapons W2 (§9z): `cond ? 1 : 0 - x` is `cond ? 1 : (0 - x)`.** The aim-camera blend was written
+that way and would have snapped the camera away from the player on the first unaimed frame.
+Parenthesise every ternary inside arithmetic.
+
+**Weapons (§9y–§9aa): inserting a function between a JSDoc block and its function.** The katana's
+`katanaSweep` went in above `createMeleeCombat`'s JSDoc, which then documented the new function;
+`tsc` inferred the options from the defaults (`null`) and rejected the scene's callbacks. Move the
+JSDoc with its function.
+
+**Headless QA: do not edit sources while a dev-server run is open.** Vite hot-reloads the page on
+any change in the module graph, so a scene run (10–25 minutes under SwiftShader) stalls or starts
+over when a file is saved mid-run. Commit, then run the scene check with nothing in flight. And
+`pkill -f <pattern>` inside a shell command matches that shell's own command line: kill by PID.
+
+**Headless QA: the start point is inside the kerb crowd.** A shoulder camera there sees only heads
+and the muzzle is often inside a pedestrian (a shot at 0–6 cm). `qa/gta-upgrade/weapons-scene.mjs`
+moves the player to the quietest walkable spot facing a facade before any weapon still.
 
 **Looks A (§9m): a pooled material compiled with its construction palette.** `dressCitizen`'s
 `onBeforeCompile` built its uniforms from the palette the material was created with, and

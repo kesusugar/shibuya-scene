@@ -1,6 +1,6 @@
 # Plan: weapons (fists, a pistol, a katana) for the player, and revolvers for the police
 
-Status: **PLAN, not implemented.** Written 2026-09-25 on `master` `7d4637e`. The work happens in
+Status: **W1–W4 implemented** on `claude/shibuya-weapons-implementation-28u1y1` (`docs/GTA-FIDELITY-STATUS.md` §9y–§9ab), 2026-09-25; R4 taken as option (a). Device checks (§5) are outstanding. Originally: Written 2026-09-25 on `master` `7d4637e`. The work happens in
 a new local Claude CLI session, so it can be checked on the real device. Read `AGENTS.md`,
 `CLAUDE.md`, `docs/GTA-FIDELITY-STATUS.md` (latest §9, §9k, §16a) and
 `docs/PLAN-POLICE-AND-OWN-CAR.md` first.
