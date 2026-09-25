@@ -52,10 +52,15 @@ const POSES=[
   run(f,s){for(let i=0;i<30;i++)f.update(s,dt);}},
  {id:'revolver-shot',label:'officer: revolver shot, at the recoil',carry:['revolver'],state:{weapon:'revolver',aim:1,aimHeading:0},
   run(f,s){for(let i=0;i<30;i++)f.update(s,dt);s.shotLeft=.633;for(let i=0;i<6;i++){f.update(s,dt);s.shotLeft-=dt;}}},
+ // W4: the dodge roll half way through, and a crouch-walk.
+ {id:'roll',label:'roll, 0.45 s in (the dodge window)',state:{weapon:'fists'},
+  run(f,s){s.rollTime=s.rollDuration=1.467;for(let i=0;i<27;i++){f.update(s,dt);s.rollTime-=dt;}}},
+ {id:'crouch-walk',label:'crouched, creeping with the pistol out',state:{weapon:'pistol',crouching:true,speed:.9},
+  run(f,s){for(let i=0;i<40;i++)f.update(s,dt);}},
  ...(window.WEAPON_POSES??[])
 ].filter(p=>!only||p.id===only);
 
-const CELL=only?{w:640,h:480}:{w:320,h:240};
+const CELL=only?{w:320,h:420}:{w:320,h:240};
 const W=CELL.w*4,H=CELL.h*POSES.length;
 const renderer=new T.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
 renderer.setPixelRatio(1);renderer.setSize(W,H);renderer.setScissorTest(true);document.body.appendChild(renderer.domElement);

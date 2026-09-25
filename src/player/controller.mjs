@@ -38,6 +38,12 @@ export const PLAYER = Object.freeze({
  // PLAN-WEAPONS R17: aiming pulls the camera in over the right shoulder, on the same wall-clipped
  // arm. `aimSide` is metres to the right.
  aimBack: 2.1, aimUp: .45, aimSide: .62, aimFov: 40,
+ // PLAN-WEAPONS W4. The roll covers the ground its clip was authored to cover (Roll: 4.99 m in
+ // 1.467 s, measured from the root-motion library into citizen.json), the push falling off
+ // linearly so the body slows into the get-up. Bullets miss inside `dodge` (seconds into the roll).
+ roll: Object.freeze({seconds: 1.467, distance: 4.99, dodge: Object.freeze([.08, .95]), cooldown: .25}),
+ // Crouched, the body creeps at Crouch_Fwd_Loop's own pace and cannot run.
+ crouchSpeed: .9,
  // Where a session starts. Chosen by sampling the walkable surface: full kerb height, so
  // it is pavement rather than a gap between solids, and 27 m out with the crossing in view.
  start: [12, 24], startHeading: Math.atan2(-12, -24),
@@ -132,7 +138,8 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
   // PLAN-WEAPONS: 1/2/3 and the wheel pick a weapon (`onWeapon(slot)`, `onWeaponCycle(step)`),
   // R reloads, the right mouse button held aims (`onAim(true|false)`). On a pad: Y cycles, LB
   // held aims, X is the attack (fire with the pistol out).
-  attach(element, {onExit, onDrive, onAttack, onHorn, onWeapon, onWeaponCycle, onReload, onAim} = {}) {
+  // W4: Q rolls, C crouches (on a pad RB and the right stick's click).
+  attach(element, {onExit, onDrive, onAttack, onHorn, onWeapon, onWeaponCycle, onReload, onAim, onRoll, onCrouch} = {}) {
    if (detach) return;
    const down = (e) => {
     if (e.repeat) return;
@@ -145,6 +152,8 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
     if (k === 'h') {onHorn?.(); e.preventDefault(); return;}   // RUN 12.1: the horn, while driving
     if (k === '1' || k === '2' || k === '3') {onWeapon?.(Number(k)); e.preventDefault(); return;}
     if (k === 'r') {onReload?.(); e.preventDefault(); return;}
+    if (k === 'q') {onRoll?.(); e.preventDefault(); return;}
+    if (k === 'c') {onCrouch?.(); e.preventDefault(); return;}
     if (!'wasd'.includes(k) && k !== 'shift' && k !== ' ') return;
     keys.add(k === ' ' ? 'shift' : k); e.preventDefault();
    };
@@ -183,17 +192,20 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    };
    const touchEnd = e => {if (e.pointerId === touchId) {touchId = null; touchLast = null;}};
    // Edge-detected, because a held button would otherwise fire get-in/get-out every frame.
-   let padPrev = {drive: false, exit: false, attack: false, cycle: false, aim: false};
+   let padPrev = {drive: false, exit: false, attack: false, cycle: false, aim: false, roll: false, crouch: false};
    padPoll = (dt) => {
     const pad = gamepad(); if (!pad) return;
     const drive = pad.buttons[0]?.pressed ?? false, exit = pad.buttons[9]?.pressed ?? false, attack=pad.buttons[2]?.pressed??false;
     const cycle = pad.buttons[3]?.pressed ?? false, aim = pad.buttons[4]?.pressed ?? false;
+    const roll = pad.buttons[5]?.pressed ?? false, crouch = pad.buttons[11]?.pressed ?? false;
+    if (roll && !padPrev.roll) onRoll?.();
+    if (crouch && !padPrev.crouch) onCrouch?.();
     if (drive && !padPrev.drive) onDrive?.();
     if (exit && !padPrev.exit) {keys.clear(); onExit?.();}
     if(attack&&!padPrev.attack)onAttack?.();
     if(cycle&&!padPrev.cycle)onWeaponCycle?.(1);
     if(aim!==padPrev.aim)onAim?.(aim);
-    padPrev = {drive, exit, attack, cycle, aim};
+    padPrev = {drive, exit, attack, cycle, aim, roll, crouch};
     const look = pad.axes[2] ?? 0, pitch = pad.axes[3] ?? 0;
     if (Math.abs(look) > PLAYER.padDeadzone) state.heading -= look * PLAYER.padLook * dt;
     if (Math.abs(pitch) > PLAYER.padDeadzone)
@@ -227,7 +239,7 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    */
   place(x = PLAYER.start[0], z = PLAYER.start[1], heading = PLAYER.startHeading) {
    const land = (px, pz) => {
-    Object.assign(state, {x: px, z: pz, heading, bodyHeading: heading, course: heading, targetSpeed: 0, speed: 0, alive: true, runOver: 0, hitBy: null, health:100, attackTime:0, hurtTime:0, vehiclePhase:0, carGrace:0, stunTime:0, knockX:0, knockZ:0, knockLeft:0});
+    Object.assign(state, {x: px, z: pz, heading, bodyHeading: heading, course: heading, targetSpeed: 0, speed: 0, alive: true, runOver: 0, hitBy: null, health:100, attackTime:0, hurtTime:0, vehiclePhase:0, carGrace:0, stunTime:0, knockX:0, knockZ:0, knockLeft:0, rollTime:0, dodging:false, crouching:false});
     state.y = ctx.height(px, pz); return true;
    };
    for (const test of [ctx.safe, standable]) {
@@ -297,8 +309,39 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    state.speed=0;state.moving=false;state.vehiclePhase=phase;
   },
 
+  /**
+   * PLAN-WEAPONS W4: a dodge roll the way the player is going (or facing, standing still).
+   * Refused mid-swing, mid-roll, stunned or dead. Returns true when it started.
+   */
+  roll() {
+   if (!state.alive || (state.rollTime ?? 0) > 0 || (state.attackTime ?? 0) > 0 || (state.stunTime ?? 0) > 0 || (state.rollRest ?? 0) > 0 || state.vehiclePhase > 0) return false;
+   const {forward: fz, strafe: fx} = api.input(), s = Math.sin(state.heading), c = Math.cos(state.heading), len = Math.hypot(fx, fz);
+   const heading = len > 0 ? Math.atan2((fz * s - fx * c) / len, (fz * c + fx * s) / len) : (state.bodyHeading ?? state.heading);
+   state.rollHeading = heading; state.bodyHeading = heading; state.course = heading;
+   state.rollTime = state.rollDuration = PLAYER.roll.seconds; state.crouching = false; state.dodging = false;
+   return true;
+  },
+  /** W4: crouch on / off. Not while rolling. */
+  crouch(on = !state.crouching) {if (!state.alive || (state.rollTime ?? 0) > 0) return false; state.crouching = !!on; return true;},
+
   step(dt) {
-   if (!state.alive) {state.runOver += dt; state.speed = 0; state.moving = false; return;}
+   if (!state.alive) {state.runOver += dt; state.speed = 0; state.moving = false; state.rollTime = 0; state.dodging = false; return;}
+   state.rollRest = Math.max(0, (state.rollRest ?? 0) - dt);
+   // A roll carries the body along its heading, the push falling linearly to nothing, integrated
+   // exactly over the frame so the distance is the same at any frame rate. Walls stop it.
+   if ((state.rollTime ?? 0) > 0) {
+    const T = state.rollDuration || PLAYER.roll.seconds, a = state.rollTime, b = Math.max(0, a - dt);
+    const k = PLAYER.roll.distance * (a * a - b * b) / (T * T);
+    advance(Math.sin(state.rollHeading) * k, Math.cos(state.rollHeading) * k);
+    state.rollTime = b;
+    const into = T - b;
+    state.dodging = into >= PLAYER.roll.dodge[0] && into <= PLAYER.roll.dodge[1];
+    state.speed = dt > 0 ? k / dt : 0; state.moving = true; state.running = false;
+    if (b === 0) {state.speed = 0; state.dodging = false; state.rollRest = PLAYER.roll.cooldown;}
+    state.y = ctx.height(state.x, state.z);
+    return;
+   }
+   state.dodging = false;
    state.carGrace = Math.max(0, (state.carGrace ?? 0) - dt);
    // Thrown by a car: carried off by the knock, then stood there until control comes back.
    if ((state.stunTime ?? 0) > 0) {
@@ -323,7 +366,9 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    // skates. The body stops (at the ordinary braking rate) and faces the swing's aim, which
    // combat owns, until the fist is back.
    const attacking=(state.attackTime??0)>0;
-   const wanted=len>0&&!attacking?(state.running?PLAYER.run:PLAYER.walk)*Math.min(1,len):0;
+   if(state.crouching)state.running=false;
+   const pace=state.crouching?PLAYER.crouchSpeed:state.running?PLAYER.run:PLAYER.walk;
+   const wanted=len>0&&!attacking?pace*Math.min(1,len):0;
    // Where the body is being asked to go, in world terms. Forward is where the camera looks;
    // strafing is perpendicular to it, so a diagonal input walks diagonally rather than
    // sidestepping, and the figure turns to face it. The camera looking along (sin h, cos h)

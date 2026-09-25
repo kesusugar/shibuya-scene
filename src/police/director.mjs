@@ -27,10 +27,16 @@ export const POLICE = Object.freeze({
  ramRepeat: 3,             // s between two rams counting twice
  speakRange: 35,           // m: the loudspeaker is used when a siren car is this close
  gunfireRange: 40,         // m: civilians this close hear a shot (PLAN-WEAPONS R14)
+ crouchSight: .55,         // PLAN-WEAPONS W4: a crouching player is seen from this share of the range
  // W4 balance: while wanted, a crowd bump may start a fight only while fewer than this many
  // civilians are already fighting the player. Police plus a mob made a dense Scramble unwinnable.
  bumpFightCap: 2
 });
+
+/** How far the police see the player (PLAN-WEAPONS W4): shorter while crouched on foot. */
+export function sightRange(player, driving = false) {
+ return !driving && player?.crouching ? WANTED.sightRange * POLICE.crouchSight : WANTED.sightRange;
+}
 
 /** May a bump start one more civilian fight? Pure; `stars` is the wanted level. */
 export function allowBumpFight(stars, pool, time, cap = POLICE.bumpFightCap) {
@@ -162,7 +168,9 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
    }
 
    // --- what the police know --------------------------------------------------------------
-   const seen = officersSee(pool, me.x, me.z, except, undefined, solid) || officersOnFootSee(units.officers, me.x, me.z, undefined, solid);
+   // W4: sneaking -- crouched on foot, the police see the player from a little over half as far.
+   const sight = sightRange(player, driving);
+   const seen = officersSee(pool, me.x, me.z, except, sight, solid) || officersOnFootSee(units.officers, me.x, me.z, sight, solid);
    let snap = wanted.update(dt, {x: me.x, z: me.z, t: time, seen});
    if (player && player.alive === false && snap.stars) wanted.clear('death');
 
@@ -180,7 +188,7 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
    const shotNow = (weapons?.shots ?? 0) > gunShotsSeen; gunShotsSeen = weapons?.shots ?? 0;
    const threat = {armed, ramming: time - lastRam < .5,
     attacking: (attackingNow ?? attacking) || shotNow};
-   const gunfire = guns.update(dt, {officers: units.officers, me: {x: me.x, z: me.z, y: me.y ?? 0}, stars: wanted.state.stars,
+   const gunfire = guns.update(dt, {officers: units.officers, me: {x: me.x, z: me.z, y: me.y ?? 0, dodging: !driving && !!player?.dodging}, stars: wanted.state.stars,
     solid: solid ?? (() => false), threat, driving, alive: player?.alive !== false && !arrested});
    for (const e of gunfire) {
     const p = e.officer;

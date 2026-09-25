@@ -104,7 +104,9 @@ export function createPoliceGuns() {
     if (!isThreat) {stats.held++; continue;}          // aim, but do not fire at someone giving up
     h.next = time + GUNS.every * (.85 + .3 * hash(p.id, h.shots)); h.rounds--; h.shots++;
     stats.shots++;
-    const hit = hash(p.id * 31 + 7, h.shots) < hitChance(d);
+    // PLAN-WEAPONS W4: inside a roll's dodge window every round goes past.
+    const hit = !me.dodging && hash(p.id * 31 + 7, h.shots) < hitChance(d);
+    if (me.dodging) stats.dodged = (stats.dodged ?? 0) + 1;
     const damage = hit ? GUNS.damage[0] + Math.round(hash(p.id, h.shots + 101) * (GUNS.damage[1] - GUNS.damage[0])) : 0;
     if (hit) {stats.hits++; stats.damage += damage;}
     // A miss goes past the player, a little to the side, so its spark lands somewhere real.

@@ -188,6 +188,7 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
    wasDriving = driving;
    effects.update(dt);
    const s = player?.state; if (!s) return;
+   if (driving) s.crouching = false;              // W4: nobody crouches in a car seat
    s.weapon = inventory.current;
    s.shotLeft = Math.max(0, (s.shotLeft ?? 0) - dt);
    s.reloadLeft = inventory.state.reloading;

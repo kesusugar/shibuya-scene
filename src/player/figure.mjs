@@ -15,7 +15,7 @@ const GAIT=new Set(['Idle','Walk','Run','Sprint']);
 /** The fists' swings. They own the whole body while they play; see STRIKE. */
 const PUNCHES=new Set(['Punch','PunchCross']);
 /** Every swing that takes the body over, the katana's cut included (PLAN-WEAPONS W1). */
-const SWINGS=new Set([...PUNCHES,'SwordAttack']);
+const SWINGS=new Set([...PUNCHES,'SwordAttack','Roll']);
 /**
  * PLAN-WEAPONS W1: holding a weapon changes how the body stands. The weapon's idle takes the
  * Idle share of the gait blend, faded over `STANCE_FADE` s, so standing still with a katana out
@@ -76,6 +76,8 @@ export const RECOIL=Object.freeze({light:[.2,.22],strong:[.38,.34]});
 export function characterAction(state){
  if(state.alive===false)return (state.runOver??0)<.6?'Fall':'Death';
  if(state.vehiclePhase>0)return state.vehicleKind==='exit'?'Exit':'Enter';
+ // PLAN-WEAPONS W4: a dodge roll owns the whole body, like a swing (STRIKE).
+ if(state.rollTime>0)return 'Roll';
  if(state.hurtTime>0)return 'Hit';
  if(state.trafficReaction==='guard')return 'Guard';
  if(state.trafficReaction==='startle')return 'Startle';
@@ -110,7 +112,9 @@ export function bakedAsset(){return baked??=bakedCitizen(pack);}
  * is worse than not correcting it: the animation is deliberately not grounded, and forcing it
  * there folds the leg. Cheaper to believe the animation.
  */
-const UNGROUNDED=new Set(['Fall','Death','Enter','Exit','Drive']);
+const UNGROUNDED=new Set(['Fall','Death','Enter','Exit','Drive','Roll']);
+/** PLAN-WEAPONS W4: crouching fades in over this long, and Crouch_Fwd_Loop's authored pace. */
+const CROUCH_FADE=.25,CROUCH_PACE=.75;
 
 /**
  * @param {any} [asset]
@@ -138,9 +142,15 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
  // has eleven bones and none of these names, so it simply goes without.
  const footIK=asset.legBones?createFootIK(root,{bones:asset.legBones,ctx}):null;
  let overlay=null,previousAttack=0,disposed=false,seeded=false,dominant='Idle';
- const strike={Punch:0,PunchCross:0,SwordAttack:0};
+ const strike={Punch:0,PunchCross:0,SwordAttack:0,Roll:0};
  // PLAN-WEAPONS: how far each weapon stance has faded in.
  const stance={SwordIdle:0,PistolIdle:0};
+ // W4: the crouch, its own two actions so it never fights the Guard reaction for one: a copy of
+ // Crouch_Idle_Loop (which is the Guard clip) and Crouch_Fwd_Loop.
+ const guardClip=instance.clips.find(c=>c.name==='Guard'),crouchWalk=actions.CrouchWalk??null;
+ const crouchIdle=guardClip?mixer.clipAction(Object.assign(guardClip.clone(),{name:'CrouchIdle'})):null;
+ crouchIdle?.setLoop(LoopRepeat,Infinity);
+ let crouchK=0;
  // A jump in world position is a teleport, not a stride. Locked feet have to be forgotten or
  // one gets dragged across the city on the next frame.
  let lastX=null,lastZ=null;
@@ -205,11 +215,23 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
     const on=held===name&&actions[name]?1:0,rate=dt/STANCE_FADE;
     stance[name]+=Math.max(-rate,Math.min(rate,on-stance[name]));stood+=stance[name];
    }
-   const idleShare=(weights.get('Idle')??0)*share;
+   // The crouch (W4) takes its share from the whole gait: crouched and still is Crouch_Idle,
+   // crouched and moving is Crouch_Fwd_Loop at the pace the body is actually making.
+   const crouchOn=!!state.crouching&&!!crouchIdle&&!!crouchWalk;
+   crouchK+=Math.max(-dt/CROUCH_FADE,Math.min(dt/CROUCH_FADE,(crouchOn?1:0)-crouchK));
+   const idleFrac=weights.get('Idle')??0,upright=share*(1-crouchK);
+   if(crouchIdle&&crouchWalk){
+    if(crouchK>0&&!crouchIdle.isRunning())crouchIdle.play();
+    if(crouchK>0&&!crouchWalk.isRunning())crouchWalk.play();
+    crouchIdle.setEffectiveWeight(share*crouchK*idleFrac);
+    crouchWalk.setEffectiveWeight(share*crouchK*(1-idleFrac));
+    crouchWalk.timeScale=Math.max(.2,speed/CROUCH_PACE);
+   }
+   const idleShare=idleFrac*upright;
    for(const name of Object.keys(stance))actions[name]?.setEffectiveWeight(idleShare*stance[name]);
    for(const name of GAIT){
     const action=actions[name];if(!action)continue;
-    const weight=(weights.get(name)??0)*share*(name==='Idle'?Math.max(0,1-stood):1);
+    const weight=(weights.get(name)??0)*upright*(name==='Idle'?Math.max(0,1-stood):1);
     action.setEffectiveWeight(weight);
     if(name==='Idle'){action.paused=false;action.timeScale=1;continue;}
     const time=gait.timeFor(name);
@@ -236,6 +258,8 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
      time=state.attackDuration>0?duration*(1-state.attackTime/total):duration-state.attackTime*(duration/.42);
      // A katana cut that met a wall holds the frame it met it on (combat.mjs cut()).
      if(overlay==='SwordAttack'&&Number.isFinite(state.attackHold))time=state.attackHold*duration;
+     // W4: the roll is scrubbed by its own clock, not the attack's.
+     if(overlay==='Roll')time=duration*(1-(state.rollTime??0)/(state.rollDuration||duration));
     }
     if(overlay==='Hit'){const total=state.hurtDuration>0?state.hurtDuration:.34;
      time=state.hurtTime>0?duration*(1-state.hurtTime/total):duration/2;}
@@ -260,11 +284,11 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
    const gunAim=(state.aim>0||(state.shotLeft??0)>0)&&Number.isFinite(state.aimHeading);
    const walkHeading=state.bodyHeading??state.heading??0;
    const behind=gunAim&&Math.abs(Math.atan2(Math.sin(state.aimHeading-walkHeading),Math.cos(state.aimHeading-walkHeading)))>GUN_TWIST;
-   const turnToAim=gunAim&&(speed<=LOCOMOTION.idleSpeed||behind);
+   const turnToAim=gunAim&&(speed<=LOCOMOTION.idleSpeed||behind)&&!(state.rollTime>0);
    const desired=aiming?state.attackHeading:turnToAim?state.aimHeading:speed>LOCOMOTION.idleSpeed
     ?walkHeading
     :(state.heading??state.bodyHeading??0);
-   facing.update(desired,speed,dt,aiming?STRIKE.turnRate:turnToAim?GUN_TURN:undefined);
+   facing.update(desired,speed,dt,aiming?STRIKE.turnRate:state.rollTime>0?STRIKE.turnRate*2:turnToAim?GUN_TURN:undefined);
    root.position.set(state.x,state.y,state.z);
    root.rotation.set(0,facing.heading,facing.lean,'YXZ');
    if(state.trafficReaction==='look'&&Number.isFinite(state.threatHeading)&&head)
@@ -316,7 +340,7 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
    mixer.stopAllAction();
    for(const action of Object.values(actions))action.reset();
    overlay=null;previousAttack=0;seeded=false;dominant='Idle';strike.Punch=strike.PunchCross=strike.SwordAttack=0;
-   stance.SwordIdle=stance.PistolIdle=0;aimLayer?.reset();
+   stance.SwordIdle=stance.PistolIdle=0;aimLayer?.reset();strike.Roll=0;crouchK=0;crouchIdle?.stop();
    gait.reset();facing.reset(0);
    for(const name of GAIT)actions[name]?.play().setEffectiveWeight(0);
    for(const name of GAIT)if(actions[name])actions[name].paused=true;
