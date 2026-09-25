@@ -1,6 +1,6 @@
 # Plan: a lighter scene at 60 fps, and the Switch Pro Controller
 
-Status: **PLAN, approved by the user 2026-09-25.** Order: P0 first, then the user measures on the
+Status: **P0 and C1–C4 implemented** (`docs/GTA-FIDELITY-STATUS.md` §9ac, §9ad); P1–P4 wait for the user's `?perf=sweep` JSON. Approved by the user 2026-09-25. Order: P0 first, then the user measures on the
 device; C1–C4 do not depend on the measurement and go ahead meanwhile; P1–P4 wait for it.
 Read `AGENTS.md`, `CLAUDE.md` and `docs/GTA-FIDELITY-STATUS.md` (§9j 12.0, §16a) first.
 
