@@ -62,6 +62,7 @@ const files=[
  'tests/pistol.test.mjs',
  'tests/police-guns.test.mjs',
  'tests/roll-crouch.test.mjs',
+ 'tests/perf-probe.test.mjs',
  'tests/own-car.test.mjs',
  'tests/kaze-detail.test.mjs',
  'tests/wanted.test.mjs',

@@ -18,7 +18,9 @@ export class ModuleSystem {
  register(id,hooks={}){if(this.entries.has(id))throw new Error('Duplicate module '+id);this.entries.set(id,{id,hooks,enabled:false,status:'disabled',error:null});}
  setEnabled(id,enabled){const m=this.entries.get(id);if(!m)throw new Error('Unknown module '+id);if(m.enabled===enabled)return;try{if(enabled){m.hooks.build?.(this.context);m.enabled=true;m.status=m.hooks.build?'ready':'stub';}else{m.hooks.dispose?.();m.enabled=false;m.status='disabled';}}catch(e){m.enabled=false;m.status='failed';m.error=String(e);try{m.hooks.dispose?.();}catch{} } }
  start(){for(const id of this.entries.keys())this.setEnabled(id,(id!=='debug'||this.config.debug)&&(this.config.only===null||this.config.only.includes(id))&&!this.config.skip.includes(id));}
- update(dt){for(const m of this.entries.values())if(m.enabled){try{m.hooks.update?.(dt);}catch(e){m.error=String(e);this.setEnabled(m.id,false);m.status='failed';}}}
+ // PLAN-PERFORMANCE P0: `probe` (perf-probe.mjs) times each module's update when set, and a
+ // module in `paused` is skipped (the ?perf=sweep A/B), without being disposed and rebuilt.
+ update(dt){const probe=this.probe;for(const m of this.entries.values())if(m.enabled&&!this.paused?.has(m.id)){try{if(probe){probe.begin('module:'+m.id);m.hooks.update?.(dt);probe.end('module:'+m.id);}else m.hooks.update?.(dt);}catch(e){probe?.end('module:'+m.id);m.error=String(e);this.setEnabled(m.id,false);m.status='failed';}}}
  timeChanged(time){for(const m of this.entries.values())if(m.enabled){try{m.hooks.onTimeChange?.(time);}catch(e){m.error=String(e);this.setEnabled(m.id,false);m.status='failed';}}}
  snapshot(){return [...this.entries.values()].map(({id,enabled,status,error})=>({id,enabled,status,error}));}
  dispose(){for(const id of this.entries.keys())this.setEnabled(id,false);}
