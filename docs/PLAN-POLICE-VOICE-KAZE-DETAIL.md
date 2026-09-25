@@ -1,7 +1,8 @@
 # Plan: a Japanese patrol car that reads as one, a human police loudspeaker, and Kaze FR in detail
 
-Status: **Step P implemented** on `claude/police-voice-kaze` (§9u). Steps V, K1 and K2 are not
-started; they follow on stacked branches. Originally: Written 2026-09-25 on `master` `b2a39ef`
+Status: **Step P implemented** on `claude/police-voice-kaze` (§9u), **Step V implemented** on
+`claude/police-voice-kaze-2` (§9v). Steps K1 and K2 are not started; they follow on stacked
+branches. Originally: Written 2026-09-25 on `master` `b2a39ef`
 (PRs #24–#31 merged). It comes from the user's first device run of the police and own-car work.
 The work happens in a local Claude CLI session so it can be checked on the real device. Read
 `AGENTS.md`, `CLAUDE.md`, `docs/GTA-FIDELITY-STATUS.md` (§9m–§9t, §16a),

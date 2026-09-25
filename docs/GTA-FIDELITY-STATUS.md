@@ -5115,6 +5115,81 @@ through HMR: 0 console errors, drawCalls 269, scene otherwise unchanged.
   (Step P is the traffic-rendered patrol car only, per the plan), but is worth a future step if the
   player drives a stolen patrol car often enough to notice.
 
+## 9v. Police voice/Kaze detail, Step V — a human-sounding loudspeaker, no VOICEVOX (branch `claude/police-voice-kaze-2`, on `claude/police-voice-kaze`)
+
+**Plan:** `docs/PLAN-POLICE-VOICE-KAZE-DETAIL.md` Step V (V1 and V2 together, per the plan's order).
+
+**What changed.**
+- **V1 (`src/player/voices.mjs`).** Three new onsets in `ONSETS`: `m` and `n` are now both a short
+  nasal hum at the `n`-vowel formant (`VOWELS.n`, already the nasal-murmur triple) rather than pure
+  silence before the vowel; `r` is a ~20 ms flap with no burst; `sh` is band-passed noise at 3.5 kHz
+  for 85 ms, lower than an `s` would be. Six new `POLICE_LINES` (`kind: 'police'`, never drawn by
+  the crowd's `chooseLine`, never overlapping `LINES`'s kinds): 止まれ！, 停車！停車！ (said twice —
+  a lone 停車 read stiff on the device, per the plan's 2026-09-25 note), 動くな！, 逃げるな！,
+  降りろ！, 確保！, picked by `policeLine(situation)` rather than by urgency. Two `POLICE_THROATS`
+  (lower `f0`, smaller `formant` than any crowd persona), deterministic by car id via
+  `policePersona`. The glottis-plus-three-formants synthesis core is factored out of
+  `createCrowdVoices` into `synthesizePoliceLine`, which builds one line into a caller-supplied
+  output node instead of straight to the destination — the crowd's own scheduling (range culling,
+  the concurrent-voice cap, scream headroom) does not fit the loudspeaker's much slower, global gap.
+  The noise-burst helper (`burst`) was hoisted to module scope, unchanged, so both paths share it.
+- **V2 (`src/police/siren.mjs`, `src/police/director.mjs`).** `createMegaphone`: a band-pass
+  (350–3,500 Hz) into a `WaveShaperNode` (mild `tanh` saturation) into a dry/echo mix (a ~90 ms
+  slapback at low level) into an HRTF panner at the car, with a synthesised mic click just before
+  each line — built only when a police line plays, never for the crowd's own voices. Scheduling is
+  its own: a 6 s gap across every car regardless of which one speaks, never the same line twice
+  running (the second candidate of a two-option situation is tried instead, or the line is dropped),
+  both waived for the arrest line (`force: true`, "outside the gap rule" per the plan). `director.mjs`
+  picks the situation each frame: driving → `stop`/`stopCar` (or `getOut` if stopped and pinned,
+  reusing the arrest-in-a-car pin detection `units.arrest.car`); on foot → `chase`/`stop`; an officer
+  within 3 m or a grab already in progress (`units.arrest.foot > 0`) → `freeze`; the frame an arrest
+  completes → `arrest`, bypassing the gap. `createSirens` gained `duck()`: since `update()`
+  re-asserts the siren's gain every frame, a one-shot ducking ramp would be overwritten by the very
+  next frame, so `duck()` instead holds a deadline `update()` itself checks and discounts by ~6 dB
+  while it is live.
+- **The machine voice.** `speechSynthesis` (`createLoudspeaker`) is no longer called during play.
+  `director.mjs` checks `?voice=tts` once at creation (guarded so a plain Node environment, which has
+  no `location`, reads false and never throws) and only then falls back to the old two Japanese
+  phrases through the browser's own speech; by default every code path uses the megaphone.
+
+**Device check.** Rendered all six lines through the real production path in a same-origin dev-server
+page: `import('/src/police/siren.mjs')`, a real `AudioContext`, `createMegaphone(...).speak(...)` for
+each of `stop/stopCar/freeze/chase/getOut/arrest` — every line returned its tag and the full chain
+(`WaveShaperNode`, `DelayNode`, `PannerNode`) built without a single exception. **Not done: actually
+listening to a line in a live chase.** The plan is explicit that "the user judges the result by ear,"
+and the render environment this session (a memory-constrained shared dev machine, `evidence/police-
+voice-kaze/step-p/metrics.json` already recorded ~2 GB free of 16 GB) made the live scene unstable
+enough (renderer timeouts under Chrome automation, <2 fps) that a recorded in-chase listening pass was
+not attempted; the synthesis path itself is confirmed correct and exception-free. This is squarely the
+plan's own fallback point: **if the five lines do not read as intended on the user's own listen, the
+documented next step is a paid TTS (ElevenLabs/OpenAI) or a commissioned voice actor** — only the
+audio source would change, not the V2 playback/scheduling built here.
+
+**Tests.** `tests/police-voice.test.mjs` (7): every police line built only from defined vowels and
+onsets and tagged `kind: 'police'`, separate from the crowd's kinds; the six lines exist one per
+situation; `m`/`n` have no noise burst, `sh` is high-frequency noise, `r`'s gap is under 30 ms; the two
+throats are lower/smaller than any crowd persona and deterministic by id; a line synthesises into a
+real-shaped audio graph without throwing, and never throws when the context refuses.
+`tests/police-loudspeaker.test.mjs` (7): the megaphone's band-pass/saturation/echo chain is built only
+when a police line plays, never by the crowd's own voices; the 6 s gap holds across different cars and
+the same line never repeats (the second candidate is used instead, and a single-candidate repeat is
+refused outright); the arrest line bypasses the gap; a missing context, bus, or unknown situation is
+silent, never an error; by default the director never touches `speechSynthesis` while the megaphone
+plays lines, and `?voice=tts` (set via `globalThis.location` in the test, since Node has none) flips
+that exactly the other way round. New modules/exports, so all 14 fail on the code before. Both files
+had to be added to `scripts/test-current.mjs`'s explicit list — see §16a.
+
+**Limitations.**
+- No recorded, judged-by-ear device check this session (see above) — this is the one thing the user
+  should check personally before this PR is trusted for feel, per the plan's own design.
+- "An officer within 3 m" and "the player's car stopped or pinned" are read from the same proxies W2
+  already uses for the grab and the in-car arrest (`units.arrest.foot`/`units.arrest.car`, a distance
+  check), not a dedicated line-of-sight or contact model; §9r's own limitation (no line-of-sight test)
+  still applies here.
+- The megaphone always uses the single nearest siren-active car within 40 m as the speaking car; with
+  several patrol cars converging, which one "speaks" can jump between frames if their distances cross.
+  Not perceptible against the plan's ≥6 s gap in practice, but worth knowing.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
@@ -5370,6 +5445,13 @@ seconds. Check the fresh case before blaming the harness.
 `vehicle-shape.mjs`, not `VEHICLES`). Tuning the band against the vehicle's overall height alone
 put the split well down in the door. Check a livery band against the actual profile vertex it is
 meant to land on, not just against a plausible-looking fraction.
+
+**Police voice/Kaze Step V (§9v): `npm run test:ci` is an explicit file list, not a glob.**
+`scripts/test-current.mjs` names every test file by hand; a new `tests/*.test.mjs` is silently never
+run by `test:ci` or `npm test` until it is added to that list. Two new files
+(`tests/police-voice.test.mjs`, `tests/police-loudspeaker.test.mjs`) passed on their own but did not
+change the CI test count until added. Always diff the `test:ci` test count before and after adding a
+test file, not just its own green run.
 
 ## 17. Files that matter
 
