@@ -86,6 +86,28 @@ await js(`window.__SHIBUYA_MELEE__.request()`);
 await until('window.__SHIBUYA_MELEE__.phase==="active"||window.__SHIBUYA_MELEE__.snapshot().cuts>0',60,'the cut');
 await shot('03-katana-cut','the two-handed cut, in its window');
 await until('window.__SHIBUYA_MELEE__.phase==="idle"',90,'the cut to end');
+// §9ai: hits that land. Bring the nearest pedestrian in front of the player and cut them twice:
+// the first cut shows the catch, the blood and the flinch; the second kills, and the ragdoll falls.
+if(process.env.HITS!=='0'){
+ const put=`(()=>{const sim=window.__SHIBUYA_LIFE__?.sim,s=window.__SHIBUYA_PLAYER__.state;let best=null,d=1e9;
+  for(const q of sim.pool){if(!q.active||q.controlled||q.struck!==undefined||q.combatDead||q.archetype==='kid'||q.crossing)continue;const k=Math.hypot(q.x-s.x,q.z-s.z);if(k<d){d=k;best=q;}}
+  if(!best)return null;const h=s.heading;best.x=best.renderX=best.previousX=s.x+Math.sin(h)*1.3;best.z=best.renderZ=best.previousZ=s.z+Math.cos(h)*1.3;
+  best.speed=0;best.pause=30;best.mode='idle';best.state='idle';best.heading=h+Math.PI;window.__HIT_TARGET__=best.id;return {id:best.id,d};})()`;
+ console.log('  target',JSON.stringify(await js(put)));
+ await frames(6);
+ await until('window.__SHIBUYA_LIFE__?.nearCharacters?.bodyOf?.(window.__HIT_TARGET__)==="humanoid"',60,'the target to get a humanoid');
+ await js(`window.__SHIBUYA_MELEE__.request()`);
+ await until('window.__SHIBUYA_LIFE__.sim.pool[window.__HIT_TARGET__].hitSeq>0',90,'the cut to land');
+ await shot('03b-cut-lands','a cut lands: the catch, the blood, the flinch');
+ await until('window.__SHIBUYA_MELEE__.phase==="idle"',90,'the cut to end');
+ await js(`window.__SHIBUYA_MELEE__.request()`);
+ await until('window.__SHIBUYA_LIFE__.sim.pool[window.__HIT_TARGET__].combatDead',120,'the second cut to kill');
+ await frames(2);
+ await shot('03c-ragdoll-falls','the second cut kills: the ragdoll falls along the cut');
+ await frames(12);
+ await shot('03d-ragdoll-down','down, where the cut put them');
+ await until('window.__SHIBUYA_MELEE__.phase==="idle"',90,'the cut to end');
+}
 // The pistol: 2, aim, fire.
 await js(`window.dispatchEvent(new KeyboardEvent('keydown',{key:'2'}))`);
 await frames(4);
