@@ -23,7 +23,9 @@ test('C2 on foot: ZR fires, ZL aims, B runs, A reloads, Y rolls, X gets in, L/R 
  assert.deepEqual(tap('right').pressed,['reload'],'A (right) is reload');
  assert.deepEqual(tap('left').pressed,['roll'],'Y (left) is roll');
  assert.deepEqual(tap('top').pressed,['enter'],'X (top) gets in');
- assert.deepEqual(tap('L').pressed,['weaponPrev']);assert.deepEqual(tap('R').pressed,['weaponNext']);
+ // Stage 1: L/R act when let go (held, they open the weapon wheel instead).
+ const tapUp=(name)=>{press(p,name);map.poll(p,1/60,'foot');release(p,name);return map.poll(p,1/60,'foot');};
+ assert.deepEqual(tapUp('L').pressed,['weaponPrev']);assert.deepEqual(tapUp('R').pressed,['weaponNext']);
  assert.deepEqual(tap('LS').pressed,['crouch']);
  assert.deepEqual(tap('plus').pressed,['menu']);assert.deepEqual(tap('minus').pressed,['map']);
  press(p,'ZL');press(p,'bottom');const held=map.poll(p,1/60,'foot');
@@ -125,4 +127,17 @@ test('the controller: the right stick turns the camera, and invert-Y flips the p
  const stored=new Map();const store={getItem:k=>stored.get(k)??null,setItem:(k,v)=>stored.set(k,v)};
  padSettings('?padLook=1.5',store);assert.equal(padSettings('',store).look,1.5,'the setting was not kept');
  assert.equal(padSettings('?padLook=99',null).look,3);assert.equal(padSettings('?padLook=-1',null).look,1);
+});
+
+test('stage 1: L or R held opens the weapon wheel, the right stick picks, and no tap fires',()=>{
+ const map=createInputMap(),p=pad();
+ press(p,'L');
+ let f;for(let t=0;t<.2;t+=1/60){f=map.poll(p,1/60,'foot');assert.equal(f.wheel,false,'a tap is not the wheel yet');}
+ for(let t=0;t<.2;t+=1/60)f=map.poll(p,1/60,'foot');
+ assert.equal(f.wheel,true,'held: the wheel');
+ p.axes[2]=.9;p.axes[3]=0;f=map.poll(p,1/60,'foot');assert.deepEqual(f.stick,{x:.9,y:0});
+ release(p,'L');f=map.poll(p,1/60,'foot');
+ assert.equal(f.wheel,false);assert.deepEqual(f.pressed,[],'letting go of the wheel is not a weapon step');
+ press(p,'R');f=map.poll(p,1/60,'car');release(p,'R');f=map.poll(p,1/60,'car');
+ assert.deepEqual(f.pressed,[],'in a car R is the handbrake, never a weapon');
 });

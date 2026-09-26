@@ -5926,6 +5926,53 @@ followed as it creeps; bounded settings; the subcommand bytes; a fake WebHID dev
 subcommands sent, aim-only drains when not aiming, sensitivity and invert, saved to storage);
 no WebHID → "unsupported".
 
+## 9am. Roadmap stage 1 — the gun's feel and its HUD (branch `claude/shibuya-weapons-implementation-28u1y1`, from `master` `261b89c`)
+
+- **Hit marker.** A short X over the crosshair when a round or a cut lands (white), red and longer
+  on a kill. Driven by the shot's outcome (`onShot`), `blade_hit`, and a new `npc_killed` combat
+  event (`combat.mjs kill()`), so fists, the katana and both guns all mark it.
+- **The automatic zooms.** `WEAPONS.smg.aimFov` 30 (the pistol keeps `PLAYER.aimFov` 40): the
+  shouldered gun closes the view further, as sights do.
+- **The ammunition panel.** Top right (above the controls on a phone): the weapon's name, the rounds
+  large with the magazine small, amber on the last quarter, and a bar that empties with the
+  magazine and fills with the reload (`snapshot().reloadProgress`). The dashboard line keeps only
+  the weapon's name.
+- **The weapon wheel** (`weapon-wheel.mjs`). Tab held (a tap still takes/gives the pointer, now on
+  release), the pad's L or R held (a tap is the previous/next weapon, now on release —
+  `input-map.mjs`), or the phone's weapon button held; the four weapons clockwise from the top in
+  key order; the mouse's travel, the right stick or a drag picks; letting go draws it. The world
+  runs at 0.3 speed while it is open (the frame's `dt`, eased).
+- **What a fight leaves** (`impact-marks.mjs`, one draw call per kind, none while empty, generated
+  textures): bullet holes on walls (the normal from the open air around the hit) and the ground,
+  90 s, 64 at most; brass casings out of the port to the gun's right, bouncing and lying on their
+  side with a synthesised tink (`gunfire.tink`), 14 s, 40 at most; muzzle smoke, ~1 s; the
+  automatic's dropped magazine, 30 s; blood pools that wait 1.1 s for the body to go down, then
+  spread to 0.45–0.8 m over ~9 s, 120 s, 12 at most.
+- **Draw and holster** (`hands.mjs`). A weapon change is a hand movement: the right hand goes to
+  where the weapon out is carried (0.22 s) and puts it away, then to where the next one is (the
+  hip holster, the handle over the right shoulder, and — new — the submachine gun slung behind the
+  right shoulder) and brings it up (0.3 s). The weapon in the hand swaps when the hand is at the
+  carry; mid-change the figure poses the weapon actually held, lowered; a shot waits for it
+  (`arsenal` checks `figure.hands.busy`). Two-bone IK over the finished pose (foot-ik's solver).
+- **The automatic's reload.** The magazine is its own mesh now. Over the 2 s reload the left hand
+  leaves the fore-end, takes the magazine, pulls it, lets it fall (it drops to the pavement),
+  fetches a fresh one from the left hip, seats it and returns; the magazine follows the palm.
+
+Tests: `tests/stage1.test.mjs` (11 — wheel geometry and picking, wall normals, casings to the
+right and resting, bounded pools, a pool's delay and spread, hole on the wall's face from a real
+shot, the draw's timeline, the reload's key points, the draw and the reload on the humanoid);
+`input-map` (L/R on release, held is the wheel, never in a car); R3 in `weapons.test.mjs` now waits
+for the draw. Stills: `evidence/roadmap/stage1/stage1bench.png` (qa/gta-upgrade/stage1bench.html
+on the game's modules: holes, casings, smoke, a dropped magazine, a pool at 0/3/9 s; the pistol to
+submachine gun change from behind; the reload from the left front). A full in-scene capture script
+is committed (qa/gta-upgrade/stage1-scene.mjs, force-added like the other benches): in
+this container's headless SwiftShader it runs at 0.1 fps and the WebGL context was lost mid-burst at
+HIGH and MEDIUM, so no in-scene stills were kept. The bench on the same modules did not lose its
+context; the scene loss is unexplained and should be checked on a real GPU.
+
+Not yet seen on a device: the whole of stage 1 in the real scene (HUD layout at phone width, the
+wheel with a real pad and on a phone, the tink's level, whether 0.3 slow-down feels right).
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle

@@ -69,6 +69,7 @@ const files=[
  'tests/perf-probe.test.mjs',
  'tests/input-map.test.mjs',
  'tests/gyro.test.mjs',
+ 'tests/stage1.test.mjs',
  'tests/police-ram.test.mjs',
  'tests/own-car.test.mjs',
  'tests/kaze-detail.test.mjs',

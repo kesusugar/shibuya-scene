@@ -28,7 +28,7 @@ export const wantsTouch = () =>
  * @param {{onAxes?:(axes:any)=>void, onDrive?:()=>void, onAttack?:()=>void, onAttackHold?:(on:boolean)=>void, onExit?:()=>void, onWeapon?:()=>void}} [options]
  */
 export const ATTACK_LABEL = Object.freeze({fists: '殴る', pistol: '撃つ', katana: '斬る', smg: '撃つ'});
-export function createTouchControls({onAxes, onDrive, onAttack, onAttackHold, onExit, onWeapon} = {}) {
+export function createTouchControls({onAxes, onDrive, onAttack, onAttackHold, onExit, onWeapon, onWheel} = {}) {
  if (typeof document === 'undefined') return {show() {}, hide() {}, setDriving() {}, setWeapon() {}, dispose() {}};
 
  const root = document.createElement('div');
@@ -107,7 +107,20 @@ export function createTouchControls({onAxes, onDrive, onAttack, onAttackHold, on
   for(const t of ['pointerup','pointercancel','pointerleave'])b.addEventListener(t,()=>onAttackHold?.(false));}
  root.querySelector('.tc-exit').addEventListener('click', e => {e.preventDefault(); onExit?.();});
  const weaponBtn = root.querySelector('.tc-weapon');
- weaponBtn.addEventListener('click', e => {e.preventDefault(); onWeapon?.();});
+ // Stage 1: a tap steps to the next weapon; held, the weapon wheel -- drag toward one and let go.
+ let wheelTimer = null, wheelOpen = false, wheelFrom = null;
+ weaponBtn.addEventListener('click', e => e.preventDefault());
+ weaponBtn.addEventListener('pointerdown', e => {
+  e.preventDefault(); weaponBtn.setPointerCapture?.(e.pointerId); wheelFrom = {x: e.clientX, y: e.clientY};
+  wheelTimer = setTimeout(() => {wheelTimer = null; wheelOpen = true; onWheel?.('open');}, 280);
+ });
+ weaponBtn.addEventListener('pointermove', e => {if (wheelOpen && wheelFrom) onWheel?.('point', (e.clientX - wheelFrom.x) / 70, (e.clientY - wheelFrom.y) / 70);});
+ const wheelUp = e => {
+  if (wheelTimer) {clearTimeout(wheelTimer); wheelTimer = null; if (e.type === 'pointerup') onWeapon?.();}
+  else if (wheelOpen) {wheelOpen = false; onWheel?.('close');}
+  wheelFrom = null;
+ };
+ weaponBtn.addEventListener('pointerup', wheelUp); weaponBtn.addEventListener('pointercancel', wheelUp);
 
  return {
   show() {root.hidden = false; document.body.classList.add('tc-on');},

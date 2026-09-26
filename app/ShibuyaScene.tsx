@@ -59,6 +59,7 @@ import {createBloodMarks} from '../src/life/blood.mjs';
 import {createCrowdVoices,prioritise} from '../src/player/voices.mjs';
 import {createMeleeCombat} from '../src/player/combat.mjs';
 import {createArsenal} from '../src/player/arsenal.mjs';
+import {createWeaponWheel,WHEEL} from '../src/player/weapon-wheel.mjs';
 import {createHitStop} from '../src/player/hit-stop.mjs';
 import {createDynamicResolution} from '../src/quality/dynamic-resolution.mjs';
 import {createGunfire} from '../src/audio/gunfire.mjs';
@@ -131,7 +132,7 @@ export default function Home(){
  const KOBAN={x:48.5,z:20.4};
  const policeFrustum=new THREE.Frustum(),policeMatrix=new THREE.Matrix4(),policePoint=new THREE.Vector3();
  const inView=(x:number,z:number)=>policeFrustum.containsPoint(policePoint.set(x,1.5,z))&&Math.hypot(x-view.position.x,z-view.position.z)<260;const earFacing=new THREE.Vector3(),SCRAMBLE_EAR={x:6.54,z:1.99};
- let seatedDrivers:any=null;let seatedHidden=false;let transitionSeated=false;let carjackSide=-1,carjackStage:string|null=null,lastCarjack:any=null;let vehicleVisual:any=null,vehicleEffects:any=null,playUI:any=null,localCrowdClock=0,frameHits=0,combatDeathReported=false;const followCamera=createFollowCamera(),feedback=createFeedbackBus(),melee=createMeleeCombat({
+ const weaponWheel=createWeaponWheel();let seatedDrivers:any=null;let seatedHidden=false;let transitionSeated=false;let carjackSide=-1,carjackStage:string|null=null,lastCarjack:any=null;let vehicleVisual:any=null,vehicleEffects:any=null,playUI:any=null,localCrowdClock=0,frameHits=0,combatDeathReported=false;const followCamera=createFollowCamera(),feedback=createFeedbackBus(),melee=createMeleeCombat({
   // PLAN-WEAPONS W1: the katana's cut goes through the same swing clock as a punch.
   weapon:()=>arsenal?.current??'fists',
   // RUN 8: a punch is an event the crowd can see. The HQ layer bounds it by its own spatial
@@ -225,6 +226,14 @@ export default function Home(){
   muzzle:(figure:any)=>figure?.weapons?.muzzle(weaponMuzzle,weaponBarrel)?{x:weaponMuzzle.x,y:weaponMuzzle.y,z:weaponMuzzle.z}:null};
  // PLAN-WEAPONS W1: 1/2/3, the wheel and the pad's weapon button. Not mid-swing, not in a car.
  const weaponBusy=()=>melee.phase!=='idle'||!!vehicleTransition.active||!player?.state.alive;
+ // Stage 1: the weapon wheel -- time slows while it is open (see the frame), and letting go draws the pick.
+ const onWheel=(kind:string,x=0,y=0)=>{
+  if(kind==='open'){if(!playerMode||driving||weaponBusy()){return;}weaponWheel.show(arsenal?.current??'fists');arsenal?.hold(false);}
+  else if(kind==='move')weaponWheel.move(x,y);
+  else if(kind==='point')weaponWheel.point(x,y);
+  else if(kind==='close'){const id=weaponWheel.close();if(id&&id!==arsenal?.current)selectWeapon(WHEEL.order.indexOf(id)+1);}
+  playUI?.setWheel?.(weaponWheel.open,weaponWheel.highlighted,arsenal?.snapshot()??null);
+ };
  const selectWeapon=(n:number)=>{if(playerMode&&arsenal?.select(n,{busy:weaponBusy(),driving}))touchPad?.setWeapon(arsenal.current);};
  const cycleWeapon=(d:number)=>{if(playerMode&&arsenal?.cycle(d,{busy:weaponBusy(),driving}))touchPad?.setWeapon(arsenal.current);};
  const crowdSlot=()=>lifeEntry.hooks.current?.sim?.pool?.[0]??null;
@@ -250,7 +259,7 @@ export default function Home(){
    // Two frequencies that do not divide into each other, so it reads as a knock rather than
    // a hum, and it only moves the eye -- the look-at point stays put or the view swims.
    c.x+=Math.sin(t*37)*shake*SHAKE_SCALE*SHAKE_THROW;c.y+=Math.sin(t*53)*shake*SHAKE_SCALE*SHAKE_THROW*.6;c.z+=Math.cos(t*43)*shake*SHAKE_SCALE*SHAKE_THROW;}
-  const targetFov=driving?61+Math.min(10,Math.abs(state.speed)*.7):50-(50-PLAYER.aimFov)*aimCamera;const nextFov=view.fov+(targetFov-view.fov)*(1-Math.exp(-3*dt));if(Math.abs(nextFov-view.fov)>.01){view.fov=nextFov;view.updateProjectionMatrix();}
+  const targetFov=driving?61+Math.min(10,Math.abs(state.speed)*.7):50-(50-(arsenal?.weapon?.aimFov??PLAYER.aimFov))*aimCamera;const nextFov=view.fov+(targetFov-view.fov)*(1-Math.exp(-3*dt));if(Math.abs(nextFov-view.fov)>.01){view.fov=nextFov;view.updateProjectionMatrix();}
   view.position.set(c.x,c.y,c.z);view.lookAt(c.tx,c.ty,c.tz);
   controls.target.set(c.tx,c.ty,c.tz);};
  // A vehicle box over the player is a knock-down. The traffic simulation's own overlap test
@@ -437,7 +446,10 @@ export default function Home(){
    // W2: every shot is heard (recorded CC0 gunshot + the street's slapback), knocks the camera a
    // little and blooms its frame; the HQ crowd sees it through the bounded witness pass.
    onShot:(shot:any)=>{gunfire?.shot(shot.from.x,shot.from.y,shot.from.z,shot.heading,{kind:shot.weapon==='smg'?'smg':'pistol',hit:shot.hit});
-    soundBank?.duck?.(.5,1.4);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_SHOT);player?.rumble?.('shot');},
+    soundBank?.duck?.(.5,1.4);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_SHOT);player?.rumble?.('shot');
+    // Stage 1: a round that found a person marks the crosshair (a kill marks it red).
+    if(shot.kind==='person')playUI?.hitMarker?.(shot.outcome==='killed');},
+   onLand:(x:number,y:number,z:number,kind:string)=>gunfire?.tink(x,y,z,kind),
    onWitness:(event:any)=>lifeEntry.hooks.current?.witness?.(event)??0});
    groups.dynamic.add(arsenal.effects.root);}
   if(!gunfire)gunfire=createGunfire(()=>playerAudio?.context??null,()=>soundBank,{solid:(x:number,z:number)=>!!lifeEntry.hooks.current?.network?.ctx?.solid?.(x,z,.1)});
@@ -449,12 +461,12 @@ export default function Home(){
   // On a touch device these are the controls, not an extra: there is no keyboard to fall
   // back to. They feed the same axes the keys and the pad feed.
   if(touchEnabled&&!touchPad)touchPad=createTouchControls({
-   onAxes:(axes:any)=>player?.setTouch(axes),onAttack:()=>attack(),onAttackHold:(on:boolean)=>arsenal?.hold(on&&!driving),onWeapon:()=>cycleWeapon(1),
+   onAxes:(axes:any)=>player?.setTouch(axes),onAttack:()=>attack(),onAttackHold:(on:boolean)=>arsenal?.hold(on&&!driving),onWeapon:()=>cycleWeapon(1),onWheel:(kind:string,x:number,y:number)=>onWheel(kind,x,y),
    onDrive:()=>toggleDrive(),onExit:()=>exitPlayer()});
   touchPad?.setDriving(false);touchPad?.show();
   const sim=trafficEntry.hooks.current?.sim;
   if(sim&&!playerCar){playerCar=createPlayerVehicle(sim,ctx);if(!playerCar.spawn(player.state.x,player.state.z))console.warn('[Player] no room to park the car');}
-  playerMode=true;combatDeathReported=false;controls.enabled=false;player.attach(canvas,{onExit:()=>exitPlayer(),onDrive:()=>toggleDrive(),onAttack:()=>attack(),onAttackHold:(on:boolean)=>arsenal?.hold(on&&!driving),onWeapon:(n:number)=>selectWeapon(n),onWeaponCycle:(d:number)=>cycleWeapon(d),onAim:(on:boolean)=>arsenal?.aim(on&&!driving),onReload:()=>{if(!driving)arsenal?.reload();},onRoll:()=>{if(playerMode&&!driving&&!vehicleTransition.active&&melee.phase==='idle')player?.roll();},
+  playerMode=true;combatDeathReported=false;controls.enabled=false;player.attach(canvas,{onExit:()=>exitPlayer(),onDrive:()=>toggleDrive(),onAttack:()=>attack(),onAttackHold:(on:boolean)=>arsenal?.hold(on&&!driving),onWeapon:(n:number)=>selectWeapon(n),onWeaponCycle:(d:number)=>cycleWeapon(d),onAim:(on:boolean)=>arsenal?.aim(on&&!driving),onWheel:(kind:string,x:number,y:number)=>onWheel(kind,x,y),onReload:()=>{if(!driving)arsenal?.reload();},onRoll:()=>{if(playerMode&&!driving&&!vehicleTransition.active&&melee.phase==='idle')player?.roll();},
    // C1-C4: the pad's own buttons for the siren (d-pad up), the horn alone (left stick in a car) and the map (−).
    driving:()=>driving,onSiren:()=>{if(driving&&playerCar)police?.toggleSiren(playerCar);},onHornOnly:()=>{if(driving&&playerCar)soundscape?.horn(playerCar.state.x,playerCar.state.z);},onMap:()=>playUI?.toggleMap?.(),onCrouch:()=>{if(playerMode&&!driving&&!vehicleTransition.active)player?.crouch();},onHorn:()=>{if(driving&&playerCar&&!police?.toggleSiren(playerCar))soundscape?.horn(playerCar.state.x,playerCar.state.z);}});setPlayerHit(null);setMode('player');
   (window as any).__SHIBUYA_PLAYER__=player;(window as any).__SHIBUYA_CAR__=playerCar;
@@ -463,7 +475,7 @@ export default function Home(){
   // surface it queries are reachable, so a check can tell those two apart.
   if(config.qa){(window as any).__SHIBUYA_FEEDBACK__=feedback;(window as any).__SHIBUYA_AUDIO__=playerAudio;(window as any).__SHIBUYA_SOUNDS__={bank:soundBank,scape:soundscape};(window as any).__SHIBUYA_MELEE__=melee;(window as any).__SHIBUYA_ARSENAL__=arsenal;(window as any).__SHIBUYA_CONTACT__=player.contact.stats;(window as any).__SHIBUYA_FIGURE__=playerFigure;(window as any).__SHIBUYA_CTX__=ctx;(window as any).__SHIBUYA_LIFE__=lifeEntry.hooks.current;(window as any).__SHIBUYA_TRAFFIC__=trafficEntry.hooks.current;}
   return true;};
- const exitPlayer=()=>{if(!playerMode)return;soundscape?.silence();playUI?.hide();vehicleVisual?.hide();vehicleEffects?.hide();lifeEntry.hooks.current?.setPlayerFocus(null);followCamera.reset();melee.reset();arsenal?.reset();touchPad?.setWeapon('fists');
+ const exitPlayer=()=>{if(!playerMode)return;weaponWheel.cancel();soundscape?.silence();playUI?.hide();vehicleVisual?.hide();vehicleEffects?.hide();lifeEntry.hooks.current?.setPlayerFocus(null);followCamera.reset();melee.reset();arsenal?.reset();touchPad?.setWeapon('fists');
   // An abandoned carjack must not leave a driver half out of a car, a door hanging open, or a
   // slot frozen out of traffic for the rest of the session.
   {const was=vehicleTransition.cancel();
@@ -563,12 +575,15 @@ export default function Home(){
    // PLAN-WEAPONS W1: the katana. A cut lands like a heavy blow; steel on a wall clanks and sparks.
    case 'blade_hit':player?.rumble?.('cut');if(!soundscape?.event({...e,kind:'punch_hit'},who))playerAudio?.punchHit(1);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_PUNCH*1.2);
     // §9ai: the cut catches (hit-stop), bleeds where the blade met them, and sounds like a cut.
-    hitStop.hit('katana');
+    hitStop.hit('katana');playUI?.hitMarker?.(false);
     {const y=(who?.height??0)+(who?.hitZone==='head'?1.6:who?.hitZone==='legs'?.6:1.2);
      arsenal?.effects.blood(e.x,y,e.z,{dir:{x:who?.hitX??0,y:-.2,z:who?.hitZ??1},count:26,spread:.5});gunfire?.slice(e.x,y,e.z,1);}
     break;
    // §9ai: a round into a body: it catches, and thumps (the blood is drawn by the arsenal at the hit point).
    case 'bullet_hit':hitStop.hit(arsenal?.current==='smg'?'smg':'pistol');gunfire?.flesh(e.x,1.2+(who?.height??0),e.z,arsenal?.current==='smg'?.7:1);break;
+   // Stage 1: a death -- the kill marker, and blood spreading under where the body comes to lie.
+   case 'npc_killed':playUI?.hitMarker?.(true);
+    {const gx=e.x+(e.dirX??0)*.45,gz=e.z+(e.dirZ??0)*.45,h=lifeEntry.hooks.current?.network?.ctx?.height?.(gx,gz)??0;arsenal?.marks.pool(gx,h,gz);}break;
    case 'blade_clank':arsenal?.event(e);gunfire?.clank(e.x,1.2,e.z);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_PUNCH);break;
    case 'player_bump':soundscape?.event(e,who);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_BUMP*e.intensity);break;
    case 'vehicle_impact':if(!soundscape?.event(e,who))playerAudio?.bodyImpact(e.intensity);break;
@@ -580,7 +595,9 @@ export default function Home(){
    // that want to know, not a second voice.
   }
  });
- let lastPlayTick=performance.now();let qaReadyRef=false;const frame=(now:number)=>{if(disposed)return;const dt=frameGate.step(now);if(dt===null){raf=requestAnimationFrame(frame);return;}const frameStart=performance.now(),updateStart=frameStart;const playElapsed=document.hidden?0:Math.max(0,(now-lastPlayTick)/1000);lastPlayTick=now;frameHits=0;{const s=lifeEntry.hooks.current?.sim;if(s)s.postUpdate=null;}
+ let lastPlayTick=performance.now();let wheelTime=1;let qaReadyRef=false;const frame=(now:number)=>{if(disposed)return;const gateDt=frameGate.step(now);if(gateDt===null){raf=requestAnimationFrame(frame);return;}
+ // Stage 1: the world slows while the weapon wheel is open.
+ wheelTime+=((weaponWheel.open?WHEEL.slow:1)-wheelTime)*Math.min(1,gateDt*12);const dt=gateDt*wheelTime;const frameStart=performance.now(),updateStart=frameStart;const playElapsed=document.hidden?0:Math.max(0,(now-lastPlayTick)/1000);lastPlayTick=now;frameHits=0;{const s=lifeEntry.hooks.current?.sim;if(s)s.postUpdate=null;}
  if((perfMode||perfWanted)&&!perfProbe&&renderer)ensurePerf();
  perfProbe?.frameStart();perfProbe?.begin('player');if(playerMode&&player)player.updateInput(dt);if(playerMode&&player){view.getWorldDirection(viewDirection);arsenal?.frame(dt,{player,figure:playerFigure,driving:driving||!!vehicleTransition.active,world:weaponWorld,
   camera:{position:view.position,direction:viewDirection},touch:touchEnabled&&document.pointerLockElement!==canvas,pad:player.lastDevice==='pad',time:lifeEntry.hooks.current?.sim?.time??0});

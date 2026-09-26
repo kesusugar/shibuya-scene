@@ -13,6 +13,7 @@ import {clipCameraArm} from './camera.mjs';
 import {createCrowdContact} from './crowd-contact.mjs';
 import {createInputMap,createRumble} from './input-map.mjs';
 import {sharedGyro} from './gyro.mjs';
+import {WHEEL} from './weapon-wheel.mjs';
 
 // The camera arm. Solids are tested at the camera's own height rather than on the ground,
 // so it is a facade that pulls the camera in and not a bollard it is sailing well above.
@@ -169,14 +170,20 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
   // `onMap` are the pad's d-pad up, left-stick press in a car, and −.
   // §9ah: `onAttackHold(true|false)` reports the attack button HELD (the mouse's left, E, the
   // pad's ZR), for the submachine gun's automatic fire; 4 selects it.
+  // Stage 1: `onWheel(kind, x, y)` is the weapon wheel -- 'open', 'move' (mouse px), 'point' (a
+  // stick, -1..1) and 'close' -- held open by Tab or the pad's L/R (a tap is what it was before).
   attach(element, {onExit, onDrive, onAttack, onAttackHold, onHorn, onWeapon, onWeaponCycle, onReload, onAim, onRoll, onCrouch,
-                   onSiren, onHornOnly, onMap, driving = () => false} = {}) {
+                   onSiren, onHornOnly, onMap, onWheel, driving = () => false} = {}) {
    if (detach) return;
+   let tabAt = null, wheelOpen = false, padWheel = false;
+   const openWheel = () => {if (!wheelOpen && !driving()) {wheelOpen = true; onWheel?.('open');}};
+   const closeWheel = () => {if (wheelOpen) {wheelOpen = false; onWheel?.('close');}};
    const down = (e) => {
     if (e.repeat) return;
     const k = e.key.toLowerCase();
     if (e.target?.closest?.('input,select,textarea')) return;
-    if(k==='tab'){e.preventDefault();if(document.pointerLockElement===element)document.exitPointerLock?.();else element.requestPointerLock?.()?.catch?.(()=>{});return;}
+    // Tab: a tap takes or gives back the pointer (on release); held, the weapon wheel.
+    if(k==='tab'){e.preventDefault();tabAt=performance.now();return;}
     if (k === 'escape') {keys.clear(); onExit?.(); return;}
     if (k === 'f') {onDrive?.(); e.preventDefault(); return;}
     if (k === 'e') {onAttack?.(); onAttackHold?.(true); e.preventDefault(); return;}
@@ -188,9 +195,15 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
     if (!'wasd'.includes(k) && k !== 'shift' && k !== ' ') return;
     keys.add(k === ' ' ? 'shift' : k); e.preventDefault();
    };
-   const up = (e) => {const k = e.key.toLowerCase(); if (k === 'e') onAttackHold?.(false); keys.delete(k === ' ' ? 'shift' : k);};
-   const blur = () => {keys.clear(); touch.forward = 0; touch.strafe = 0; touch.running = false; aimHeld = false; onAim?.(false); onAttackHold?.(false);};
+   const up = (e) => {const k = e.key.toLowerCase(); if (k === 'e') onAttackHold?.(false); keys.delete(k === ' ' ? 'shift' : k);
+    if (k === 'tab' && tabAt !== null) {
+     e.preventDefault(); tabAt = null;
+     if (wheelOpen) closeWheel();
+     else if (document.pointerLockElement === element) document.exitPointerLock?.(); else element.requestPointerLock?.()?.catch?.(() => {});
+    }};
+   const blur = () => {tabAt = null; closeWheel(); keys.clear(); touch.forward = 0; touch.strafe = 0; touch.running = false; aimHeld = false; onAim?.(false); onAttackHold?.(false);};
    const move = (e) => {
+    if (wheelOpen) {onWheel?.('move', e.movementX, e.movementY); return;}
     if (document.pointerLockElement !== element) return;
     lastDevice = 'mouse';
     state.heading -= e.movementX * PLAYER.look;
@@ -226,8 +239,10 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    // The pad, as actions: one poll a frame, edges fired once, held states kept for input().
    let padAim = false, padFire = false;
    padPoll = (dt) => {
+    // Tab held long enough: the wheel (checked here, once a frame, rather than on a timer).
+    if (tabAt !== null && !wheelOpen && performance.now() - tabAt >= WHEEL.hold * 1000) openWheel();
     // Gyro: turning the controller turns the camera (+yaw is to the left, as heading grows).
-    if (gyro?.connected && !driving()) {
+    if (gyro?.connected && !driving() && !wheelOpen) {
      const t = gyro.turn(aimHeld || padAim);
      if (t.yaw || t.pitch) {
       lastDevice = 'pad';
@@ -254,6 +269,10 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
      else if (action === 'map') onMap?.();
      else if (action === 'menu') {keys.clear(); onExit?.();}
     }
+    // Stage 1: L/R held is the wheel; the right stick picks and does not turn the camera.
+    if (f.wheel && !padWheel) {padWheel = true; openWheel();}
+    else if (!f.wheel && padWheel) {padWheel = false; closeWheel();}
+    if (padWheel && wheelOpen) {onWheel?.('point', f.stick.x, f.stick.y); return;}
     if (f.aim !== padAim) {padAim = f.aim; onAim?.(f.aim);}
     if (!!f.fire !== padFire) {padFire = !!f.fire; onAttackHold?.(padFire);}
     const k = PLAYER.padLook * settings.look * dt;
@@ -271,7 +290,7 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
     window.removeEventListener('blur', blur);
     element.removeEventListener('mousemove', move); element.removeEventListener('click', click);element.removeEventListener('mousedown',punch);
     element.removeEventListener('mouseup',release);element.removeEventListener('contextmenu',menu);element.removeEventListener('wheel',wheel);
-    onAim?.(false); onAttackHold?.(false);
+    onAim?.(false); onAttackHold?.(false); closeWheel();
     element.removeEventListener('pointerdown', touchStart); element.removeEventListener('pointermove', touchMove);
     for (const type of ['pointerup', 'pointercancel']) element.removeEventListener(type, touchEnd);
     if (document.pointerLockElement === element) document.exitPointerLock?.();

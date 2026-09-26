@@ -189,3 +189,29 @@ body.tc-on .player-hint{display:none}
 .perf-start{margin-top:10px;width:100%}
 .gyro-settings .gyro-sens{display:grid;gap:6px}.gyro-settings input[type=range]{width:100%;accent-color:var(--primary)}
 .perf-overlay button:disabled{opacity:.45;cursor:default}
+/* Stage 1: hit marker, ammunition panel, weapon wheel */
+.play-hitmarker{position:fixed;left:50%;top:50%;width:30px;height:30px;margin:-15px 0 0 -15px;pointer-events:none;z-index:21;opacity:0}
+.play-hitmarker i{position:absolute;left:50%;top:50%;width:9px;height:2px;margin:-1px 0 0 -4.5px;background:#fff;box-shadow:0 0 2px #000c}
+.play-hitmarker i:nth-child(1){transform:rotate(45deg) translateX(-10px)}.play-hitmarker i:nth-child(2){transform:rotate(135deg) translateX(-10px)}
+.play-hitmarker i:nth-child(3){transform:rotate(225deg) translateX(-10px)}.play-hitmarker i:nth-child(4){transform:rotate(315deg) translateX(-10px)}
+.play-hitmarker[data-kind="kill"] i{background:#ff3b30;width:11px}
+.play-hitmarker.on{animation:play-hit .24s ease-out forwards}.play-hitmarker.on[data-kind="kill"]{animation-duration:.42s}
+@keyframes play-hit{0%{opacity:1;transform:scale(1.35)}35%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1)}}
+.play-ammo{position:absolute;top:64px;right:20px;min-width:128px;padding:8px 12px 9px;background:#0b1724cc;border:1px solid #ffffff22;border-radius:10px;text-align:right}
+.play-ammo[hidden]{display:none}
+.play-ammo small{display:block;color:#b8c7d0;font-size:12px;letter-spacing:.04em}
+.play-ammo b{font-size:30px;line-height:1.05;font-weight:700;color:#fff}.play-ammo span{margin-left:4px;color:#9fb3bf;font-size:15px}
+.play-ammo[data-low="true"] b{color:#ffb020}.play-ammo[data-reloading="true"] b{font-size:18px;color:#9fe0ff}
+.play-ammo-bar{display:block;margin:6px 0 0 !important;height:3px;background:#ffffff22;border-radius:2px;overflow:hidden}
+.play-ammo-bar i{display:block;height:100%;background:#e8f1f5;transition:width .12s linear}
+.play-ammo[data-reloading="true"] .play-ammo-bar i{background:#9fe0ff}
+.play-wheel{position:fixed;inset:0;display:grid;place-items:center;background:radial-gradient(circle,#0006 0,#0003 40%,transparent 70%);pointer-events:none;z-index:30}
+.play-wheel[hidden]{display:none}
+.play-wheel-ring{position:relative;width:min(340px,80vw);height:min(340px,80vw);border-radius:50%;background:#0b1724b0;border:1px solid #ffffff2a}
+.play-wheel-slot{position:absolute;left:50%;top:50%;width:104px;margin:-26px 0 0 -52px;padding:8px 6px;text-align:center;border-radius:10px;
+ transform:rotate(var(--a)) translateY(calc(min(340px,80vw) * -.34)) rotate(calc(-1 * var(--a)));background:#16263599;border:1px solid #ffffff1c}
+.play-wheel-slot b{display:block;font-size:14px}.play-wheel-slot small{display:block;min-height:14px;color:#a9bcc7;font-size:11px}
+.play-wheel-slot[data-on="true"]{background:#e8f1f5;color:#0b1724;border-color:#fff}.play-wheel-slot[data-on="true"] small{color:#334855}
+.play-wheel-centre{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center}
+.play-wheel-centre b{display:block;font-size:17px}.play-wheel-centre small{color:#a9bcc7;font-size:12px}
+@media(pointer:coarse){.play-ammo{top:auto;bottom:230px;right:16px;min-width:104px}.play-ammo b{font-size:24px}}
