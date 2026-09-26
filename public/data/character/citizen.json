@@ -201,6 +201,12 @@
    "tracks": 50
   },
   {
+   "name": "Crawl",
+   "upstream": "Swim_Fwd_Loop",
+   "seconds": 1.333,
+   "tracks": 50
+  },
+  {
    "name": "SmgLow",
    "upstream": "CMU 80_03 (scripts/cmu/weapon-clip.mjs)",
    "seconds": 0.033,
@@ -220,7 +226,8 @@
   "Fall": 0.2708,
   "Death": 0.2708,
   "Roll": 3.4032,
-  "CrouchWalk": 0.75
+  "CrouchWalk": 0.75,
+  "Crawl": 2.175
  },
  "hybridRun": {
   "stride": 2.6866,
@@ -276,8 +283,8 @@
  },
  "output": {
   "file": "public/data/character/citizen.glb",
-  "bytes": 2749552,
-  "sha256": "4644c3d15244384a35467b5959c3bcb78da40c5fdfe93d525635bddf571375df"
+  "bytes": 2811684,
+  "sha256": "b2a467120dc049e2bad5761409f8f317d902ebd592e3741ffecfb77ba1d00265"
  },
  "gaitDetail": {
   "samples": 120,
@@ -360,6 +367,17 @@
     "airborne": 0.333,
     "contactOffset": 0.492,
     "leftContact": 0.092
+   },
+   "Crawl": {
+    "seconds": 1.333,
+    "speed": 2.175,
+    "stride": 2.9,
+    "step": 1.45,
+    "cadence": 90,
+    "duty": 0.192,
+    "airborne": 0.617,
+    "contactOffset": 0,
+    "leftContact": 0.05
    }
   }
  }

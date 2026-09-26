@@ -6,19 +6,21 @@ import {attackOf} from './attack-timing.mjs';
 import {createWeaponRig} from './weapon-mesh.mjs';
 import {createAimLayer} from './aim-layer.mjs';
 import {createHands} from './hands.mjs';
+import {createHandsUp,createLimp,createUpperPose} from './body-states.mjs';
 import {createHitReaction} from './hit-reaction.mjs';
 import {createRagdoll} from './ragdoll.mjs';
 import pack from './generated/character.mjs';
 
 export const FIGURE=Object.freeze({height:1.76,shirt:0xc94d38,trousers:0x263443,skin:0xdfb994,hair:0x25282a,cycle:1.55});
 
-const looping=new Set(['Idle','Walk','Run','Sprint','Death','Guard','Drive','SwordIdle','PistolIdle','CrouchWalk']);
+const looping=new Set(['Idle','Walk','Run','Sprint','Death','Guard','Drive','SwordIdle','PistolIdle','CrouchWalk','Crawl']);
 /** Clips the gait blend owns. Anything else is a one-shot the state machine plays over it. */
 const GAIT=new Set(['Idle','Walk','Run','Sprint']);
 /** The fists' swings. They own the whole body while they play; see STRIKE. */
 const PUNCHES=new Set(['Punch','PunchCross']);
 /** Every swing that takes the body over, the katana's cut included (PLAN-WEAPONS W1). */
-const SWINGS=new Set([...PUNCHES,'SwordAttack','Roll']);
+// Roadmap stage 2: crawling owns the whole body the same way (it is Swim_Fwd_Loop laid on the ground).
+const SWINGS=new Set([...PUNCHES,'SwordAttack','Roll','Crawl']);
 /**
  * PLAN-WEAPONS W1: holding a weapon changes how the body stands. The weapon's idle takes the
  * Idle share of the gait blend, faded over `STANCE_FADE` s, so standing still with a katana out
@@ -79,6 +81,8 @@ export const RECOIL=Object.freeze({light:[.2,.22],strong:[.38,.34]});
 export function characterAction(state){
  if(state.alive===false)return (state.runOver??0)<.6?'Fall':'Death';
  if(state.vehiclePhase>0)return state.vehicleKind==='exit'?'Exit':'Enter';
+ // Roadmap stage 2: down on the ground with a leg wound, dragging themselves away.
+ if(state.crawling)return 'Crawl';
  // PLAN-WEAPONS W4: a dodge roll owns the whole body, like a swing (STRIKE).
  if(state.rollTime>0)return 'Roll';
  if(state.hurtTime>0)return 'Hit';
@@ -115,7 +119,9 @@ export function bakedAsset(){return baked??=bakedCitizen(pack);}
  * is worse than not correcting it: the animation is deliberately not grounded, and forcing it
  * there folds the leg. Cheaper to believe the animation.
  */
-const UNGROUNDED=new Set(['Fall','Death','Enter','Exit','Drive','Roll']);
+const UNGROUNDED=new Set(['Fall','Death','Enter','Exit','Drive','Roll','Crawl']);
+/** Stage 2: how high the crawl's root sits (the clip is a swim, centred on the chest), and its authored pace. */
+export const CRAWL=Object.freeze({lift:.36,pace:.55});
 /** PLAN-WEAPONS W4: crouching fades in over this long, and Crouch_Fwd_Loop's authored pace. */
 const CROUCH_FADE=.25,CROUCH_PACE=.75;
 
@@ -145,7 +151,7 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
  // has eleven bones and none of these names, so it simply goes without.
  const footIK=asset.legBones?createFootIK(root,{bones:asset.legBones,ctx}):null;
  let overlay=null,previousAttack=0,disposed=false,seeded=false,dominant='Idle';
- const strike={Punch:0,PunchCross:0,SwordAttack:0,Roll:0};
+ const strike={Punch:0,PunchCross:0,SwordAttack:0,Roll:0,Crawl:0};
  // PLAN-WEAPONS: how far each weapon stance has faded in.
  const stance={SwordIdle:0,PistolIdle:0};
  // W4: the crouch, its own two actions so it never fights the Guard reaction for one: a copy of
@@ -177,6 +183,11 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
   ?createAimLayer(root,instance.clips,weaponRig,{correction:aimCorrection}):null;
  // Stage 1: weapon changes and the submachine gun's magazine are hand movements (hands.mjs).
  const hands=weaponRig?createHands(root,weaponRig):null;
+ // Roadmap stage 2: hands up at gunpoint, a limp, and the katana's guard held while walking.
+ const handsUp=root.getObjectByName('upperarm_l')?createHandsUp(root):null;
+ const limp=root.getObjectByName('calf_r')?createLimp(root):null;
+ const swordWalk=weaponRig&&weapons.includes('katana')?createUpperPose(root,instance.clips,'SwordIdle'):null;
+ let swordK=0;
  // §9ai: a blow you can see land (hit-reaction.mjs), and a body that falls the way it was hit
  // (ragdoll.mjs). Only on a rig that has the bones; the eleven-bone baked figure goes without.
  const hitReaction=root.getObjectByName('spine_02')?createHitReaction(root):null;
@@ -278,6 +289,8 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
      if(overlay==='SwordAttack'&&Number.isFinite(state.attackHold))time=state.attackHold*duration;
      // W4: the roll is scrubbed by its own clock, not the attack's.
      if(overlay==='Roll')time=duration*(1-(state.rollTime??0)/(state.rollDuration||duration));
+     // Stage 2: the crawl loops at the pace the body is dragging itself.
+     if(overlay==='Crawl'){time=null;action.timeScale=Math.max(.25,Math.min(2,speed/CRAWL.pace));}
     }
     if(overlay==='Hit'){const total=state.hurtDuration>0?state.hurtDuration:.34;
      time=state.hurtTime>0?duration*(1-state.hurtTime/total):duration/2;}
@@ -307,8 +320,8 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
     ?walkHeading
     :(state.heading??state.bodyHeading??0);
    facing.update(desired,speed,dt,aiming?STRIKE.turnRate:state.rollTime>0?STRIKE.turnRate*2:turnToAim?GUN_TURN:undefined);
-   root.position.set(state.x,state.y,state.z);
-   root.rotation.set(0,facing.heading,facing.lean,'YXZ');
+   root.position.set(state.x,state.y+(overlay==='Crawl'?CRAWL.lift*strike.Crawl:0),state.z);
+   root.rotation.set(0,facing.heading,overlay==='Crawl'?0:facing.lean,'YXZ');
    if(state.trafficReaction==='look'&&Number.isFinite(state.threatHeading)&&head)
     head.rotation.y=Math.max(-.8,Math.min(.8,Math.atan2(Math.sin(state.threatHeading-facing.heading),Math.cos(state.threatHeading-facing.heading))));
    // RUN 11.2: weight behind a punch: the body leans into it as the fist goes out. Additive
@@ -344,8 +357,14 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
    // The gun arm over whatever the legs are doing, pointed at the target (R1). Not during a
    // swing, a fall or a car. Mid-change it poses the weapon actually in the hand, lowered.
    const posed=inHand!==(state.weapon??null)?{...state,weapon:inHand,aim:0,shotLeft:0}:state;
+   // Stage 2: walking with the katana out, the upper body keeps the two-handed guard.
+   if(swordWalk){const on=inHand==='katana'&&!SWINGS.has(overlay)&&!UNGROUNDED.has(overlay)&&speed>LOCOMOTION.idleSpeed;
+    swordK+=Math.max(-dt/.2,Math.min(dt/.2,(on?1:0)-swordK));if(swordK>0)swordWalk.update(swordK*swordK*(3-2*swordK),dt);}
    if(aimLayer&&!SWINGS.has(overlay)&&!UNGROUNDED.has(overlay))aimLayer.update(posed,dt);
    if(hands&&!SWINGS.has(overlay)&&!UNGROUNDED.has(overlay))hands.update(posed,dt);
+   // Stage 2: hands up (over whatever the arms were doing), and the limp (before the feet are planted).
+   handsUp?.update(!!state.handsUp&&!SWINGS.has(overlay)&&!UNGROUNDED.has(overlay)&&state.alive!==false,dt);
+   limp?.update(!!state.limp&&!state.crawling&&!SWINGS.has(overlay)&&!UNGROUNDED.has(overlay),gait.phase,dt,speed>LOCOMOTION.idleSpeed);
 
    // Feet last, on top of the finished pose, because it corrects what the animation produced
    // rather than producing it. A teleport or a state where the feet are not on anything drops
@@ -373,7 +392,7 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
    mixer.stopAllAction();
    for(const action of Object.values(actions))action.reset();
    overlay=null;previousAttack=0;seeded=false;dominant='Idle';strike.Punch=strike.PunchCross=strike.SwordAttack=0;
-   stance.SwordIdle=stance.PistolIdle=0;aimLayer?.reset();hands?.reset();strike.Roll=0;crouchK=0;crouchIdle?.stop();
+   stance.SwordIdle=stance.PistolIdle=0;aimLayer?.reset();hands?.reset();handsUp?.reset();limp?.reset();swordK=0;strike.Crawl=0;strike.Roll=0;crouchK=0;crouchIdle?.stop();
    hitReaction?.reset();ragdoll?.reset();hitSeq=null;ragdollSeq=null;
    gait.reset();facing.reset(0);
    for(const name of GAIT)actions[name]?.play().setEffectiveWeight(0);

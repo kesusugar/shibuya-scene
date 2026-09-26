@@ -60,6 +60,8 @@ import {createCrowdVoices,prioritise} from '../src/player/voices.mjs';
 import {createMeleeCombat} from '../src/player/combat.mjs';
 import {createArsenal} from '../src/player/arsenal.mjs';
 import {createWeaponWheel,WHEEL} from '../src/player/weapon-wheel.mjs';
+import {createStreetReactions} from '../src/life/street-reactions.mjs';
+import {setRagdollWorld} from '../src/player/ragdoll.mjs';
 import {createHitStop} from '../src/player/hit-stop.mjs';
 import {createDynamicResolution} from '../src/quality/dynamic-resolution.mjs';
 import {createGunfire} from '../src/audio/gunfire.mjs';
@@ -132,7 +134,7 @@ export default function Home(){
  const KOBAN={x:48.5,z:20.4};
  const policeFrustum=new THREE.Frustum(),policeMatrix=new THREE.Matrix4(),policePoint=new THREE.Vector3();
  const inView=(x:number,z:number)=>policeFrustum.containsPoint(policePoint.set(x,1.5,z))&&Math.hypot(x-view.position.x,z-view.position.z)<260;const earFacing=new THREE.Vector3(),SCRAMBLE_EAR={x:6.54,z:1.99};
- const weaponWheel=createWeaponWheel();let seatedDrivers:any=null;let seatedHidden=false;let transitionSeated=false;let carjackSide=-1,carjackStage:string|null=null,lastCarjack:any=null;let vehicleVisual:any=null,vehicleEffects:any=null,playUI:any=null,localCrowdClock=0,frameHits=0,combatDeathReported=false;const followCamera=createFollowCamera(),feedback=createFeedbackBus(),melee=createMeleeCombat({
+ const weaponWheel=createWeaponWheel(),streetReactions=createStreetReactions(),ragdollCars:any[]=[];let frameShotAt:any=null;let seatedDrivers:any=null;let seatedHidden=false;let transitionSeated=false;let carjackSide=-1,carjackStage:string|null=null,lastCarjack:any=null;let vehicleVisual:any=null,vehicleEffects:any=null,playUI:any=null,localCrowdClock=0,frameHits=0,combatDeathReported=false;const followCamera=createFollowCamera(),feedback=createFeedbackBus(),melee=createMeleeCombat({
   // PLAN-WEAPONS W1: the katana's cut goes through the same swing clock as a punch.
   weapon:()=>arsenal?.current??'fists',
   // RUN 8: a punch is an event the crowd can see. The HQ layer bounds it by its own spatial
@@ -448,7 +450,8 @@ export default function Home(){
    onShot:(shot:any)=>{gunfire?.shot(shot.from.x,shot.from.y,shot.from.z,shot.heading,{kind:shot.weapon==='smg'?'smg':'pistol',hit:shot.hit});
     soundBank?.duck?.(.5,1.4);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_SHOT);player?.rumble?.('shot');
     // Stage 1: a round that found a person marks the crosshair (a kill marks it red).
-    if(shot.kind==='person')playUI?.hitMarker?.(shot.outcome==='killed');},
+    if(shot.kind==='person')playUI?.hitMarker?.(shot.outcome==='killed');
+    frameShotAt={x:shot.from.x,z:shot.from.z};},
    onLand:(x:number,y:number,z:number,kind:string)=>gunfire?.tink(x,y,z,kind),
    onWitness:(event:any)=>lifeEntry.hooks.current?.witness?.(event)??0});
    groups.dynamic.add(arsenal.effects.root);}
@@ -475,7 +478,7 @@ export default function Home(){
   // surface it queries are reachable, so a check can tell those two apart.
   if(config.qa){(window as any).__SHIBUYA_FEEDBACK__=feedback;(window as any).__SHIBUYA_AUDIO__=playerAudio;(window as any).__SHIBUYA_SOUNDS__={bank:soundBank,scape:soundscape};(window as any).__SHIBUYA_MELEE__=melee;(window as any).__SHIBUYA_ARSENAL__=arsenal;(window as any).__SHIBUYA_CONTACT__=player.contact.stats;(window as any).__SHIBUYA_FIGURE__=playerFigure;(window as any).__SHIBUYA_CTX__=ctx;(window as any).__SHIBUYA_LIFE__=lifeEntry.hooks.current;(window as any).__SHIBUYA_TRAFFIC__=trafficEntry.hooks.current;}
   return true;};
- const exitPlayer=()=>{if(!playerMode)return;weaponWheel.cancel();soundscape?.silence();playUI?.hide();vehicleVisual?.hide();vehicleEffects?.hide();lifeEntry.hooks.current?.setPlayerFocus(null);followCamera.reset();melee.reset();arsenal?.reset();touchPad?.setWeapon('fists');
+ const exitPlayer=()=>{if(!playerMode)return;weaponWheel.cancel();streetReactions.reset(lifeEntry.hooks.current?.sim?.pool??[]);soundscape?.silence();playUI?.hide();vehicleVisual?.hide();vehicleEffects?.hide();lifeEntry.hooks.current?.setPlayerFocus(null);followCamera.reset();melee.reset();arsenal?.reset();touchPad?.setWeapon('fists');
   // An abandoned carjack must not leave a driver half out of a car, a door hanging open, or a
   // slot frozen out of traffic for the rest of the session.
   {const was=vehicleTransition.cancel();
@@ -571,16 +574,16 @@ export default function Home(){
   const sim=lifeEntry.hooks.current?.sim,who=e.id!=null?sim?.pool?.[e.id]:null;
   switch(e.kind){
    case 'punch_swing':if(!soundscape?.event(e,who))playerAudio?.swing(e.intensity);break;
-   case 'punch_hit':if(!soundscape?.event(e,who))playerAudio?.punchHit(e.intensity);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_PUNCH*(.6+.4*e.intensity));break;
+   case 'punch_hit':if(who&&!who.officer)streetReactions.provoke(who,'hurt');if(!soundscape?.event(e,who))playerAudio?.punchHit(e.intensity);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_PUNCH*(.6+.4*e.intensity));break;
    // PLAN-WEAPONS W1: the katana. A cut lands like a heavy blow; steel on a wall clanks and sparks.
-   case 'blade_hit':player?.rumble?.('cut');if(!soundscape?.event({...e,kind:'punch_hit'},who))playerAudio?.punchHit(1);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_PUNCH*1.2);
+   case 'blade_hit':if(who)streetReactions.provoke(who,'hurt');player?.rumble?.('cut');if(!soundscape?.event({...e,kind:'punch_hit'},who))playerAudio?.punchHit(1);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_PUNCH*1.2);
     // §9ai: the cut catches (hit-stop), bleeds where the blade met them, and sounds like a cut.
     hitStop.hit('katana');playUI?.hitMarker?.(false);
     {const y=(who?.height??0)+(who?.hitZone==='head'?1.6:who?.hitZone==='legs'?.6:1.2);
      arsenal?.effects.blood(e.x,y,e.z,{dir:{x:who?.hitX??0,y:-.2,z:who?.hitZ??1},count:26,spread:.5});gunfire?.slice(e.x,y,e.z,1);}
     break;
    // §9ai: a round into a body: it catches, and thumps (the blood is drawn by the arsenal at the hit point).
-   case 'bullet_hit':hitStop.hit(arsenal?.current==='smg'?'smg':'pistol');gunfire?.flesh(e.x,1.2+(who?.height??0),e.z,arsenal?.current==='smg'?.7:1);break;
+   case 'bullet_hit':if(who)streetReactions.provoke(who,'hurt');hitStop.hit(arsenal?.current==='smg'?'smg':'pistol');gunfire?.flesh(e.x,1.2+(who?.height??0),e.z,arsenal?.current==='smg'?.7:1);break;
    // Stage 1: a death -- the kill marker, and blood spreading under where the body comes to lie.
    case 'npc_killed':playUI?.hitMarker?.(true);
     {const gx=e.x+(e.dirX??0)*.45,gz=e.z+(e.dirZ??0)*.45,h=lifeEntry.hooks.current?.network?.ctx?.height?.(gx,gz)??0;arsenal?.marks.pool(gx,h,gz);}break;
@@ -716,12 +719,9 @@ export default function Home(){
   // C4: losing health shakes the pad; C1: the HUD's hints follow the pad in use.
   if((player.state.health??100)<healthLast)player.rumble?.('hurt');healthLast=player.state.health??100;
   {const profile=player.lastDevice==='pad'?player.padProfile:'keyboard',key=profile+(driving?':car':':foot');if(key!==hintKey){hintKey=key;playUI?.setControls?.(controlHints(profile,driving));}}
-  if(police){policeFrustum.setFromProjectionMatrix(policeMatrix.multiplyMatrices(view.projectionMatrix,view.matrixWorldInverse));
-   const w=police.frame(dt,{player:player.state,car:playerCar,driving,melee:melee.snapshot(),weapons:arsenal?.snapshot()??null,solid:weaponWorld.solid,traffic:trafficEntry.hooks.current?.sim,crowd:crowdSim,listener:{x:view.position.x,z:view.position.z,vx:0,vz:0},visible:inView,hurt:(n:number,src:string)=>{if(!driving)player.hurt?.(n,src);}});
-   playUI?.setWanted(w,dt);(window as any).__SHIBUYA_POLICE__=police;
-   // PLAN-WEAPONS W3: an officer's revolver -- the flash, the round's streak and where it went, the
-   // recorded revolver shot with the street's echo. A hit on the player bleeds and knocks the view.
-   for(const e of w.gunfire??[]){if(e.kind!=='warn'&&e.kind!=='shot')continue;
+  // A round fired at the player -- an officer's revolver, or (stage 2) an armed civilian's handgun: the
+  // flash, the streak and where it went, the shot with the street's echo; a hit bleeds and knocks the view.
+  const enemyShot=(e:any)=>{if(e.kind!=='warn'&&e.kind!=='shot')return;
     // The flash from the drawn revolver's own muzzle when a near body draws the officer; the
     // director's estimate (in front of the chest) otherwise.
     if(lifeEntry.hooks.current?.muzzleOf?.(e.officer.id,weaponMuzzle,weaponBarrel)){const lift=e.to.y-e.from.y;e.from={x:weaponMuzzle.x,y:weaponMuzzle.y,z:weaponMuzzle.z};if(e.kind==='warn')e.to={x:e.from.x,y:e.from.y+lift,z:e.from.z};}
@@ -732,7 +732,21 @@ export default function Home(){
      end=r.point;if(r.kind!=='none')arsenal?.effects.burst(end.x,end.y,end.z,{count:8,nx:-dir.x,nz:-dir.z});}
     if(e.kind==='shot')arsenal?.effects.tracer(e.from,end);
     gunfire?.shot(e.from.x,e.from.y,e.from.z,Math.atan2(dir.x,dir.z),{kind:'revolver',hit:e.kind==='shot'&&!e.hit?{kind:'wall',point:end}:null});
-    if(e.hit&&!driving){weaponWorld.bleed({x:player.state.x,y:0,z:player.state.z},dir);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_PUNCH*1.4);}}
+    if(e.hit&&!driving){if(e.civilian)player.hurt?.(e.damage,'fight');weaponWorld.bleed({x:player.state.x,y:0,z:player.state.z},dir);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_PUNCH*1.4);}};
+  // Roadmap stage 2 (street-reactions.mjs): hands up at gunpoint, and the armed few shooting back.
+  {const crowdNow=lifeEntry.hooks.current?.sim;
+   for(const e of streetReactions.update(dt,{crowd:crowdNow,me:{x:player.state.x,y:player.state.y,z:player.state.z,alive:player.state.alive!==false,dodging:!!player.state.dodging},
+    aimedId:driving?null:arsenal?.aimedAt??null,shotAt:frameShotAt,solid:weaponWorld.solid}))enemyShot(e);
+   frameShotAt=null;
+   // What a falling body can strike besides the ground: the walls, and the cars near the player.
+   ragdollCars.length=0;for(const v of (trafficEntry.hooks.current?.sim?.pool??[])){if(!v.active||Math.abs(v.x-player.state.x)>40||Math.abs(v.z-player.state.z)>40)continue;const d=(VEHICLES as any)[v.type];if(d)ragdollCars.push({x:v.x,z:v.z,y:v.y??0,heading:v.heading,width:d.width,length:d.length,height:d.height});}
+   setRagdollWorld({solid:weaponWorld.solid,cars:ragdollCars});}
+  if(police){policeFrustum.setFromProjectionMatrix(policeMatrix.multiplyMatrices(view.projectionMatrix,view.matrixWorldInverse));
+   const w=police.frame(dt,{player:player.state,car:playerCar,driving,melee:melee.snapshot(),weapons:arsenal?.snapshot()??null,solid:weaponWorld.solid,traffic:trafficEntry.hooks.current?.sim,crowd:crowdSim,listener:{x:view.position.x,z:view.position.z,vx:0,vz:0},visible:inView,hurt:(n:number,src:string)=>{if(!driving)player.hurt?.(n,src);}});
+   playUI?.setWanted(w,dt);(window as any).__SHIBUYA_POLICE__=police;
+   // PLAN-WEAPONS W3: an officer's revolver -- the flash, the round's streak and where it went, the
+   // recorded revolver shot with the street's echo. A hit on the player bleeds and knocks the view.
+   for(const e of w.gunfire??[])enemyShot(e);
    // W2: 逮捕. Out of the car at once, frozen, and the game-over dialog with its own message;
    // 「もう一度」 wakes the player at the koban with the stars cleared.
    if(w.arrested&&!arrestedPending){arrestedPending=true;

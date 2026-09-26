@@ -5973,6 +5973,43 @@ context; the scene loss is unexplained and should be checked on a real GPU.
 Not yet seen on a device: the whole of stage 1 in the real scene (HUD layout at phone width, the
 wheel with a real pad and on a phone, the tink's level, whether 0.3 slow-down feels right).
 
+## 9an. Roadmap stage 2 — people answer a weapon (branch restarted from `master` `ea42b64`)
+
+- **Hands up** (`street-reactions.mjs`, `body-states.mjs`). The person the raised gun is on
+  (`arsenal.aimedAt`: the lock-on or the crosshair's ray), within 22 m, stops, turns to face it and
+  raises both hands beside the head (two-bone IK, elbows bent, 0.2 s in). They hold while the aim
+  stays (the simulation's `surrender` state, `speed 0`); 0.9 s after it leaves, or after 6 s of it
+  anyway, they run from the player. Held people get a humanoid body (near-characters priority).
+- **Limp and crawl.** A non-fatal round in the legs (`part === 'legs'`, combat.mjs) leaves them
+  limping at 0.45 of their pace: the right knee kept nearly straight and the pelvis dropping as it
+  takes the weight. A second leg wound, or one at 45 health or less, puts them on the ground:
+  `Crawl`, a new clip baked from the pack's Swim_Fwd_Loop (prone, head first, arms reaching and
+  pulling), set down at the pavement (`CRAWL.lift` 0.36 m) and played at the pace they drag
+  themselves (0.22 of their pace). `citizen.glb` rebaked: 28 clips (CMU weapon clips preserved).
+- **The armed few.** 5% of adults (fixed by id; never a child or an officer) carry a handgun. Hurt by
+  the player, aimed at, or within 16 m of a gunshot, they draw instead of running and shoot back from
+  where they stand (`shooting` state) while they have a line to the player, every ~1.35 s, less
+  accurately than the police (50% at point blank falling to 6% at 30 m, 8–14 damage), for 14 s after
+  the last provocation. Their rounds go through the police revolver's drawing and sound path
+  (`enemyShot` in the scene, now shared) and hurt the player directly. The drawn gun is the humanoid
+  slot's revolver mesh, as an officer's is.
+- **A falling body meets walls and cars** (`ragdoll.mjs`, `setRagdollWorld`). Each ragdoll point
+  that steps into a solid cell is put back where it was across the ground (inelastic, like the
+  floor); a point inside a nearby car's box is pushed out through the nearest face (onto the roof if
+  it came from above). The scene hands the ragdolls the cars within 40 m every frame.
+- **The katana held in both hands while walking** (`createUpperPose`): walking with the katana out,
+  the upper body keeps Sword_Idle's two-handed guard over the walk, faded over 0.2 s.
+
+Tests: `tests/stage2.test.mjs` (11 — armed share, hands up / hold / run / give up, leg wounds, the
+armed drawing and firing only with a line and worse than the police, hands up on the body, limp and
+crawl on the body, katana hands together while walking, ragdoll stopped by a wall and a car, the
+simulation's hold and wounded pace). Stills: `evidence/roadmap/stage2/stage2bench.png`
+(qa/gta-upgrade/stage2bench.html).
+
+Not yet seen in the real scene or on a device: the whole of stage 2 (the headless scene capture is
+at 0.1 fps and lost its WebGL context in stage 1). The crawl is a laid-down swim and should be
+judged by eye; `CRAWL.lift` is a first guess.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle

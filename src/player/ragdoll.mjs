@@ -27,6 +27,19 @@
 // Only the nearest humanoids (src/life/near-characters.mjs) carry one; the far crowd is unchanged.
 import {Matrix4,Quaternion,Vector3} from 'three';
 
+/**
+ * Roadmap stage 2: what a falling body can strike besides the ground -- the buildings' solid
+ * cells and the cars nearby. `solid(x, z)` is the collision grid; `cars` a list of boxes
+ * {x, z, y, heading, width, length, height}, refreshed by the scene each frame. Shared by every
+ * ragdoll (there are at most four). Inelastic, like the ground: a point that meets a wall or a
+ * car loses the motion that carried it in, so a body slumps against it instead of passing
+ * through or bouncing off.
+ */
+/** @type {{solid:null|((x:number,z:number)=>boolean), cars:any[]}} */
+const WORLD = {solid: null, cars: []};
+/** @param {{solid?:null|((x:number,z:number)=>boolean), cars?:any[]}} [world] */
+export function setRagdollWorld({solid = null, cars = []} = {}) {WORLD.solid = solid; WORLD.cars = cars; return WORLD;}
+
 export const RAGDOLL = Object.freeze({
  gravity: 9.81,
  step: 1 / 60,              // s per integration step
@@ -95,6 +108,7 @@ export function createRagdoll(root) {
  const pos = Array.from({length: n}, () => new Vector3()), prev = Array.from({length: n}, () => new Vector3());
  const sticks = [], limits = [];
  let active = false, asleep = false, age = 0, still = 0, ground = 0, carry = 0;
+ const hits = {walls: 0, cars: 0};
  // The frames the pelvis and chest are turned by: their bone world rotation at the start, and
  // the (spine, lateral) basis the points made then.
  const start = {pelvis: new Quaternion(), chest: new Quaternion(), pelvisBasis: new Matrix4(), chestBasis: new Matrix4(),
@@ -216,6 +230,24 @@ export function createRagdoll(root) {
   for (let i = 0; i < n; i++) {
    const r = i === I.Head || i === I.headTop ? RAGDOLL.headRadius : RAGDOLL.radius;
    if (pos[i].y < ground + r) {pos[i].y = ground + r; if (prev[i].y < pos[i].y) prev[i].y = pos[i].y;}
+   // Stage 2: a wall stops the point where it met it (back to where it was, across the ground).
+   if (WORLD.solid && WORLD.solid(pos[i].x, pos[i].z) && !WORLD.solid(prev[i].x, prev[i].z)) {
+    pos[i].x = prev[i].x; pos[i].z = prev[i].z; hits.walls++;
+   }
+   for (const car of WORLD.cars) {
+    const h = car.heading ?? 0, s = Math.sin(h), c = Math.cos(h), px = pos[i].x - car.x, pz = pos[i].z - car.z;
+    const across = px * c - pz * s, along = px * s + pz * c, hw = car.width / 2 + r, hl = car.length / 2 + r;
+    if (Math.abs(across) >= hw || Math.abs(along) >= hl || pos[i].y > (car.y ?? 0) + car.height + r) continue;
+    // Out through the nearest face -- the roof if it came down onto the car.
+    const up = (car.y ?? 0) + car.height + r - pos[i].y, sx = hw - Math.abs(across), sz = hl - Math.abs(along);
+    if (up < Math.min(sx, sz) && prev[i].y >= (car.y ?? 0) + car.height) {pos[i].y += up; if (prev[i].y < pos[i].y) prev[i].y = pos[i].y;}
+    else {
+     const ax = sx < sz ? Math.sign(across || 1) * sx : 0, az = sx < sz ? 0 : Math.sign(along || 1) * sz;
+     pos[i].x += ax * c + az * s; pos[i].z += -ax * s + az * c;
+     prev[i].x = pos[i].x; prev[i].z = pos[i].z;
+    }
+    hits.cars++;
+   }
   }
  }
 
@@ -264,6 +296,8 @@ export function createRagdoll(root) {
   get ready() {return ready;},
   get active() {return active;},
   get asleep() {return asleep;},
+  /** Stage 2: how often a point has met a wall or a car (for tests and QA). */
+  get hits() {return {...hits};},
   /** Where the points are, for tests and QA: name -> Vector3 (live). */
   get points() {return Object.fromEntries(POINTS.map((p, i) => [p, pos[i]]));},
   get sticks() {return sticks.map(([a, b, rest]) => ({a: POINTS[a], b: POINTS[b], rest, now: pos[a].distanceTo(pos[b])}));},

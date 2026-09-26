@@ -97,6 +97,8 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
  let triggerHeld = false, spread = 0, recoil = 0, burst = 0;
  // §9aj: the person the crosshair's ray last met, if any.
  let lastRayTarget = null;
+ // Roadmap stage 2: whom the gun is on this frame (their pool id), for hands up and the armed.
+ let aimedId = null;
  const isGun = id => GUNS.includes(id);
  const stats = {switches: 0, clanks: 0, shots: 0, hits: 0, headshots: 0, kills: 0, walls: 0, cars: 0, misses: 0, panicked: 0, maxPanic: 0};
 
@@ -189,6 +191,8 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
   get weapon() {return WEAPONS[inventory.current];},
   get aiming() {return aimHeld;},
   get lastShot() {return lastShot;},
+  /** Stage 2: the pool id of the person the raised gun is on, or null. */
+  get aimedAt() {return aimedId;},
   /** 1/2/3. Refused mid-swing (`busy`), while reloading, and in a car. */
   select(slot, {busy = false, driving = false} = {}) {
    if (driving) return false;
@@ -245,6 +249,7 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
    marks.update(dt, {ground: groundOf ?? undefined, onLand});
    // A magazine the hand lets go of during the automatic's reload falls to the ground (hands.mjs).
    if (figure?.hands) figure.hands.onDrop = dropMag;
+   aimedId = null;
    const s = player?.state; if (!s) return;
    if (driving) s.crouching = false;              // W4: nobody crouches in a car seat
    s.weapon = inventory.current;
@@ -276,6 +281,7 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
     // §9aj G1: whoever is on the crosshair gets a detailed body before the round lands.
     const on = lock?.p ?? (camera && !lock ? lastRayTarget : null);
     if (on && world.crowd) on.aimedUntil = (world.crowd.time ?? 0) + .6;
+    aimedId = s.aim > 0 && on ? on.id : null;
     s.aimHeading = Math.atan2(point.x - s.x, point.z - s.z);
     // Standing, the body's heading is the aim: a step off then starts from where the gun points.
     if ((s.speed ?? 0) < .16) s.bodyHeading = s.aimHeading;

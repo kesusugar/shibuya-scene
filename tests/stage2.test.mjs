@@ -146,3 +146,33 @@ test('stage 2 numbers are sane',()=>{
  assert.ok(BODY.handsUp.left[0]>0&&BODY.handsUp.right[0]<0,'left is +X');
  assert.ok(REACT.crawlSpeed<REACT.limpSpeed&&REACT.limpSpeed<1);
 });
+
+test('a falling body is stopped by a wall and by a car, not passed through',async()=>{
+ const {setRagdollWorld}=await import('../src/player/ragdoll.mjs');
+ const fall=async(world)=>{
+  const figure=createPlayerFigure(await humanoid());
+  const s={x:0,y:0,z:0,speed:0,heading:0,alive:true,attackTime:0};
+  for(let i=0;i<20;i++)figure.update(s,1/30);
+  setRagdollWorld(world);
+  s.ragdoll={seq:1,dir:{x:0,z:1},zone:'body',strength:1.5,push:{x:0,y:.4,z:3.5},ground:0};
+  let far=-Infinity;const p=new Vector3();
+  for(let i=0;i<90;i++){figure.update(s,1/30);figure.root.updateMatrixWorld(true);
+   figure.root.traverse(o=>{if(o.isBone){o.getWorldPosition(p);far=Math.max(far,p.z);}});}
+  const hits=figure.ragdoll.hits;figure.dispose();setRagdollWorld({});return {far,hits};
+ };
+ const open=await fall({});
+ assert.ok(open.far>1.0,`with nothing in the way it goes down ${open.far.toFixed(2)} m along the push`);
+ const wall=await fall({solid:(x,z)=>z>.5});
+ assert.ok(wall.far<.62,`a wall at 0.5 m stops it (${wall.far.toFixed(2)})`);assert.ok(wall.hits.walls>0);
+ const car=await fall({cars:[{x:0,z:1.6,y:0,heading:Math.PI/2,width:1.8,length:4.6,height:1.45}]});
+ assert.ok(car.far<.78,`a car side at 0.7 m stops it (${car.far.toFixed(2)})`);assert.ok(car.hits.cars>0);
+});
+
+test('the simulation holds a surrendering or shooting person in place and slows the wounded',async()=>{
+ const {woundedPace}=await import('../src/life/street-reactions.mjs');
+ const src=readFileSync('src/life/simulation.mjs','utf8');
+ assert.match(src,/handsUpUntil>this\.time\|\|p\.shooterUntil>this\.time/,'hold on hands up / shooting');
+ assert.match(src,/f\.speed\*woundedPace\(p\)/,'fleeing wounded are slower');
+ assert.match(src,/p\.baseSpeed\*woundedPace\(p\)/,'walking wounded are slower');
+ assert.equal(woundedPace({limp:true,crawling:true}),REACT.crawlSpeed);
+});
