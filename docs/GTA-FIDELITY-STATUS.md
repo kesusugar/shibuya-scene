@@ -6044,6 +6044,41 @@ Not yet seen in the real scene or on a device: the helicopter over the real skyl
 level against the sirens, whether ☆4–5 are escapable (the searchlight makes night escapes harder,
 day escapes need 70 m from the helicopter).
 
+## 9ap. Roadmap stage 4 — onlookers, the aftermath, the crowd by time of day (branch restarted from `master` `418c7e1`)
+
+- **Onlookers** (`life/onlookers.mjs`). Three seconds after the last gunshot (anyone's), for each
+  body the nearest five people between 4 and 20 m (not children, officers, anyone crossing,
+  fleeing, fighting, armed, at gunpoint or crawling) stop, turn to it and take out a phone for
+  12–28 s: about two in three hold it up to film, the rest put it to the ear to call it in (fixed by
+  the person and the body). The simulation holds them (`watching`); the drawn body raises the phone
+  (`body-states.mjs` `createPhone`: two-bone IK of the right arm to in front of the face or to the
+  right ear, and a small phone mesh in the hand, built on first use).
+- **The aftermath** (`life/aftermath.mjs`). A body killed in a fight or by a weapon now stays down
+  until it is collected (at most 180 s), instead of vanishing after FALL_SECONDS (14 s). With no
+  chase on (☆0), 18 s after the newest death, an ambulance and a patrol car are taken from the
+  traffic pool 70 m up the nearest police-usable lane (within 35 m of the bodies), driven by hand
+  along it with their lamps flashing, stop by the scene (the patrol car 7.5 m behind), stay 14 s,
+  take the bodies within 25 m and wash the blood pools there (`impact-marks.clearNear`), drive on to
+  the end of the lane and are gone. A body nowhere near a lane is taken off-screen. The ambulance is
+  a new vehicle type (weight 0, `handDriven`: never ordinary traffic, never takeable; the fleet test
+  exempts it from needing lanes of its own) with a red-below-white livery and a red lightbar.
+- **The crowd by time of day** (`life/population.mjs`): the share of the tier's crowd that is sent
+  out -- dawn 0.35, day 1, dusk 0.9, night 0.6 -- set on the simulation every frame
+  (`setPopulation`); a drop thins the crowd as walks end rather than removing anyone in view. No
+  rain (the owner's call).
+
+Tests: `tests/stage4.test.mjs` (6 — who stops to watch and who never does, one gathering per body,
+phones away after; the simulation's watching hold and bodies staying down; the population shares
+and the clamp; the ambulance's config; the whole aftermath on the real HIGH lane graph -- not
+while chasing, not before the wait, the two near bodies one scene, the patrol car behind, the far
+body left, the blood washed only there, gone after; the phone on the body, filming and calling).
+Stills: `evidence/roadmap/stage4/stage4bench.png` (qa/gta-upgrade/stage4bench.html; the bench draws
+the ambulance plain white: the livery band is the fleet shader's).
+
+Not yet seen in the real scene or on a device: the onlookers among the real crowd, the ambulance's
+livery in the fleet renderer, how far the lane stop is from bodies in narrow streets, the crowd
+thinning at night.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
