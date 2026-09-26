@@ -5892,6 +5892,40 @@ wrong way and the legs never split (`evidence/weapons/hit-bench/hitbench.png`). 
 never over 125° apart, no thigh far behind the trunk; the chest flinch curls forward from front,
 back and side with only a small lean along the blow; the knees give from front and behind.
 
+## 9al. Roadmap stage 0 — gyro aim on the Switch Pro Controller (branch restarted from `master` `90429ad`)
+
+The staged roadmap the user approved (stage 0 gyro; 1 gun feel and HUD; 2 people's reactions; 3
+wanted 4–5 and escape; 4 onlookers, emergency services, time-of-day population — no rain; 5
+missions, money, shops, save; 6 car damage, an original GTA-style radio, a motorcycle), one PR
+per stage.
+
+- **Why WebHID.** The Gamepad API gives sticks and buttons only. `src/player/gyro.mjs` opens the
+  Pro Controller (057e:2009) over WebHID (Chrome/Edge), turns its IMU on (subcommand 0x40) and
+  asks for full reports (0x03 → 0x30). Each 0x30 report carries three samples 5 ms apart
+  (accel xyz, gyro xyz, int16 LE, 0.061 dps/count, at data offset 12 — the report id is not in
+  `event.data`).
+- **Feel.** One to one at sensitivity 1 (default 1.5, 0.25–4), + yaw turning left as `heading`
+  grows. Default **only while aiming** (ZL or the right mouse button), as the Switch's own shooters
+  do; "always" is a choice. Off while driving (and drained, so turning in a car is not dumped on
+  the camera when you get out).
+- **Drift.** The first 0.5 s (100 samples) decide the at-rest offset, and only if the controller
+  was still (spread under 2.5 dps) — a controller being waved does not calibrate. After that the
+  offset keeps learning slowly whenever it is still for 0.6 s; rates under 0.6 dps are dropped.
+- **UI.** 詳細設定 → ジャイロ照準: the switch (the browser's device picker opens from the click;
+  a controller allowed before is reopened on load without asking), 構え中のみ/常時, sensitivity,
+  left-right and up-down invert. Kept in `shibuya.pad` with the stick settings.
+- **Not yet seen on a device.** Which IMU axis is yaw and pitch (Z and Y) and their signs are from
+  the controller's documented layout, not from a controller in hand; the invert switches cover a
+  wrong sign. On the device check: gyro left/right and up/down directions, whether the sticks and
+  buttons keep working through the Gamepad API while WebHID has the controller open (both over USB
+  and Bluetooth).
+
+Tests (`tests/gyro.test.mjs`, 8): report parsing; offset learned before any turn and a still
+controller never drifts; 90 dps for 1 s is a quarter turn; no calibration while moving; the offset
+followed as it creeps; bounded settings; the subcommand bytes; a fake WebHID device (the two
+subcommands sent, aim-only drains when not aiming, sensitivity and invert, saved to storage);
+no WebHID → "unsupported".
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle

@@ -12,6 +12,7 @@
 import {clipCameraArm} from './camera.mjs';
 import {createCrowdContact} from './crowd-contact.mjs';
 import {createInputMap,createRumble} from './input-map.mjs';
+import {sharedGyro} from './gyro.mjs';
 
 // The camera arm. Solids are tested at the camera's own height rather than on the ground,
 // so it is a facade that pulls the camera in and not a bollard it is sailing well above.
@@ -117,6 +118,9 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
  const inputMap = createInputMap(), rumble = createRumble();
  let padFrame = null, lastDevice = 'keyboard', padProfile = null;
  const settings = padSettings();
+ // Stage 0: gyro aim (gyro.mjs). The settings panel connects the controller; this only reads it.
+ const gyro = typeof navigator !== 'undefined' ? sharedGyro() : null;
+ let aimHeld = false;
  // On-screen controls, for a phone. Held as axes rather than as synthetic key events so a
  // finger can be half-way down a throttle, and so releasing the screen cannot leave a key
  // stuck the way a lost keyup does.
@@ -185,7 +189,7 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
     keys.add(k === ' ' ? 'shift' : k); e.preventDefault();
    };
    const up = (e) => {const k = e.key.toLowerCase(); if (k === 'e') onAttackHold?.(false); keys.delete(k === ' ' ? 'shift' : k);};
-   const blur = () => {keys.clear(); touch.forward = 0; touch.strafe = 0; touch.running = false; onAim?.(false); onAttackHold?.(false);};
+   const blur = () => {keys.clear(); touch.forward = 0; touch.strafe = 0; touch.running = false; aimHeld = false; onAim?.(false); onAttackHold?.(false);};
    const move = (e) => {
     if (document.pointerLockElement !== element) return;
     lastDevice = 'mouse';
@@ -195,8 +199,8 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    const click = (e) => {if (e.pointerType === 'touch') return; if (document.pointerLockElement !== element) element.requestPointerLock?.()?.catch?.(()=>{});};
    const punch = e => {if(document.pointerLockElement!==element)return;
     if(e.button===0){onAttack?.();onAttackHold?.(true);e.preventDefault();}
-    else if(e.button===2){onAim?.(true);e.preventDefault();}};
-   const release = e => {if(e.button===2)onAim?.(false);if(e.button===0)onAttackHold?.(false);};
+    else if(e.button===2){aimHeld=true;onAim?.(true);e.preventDefault();}};
+   const release = e => {if(e.button===2){aimHeld=false;onAim?.(false);}if(e.button===0)onAttackHold?.(false);};
    const menu = e => e.preventDefault();
    // The wheel steps through the weapons, one notch at a time however fast it spins.
    let wheelAt = 0;
@@ -222,6 +226,15 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    // The pad, as actions: one poll a frame, edges fired once, held states kept for input().
    let padAim = false, padFire = false;
    padPoll = (dt) => {
+    // Gyro: turning the controller turns the camera (+yaw is to the left, as heading grows).
+    if (gyro?.connected && !driving()) {
+     const t = gyro.turn(aimHeld || padAim);
+     if (t.yaw || t.pitch) {
+      lastDevice = 'pad';
+      state.heading += t.yaw;
+      state.pitch = Math.max(-PLAYER.pitchLimit, Math.min(PLAYER.pitchLimit, state.pitch + t.pitch));
+     }
+    } else if (gyro?.connected) gyro.take();   // in a car: drained, not saved up for getting out
     const pad = gamepad();
     const mode = driving() ? 'car' : 'foot';
     const f = inputMap.poll(pad, dt, mode);
