@@ -187,4 +187,5 @@ body.tc-on .player-hint{display:none}
 .perf-result{margin-top:6px;border-top:1px solid #34495a;padding-top:6px}
 .perf-result button{margin:6px 6px 0 0}
 .perf-start{margin-top:10px;width:100%}
+.gyro-settings .gyro-sens{display:grid;gap:6px}.gyro-settings input[type=range]{width:100%;accent-color:var(--primary)}
 .perf-overlay button:disabled{opacity:.45;cursor:default}
