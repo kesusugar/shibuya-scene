@@ -62,7 +62,10 @@ test('katana: both hands on the handle, mirrored to a right-hand lead, a fast cu
  const clip=load('katana-cut'),m=clip.measured;
  assert.equal(PRESETS['katana-cut'].mirror,true,'02_07 leads with the left hand; the game\'s katana is in the right');
  assert.ok(m.handsApartTargetM>=.12&&m.handsApartTargetM<=.2,`hands ${m.handsApartTargetM} m apart`);
- assert.ok(m.leftMissCm<=5,`the left palm misses its place on the handle by ${m.leftMissCm} cm`);
+ // §9ah: the left clavicle helps a short arm, so the left palm is ON its place (was 4.4 cm off).
+ assert.ok(m.leftMissCm<=.5,`the left palm misses its place on the handle by ${m.leftMissCm} cm`);
+ // §9ah: the right hand rolls the blade up to 15° off the cut's plane for the wrist (was 50°).
+ assert.ok(m.wristDeg.right.bendMedian<=20,`the right wrist bends ${m.wristDeg.right.bendMedian}° at median`);
  // Captured, the hands peak near 3 m/s; the cut is replayed at 2x.
  assert.ok(m.gripPeakMs>=5.5,`the fist peaks at ${m.gripPeakMs} m/s`);
  assert.ok(clip.duration<1.7,`the whole cut takes ${clip.duration} s`);

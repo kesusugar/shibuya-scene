@@ -25,9 +25,10 @@ export const WEAPONS = Object.freeze({
   witnessRadius: 40, witnessSeverity: 1, panicCap: 60}),
  katana: Object.freeze({id: 'katana', label: '日本刀', kind: 'melee',
   damage: 50,             // two cuts put a person down
-  reach: 1.9,             // m, centre to centre: the blade tip at its furthest plus a body radius
-  // R4 option (a): the clip is a one-handed cut, and the katana is held in the right hand only.
-  hands: 1}),
+  reach: 1.7,             // m, centre to centre: the blade tip at its furthest (SWORD.tipReach 1.42) plus a body radius
+  // R4 option (b) since §9ah: the cut is CMU 02_07's two-handed cut, the left hand on the handle
+  // 0.15 m behind the right fist (scripts/cmu/weapon-clip.mjs).
+  hands: 2}),
  // The police weapon (W3). Not in the player's inventory.
  revolver: Object.freeze({id: 'revolver', label: '回転式拳銃', kind: 'gun',
   cylinder: 5, damage: [10, 15], range: 45, shotSeconds: .633, refire: 1.1})

@@ -64,6 +64,10 @@ export const PRESETS=Object.freeze({
  // `trunk` softens anything past 28° to a third of the excess.
  'katana-cut':{trial:'02_07',subject:'02',fps:120,from:6.2,to:8.4,weapon:'katana',left:-.15,mirror:true,
   warp:[[6.2,1.25],[6.85,1.25],[7.0,2.0],[7.5,2.0],[7.7,1.3],[8.4,1.3]],trunk:{limit:28,keep:.33}},
+ // The two-handed guard the katana stands in: 02_07's one quiet stretch with the hands together
+ // at the chest (18.0-18.6 s, the hands 0.18 m apart, 0.23 m above the hips), looped.
+ 'katana-guard':{trial:'02_07',subject:'02',fps:120,from:17.95,to:18.7,weapon:'katana',left:-.15,mirror:true,loop:.3,
+  trunk:{limit:28,keep:.33}},
  // The raise, from a low ready to the shouldered aim. The capture holds the gun 17° high and in
  // front of the chest, and starts with it hanging sideways from the hands: so the gun is at a
  // low ready (muzzle forward and 40° down) while the source's hands are low, and in the shoulder,
@@ -338,9 +342,22 @@ export async function weaponClip({dir,preset,glbPath='public/data/character/citi
    if(short>0)gripAt.addScaledVector(shoulderL.clone().sub(fore).normalize(),short);
    reach(bones.get('upperarm_r'),bones.get('lowerarm_r'),handR,gripAt.sub(gripOffset));
   }
-  setWorldQuat(handR,wantR);
-  // The right elbow swings about the shoulder-to-wrist line to where the wrist bends least.
-  swivel(bones.get('upperarm_r'),handR,wantR,bind.get('hand_r'));
+  if(P.weapon==='katana'){
+   // The right hand may turn the blade up to 15° off the plane of the cut (at a cost of 0.6° of
+   // wrist bend per degree, so the edge still leads): the roll that bends the wrist least wins.
+   let bestRoll=0,best=Infinity;
+   const tryRoll=roll=>{
+    const w=new Quaternion().setFromAxisAngle(forward,roll*Math.PI/180).multiply(weapon);
+    return swivel(bones.get('upperarm_r'),handR,w.multiply(gripR.clone().invert()),bind.get('hand_r'))+Math.abs(roll)*.6;
+   };
+   for(let roll=-15;roll<=15;roll+=5){const b=tryRoll(roll);if(b<best){best=b;bestRoll=roll;}}
+   tryRoll(bestRoll);
+   weapon.premultiply(new Quaternion().setFromAxisAngle(forward,bestRoll*Math.PI/180));
+  }else{
+   setWorldQuat(handR,wantR);
+   // The right elbow swings about the shoulder-to-wrist line to where the wrist bends least.
+   swivel(bones.get('upperarm_r'),handR,wantR,bind.get('hand_r'));
+  }
   const origin=handR.localToWorld(new Vector3(...grip.at));
   grips.push(origin.clone());
   const target=origin.clone().addScaledVector(forward,P.weapon==='katana'?P.left:spacing);
@@ -353,6 +370,19 @@ export async function weaponClip({dir,preset,glbPath='public/data/character/citi
    reach(bones.get('upperarm_l'),bones.get('lowerarm_l'),handL,target.clone().sub(atL.clone().multiply(scale).applyQuaternion(want)));
    return swivel(bones.get('upperarm_l'),handL,want,bind.get('hand_l'))+Math.abs(roll)*.05;
   };
+  // The left shoulder girdle helps a short arm: if the place is past 97% of the arm, the clavicle
+  // turns toward it (up to 20°), which brings the shoulder joint that much closer.
+  {
+   const clav=bones.get('clavicle_l'),shoulder=pos(bones.get('upperarm_l'));
+   const arm=pos(bones.get('lowerarm_l')).distanceTo(shoulder)+pos(handL).distanceTo(pos(bones.get('lowerarm_l')));
+   const short=target.distanceTo(shoulder)-arm*.97;
+   if(short>0){
+    const base=pos(clav),len=shoulder.distanceTo(base);
+    const toward=new Quaternion().setFromUnitVectors(shoulder.clone().sub(base).normalize(),target.clone().sub(base).normalize());
+    const need=Math.min(20*Math.PI/180,short/len),full=2*Math.acos(Math.min(1,Math.abs(toward.w)));
+    if(full>1e-4)turnWorld(clav,new Quaternion().slerp(toward,Math.min(1,need/full)));
+   }
+  }
   let bestRoll=0,best=Infinity;
   for(let roll=-60;roll<=60;roll+=10){const b=placeL(roll);if(b<best){best=b;bestRoll=roll;}}
   placeL(bestRoll);
