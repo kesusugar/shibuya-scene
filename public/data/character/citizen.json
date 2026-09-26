@@ -276,8 +276,8 @@
  },
  "output": {
   "file": "public/data/character/citizen.glb",
-  "bytes": 2749544,
-  "sha256": "4a743e7a97681fe9d2c27358c4b85be7fb375e979452dcb3050e1c43f42c3adc"
+  "bytes": 2749552,
+  "sha256": "4644c3d15244384a35467b5959c3bcb78da40c5fdfe93d525635bddf571375df"
  },
  "gaitDetail": {
   "samples": 120,
