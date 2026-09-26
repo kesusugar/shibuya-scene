@@ -139,7 +139,7 @@ export default function Home(){
   // RUN 11.3: swings, hits and pain, for audio and the camera.
   onEvent:(kind:string,e:any)=>{feedback.emit(kind,lifeEntry.hooks.current?.sim?.time??0,e);}
  }),vehicleTransition=createVehicleTransition();
- const playerSize={width:PLAYER.radius*2,length:PLAYER.radius*2};const PLAYER_WEAPONS=['pistol','katana'];const PLAYER_HEIGHT=1.76;
+ const playerSize={width:PLAYER.radius*2,length:PLAYER.radius*2};const PLAYER_WEAPONS=['pistol','katana','smg'];const PLAYER_HEIGHT=1.76;
  // Getting in and out begins with the player's parked car, but a stopped traffic slot can
  // later become the controlled one. The slot is reused so traffic still sees its body.
  /**
@@ -240,7 +240,9 @@ export default function Home(){
   // `seated` arrives before `driving` does -- control transfers at the end of the sequence,
   // and the camera has to move at the start of the seat, not after the door shuts.
   const inCar=(driving||transitionSeated)&&playerCar;
-  const state=inCar?playerCar.state:player.state;aimCamera+=(((!inCar&&player.state.aim>0)?1:0)-aimCamera)*(1-Math.exp(-10*dt));const desired=inCar?vehicleCamera(state,followPose,ctx):playerCamera(state,followPose,ctx,aimCamera);const c:any={...followCamera.update(desired,{x:state.x,y:state.y+(driving?CAR.eye:PLAYER.eye),z:state.z},ctx,dt,driving?'drive':'walk')};
+  const state=inCar?playerCar.state:player.state;aimCamera+=(((!inCar&&player.state.aim>0)?1:0)-aimCamera)*(1-Math.exp(-10*dt));// §9ah: an automatic's recoil lifts the view with the muzzle (its `recoil.camera` share of the climb); it settles with the recoil.
+  const kick=!inCar&&arsenal?arsenal.recoil*(arsenal.weapon?.recoil?.camera??0):0;
+  const desired=inCar?vehicleCamera(state,followPose,ctx):playerCamera(kick?{...state,pitch:state.pitch+kick}:state,followPose,ctx,aimCamera);const c:any={...followCamera.update(desired,{x:state.x,y:state.y+(driving?CAR.eye:PLAYER.eye),z:state.z},ctx,dt,driving?'drive':'walk')};
   if(shake>.002){const t=performance.now()/1000;
    // Two frequencies that do not divide into each other, so it reads as a knock rather than
    // a hum, and it only moves the eye -- the look-at point stays put or the view swims.
@@ -429,7 +431,7 @@ export default function Home(){
   if(!arsenal){arsenal=createArsenal({
    // W2: every shot is heard (recorded CC0 gunshot + the street's slapback), knocks the camera a
    // little and blooms its frame; the HQ crowd sees it through the bounded witness pass.
-   onShot:(shot:any)=>{gunfire?.shot(shot.from.x,shot.from.y,shot.from.z,shot.heading,{kind:'pistol',hit:shot.hit});
+   onShot:(shot:any)=>{gunfire?.shot(shot.from.x,shot.from.y,shot.from.z,shot.heading,{kind:shot.weapon==='smg'?'smg':'pistol',hit:shot.hit});
     soundBank?.duck?.(.5,1.4);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_SHOT);player?.rumble?.('shot');},
    onWitness:(event:any)=>lifeEntry.hooks.current?.witness?.(event)??0});
    groups.dynamic.add(arsenal.effects.root);}
@@ -442,12 +444,12 @@ export default function Home(){
   // On a touch device these are the controls, not an extra: there is no keyboard to fall
   // back to. They feed the same axes the keys and the pad feed.
   if(touchEnabled&&!touchPad)touchPad=createTouchControls({
-   onAxes:(axes:any)=>player?.setTouch(axes),onAttack:()=>attack(),onWeapon:()=>cycleWeapon(1),
+   onAxes:(axes:any)=>player?.setTouch(axes),onAttack:()=>attack(),onAttackHold:(on:boolean)=>arsenal?.hold(on&&!driving),onWeapon:()=>cycleWeapon(1),
    onDrive:()=>toggleDrive(),onExit:()=>exitPlayer()});
   touchPad?.setDriving(false);touchPad?.show();
   const sim=trafficEntry.hooks.current?.sim;
   if(sim&&!playerCar){playerCar=createPlayerVehicle(sim,ctx);if(!playerCar.spawn(player.state.x,player.state.z))console.warn('[Player] no room to park the car');}
-  playerMode=true;combatDeathReported=false;controls.enabled=false;player.attach(canvas,{onExit:()=>exitPlayer(),onDrive:()=>toggleDrive(),onAttack:()=>attack(),onWeapon:(n:number)=>selectWeapon(n),onWeaponCycle:(d:number)=>cycleWeapon(d),onAim:(on:boolean)=>arsenal?.aim(on&&!driving),onReload:()=>{if(!driving)arsenal?.reload();},onRoll:()=>{if(playerMode&&!driving&&!vehicleTransition.active&&melee.phase==='idle')player?.roll();},
+  playerMode=true;combatDeathReported=false;controls.enabled=false;player.attach(canvas,{onExit:()=>exitPlayer(),onDrive:()=>toggleDrive(),onAttack:()=>attack(),onAttackHold:(on:boolean)=>arsenal?.hold(on&&!driving),onWeapon:(n:number)=>selectWeapon(n),onWeaponCycle:(d:number)=>cycleWeapon(d),onAim:(on:boolean)=>arsenal?.aim(on&&!driving),onReload:()=>{if(!driving)arsenal?.reload();},onRoll:()=>{if(playerMode&&!driving&&!vehicleTransition.active&&melee.phase==='idle')player?.roll();},
    // C1-C4: the pad's own buttons for the siren (d-pad up), the horn alone (left stick in a car) and the map (−).
    driving:()=>driving,onSiren:()=>{if(driving&&playerCar)police?.toggleSiren(playerCar);},onHornOnly:()=>{if(driving&&playerCar)soundscape?.horn(playerCar.state.x,playerCar.state.z);},onMap:()=>playUI?.toggleMap?.(),onCrouch:()=>{if(playerMode&&!driving&&!vehicleTransition.active)player?.crouch();},onHorn:()=>{if(driving&&playerCar&&!police?.toggleSiren(playerCar))soundscape?.horn(playerCar.state.x,playerCar.state.z);}});setPlayerHit(null);setMode('player');
   (window as any).__SHIBUYA_PLAYER__=player;(window as any).__SHIBUYA_CAR__=playerCar;
@@ -680,7 +682,7 @@ export default function Home(){
     player:driving?null:player.state,car:driving?playerCar?.state:null,people:crowdSim?.pool,cars:trafficEntry.hooks.current?.sim?.pool,
     pedestrianGreen:crowdSim?.signals?.phase?.()[0]==='PEDESTRIAN'});}
   playUI?.update(playElapsed,player.state,playerCar?.state,driving,playerReach,frameHits);
-  if(arsenal)playUI?.setWeapon(arsenal.snapshot(),{aiming:player.state.aim>0&&!driving,locked:player.state.aimLock!=null});
+  if(arsenal)playUI?.setWeapon(arsenal.snapshot(),{aiming:player.state.aim>0&&!driving,locked:player.state.aimLock!=null,spread:arsenal.spread});
   // C4: losing health shakes the pad; C1: the HUD's hints follow the pad in use.
   if((player.state.health??100)<healthLast)player.rumble?.('hurt');healthLast=player.state.health??100;
   {const profile=player.lastDevice==='pad'?player.padProfile:'keyboard',key=profile+(driving?':car':':foot');if(key!==hintKey){hintKey=key;playUI?.setControls?.(controlHints(profile,driving));}}

@@ -70,7 +70,7 @@ test('the HUD names the Switch buttons for a Switch pad and the Xbox ones otherw
  assert.match(controlHints('switch'),/ZR 攻撃/);assert.match(controlHints('switch'),/A 装填/);assert.match(controlHints('switch'),/Y 回避/);
  assert.match(controlHints('standard'),/RT 攻撃/);assert.match(controlHints('standard'),/B 装填/);
  assert.match(controlHints('switch',true),/ZR アクセル/);
- assert.match(controlHints('keyboard'),/1\/2\/3 武器/);
+ assert.match(controlHints('keyboard'),/1\/2\/3\/4 武器/);
  assert.equal(GLYPHS.switch.right,'A');assert.equal(GLYPHS.switch.bottom,'B');
 });
 

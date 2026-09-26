@@ -86,6 +86,25 @@ const BUILD={
    blade(bladeStart,tip-bladeStart,COLOUR.blade,COLOUR.hamon),
   ];
  },
+ // §9ah: a generic submachine gun, built to the numbers its clips were baked against (SHAPE.smg):
+ // the pistol grip at the origin, the butt plate 0.33 m behind it, the fore-end the left hand
+ // closes on 0.28 m ahead, the rear sight's top 0.115 m up, the muzzle at SHAPE.smg.muzzle.
+ smg:()=>{
+  const {muzzle,butt,foreEnd}=SHAPE.smg;
+  return [
+   box(.03,.1,.042,COLOUR.black,{at:[0,-.018,-.004],rx:-.25}),           // pistol grip
+   box(.044,.064,.3,COLOUR.gunmetal,{at:[0,.055,.08]}),                  // receiver
+   box(.05,.05,.16,COLOUR.black,{at:[0,.045,foreEnd]}),                  // fore-end
+   tube(.012,muzzle[2]-.33,COLOUR.steel,{at:[0,muzzle[1],(muzzle[2]+.33)/2]}),   // barrel
+   box(.028,.13,.034,COLOUR.black,{at:[0,-.035,.14],rx:.12}),            // magazine
+   box(.022,.03,.26,COLOUR.black,{at:[0,.05,-.16]}),                     // stock, top bar
+   box(.022,.022,.2,COLOUR.black,{at:[0,.005,-.2],rx:-.12}),             // stock, lower bar
+   box(.036,.095,.02,COLOUR.black,{at:[0,butt[1]-.005,butt[2]+.01]}),     // butt plate
+   box(.012,.03,.02,COLOUR.black,{at:[0,.1,-.05]}),                      // rear sight (its top at SHAPE.smg.sight)
+   box(.006,.022,.008,COLOUR.black,{at:[0,.095,.23]}),                   // front sight
+   box(.006,.008,.04,COLOUR.black,{at:[0,.012,.03]})                     // trigger guard
+  ];
+ },
  // The katana in its scabbard, for the back: the same handle and guard, and a lacquered saya over
  // the blade's length.
  sheathed:()=>{

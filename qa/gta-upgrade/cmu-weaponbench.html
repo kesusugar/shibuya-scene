@@ -9,7 +9,7 @@
 
   One block per clip, two rows per block (three-quarter front from the player's right, and the
   player's right side), one column per moment. The katana is the game's own mesh
-  (weapon-mesh.mjs); the long gun is a grey proxy drawn here (仮), since the game has none.
+  (weapon-mesh.mjs) and the game's submachine gun.
   The yellow dot is the left hand's grip point.
 
   `node qa/gta-upgrade/weaponbench-capture.mjs out.png "" cmu-weaponbench.html` saves it.
@@ -29,8 +29,8 @@ const asset=humanoidCitizen(await new Promise((res,rej)=>new GLTFLoader().parse(
 const CLIPS=[
  {id:'katana-cut',label:'katana: CMU 02_07 overhead cut (source 6.2-8.4 s, the cut replayed at 2x)',times:[.2,.45,.6,.68,.75,.82,.95,1.5]},
  {id:'katana-guard',label:'katana: CMU 02_07 two-handed guard, looped (source 17.95-18.7 s)',times:[0,.15,.3,.45,.6,.75]},
- {id:'rifle-raise',label:'short gun (proxy 仮): CMU 80_03 low ready to shouldered aim (source 1.9-7.0 s)',times:[0,.5,.9,1.4,2.2,3.2,4.2,5.0]},
- {id:'rifle-shouldered',label:'short gun (proxy 仮): 80_03 shouldered hold, looped (source 4.2-6.8 s)',times:[0,.4,.8,1.2,1.6,2.0,2.3,2.6]}
+ {id:'rifle-raise',label:'submachine gun: CMU 80_03 low ready to shouldered aim (source 1.9-7.0 s)',times:[0,.5,.9,1.4,2.2,3.2,4.2,5.0]},
+ {id:'rifle-shouldered',label:'submachine gun: 80_03 shouldered hold, looped (source 4.2-6.8 s)',times:[0,.4,.8,1.2,1.6,2.0,2.3,2.6]}
 ];
 // ?only=katana-cut&times=0.6,1.1 draws a few moments of one clip, larger, from closer.
 const Q=new URLSearchParams(location.search),ONLY=Q.get('only'),CLOSE=!!ONLY;
@@ -41,23 +41,6 @@ const CELL=CLOSE?{w:420,h:480}:{w:160,h:250},COLS=Math.max(...CLIPS.map(c=>c.tim
 const W=CELL.w*COLS,H=CELL.h*2*CLIPS.length;
 const renderer=new T.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
 renderer.setPixelRatio(1);renderer.setSize(W,H);renderer.setScissorTest(true);document.body.appendChild(renderer.domElement);
-
-/** A generic long gun, in the weapon frame (+Z barrel, +Y up, origin at the pistol grip). */
-function longGun(spacing=.4){
- const short=spacing<.35;
- const m=new T.MeshStandardMaterial({color:0x6a6f78,metalness:.4,roughness:.5});
- const g=new T.Group();
- const add=(w,h,l,x,y,z,rx=0)=>{const b=new T.Mesh(new T.BoxGeometry(w,h,l),m);b.position.set(x,y,z);b.rotation.x=rx;g.add(b);};
- add(.028,.11,.04,0,-.01,-.005,-.3);   // pistol grip
- add(.045,.07,.30,0,.07,.07);          // receiver
- // The fore-end runs from the receiver to just past the left hand (at `spacing`), then the barrel.
- const end=spacing+.08;
- add(.05,.055,end-.22,0,.06,(.22+end)/2);  // fore-end, where the left hand goes
- add(.018,.018,short?.1:.16,0,.07,end+(short?.05:.08));  // barrel
- add(.04,.09,.26,0,.04,-.2);           // stock
- add(.03,.12,.03,0,-.005,.12);         // magazine
- return g;
-}
 
 const lines=['three-quarter front (player\'s right) / right side; columns are clip time'];
 CLIPS.forEach((clip,block)=>{
@@ -76,14 +59,9 @@ CLIPS.forEach((clip,block)=>{
  if(d.weapon==='katana'){const rig=createWeaponRig(inst.root,{carry:['katana']});rig.show('katana');weapon=rig.meshes[0];
   // The scabbard is placed from the Idle pose in the game; on this bare clip it would float.
   for(const m of rig.meshes)if(m!==weapon)m.visible=false;}
- else{
-  weapon=longGun(d.spacing);hand.add(weapon);
-  const s=new T.Vector3();hand.getWorldScale(s);weapon.scale.setScalar(1/s.x);
-  const g=GRIP.pistol,z=new T.Vector3(...g.forward).normalize(),x=new T.Vector3(...g.up).cross(z).normalize(),y=z.clone().cross(x);
-  weapon.position.set(...g.at);weapon.quaternion.setFromRotationMatrix(new T.Matrix4().makeBasis(x,y,z));
- }
+ else{const rig=createWeaponRig(inst.root,{carry:['smg']});rig.show('smg');weapon=rig.meshes[0];}
  const mark=new T.Mesh(new T.SphereGeometry(.018,10,8),new T.MeshBasicMaterial({color:0xffd23a,depthTest:false}));mark.renderOrder=9;scene.add(mark);
- const grip=d.weapon==='katana'?GRIP.katana:GRIP.pistol,atL=new T.Vector3(-grip.at[0],grip.at[1],grip.at[2]);
+ const grip=d.weapon==='katana'?GRIP.katana:GRIP.smg,atL=new T.Vector3(-grip.at[0],grip.at[1],grip.at[2]);
  const cams=[[-2.3,1.55,2.5],[-3.3,1.35,.25]].map(p=>{const c=new T.PerspectiveCamera(CLOSE?20:32,CELL.w/CELL.h,.05,60);c.position.set(...p);return c;});
  const notes=[];
  clip.times.forEach((t,col)=>{

@@ -19,6 +19,9 @@ export const GUNFIRE = Object.freeze({
  echoLowpass: [2600, 1600, 1000],
  ricochetChance: .35,     // of a shot that hits a wall or a car
  fallbackGain: .5,        // the synthesised crack, relative to the bus
+ // §9ah: the submachine gun reuses the recorded gunshot, a little higher and lighter (a smaller
+ // round, 12 a second), with only the first reflection each side so a burst does not smear.
+ smg: Object.freeze({rate: 1.14, gain: .72, echoes: 2}),
  clankGain: .28
 });
 
@@ -100,7 +103,7 @@ export function createGunfire(getContext, getBank, {solid = () => false} = {}) {
  return {
   get stats() {return {...stats};},
   /**
-   * A shot at `x,y,z` from someone facing `heading`. `kind` is 'pistol' or 'revolver'; `hit` is
+   * A shot at `x,y,z` from someone facing `heading`. `kind` is 'pistol', 'revolver' or 'smg'; `hit` is
    * what the bullet struck ('wall', 'car', ...) and where, for a ricochet.
    */
   shot(x, y, z, heading, {kind = 'pistol', gain = 1, hit = null, roll = Math.random()} = {}) {
@@ -108,11 +111,14 @@ export function createGunfire(getContext, getBank, {solid = () => false} = {}) {
    if (!ctx || ctx.state !== 'running') return false;
    stats.shots++;
    const clip = kind === 'revolver' && bank?.has?.('gunshot-revolver') ? 'gunshot-revolver' : 'gunshot';
-   const recorded = !!bank?.play?.(clip, {x, y, z, gain});
+   const auto = kind === 'smg', rate = auto ? GUNFIRE.smg.rate : 1;
+   if (auto) gain *= GUNFIRE.smg.gain;
+   const recorded = !!bank?.play?.(clip, {x, y, z, gain, rate});
    if (recorded) stats.recorded++; else if (synthShot(ctx, x, y, z, ctx.currentTime, gain)) stats.synthesised++;
-   for (const tap of echoTaps(solid, x, z, heading)) {
+   const taps = echoTaps(solid, x, z, heading);
+   for (const tap of auto ? taps.slice(0, GUNFIRE.smg.echoes) : taps) {
     const when = ctx.currentTime + tap.delay;
-    const ok = recorded ? bank.play(clip, {x: tap.x, y: y + 2, z: tap.z, gain: gain * tap.gain, when, lowpass: tap.lowpass, rate: .97})
+    const ok = recorded ? bank.play(clip, {x: tap.x, y: y + 2, z: tap.z, gain: gain * tap.gain, when, lowpass: tap.lowpass, rate: .97 * rate})
      : synthShot(ctx, tap.x, y + 2, tap.z, when, gain * tap.gain);
     if (ok) stats.echoes++;
    }

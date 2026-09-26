@@ -170,7 +170,7 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
  // set, which is the pose the carry positions in weapon-mesh.mjs were placed against.
  const weaponRig=weapons?.length?createWeaponRig(root,{carry:weapons}):null;
  // PLAN-WEAPONS W2: a gun is aimed by an upper-body layer with a muzzle correction (aim-layer.mjs).
- const aimLayer=weaponRig&&weapons.some(w=>w==='pistol'||w==='revolver')
+ const aimLayer=weaponRig&&weapons.some(w=>w==='pistol'||w==='revolver'||w==='smg')
   ?createAimLayer(root,instance.clips,weaponRig,{correction:aimCorrection}):null;
 
  /** Play a one-shot or a held pose over the legs, or hand the body back to the gait. */

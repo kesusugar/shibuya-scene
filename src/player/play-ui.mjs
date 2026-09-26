@@ -8,7 +8,7 @@ export function createPlayUI(network,parent,{onExit,onDrive}={}){
  root.innerHTML=`<div class="play-top"><div class="play-brand">SHIBUYA <span>FREE ROAM · Tab メニュー</span></div><button class="play-exit" type="button">観察に戻る</button></div>
  <div class="play-mission"><strong>渋谷デリバリー</strong><p class="play-task">徒歩と車で3か所へ。降車して停止すると配達できます。</p><div class="play-task-row"><span class="play-timer"></span><button class="play-start" type="button">配送を始める</button><button class="play-cancel" type="button" hidden>中止</button></div><progress class="play-progress" max="1" value="0" aria-label="受け渡し進行" hidden></progress></div>
  <div class="play-map"><canvas width="320" height="320" aria-label="周辺地図・北が上"></canvas><span>N · 北 / 緑：目的地 / 青：車</span></div>
- <div class="play-dashboard"><div><div class="play-wanted" role="img" aria-label="手配度 0" data-stars="0" data-flash="false"><i>★</i><i>★</i><i>★</i><i>★</i><i>★</i></div><b class="play-speed">徒歩</b><div class="play-health" role="meter" aria-label="体力" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100" data-level="ok"><span>体力</span><span class="play-health-bar"><i></i></span><b class="play-health-value">100</b></div><small class="play-weapon" data-weapon="fists">素手</small><small class="play-hint">E/クリック 攻撃 · 1/2/3 武器 · 右ボタン 構える · R 装填 · Q 回避 · C しゃがむ</small><small class="play-damage"></small></div><button class="play-drive" type="button">車を探す</button></div>`;
+ <div class="play-dashboard"><div><div class="play-wanted" role="img" aria-label="手配度 0" data-stars="0" data-flash="false"><i>★</i><i>★</i><i>★</i><i>★</i><i>★</i></div><b class="play-speed">徒歩</b><div class="play-health" role="meter" aria-label="体力" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100" data-level="ok"><span>体力</span><span class="play-health-bar"><i></i></span><b class="play-health-value">100</b></div><small class="play-weapon" data-weapon="fists">素手</small><small class="play-hint">E/クリック 攻撃 · 1/2/3/4 武器 · 右ボタン 構える · R 装填 · Q 回避 · C しゃがむ</small><small class="play-damage"></small></div><button class="play-drive" type="button">車を探す</button></div>`;
  root.insertAdjacentHTML('beforeend','<div class="play-wanted-banner" role="status" aria-live="polite" hidden></div>');
  // PLAN-WEAPONS W2: the crosshair, only while a gun is up. The aim is the centre of the view.
  root.insertAdjacentHTML('beforeend','<div class="play-crosshair" aria-hidden="true" hidden><i></i></div>');
@@ -42,12 +42,15 @@ export function createPlayUI(network,parent,{onExit,onDrive}={}){
   if(bannerFor>0){bannerFor-=dt;if(bannerFor<=0)banner.hidden=true;}
  }
  /** PLAN-WEAPONS: the weapon out, the magazine, and the crosshair (on a person when locked). */
- const NAMES={fists:'素手',pistol:'ピストル',katana:'日本刀'};
- function setWeapon(w,{aiming=false,locked=false}={}){
+ const NAMES={fists:'素手',pistol:'ピストル',katana:'日本刀',smg:'サブマシンガン'};
+ const GUN=new Set(['pistol','smg']);
+ function setWeapon(w,{aiming=false,locked=false,spread=0}={}){
   if(disposed||!w)return;
   weaponLabel.dataset.weapon=w.current;
-  weaponLabel.textContent=w.current==='pistol'?`${NAMES.pistol} ${w.reloading?'装填中':`${w.rounds}/${w.magazine}`}`:(NAMES[w.current]??w.current);
-  crosshair.hidden=!(aiming&&w.current==='pistol');crosshair.dataset.locked=String(!!locked);
+  weaponLabel.textContent=GUN.has(w.current)?`${NAMES[w.current]} ${w.reloading?'装填中':`${w.rounds}/${w.magazine}`}`:(NAMES[w.current]??w.current);
+  crosshair.hidden=!(aiming&&GUN.has(w.current));crosshair.dataset.locked=String(!!locked);
+  // §9ah: the automatic's crosshair opens with its spread.
+  crosshair.style.setProperty('--spread',String(Math.round(Math.min(1,spread/.06)*100)/100));
  }
  /** C1: the controls line follows the device in use (keyboard, or the pad's own button names). */
  const hint=query('.play-hint'),mapBox=query('.play-map');

@@ -31,7 +31,7 @@ import {dirname} from 'node:path';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {Quaternion,Vector3,Matrix4} from 'three';
 import {parseASF,parseAMC,forwardASF,restHipHeight} from './asf.mjs';
-import {GRIP} from '../../src/player/weapons.mjs';
+import {GRIP,SHAPE} from '../../src/player/weapons.mjs';
 
 globalThis.ProgressEvent??=class{constructor(t,i={}){Object.assign(this,{type:t},i);}};
 
@@ -75,13 +75,14 @@ export const PRESETS=Object.freeze({
  // the capture's. With the stock at the shoulder the left hand cannot reach the source's 0.46 m
  // fore-end (13 cm short on this body's 0.48 m arm), so it goes 0.28 m ahead of the grip: a
  // short weapon's fore-end, which is what a submachine gun would have.
- 'rifle-raise':{trial:'80_03',subject:'80',fps:60,from:1.9,to:7.0,weapon:'rifle',shoulder:'raise',spacing:.28},
+ 'rifle-raise':{trial:'80_03',subject:'80',fps:60,from:1.9,to:7.0,weapon:'rifle',shoulder:'raise',spacing:SHAPE.smg.foreEnd},
  // The held aim alone, looped (the last 0.4 s eases back onto the first key).
- 'rifle-shouldered':{trial:'80_03',subject:'80',fps:60,from:4.2,to:6.8,weapon:'rifle',shoulder:'hold',spacing:.28,loop:.4}
+ 'rifle-shouldered':{trial:'80_03',subject:'80',fps:60,from:4.2,to:6.8,weapon:'rifle',shoulder:'hold',spacing:SHAPE.smg.foreEnd,loop:.4}
 });
 
-// A long gun is held by its pistol grip as the pistol is: the same frame in the right hand.
-const GRIPS={katana:GRIP.katana,rifle:GRIP.pistol};
+// The gun is the game's submachine gun (§9ah): its grip frame and its shape (butt, fore-end,
+// sight) are read from src/player/weapons.mjs, so the clips and the mesh cannot drift apart.
+const GRIPS={katana:GRIP.katana,rifle:GRIP.smg};
 
 const basis=(forward,up)=>{
  const z=forward.clone().normalize(),x=up.clone().cross(z).normalize(),y=z.clone().cross(x);
@@ -245,8 +246,8 @@ export async function weaponClip({dir,preset,glbPath='public/data/character/citi
  const headBone=bones.get('Head'),eyeLocal=headBone.worldToLocal(pos(headBone).add(new Vector3(0,.07,.09)));
  const grips=[],eyeGap=[],trunkMax={before:0,after:0};
  const stats={leftMiss:0,handsSource:[],handsTarget:[],wrist:{r:[],l:[]},elevation:[],butt:[]};
- // The long gun's butt, in the weapon frame (the bench's proxy has the same stock).
- const BUTT=new Vector3(0,.04,-.33);
+ // The gun's butt, in the weapon frame (SHAPE.smg; the mesh is built from the same numbers).
+ const BUTT=new Vector3(...SHAPE.smg.butt);
  for(let s=0;s<steps;s++){
   const t=s/(steps-1)*duration;times.push(t);
   const src=pose(at(sourceAt(t)));
@@ -326,12 +327,12 @@ export async function weaponClip({dir,preset,glbPath='public/data/character/citi
    chest.premultiply(turn);
    // The butt in the shoulder pocket: 5 cm in front of the shoulder joint, 8 cm in toward the
    // chest (the pocket is inside the deltoid, not on the joint) and 2 cm below it -- then, as the
-   // gun comes up, moved across the line of fire until the sight line is within 2.5 cm of the eye
+   // gun comes up, moved across the line of fire until the sight line is within 0.5 cm of the eye
    // (a cheek weld is then a small lean of the head, not an ear on the shoulder).
    const pocket=pos(bones.get('upperarm_r')).addScaledVector(new Vector3(0,0,1).applyQuaternion(chest),.05)
     .addScaledVector(new Vector3(1,0,0).applyQuaternion(chest),.08).add(new Vector3(0,-.02,0));
    const across=headBone.localToWorld(eyeLocal.clone()).sub(pocket).dot(side);
-   if(Math.abs(across)>.025)pocket.addScaledVector(side,(across-Math.sign(across)*.025)*raised);
+   if(Math.abs(across)>.005)pocket.addScaledVector(side,(across-Math.sign(across)*.005)*raised);
    // The low ready keeps the butt in the shoulder and dips the muzzle 40°: the gun pivots about
    // the butt, so the stock never swings into the chest (tilting it about the grip did).
    const gripAt=pocket.sub(BUTT.clone().applyQuaternion(weapon));
@@ -396,8 +397,8 @@ export async function weaponClip({dir,preset,glbPath='public/data/character/citi
    stats.butt.push(BUTT.clone().applyQuaternion(weapon).add(origin).distanceTo(pos(bones.get('upperarm_r'))));
    // The head down to the sights, as far as the gun is up: the eye 3.5 cm above the sight line
    // (the rear sight's top, 11.5 cm over the grip), 60% of the turn at the neck, 40% at the head,
-   // at most 25° in all.
-   const sight=new Vector3(0,.115,-.05).applyQuaternion(weapon).add(origin);
+   // at most 10° in all (25° read as a lolling head from the front in the game, §9ah).
+   const sight=new Vector3(...SHAPE.smg.sight).applyQuaternion(weapon).add(origin);
    // The eye can only swing on a sphere about the neck, so its target is where the sight line
    // (raised 3.5 cm) crosses that sphere, on the side nearest the eye -- the nearest point of
    // the line would sit inside the sphere and never be reached.
@@ -411,7 +412,7 @@ export async function weaponClip({dir,preset,glbPath='public/data/character/citi
    };
    const lineGap=eye=>{const base=sight.clone().add(new Vector3(0,.035,0));return eye.clone().sub(base).projectOnPlane(forward).length();};
    // Iterated: the head bone pivots above the neck, so one pass lands short.
-   let budget=25*raised;
+   let budget=10*raised;
    for(let i=0;i<5&&budget>.5;i++){
     const {eye,neck,onLine}=headTurn();
     const full=new Quaternion().setFromUnitVectors(eye.clone().sub(neck).normalize(),onLine.clone().sub(neck).normalize());

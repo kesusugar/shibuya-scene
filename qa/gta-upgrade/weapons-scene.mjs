@@ -81,10 +81,10 @@ await shot('01-player','player mode, fists, pistol at the hip, katana on the bac
 // The katana: 3, then a cut.
 await js(`window.dispatchEvent(new KeyboardEvent('keydown',{key:'3'}))`);
 await frames(6);
-await shot('02-katana','katana drawn (Sword_Idle)');
+await shot('02-katana','katana drawn: the two-handed guard (SwordIdle, CMU 02_07)');
 await js(`window.__SHIBUYA_MELEE__.request()`);
 await until('window.__SHIBUYA_MELEE__.phase==="active"||window.__SHIBUYA_MELEE__.snapshot().cuts>0',60,'the cut');
-await shot('03-katana-cut','katana cut, in its window');
+await shot('03-katana-cut','the two-handed cut, in its window');
 await until('window.__SHIBUYA_MELEE__.phase==="idle"',90,'the cut to end');
 // The pistol: 2, aim, fire.
 await js(`window.dispatchEvent(new KeyboardEvent('keydown',{key:'2'}))`);
@@ -99,6 +99,22 @@ for(let k=0;k<3;k++){
  await shot(`05-pistol-shot-${k}`,'a shot, the frame it was fired');
  await frames(3);
 }
+await js(`window.__SHIBUYA_ARSENAL__.aim(false)`);
+// §9ah: the submachine gun: 4, the low ready, then aim and hold the trigger for a burst.
+await js(`window.dispatchEvent(new KeyboardEvent('keydown',{key:'4'}))`);
+await until('window.__SHIBUYA_FIGURE__?.weapons?.current==="smg"',60,'the submachine gun');
+await frames(4);
+await shot('08-smg-low','submachine gun drawn: the low ready');
+await js(`window.__SHIBUYA_ARSENAL__.aim(true)`);
+await until('window.__SHIBUYA_FIGURE__?.aim?.aimWeight>.95',60,'the aim');
+await shot('09-smg-aim','submachine gun shouldered, crosshair');
+{const before=await js('window.__SHIBUYA_ARSENAL__.snapshot().shots');
+ await js(`window.__SHIBUYA_ARSENAL__.trigger();window.__SHIBUYA_ARSENAL__.hold(true)`);
+ await until(`window.__SHIBUYA_ARSENAL__.snapshot().shots>=${before}+2`,120,'a burst');
+ await shot('10-smg-burst','a burst: recoil and the open crosshair');
+ await until(`window.__SHIBUYA_ARSENAL__.snapshot().shots>=${before}+6`,240,'a longer burst');
+ await js(`window.__SHIBUYA_ARSENAL__.hold(false)`);
+ await shot('11-smg-burst-end','the burst released');}
 await js(`window.__SHIBUYA_ARSENAL__.aim(false)`);
 if(process.env.POLICE!=='0'){
  // W3: ☆3 by the wanted level's own rule (a police car taken), then wait for armed officers.

@@ -55,7 +55,7 @@ export const GLYPHS = Object.freeze({
 export function controlHints(profile, driving = false) {
  if (!profile || profile === 'keyboard' || profile === 'raw' || profile === 'switch-raw')
   return driving ? 'WASD 運転 · Space サイドブレーキ · F 降りる · H ホーン/サイレン'
-   : 'E/クリック 攻撃 · 1/2/3 武器 · 右ボタン 構える · R 装填 · Q 回避 · C しゃがむ';
+   : 'E/クリック 攻撃 · 1/2/3/4 武器 · 右ボタン 構える · R 装填 · Q 回避 · C しゃがむ';
  const g = GLYPHS[profile] ?? GLYPHS.standard;
  return driving ? `${g.ZR} アクセル · ${g.ZL} ブレーキ · ${g.R} サイドブレーキ · ${g.top} 降りる · ${g.LS} ホーン · ${g.up} サイレン`
   : `${g.ZR} 攻撃 · ${g.ZL} 構える · ${g.L}/${g.R} 武器 · ${g.right} 装填 · ${g.left} 回避 · ${g.bottom} 走る · ${g.top} 乗る · ${g.LS} しゃがむ`;
@@ -89,12 +89,13 @@ export function createInputMap() {
  };
  const api = {
   /**
-   * One frame. `mode` is 'foot' or 'car'. Returns {profile, move, look, aim, run, throttle,
-   * brake, handbrake, pressed: string[]}; `move.y` is forward (+), `look` already curved.
+   * One frame. `mode` is 'foot' or 'car'. Returns {profile, move, look, aim, fire, run, throttle,
+   * brake, handbrake, pressed: string[]}; `move.y` is forward (+), `look` already curved. `fire`
+   * is ZR held on foot (§9ah: an automatic keeps firing while it is).
    */
   poll(pad, dt = 0, mode = 'foot') {
    const profile = profileOf(pad);
-   const none = {profile, move: {x: 0, y: 0}, look: {x: 0, y: 0}, aim: false, run: false, throttle: 0, brake: 0, handbrake: false, pressed: []};
+   const none = {profile, move: {x: 0, y: 0}, look: {x: 0, y: 0}, aim: false, fire: false, run: false, throttle: 0, brake: 0, handbrake: false, pressed: []};
    if (!pad) {prev = prev.fill(false); throttle = brake = 0; return none;}
    // Outside the standard mapping the button indices mean nothing in particular, so no button
    // is read; the first two sticks are the same on every pad we know of, so they still work.
@@ -114,7 +115,7 @@ export function createInputMap() {
    brake = trigger(brake, value(pad, BUTTON.ZL), dt);
    prev = now;
    return {profile, move: {x: move.x, y: move.y}, look: {x: look.x, y: look.y},
-    aim: mode === 'foot' && now[BUTTON.ZL], run: mode === 'foot' && now[BUTTON.bottom],
+    aim: mode === 'foot' && now[BUTTON.ZL], fire: mode === 'foot' && now[BUTTON.ZR], run: mode === 'foot' && now[BUTTON.bottom],
     throttle: mode === 'car' ? throttle : 0, brake: mode === 'car' ? brake : 0,
     handbrake: mode === 'car' && now[BUTTON.R], pressed};
   },

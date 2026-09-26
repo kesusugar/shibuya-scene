@@ -6,7 +6,7 @@
 // It owns what the player is holding, and writes it onto the player's state -- `weapon`, and for
 // the pistol `aim`, `aimTarget`, `aimHeading`, `shotLeft`, `reloadLeft` -- which is what the
 // figure draws (figure.mjs, aim-layer.mjs) and combat reads.
-import {createInventory,WEAPONS} from './weapons.mjs';
+import {createInventory,WEAPONS,GUNS} from './weapons.mjs';
 import {createWeaponEffects} from './weapon-effects.mjs';
 import {castShot,peopleAlong,BALLISTICS} from './ballistics.mjs';
 import {onRails} from './combat.mjs';
@@ -59,6 +59,25 @@ export function gunfirePanic(crowd, x, z, {radius = WEAPONS.pistol.witnessRadius
 }
 
 /**
+ * §9ah: a round's direction off the aim for an automatic: the spread cone (a deterministic
+ * sunflower spiral over the burst, so a test can repeat it) plus the recoil's climb. Pure.
+ * `dir` is the aim direction; returns a new unit vector.
+ */
+export function spreadDirection(dir, {spread = 0, climb = 0, index = 0} = {}) {
+ const len = Math.hypot(dir.x, dir.y, dir.z) || 1, d = {x: dir.x / len, y: dir.y / len, z: dir.z / len};
+ // The aim's own frame: a horizontal side vector r, and up = d x r (for d = +Z, r = +X, up = +Y).
+ let rx = d.z, rz = -d.x; const rl = Math.hypot(rx, rz) || 1; rx /= rl; rz /= rl;
+ const ux = d.y * rz, uy = d.z * rx - d.x * rz, uz = -d.y * rx;
+ const golden = 2.399963, r = spread * Math.sqrt(((index * .618034) % 1)), a = index * golden;
+ const off = Math.tan(climb);
+ const x = d.x + (rx * Math.cos(a) + ux * Math.sin(a)) * r + ux * off;
+ const y = d.y + uy * Math.sin(a) * r + uy * off;
+ const z = d.z + (rz * Math.cos(a) + uz * Math.sin(a)) * r + uz * off;
+ const n = Math.hypot(x, y, z);
+ return {x: x / n, y: y / n, z: z / n};
+}
+
+/**
  * @param {object} [options]
  * @param {any} [options.effects]
  * @param {null|((shot:any)=>void)} [options.onShot] every shot: the scene's sound, bloom and crimes
@@ -67,6 +86,9 @@ export function gunfirePanic(crowd, x, z, {radius = WEAPONS.pistol.witnessRadius
 export function createArsenal({effects = createWeaponEffects(), onShot = null, onWitness = null} = {}) {
  const inventory = createInventory();
  let wasDriving = false, aimHeld = false, pendingShot = 0, lastShot = null, touchAim = 0;
+ // §9ah: the automatic's trigger, held; its spread and recoil, and the round index in the burst.
+ let triggerHeld = false, spread = 0, recoil = 0, burst = 0;
+ const isGun = id => GUNS.includes(id);
  const stats = {switches: 0, clanks: 0, shots: 0, hits: 0, headshots: 0, kills: 0, walls: 0, cars: 0, misses: 0, panicked: 0, maxPanic: 0};
 
  /** Where the camera's centre ray first meets something, or `range` out along it. */
@@ -99,22 +121,28 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
  }
 
  function fire(player, world, figure, time) {
-  const s = player.state, t = s.aimTarget;
+  const s = player.state, t = s.aimTarget, gunId = inventory.current, w = WEAPONS[gunId];
   if (!inventory.fire()) return null;
   // The muzzle as the figure holds it; without a figure, in front of the chest.
   const from = (figure && world.muzzle?.(figure)) ||
    {x: s.x + Math.sin(s.aimHeading ?? s.heading) * .45, y: s.y + ARSENAL.muzzleFallback, z: s.z + Math.cos(s.aimHeading ?? s.heading) * .45};
-  const dir = {x: t.x - from.x, y: t.y - from.y, z: t.z - from.z};
-  const hit = castShot({from, dir, range: WEAPONS.pistol.range, solid: world.solid, ground: world.ground,
-   cars: world.cars, dimsOf: world.dimsOf, people: world.people(from, dir, WEAPONS.pistol.range), skip: world.skip, bodyOf: world.bodyOf});
+  let dir = {x: t.x - from.x, y: t.y - from.y, z: t.z - from.z};
+  if (w.auto) {
+   // The round goes where the gun points after the recoil so far, inside the burst's spread;
+   // then this round adds its own climb and opens the spread.
+   dir = spreadDirection(dir, {spread: w.spread.first + spread, climb: recoil, index: burst});
+   burst++; spread = Math.min(w.spread.max, spread + w.spread.perShot); recoil += w.recoil.climb;
+  }
+  const hit = castShot({from, dir, range: w.range, solid: world.solid, ground: world.ground,
+   cars: world.cars, dimsOf: world.dimsOf, people: world.people(from, dir, w.range), skip: world.skip, bodyOf: world.bodyOf});
   stats.shots++;
-  s.shotLeft = WEAPONS.pistol.shotSeconds;
+  s.shotLeft = w.shotSeconds;
   effects.muzzle(from.x, from.y, from.z, hit.dir);
   effects.tracer(from, hit.point);
   let outcome = null;
   if (hit.kind === 'person') {
    stats.hits++; if (hit.zone === 'head') stats.headshots++;
-   outcome = world.wound?.(hit.target, {damage: WEAPONS.pistol.bodyDamage, head: hit.zone === 'head', dir: hit.dir}) ?? null;
+   outcome = world.wound?.(hit.target, {damage: w.bodyDamage, head: hit.zone === 'head', dir: hit.dir, weapon: gunId}) ?? null;
    if (outcome === 'killed') stats.kills++;
    world.bleed?.(hit.point, hit.dir);
   } else if (hit.kind === 'wall' || hit.kind === 'ground') {
@@ -126,11 +154,11 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
    effects.burst(hit.point.x, hit.point.y, hit.point.z, {count: 14, nx: -hit.dir.x, nz: -hit.dir.z});
   } else stats.misses++;
   // The street hears it (R14): the nearest run, capped; the HQ crowd looks, bounded there.
-  const panicked = gunfirePanic(world.crowd, s.x, s.z);
+  const panicked = gunfirePanic(world.crowd, s.x, s.z, {radius: w.witnessRadius, cap: w.panicCap, severity: w.witnessSeverity});
   stats.panicked += panicked; stats.maxPanic = Math.max(stats.maxPanic, panicked);
-  onWitness?.({x: s.x, z: s.z, severity: WEAPONS.pistol.witnessSeverity, radius: WEAPONS.pistol.witnessRadius, kind: 'gunshot'});
+  onWitness?.({x: s.x, z: s.z, severity: w.witnessSeverity, radius: w.witnessRadius, kind: 'gunshot'});
   lastShot = {kind: hit.kind, zone: hit.zone, distance: +hit.distance.toFixed(2), outcome, time,
-   from: {...from}, point: hit.point, target: hit.target?.id ?? null};
+   from: {...from}, point: hit.point, target: hit.target?.id ?? null, weapon: gunId};
   onShot?.({...lastShot, heading: s.aimHeading ?? s.heading, hit});
   if (inventory.state.rounds === 0) inventory.reload();
   return lastShot;
@@ -157,13 +185,18 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
   },
   /** The right mouse button, or the pad's LB. */
   aim(on) {aimHeld = !!on;},
+  /** §9ah: the attack button held (the mouse's left, E, the pad's ZR): an automatic keeps firing. */
+  hold(on) {triggerHeld = !!on; if (!on && WEAPONS[inventory.current]?.auto) pendingShot = 0;},
+  /** §9ah: the drawn automatic's muzzle climb (radians) and spread, for the figure and the camera. */
+  get recoil() {return recoil;},
+  get spread() {return spread;},
   /**
    * The attack button with the pistol out. With the gun already up it fires at once; otherwise
    * it raises the gun and fires when it is up (a hip shot is not a thing this body can do). On a
    * phone (`touch`) it also locks on for the shot. Returns false if this is not a gun.
    */
   trigger({touch = false} = {}) {
-   if (inventory.current !== 'pistol') return false;
+   if (!isGun(inventory.current)) return false;
    if (inventory.state.rounds === 0) {inventory.reload(); return true;}
    pendingShot = ARSENAL.raiseWait; if (touch) touchAim = ARSENAL.raiseWait + .35;
    return true;
@@ -193,9 +226,19 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
    if (driving) s.crouching = false;              // W4: nobody crouches in a car seat
    s.weapon = inventory.current;
    s.shotLeft = Math.max(0, (s.shotLeft ?? 0) - dt);
+   // §9ah: an automatic's recoil settles and its spread closes; a released trigger ends the burst.
+   const drawnGun = WEAPONS[inventory.current];
+   if (drawnGun?.auto) {
+    recoil = Math.max(0, recoil - recoil * Math.min(1, drawnGun.recoil.settle * dt));
+    if (!triggerHeld) {spread = Math.max(0, spread - drawnGun.spread.recover * dt); burst = 0;}
+   } else {recoil = 0; spread = 0; burst = 0;}
+   s.recoil = recoil;
    s.reloadLeft = inventory.state.reloading;
    pendingShot = Math.max(0, pendingShot - dt); touchAim = Math.max(0, touchAim - dt);
-   const gun = inventory.current === 'pistol' && !driving && s.alive !== false && !(s.vehiclePhase > 0);
+   const gun = isGun(inventory.current) && !driving && s.alive !== false && !(s.vehiclePhase > 0);
+   const auto = gun && !!WEAPONS[inventory.current].auto;
+   // An automatic keeps the gun up while the trigger is held, as a pending shot does.
+   if (auto && triggerHeld && inventory.state.rounds > 0) pendingShot = Math.max(pendingShot, .05);
    const wants = gun && (aimHeld || pendingShot > 0 || touchAim > 0);
    s.aim = wants && inventory.state.reloading <= 0 ? 1 : 0;
    if (!gun || !world) {if (!gun) s.aim = 0; return;}
@@ -204,7 +247,7 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
     const lock = lockTarget(player, camera, world, touch, pad);
     let point;
     if (lock) point = {x: lock.x, y: lock.y, z: lock.z};
-    else if (camera) point = cameraPoint(camera, world, WEAPONS.pistol.range).point;
+    else if (camera) point = cameraPoint(camera, world, WEAPONS[inventory.current].range).point;
     else point = {x: s.x + Math.sin(s.heading) * 20, y: s.y + ARSENAL.chest, z: s.z + Math.cos(s.heading) * 20};
     s.aimTarget = point; s.aimLock = lock?.p?.id ?? null;
     s.aimHeading = Math.atan2(point.x - s.x, point.z - s.z);
@@ -213,10 +256,14 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
    }
    // Fire once the gun is up (or at once without a figure to wait for).
    const up = !figure?.aim || figure.aim.aimWeight >= ARSENAL.raiseWeight;
-   if (pendingShot > 0 && s.aim && up && inventory.canFire) {pendingShot = 0; fire(player, world, figure, time);}
+   if (pendingShot > 0 && s.aim && up && inventory.canFire) {
+    // The pistol fires once per press; an automatic, every refire while the trigger is held.
+    if (!auto || !triggerHeld) pendingShot = 0;
+    fire(player, world, figure, time);
+   }
   },
   /** Respawn or leaving play: fists, a full magazine, nothing in flight. */
-  reset() {inventory.reset(); wasDriving = false; aimHeld = false; pendingShot = 0; touchAim = 0;},
+  reset() {inventory.reset(); wasDriving = false; aimHeld = false; pendingShot = 0; touchAim = 0; triggerHeld = false; spread = 0; recoil = 0; burst = 0;},
   snapshot() {return {...inventory.snapshot(), ...stats, aiming: aimHeld, lastShot, effects: effects.stats};},
   dispose() {effects.dispose();}
  };
