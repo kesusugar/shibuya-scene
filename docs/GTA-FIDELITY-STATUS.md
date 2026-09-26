@@ -5719,6 +5719,68 @@ into reach instead bent the right wrist to 92°, so that was reverted. The right
 Still not done before the game: the cut's hit frame and reach measured like `SWORD`, a fire
 recoil, the walk under the upper body, citizen.glb, and a device look.
 
+## 9ah. The two-handed weapons in the game — the katana (slot 3) and a submachine gun (slot 4) (same branch)
+
+The user: "残っている点とゲームに組み込むための作業を行なってほしい" — the two points §9ag left on the
+katana, and everything §9ag listed as missing before the game.
+
+**The two remaining katana points (the bake, `scripts/cmu/weapon-clip.mjs`).**
+- *The left palm 4.4 cm off its place on the handle* in the overhead frames: the left clavicle now
+  turns toward the handle (≤ 20°) when the place is past 97% of the left arm, which brings the
+  shoulder joint closer. **4.4 → 0 cm.** (Pulling the sword into reach with the right arm instead
+  bent the right wrist to 92°; that was reverted in §9ag.)
+- *The right wrist at 50°* (median): the right hand may turn the blade up to 15° off the plane of
+  the cut, at a cost of 0.6° of bend per degree so the edge still leads, together with the elbow
+  swivel. **50 → 10° at median** (max 60°).
+
+**Into citizen.glb (`scripts/convert-character.mjs`).** A CMU-weapons section, like the hybrid
+Run, reads `assets/character/cmu-weapons/` and replaces or adds clips:
+`SwordAttack` ← katana-cut and `SwordIdle` ← katana-guard (the SAME names, so the hit test, the
+hold on a wall and the stance play them unchanged), `SmgLow` ← the raise's first key (the low
+ready), `SmgAim` ← the shouldered hold (looped). A new `katana-guard` preset is 02_07's one quiet
+stretch with both hands on the handle (17.95–18.7 s). The report carries each clip's trial,
+window and AMC SHA-256, and CMU's acknowledgment text. The upstream `SwordAttack` travel is
+dropped from `gait` (these clips play in place; the cut's pelvis moves 7 cm). `citizen.glb`
+2.77 → 2.75 MB. The bake now reads the gun's grip frame and shape from `GRIP.smg` / `SHAPE.smg`
+(its output was byte-identical after the change), so the clips and the mesh cannot drift apart.
+
+**The katana's hit timing and reach, measured (`qa/gta-upgrade/sword-timing.mjs` → `SWORD`).**
+The two-handed cut is raised over the head and comes down as a diagonal from high on the LEFT
+(the tip 2.25 m up) to the right knee (0.69 m) — the one-handed Quaternius cut ran right to
+left. Window **0.674–0.890 s** of 1.526 s (peak 0.814), the tip at **17 m/s**, tip reach
+**1.42 m**; `WEAPONS.katana.reach` 1.9 → 1.7 (tip reach + a body radius), `hands` 1 → 2. The R6
+tests now assert the left-to-right sweep, the wall on the starting side, and a tip from over the
+head to below the waist.
+
+**The submachine gun (slot 4).** Generic (`サブマシンガン`), no real model or maker.
+- `weapons.mjs`: 30 rounds, a 0.085 s refire (about 700 a minute), 25 per body hit (a head hit
+  still kills), 50 m, a 2.0 s reload; spread 0.004 rad on the first round, +0.006 a round to
+  0.06, closing at 0.25/s when the trigger is let go; recoil 0.035 rad of climb a round, settling
+  at 9/s, the camera taking 35% of it. Each gun keeps its own magazine (`state.ammo`).
+- The mesh (`weapon-mesh.mjs`) is built to the numbers the clips were baked against: the butt
+  0.33 m behind the grip, the fore-end the left hand closes on 0.28 m ahead, the rear sight's top
+  0.115 m up. Hidden when not in the hand.
+- **Walking with it (the upper-body layer, `aim-layer.mjs`).** Drawn, the upper body holds SmgLow
+  over whatever the legs do; aimed it blends to SmgAim (shouldered, the head down to the sights,
+  looped) and the pistol's spine correction puts the muzzle on the target; each round's recoil
+  is added after the correction so the climb shows. Reloading drops it to the low ready with a
+  dip. Walking 45° off the aim the muzzle ray passes within 0.25 m at 10 m (the pistol's R1 bound).
+- **Firing (`arsenal.mjs`).** The attack button HELD — the mouse's left, E, the pad's ZR
+  (`input-map` `fire`), the touch button — keeps an automatic firing (`hold()`); the pistol still
+  fires once a press. Each round's direction is the aim plus the recoil so far inside the burst's
+  spread (`spreadDirection`, a deterministic spiral). The crosshair opens with the spread. The
+  gunshot is the recorded CC0 clip a little higher and lighter with one reflection each side, so a
+  burst does not smear.
+- **The street and the police.** A burst is heard 55 m out and can send up to 80 running; an
+  officer counts it as a weapon out, a kill with it as a weapon kill (`WEAPON_IDS`).
+- The head tilt at the aim was 30° in the game figure (read as lolling); the bake now keeps the
+  head's turn to 10° and moves the stock under the eye instead: 15° sideways, eye on the sights.
+
+**Checks.** `tests/smg.test.mjs` (8), `tests/cmu-weapon-clip.test.mjs` (12),
+`tests/weapons.test.mjs` updated (the inventory's four slots, the SMG's magazine and rate, the
+two-handed cut); the game-figure bench `qa/gta-upgrade/weaponbench.html` gains smg-low, smg-aim,
+smg-aim-walk, smg-recoil and smg-walk; `qa/gta-upgrade/weapons-scene.mjs` gains the SMG steps.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
