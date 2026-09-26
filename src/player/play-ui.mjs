@@ -19,7 +19,7 @@ export function createPlayUI(network,parent,{onExit,onDrive}={}){
  root.insertAdjacentHTML('beforeend',`<div class="play-wheel" role="dialog" aria-label="武器を選ぶ" hidden><div class="play-wheel-ring">${WHEEL.order.map((id,i)=>`<div class="play-wheel-slot" data-slot="${id}" style="--a:${i*360/WHEEL.order.length}deg"><b></b><small></small></div>`).join('')}<div class="play-wheel-centre"><b></b><small></small></div></div></div>`);
  document.body.appendChild(root);
  const query=s=>root.querySelector(s),canvas=query('canvas'),c=canvas.getContext('2d'),task=query('.play-task'),timer=query('.play-timer'),start=query('.play-start'),cancel=query('.play-cancel'),progress=query('.play-progress'),speed=query('.play-speed'),health=query('.play-health'),healthBar=query('.play-health-bar i'),healthValue=query('.play-health-value'),damage=query('.play-damage'),drive=query('.play-drive'),wanted=query('.play-wanted'),stars=[...root.querySelectorAll('.play-wanted i')],banner=query('.play-wanted-banner'),weaponLabel=query('.play-weapon'),crosshair=query('.play-crosshair'),hitmarker=query('.play-hitmarker'),ammo=query('.play-ammo'),ammoName=query('.play-ammo-name'),ammoRounds=query('.play-ammo-rounds'),ammoMag=query('.play-ammo-mag'),ammoBar=query('.play-ammo-bar i'),wheelBox=query('.play-wheel'),wheelSlots=[...root.querySelectorAll('.play-wheel-slot')],wheelCentre=query('.play-wheel-centre');
- let bannerFor=0,bannerSeq=0;
+ let bannerFor=0,bannerSeq=0,lastWanted=null;
  let current=null,visible=false,clock=0,disposed=false;
  query('.play-exit').onclick=()=>onExit?.();drive.onclick=()=>onDrive?.();
  start.onclick=()=>{if(current&&current.alive!==false){mission.start(current);document.exitPointerLock?.();clock=1;}};
@@ -30,6 +30,16 @@ export function createPlayUI(network,parent,{onExit,onDrive}={}){
   m.beginPath();for(const e of network.edges){const points=e.points??[[network.nodes[e.from].x,network.nodes[e.from].z],[network.nodes[e.to].x,network.nodes[e.to].z]];points.forEach((p,i)=>m[i?'lineTo':'moveTo']((p[0]+250)*scale,(p[1]+250)*scale));}m.stroke();}
  function draw(position,car,target){if(!c)return;const extent=90,k=320/(extent*2);c.fillStyle='#0c1821';c.fillRect(0,0,320,320);c.drawImage(map,(position.x-extent+250)*scale,(position.z-extent+250)*scale,extent*2*scale,extent*2*scale,0,0,320,320);
   const dot=(p,color,r)=>{if(!p)return;const x=Math.max(8,Math.min(312,160+(p.x-position.x)*k)),y=Math.max(8,Math.min(312,160+(p.z-position.z)*k));c.fillStyle=color;c.beginPath();c.arc(x,y,r,0,Math.PI*2);c.fill();};
+  // Roadmap stage 3: while the police search, their circle round where they last saw the player
+  // (red and blue in turn, as the stars flash); the helicopter as a white cross, its light a ring.
+  const w=lastWanted;
+  if(w?.stars&&w.flashing&&w.lastSeen&&w.searchRadius){const cx=160+(w.lastSeen.x-position.x)*k,cy=160+(w.lastSeen.z-position.z)*k,r=w.searchRadius*k;
+   const blue=Math.floor(performance.now()/500)%2;c.save();c.beginPath();c.arc(cx,cy,r,0,Math.PI*2);c.fillStyle=blue?'rgba(80,140,255,.18)':'rgba(255,70,70,.18)';c.fill();
+   c.lineWidth=2;c.strokeStyle=blue?'rgba(120,170,255,.8)':'rgba(255,110,110,.8)';c.stroke();c.restore();}
+  const h=w?.heli;
+  if(h?.active){const hx=160+(h.x-position.x)*k,hy=160+(h.z-position.z)*k;
+   if(h.light&&!h.leaving){c.beginPath();c.arc(160+(h.light.x-position.x)*k,160+(h.light.z-position.z)*k,Math.max(3,7*k),0,Math.PI*2);c.strokeStyle='rgba(255,242,208,.9)';c.lineWidth=1.5;c.stroke();}
+   if(hx>-8&&hx<328&&hy>-8&&hy<328){c.strokeStyle='#fff';c.lineWidth=3;c.beginPath();c.moveTo(hx-7,hy-7);c.lineTo(hx+7,hy+7);c.moveTo(hx+7,hy-7);c.lineTo(hx-7,hy+7);c.stroke();}}
   if(car?.active)dot(car,'#70d7ff',6);if(target)dot(target,'#68e7b4',8);
   c.save();c.translate(160,160);c.rotate(-position.heading);c.fillStyle='#fff';c.beginPath();c.moveTo(0,10);c.lineTo(-7,-7);c.lineTo(7,-7);c.closePath();c.fill();c.restore();
  }
@@ -39,6 +49,7 @@ export function createPlayUI(network,parent,{onExit,onDrive}={}){
   */
  function setWanted(w,dt=0){
   if(disposed||!w)return;
+  lastWanted=w;
   const n=w.stars|0;
   wanted.dataset.stars=String(n);wanted.dataset.flash=String(!!w.flashing);
   wanted.setAttribute('aria-label',`手配度 ${n}${w.flashing?'（捜索中）':''}`);
