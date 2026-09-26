@@ -5694,6 +5694,31 @@ Not done, and needed before any of it is in the game: timing (hit frame, reach) 
 clip like `SWORD` (§9y); a loopable hold and a fire recoil for the gun; the walk with the upper
 body layered over it (as the pistol aim is); citizen.glb conversion; a device look. `tests/cmu-weapon-clip.test.mjs` (6).
 
+## 9ag. The two-handed trial, made natural — every concern §9af listed, fixed in the bake (same branch; still bench only)
+
+The user: "今実装したところで気になる点は全部治して自然な感じにして". Each §9af concern, what
+`scripts/cmu/weapon-clip.mjs` now does about it, and the number before → after (the clip's own
+`measured` block, asserted by `tests/cmu-weapon-clip.test.mjs`, 10 tests; 6 of them fail on the
+§9af clips):
+
+| concern (§9af) | fix | before → after |
+| --- | --- | --- |
+| cut too slow (hands ~3 m/s) | a time warp (`warp` knots): raise 1.25x, the cut 2x, recovery 1.3x | grip peak 3.3 → **6.7 m/s**; the clip 2.2 → **1.53 s** |
+| trunk folds deep in the follow-through | past 28° off vertical only a third of the excess is kept, spread over spine_01-03 (iterated, since the tilt is measured from the pelvis); the blade turns with the chest | 52° → **36°** |
+| wrists bent 68-77° (median) | 70% of each hand's twist moves into its forearm (a wrist cannot twist; the rig has no twist bones, and the hand sits on the forearm's +Y so the wrist does not move); the elbow swivels ±40° about the shoulder-wrist line to the least bend; the left hand may roll ±60° round the handle/fore-end | katana R 68 → **50** (max 62), L 77 → **21** (max 32); gun R 78 → **28**, L 38 → **11** |
+| gun 17° up, in front of the chest | the raise goes from a low ready (butt in the shoulder, muzzle 40° down, the gun pivoting about the butt) to level, blended by the source's own hand height, so the timing is the capture's | 17° → **0°** at the hold; −40° at the start |
+| butt off the shoulder, head not on the sights | the chest bladed up to 15° more (the neck turns back so the face stays on the target); the butt in the pocket 8 cm inside the shoulder joint, moved across the line of fire until the sight line is within 2.5 cm of the eye; the head brought down to the sights (≤25°, neck 60% / head 40%, aimed at where the sight line crosses the sphere the eye can reach) | eye to sight line 12 → **0.1 cm** (max 2.1 in the raise) |
+| left hand out of reach | if the fore-end is past 97% of the left arm, the gun comes toward the left shoulder by the shortfall | 13 cm → **0** |
+| hold not loopable | the last 0.4 s eases back onto the first key | loop closes exactly |
+
+The katana's left palm can still sit up to 4.4 cm from its intended place on the handle (along
+the handle, in the overhead frames; the hand stays on it — `katana-close.png`). Pulling the sword
+into reach instead bent the right wrist to 92°, so that was reverted. The right wrist at 50°
+(max 62°) is set by the edge having to lead the cut.
+
+Still not done before the game: the cut's hit frame and reach measured like `SWORD`, a fire
+recoil, the walk under the upper body, citizen.glb, and a device look.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
@@ -6014,6 +6039,15 @@ bone's rest direction first. The same step is what RUN 5.7's "shoulder 10° high
 back at the chest in 170 of 188 samples). Taking the blade axis as left→right turned the katana
 backwards and the yaw that aligns it turned the whole figure away from the camera. The take is
 mirrored left for right, since the game's katana is in the right hand.
+
+**The two-handed trial (§9ag): a low ready tilts the gun about the butt, not the grip.**
+Dipping the muzzle 40° about the pistol grip swung the stock up through the chest. A low ready
+keeps the butt in the shoulder; pivoting there keeps the stock outside the body.
+
+**The two-handed trial (§9ag): a head can only swing its eye on a sphere about the neck.** Aiming
+the eye at the nearest point of the sight line never converged (that point is inside the
+sphere): the target is where the line crosses the sphere. And when the line is 15 cm to the side,
+no neck reaches it — the body has to blade and the stock move in, or the head ends ear-on-shoulder.
 
 ## 17. Files that matter
 
