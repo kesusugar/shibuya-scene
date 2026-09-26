@@ -316,6 +316,8 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
   const timing=rate===1?base:{...base,duration:base.duration/rate,windup:base.windup/rate,activeEnd:base.activeEnd/rate,peak:base.peak/rate};
   const state=player.state,aim=crowd?lockOn(crowd,state):null;
   swing={id:swingIndex,name,timing,elapsed:0,phase:PHASE.WINDUP,hitConsumed:false,aim,katana,rate,cut:new Set(),stopped:null};
+  // §9aj G1: the one the swing is thrown at gets a detailed body before it lands.
+  if(aim)aim.aimedUntil=(crowd?.time??0)+timing.duration+.3;
   stats.swings++;
   aimAt(state,aim?angleTo(state,aim):forwardOf(state));
   // The renderer plays the clip for as long as the clip lasts, not for a fixed 0.42 s.

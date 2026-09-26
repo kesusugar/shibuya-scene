@@ -40,8 +40,19 @@ export const NEAR_IK_LIMITS={high:8,medium:4,low:0};
  * picked up afterwards would stand up in the idle pose and then fall. The rest stay with the mass
  * crowd, which plays its knock-down as before.
  */
-export const RAGDOLL_LIMIT=3;
+export const RAGDOLL_LIMIT=4;
 const fallen=p=>p.struck!==undefined&&p.combatDead&&!!p.ragdoll;
+
+/**
+ * §9aj G1: whoever the player is aiming at or has just hit gets a humanoid, wherever they stand
+ * within a gun's reach -- as GTA does: not every pedestrian is detailed, but the one you shoot
+ * always is. `aimedUntil` is written by the arsenal (lock-on, or the person on the crosshair) and
+ * by the katana's lock-on; `hitAt` by every landed blow. Such a person outranks everyone merely
+ * nearer and is kept out to `PRIORITY_RANGE`; the bystander they displace goes back to the mass
+ * crowd, which draws them just as well at that distance.
+ */
+export const PRIORITY_RANGE=55,PRIORITY_HOLD=4;
+const priorityOf=(p,clock)=>(p.aimedUntil>clock)||(clock-(p.hitAt??-1e9)<PRIORITY_HOLD);
 
 // RUN 6.8 moved what a citizen looks like into src/life/appearance.mjs. It used to be eight
 // wardrobes and a skin list right here, which produced eight recolours of one body -- the
@@ -151,10 +162,13 @@ export function createNearCharacters(tier='high',{ctx=null}={}){
    const limit=hqCovered?(human?limitFor(HUMANOID_LIMITS):0):(NEAR_LIMITS[tier]??4);
    if(!limit){clear();return selected;}
    let bodies=0;
+   // A body killed while held falls under its ragdoll; so does one killed this instant even if it
+   // was not held (§9aj: it was standing, so the ragdoll starts from a standing pose, which is
+   // what it was in). One picked up later would stand up and then fall, so it is left alone.
    const candidates=people.filter(p=>p.active&&!p.controlled&&p.archetype!=='kid'
-     &&(p.struck===undefined||(fallen(p)&&selected.has(p.id)&&bodies++<RAGDOLL_LIMIT))
-     &&Math.hypot(p.x-focus.x,p.z-focus.z)<(selected.has(p.id)?30:25))
-    .map(p=>({p,score:Math.hypot(p.x-focus.x,p.z-focus.z)-(selected.has(p.id)?3:0)-(p.combatTarget?40:0)-(p.reactionUntil>clock?20:0)-(fallen(p)?60:0)})).sort((a,b)=>a.score-b.score||a.p.id-b.p.id).slice(0,limit);
+     &&(p.struck===undefined||(fallen(p)&&(selected.has(p.id)||clock-(p.hitAt??-1e9)<.25)&&bodies++<RAGDOLL_LIMIT))
+     &&Math.hypot(p.x-focus.x,p.z-focus.z)<(priorityOf(p,clock)?PRIORITY_RANGE:selected.has(p.id)?30:25))
+    .map(p=>({p,score:Math.hypot(p.x-focus.x,p.z-focus.z)-(selected.has(p.id)?3:0)-(p.combatTarget?40:0)-(p.reactionUntil>clock?20:0)-(fallen(p)?60:0)-(priorityOf(p,clock)?80:0)})).sort((a,b)=>a.score-b.score||a.p.id-b.p.id).slice(0,limit);
    // The priority order is untouched by any of this: a combat target or a reacting pedestrian
    // still outranks someone merely closer, and only then does body quality follow rank.
 

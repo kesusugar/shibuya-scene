@@ -206,3 +206,63 @@ test('H4 wiring: a figure told it is a ragdoll falls from where it stood and sto
  assert.ok(pelvis.y<.35,`the pelvis is ${pelvis.y.toFixed(2)} m up`);
  figure.dispose();
 });
+
+// §9aj G1 / G2 --------------------------------------------------------------------------------------
+import {createNearCharacters,PRIORITY_RANGE} from '../src/life/near-characters.mjs';
+import {createHQLayer} from '../src/life/hq-layer.mjs';
+
+test('G1: the person on the crosshair gets a near body even 45 m out, past everyone nearer',()=>{
+ const pool=createNearCharacters('high'),people=[];
+ for(let id=0;id<40;id++)people.push({id,active:true,archetype:'adult',x:(id%8)*1.2,z:Math.floor(id/8)*1.2,heading:0,speed:1,
+  renderX:(id%8)*1.2,renderZ:Math.floor(id/8)*1.2,height:0,reactionUntil:-1});
+ const far={id:99,active:true,archetype:'adult',x:0,z:45,renderX:0,renderZ:45,heading:0,speed:1,height:0,reactionUntil:-1};
+ people.push(far);
+ let sel;for(let f=0;f<60;f++)sel=pool.update(people,{x:0,z:0},1/60,f/60);
+ assert.ok(!sel.has(99),'held at 45 m without being aimed at');
+ far.aimedUntil=10;for(let f=60;f<120;f++)sel=pool.update(people,{x:0,z:0},1/60,f/60);
+ assert.ok(sel.has(99),'the aimed-at person was not promoted');
+ assert.ok(PRIORITY_RANGE>=50);
+ // Just hit, the same holds without the aim; and it lets go a while after.
+ far.aimedUntil=0;far.hitAt=2;for(let f=120;f<180;f++)sel=pool.update(people,{x:0,z:0},1/60,f/60);
+ assert.ok(sel.has(99),'the person just hit was not held');
+ for(let f=180;f<600;f++)sel=pool.update(people,{x:0,z:0},1/60,f/60);
+ assert.ok(!sel.has(99),'held long after the hit');
+ // Killed this instant while NOT held: picked up for the ragdoll. Killed a while ago: left alone.
+ far.struck=0;far.combatDead=true;far.ragdoll={seq:1};far.hitAt=10;
+ sel=pool.update(people,{x:0,z:0},1/60,10.05);
+ assert.ok(sel.has(99),'a fresh kill was not picked up for its ragdoll');
+ const old={...far,id:98,hitAt:0};people.push(old);
+ sel=pool.update(people,{x:0,z:0},1/60,10.1);
+ assert.ok(!sel.has(98),'a body killed long ago was picked up (it would stand up and fall)');
+ pool.dispose();
+});
+
+test('G2: a body the mass crowd draws falls along the blow, even when the push was slight',()=>{
+ const manifest=JSON.parse(readFileSync('public/data/crowd/hq-crowd.json','utf8'));
+ const raw=readFileSync('public/data/crowd/hq-crowd.bin');
+ const layer=createHQLayer(manifest,raw.buffer.slice(raw.byteOffset,raw.byteOffset+raw.byteLength),{budget:40});
+ const people=[];for(let id=0;id<20;id++)people.push({id,active:true,controlled:false,archetype:'adult',state:'walking',
+  x:id,z:5,renderX:id,renderZ:5,height:0,heading:0,speed:1.2,crossing:null,queueKey:null,edge:3,route:[3]});
+ layer.sync(people,{x:0,z:0},1/60,{time:0});
+ const p=people[4];
+ // A round from the west: the blow travels +x; the push is a gunshot's 0.7 m/s scaled down.
+ Object.assign(p,{struck:0,combatDead:true,hitX:1,hitZ:0,flyX:.3,flyZ:0,flyY:0});
+ for(let f=1;f<20;f++)layer.sync(people,{x:0,z:0},1/60,{time:f/60});
+ const i=layer.crowd.indexOf(p.id),h=layer.crowd.state.heading[i];
+ // Facing against the blow (the baked fall goes over backwards): heading atan2(-1, 0) = -pi/2.
+ const off=Math.abs(Math.atan2(Math.sin(h+Math.PI/2),Math.cos(h+Math.PI/2)));
+ assert.ok(off<.1,`the body faces ${h.toFixed(2)}, not against the blow`);
+ layer.dispose();
+});
+
+import {createArsenal} from '../src/player/arsenal.mjs';
+test('G1: aiming at someone marks them for a detailed body before the round is fired',()=>{
+ const target={id:7,active:true,controlled:false,archetype:'office',x:0,z:12,y:0,height:0};
+ const crowd={time:5,grid:new Map(),flee:()=>true,say:()=>true};
+ const state={x:0,y:0,z:0,heading:0,bodyHeading:0,speed:0,alive:true},player={state};
+ const world={solid:()=>false,ground:()=>0,cars:[],dimsOf:()=>null,people:()=>[target],bodyOf:()=>({y:0,height:1.76}),
+  skip:()=>false,clear:()=>true,crowd,wound:()=>null,bleed:()=>{},muzzle:()=>null};
+ const arsenal=createArsenal();arsenal.select(2);arsenal.aim(true);
+ arsenal.frame(1/60,{player,world,camera:{position:{x:0,y:1.3,z:0},direction:{x:0,y:0,z:1}}});
+ assert.ok(target.aimedUntil>crowd.time,'the person on the crosshair was not marked');
+});

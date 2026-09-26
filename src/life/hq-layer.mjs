@@ -232,9 +232,13 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
      // by its last frame). A body thrown the way it was facing therefore fell back towards the
      // car while sliding away from it. Turn it, fast, to face against its own flight, so the
      // clip and the travel agree.
-     const fx=p.flyX??0,fz=p.flyZ??0;
-     if(Math.hypot(fx,fz)>.6&&dt>0){const want=Math.atan2(-fx,-fz),h=crowd.state.heading[i];
-      const d=Math.atan2(Math.sin(want-h),Math.cos(want-h)),k=HQ_THROW_TURN*dt;
+     // §9aj G2: a body felled by a blade or a round falls along the BLOW (hitX/hitZ), which is
+     // what the eye follows -- a gunshot's push is too slight (0.7 m/s) to have turned it at all
+     // -- and turns onto it at once, since the fall starts the moment it is struck.
+     const blow=p.combatDead&&Number.isFinite(p.hitX)&&Number.isFinite(p.hitZ)&&(p.hitX||p.hitZ);
+     const fx=blow?p.hitX:p.flyX??0,fz=blow?p.hitZ:p.flyZ??0;
+     if((blow||Math.hypot(fx,fz)>.6)&&dt>0){const want=Math.atan2(-fx,-fz),h=crowd.state.heading[i];
+      const d=Math.atan2(Math.sin(want-h),Math.cos(want-h)),k=HQ_THROW_TURN*dt*(blow?4:1);
       crowd.state.heading[i]=h+(Math.abs(d)<=k?d:Math.sign(d)*k);}
     }
     // The simulation decides how long a thrown body stays down (`struck`): 4.9 s for a driver
