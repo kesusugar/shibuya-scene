@@ -15,6 +15,7 @@
 // crowd, and the HQ crowd never decides combat -- it reads `struck` and `combatDead` off the
 // pedestrian, exactly as it already reads them for a car.
 import {ATTACKS,attackOf,SWORD,swordBearing} from './attack-timing.mjs';
+import {HIT_STOP} from './hit-stop.mjs';
 import {WEAPONS} from './weapons.mjs';
 import {blowOn,RESPONSE} from '../life/temperament.mjs';
 
@@ -212,6 +213,20 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
   crowd.strike(p,dx,dz,2.4,impulse);p.fatal=true;
  }
 
+ /**
+  * §9ai: record a blow on the person for the body that draws them -- which way it went, where it
+  * struck and how hard (figure.mjs flinches on a new `hitSeq`), and, if it killed them, how the
+  * ragdoll starts: the crowd's own knock-down push, plus the blow at the point it struck.
+  */
+ function mark(crowd,p,{dirX,dirZ,zone,strength=1,fatal=false,kind='pistol'}){
+  const l=Math.hypot(dirX,dirZ)||1;
+  p.hitSeq=(p.hitSeq??0)+1;p.hitAt=crowd.time??0;p.hitX=dirX/l;p.hitZ=dirZ/l;p.hitZone=zone;p.hitStrength=strength;
+  // H1: the victim's body catches for the blow's hit-stop, as the attacker's swing does.
+  p.hitStopUntil=Math.max(p.hitStopUntil??0,(crowd.time??0)+(HIT_STOP[kind]??HIT_STOP.pistol));
+  if(fatal)p.ragdoll={seq:p.hitSeq,dir:{x:dirX/l,z:dirZ/l},zone,strength,
+   push:{x:p.flyX??0,y:(p.flyY??0)*.5,z:p.flyZ??0},ground:p.flyGround??p.height??0};
+ }
+
  /** Tell whoever is listening that a punch was thrown here. Bounded by the listener. */
  function witness(crowd,state,victim,severity){
   if(!onWitness)return;
@@ -265,6 +280,14 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
    stats.hits++;stats.byResponse[RESPONSE.FIGHT]++;
    if(fatal)kill(crowd,p,state);
    else{engage(crowd,p,state);if(!onRails(p)){p.staggerX=blow.impulse.x;p.staggerZ=blow.impulse.z;p.staggerLeft=blow.hold;}}
+   // Where the blade met them, from how far through its sweep it was at their bearing (the tip
+   // comes down from over the head to the knee), and the way it was going: across the body from
+   // its left to its right, and away from the swordsman.
+   {const h=state.attackHeading??state.bodyHeading??state.heading??0,rel=turn(h,angleTo(state,p));
+    const u=Math.max(0,Math.min(1,(SWORD.sweepFrom-rel)/(SWORD.sweepFrom-SWORD.sweepTo||1)));
+    const tip=SWORD.tipHeight[1]+(SWORD.tipHeight[0]-SWORD.tipHeight[1])*u;
+    const away=angleTo(state,p),ax=Math.sin(away),az=Math.cos(away),rx=-Math.cos(h),rz=Math.sin(h);
+    mark(crowd,p,{dirX:ax*.6+rx*.8,dirZ:az*.6+rz*.8,zone:tip>1.45?'head':tip<.8?'legs':'body',strength:1.2,fatal,kind:'katana'});}
    onBlow?.({victim:p.id,blow,response:RESPONSE.FIGHT,time:crowd.time});
    lastBlow={victim:p.id,response:RESPONSE.FIGHT,strength:'strong',quarter:blow.quarter,fatal,time:crowd.time,weapon:'katana'};
    onEvent?.('blade_hit',{x:p.x,z:p.z,intensity:1,id:p.id});
@@ -457,7 +480,7 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
    * unless they are on rails (a crossing, the cast's track), who keep walking -- being stopped
    * there would hold the signals (§16a). Returns 'killed', 'wounded' or null (not a valid target).
    */
-  wound(crowd,player,p,{damage=50,head=false,dir={x:0,z:1},weapon='pistol'}={}){
+  wound(crowd,player,p,{damage=50,head=false,dir={x:0,z:1},weapon='pistol',part=null}={}){
    if(disposed||!crowd||!p||!eligible(p,crowd))return null;
    const state=player?.state??{x:p.x-dir.x,z:p.z-dir.z};
    p.combatHealth=(p.combatHealth??100)-(head?Infinity:damage);
@@ -466,6 +489,8 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
    p.hurtUntil=crowd.time+.45;p.hurtDuration=.45;p.hurtX=ux;p.hurtZ=uz;p.hurtStrong=true;
    if(fatal)kill(crowd,p,state,{x:ux*COMBAT.shotPush,z:uz*COMBAT.shotPush,y:0});
    else if(!onRails(p)){p.combatTarget=null;crowd.flee?.(p,ux,uz,{urgency:1,from:state});}
+   // §9ai: the round's kick on the body; an automatic's rounds are lighter each, and add up.
+   mark(crowd,p,{dirX:ux,dirZ:uz,zone:part??(head?'head':'body'),strength:weapon==='smg'?.6:1,fatal,kind:weapon==='smg'?'smg':'pistol'});
    lastBlow={victim:p.id,response:'shot',strength:'strong',quarter:'front',fatal,time:crowd.time,weapon};
    onBlow?.({victim:p.id,blow:{hold:.45,fatal,impulse:{x:ux,z:uz},strength:'strong'},response:'backoff',time:crowd.time});
    onEvent?.('bullet_hit',{x:p.x,z:p.z,intensity:1,id:p.id,head});

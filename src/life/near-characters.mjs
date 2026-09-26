@@ -4,6 +4,7 @@ import {ARCHETYPES as LOOKS,appearanceOf,paletteOf,deduplicate} from './appearan
 import {Group} from 'three';
 import {createPlayerFigure,bakedAsset} from '../player/figure.mjs';
 import {paceStep,PACE} from './pace.mjs';
+import {victimScale} from '../player/hit-stop.mjs';
 
 export const NEAR_LIMITS={high:32,medium:12,low:4};
 
@@ -32,6 +33,15 @@ export const HUMANOID_LIMITS={high:8,medium:4,low:0};
  * the baked figure has eleven bones and none of the joint names the solver needs.
  */
 export const NEAR_IK_LIMITS={high:8,medium:4,low:0};
+
+/**
+ * §9ai H4: how many of the humanoid slots may be holding a body killed by a blade or a bullet, so
+ * that its ragdoll plays out. Only a body the pool was ALREADY holding when it died is kept -- one
+ * picked up afterwards would stand up in the idle pose and then fall. The rest stay with the mass
+ * crowd, which plays its knock-down as before.
+ */
+export const RAGDOLL_LIMIT=3;
+const fallen=p=>p.struck!==undefined&&p.combatDead&&!!p.ragdoll;
 
 // RUN 6.8 moved what a citizen looks like into src/life/appearance.mjs. It used to be eight
 // wardrobes and a skin list right here, which produced eight recolours of one body -- the
@@ -140,8 +150,11 @@ export function createNearCharacters(tier='high',{ctx=null}={}){
    if(!focus){clear();return selected;}
    const limit=hqCovered?(human?limitFor(HUMANOID_LIMITS):0):(NEAR_LIMITS[tier]??4);
    if(!limit){clear();return selected;}
-   const candidates=people.filter(p=>p.active&&!p.controlled&&p.archetype!=='kid'&&p.struck===undefined&&Math.hypot(p.x-focus.x,p.z-focus.z)<(selected.has(p.id)?30:25))
-    .map(p=>({p,score:Math.hypot(p.x-focus.x,p.z-focus.z)-(selected.has(p.id)?3:0)-(p.combatTarget?40:0)-(p.reactionUntil>clock?20:0)})).sort((a,b)=>a.score-b.score||a.p.id-b.p.id).slice(0,limit);
+   let bodies=0;
+   const candidates=people.filter(p=>p.active&&!p.controlled&&p.archetype!=='kid'
+     &&(p.struck===undefined||(fallen(p)&&selected.has(p.id)&&bodies++<RAGDOLL_LIMIT))
+     &&Math.hypot(p.x-focus.x,p.z-focus.z)<(selected.has(p.id)?30:25))
+    .map(p=>({p,score:Math.hypot(p.x-focus.x,p.z-focus.z)-(selected.has(p.id)?3:0)-(p.combatTarget?40:0)-(p.reactionUntil>clock?20:0)-(fallen(p)?60:0)})).sort((a,b)=>a.score-b.score||a.p.id-b.p.id).slice(0,limit);
    // The priority order is untouched by any of this: a combat target or a reacting pedestrian
    // still outranks someone merely closer, and only then does body quality follow rank.
 
@@ -307,10 +320,14 @@ export function createNearCharacters(tier='high',{ctx=null}={}){
      // RUN 11.2: being hit shows as a hit, for as long as the blow holds them.
      hurtTime:p.hurtUntil>clock?p.hurtUntil-clock:0,hurtDuration:p.hurtDuration??.34,
      hurtX:p.hurtX??0,hurtZ:p.hurtZ??0,hurtStrong:!!p.hurtStrong,
+     // §9ai: the last blow that landed (a new hitSeq is a flinch), and a ragdoll once killed.
+     hitSeq:p.hitSeq,hitAge:clock-(p.hitAt??-1e9),hitX:p.hitX,hitZ:p.hitZ,hitZone:p.hitZone,hitStrength:p.hitStrength,
+     ragdoll:fallen(p)?p.ragdoll:null,
      // An officer's revolver (src/police/guns.mjs): drawn, aimed at the player, and its recoil.
      ...(p.officer&&p.gunDrawn?{weapon:'revolver',aim:p.gunAim??0,aimTarget:p.gunTarget,
       aimHeading:p.gunTarget?Math.atan2(p.gunTarget.x-(p.renderX??p.x),p.gunTarget.z-(p.renderZ??p.z)):p.heading,shotLeft:p.gunShotLeft??0}:{})};
-    if(slot.elapsed>=interval){slot.figure.update(state,Math.min(.1,slot.elapsed));slot.elapsed=0;}
+    // §9ai H1: a body that has just been hit catches for the blow's hit-stop.
+    if(slot.elapsed>=interval){slot.figure.update(state,victimScale(Math.min(.1,slot.elapsed),clock,p.hitStopUntil));slot.elapsed=0;}
     else slot.figure.root.position.set(state.x,state.y,state.z);
    }
    return selected;

@@ -19,6 +19,7 @@ export const BALLISTICS = Object.freeze({
  refine: 6,          // bisection steps once a solid is found (to ~4 mm)
  bodyRadius: .27,    // m: a person's capsule radius
  bodyHeight: 1.76,   // m: the reference height the head zone is measured on
+ legsHeight: .85,    // m on that body: below this a hit is to the legs (§9ai, for the reaction)
  headHeight: 1.5,    // m above the feet at the reference height
  carHeight: 1.5      // m: a car box when its type does not say
 });
@@ -86,7 +87,7 @@ export function lineOfSight(solid, a, b, {step = .5, skipStart = .4, skipEnd = .
  * scene passes a `bodyOf`). `skip(p)` leaves someone out (the shooter).
  *
  * Returns {kind: 'none'|'wall'|'ground'|'car'|'person', distance, point, target, zone}, where
- * zone is 'head' or 'body' for a person.
+ * zone is 'head' or 'body' for a person (and `part` 'head', 'body' or 'legs', for the reaction).
  * @param {any} options
  * @returns {{kind:string, distance:number, target:any, zone:string|null, point:{x:number,y:number,z:number}, dir:{x:number,y:number,z:number}}}
  */
@@ -131,7 +132,9 @@ export function castShot({from, dir, range = 60, solid = () => false, ground = n
   const t = rayCylinder(from, d, p.x, p.z, BALLISTICS.bodyRadius, y0, y0 + h);
   if (t < best.distance) {
    const y = from.y + d.y * t - y0;
-   best = {kind: 'person', distance: t, target: p, zone: y >= BALLISTICS.headHeight * h / BALLISTICS.bodyHeight ? 'head' : 'body'};
+   const zone = y >= BALLISTICS.headHeight * h / BALLISTICS.bodyHeight ? 'head' : 'body';
+   // §9ai: where on the body, for the reaction only (damage goes by `zone`): below the hips is legs.
+   best = {kind: 'person', distance: t, target: p, zone, part: zone === 'head' ? 'head' : y < BALLISTICS.legsHeight * h / BALLISTICS.bodyHeight ? 'legs' : 'body'};
   }
  }
  const t = best.distance;

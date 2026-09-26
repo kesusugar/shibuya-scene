@@ -58,6 +58,7 @@ import {createBloodMarks} from '../src/life/blood.mjs';
 import {createCrowdVoices,prioritise} from '../src/player/voices.mjs';
 import {createMeleeCombat} from '../src/player/combat.mjs';
 import {createArsenal} from '../src/player/arsenal.mjs';
+import {createHitStop} from '../src/player/hit-stop.mjs';
 import {createGunfire} from '../src/audio/gunfire.mjs';
 import {controlHints} from '../src/player/input-map.mjs';
 import {lineOfSight,peopleAlong,castShot} from '../src/player/ballistics.mjs';
@@ -546,7 +547,7 @@ export default function Home(){
  const SHAKE_SHOT=.06,SHAKE_BUMP=.05,SHAKE_PER_HIT=.12,SHAKE_PERSON_MAX=.45,SHAKE_PUNCH=.07,SHAKE_PUNCH_MAX=.25,SHAKE_FALL=2.6,SHAKE_THROW=.42;
  // RUN 12.5: the OS "reduce motion" setting quarters every camera knock; ?shake=0 removes it.
  const SHAKE_SCALE=params.get('shake')==='0'?0:(typeof matchMedia==='function'&&matchMedia('(prefers-reduced-motion: reduce)').matches?.25:1);
- let shake=0,lastAccidentWitness=-Infinity;
+ let shake=0,lastAccidentWitness=-Infinity;const hitStop=createHitStop();
  // RUN 11.3/11.4: everything the feedback bus delivers, turned into sound and a camera knock.
  // Voices go through the simulation's own queue, so its per-person cooldown and the voices'
  // concurrency cap and priorities apply to them like any other shout.
@@ -556,7 +557,14 @@ export default function Home(){
    case 'punch_swing':if(!soundscape?.event(e,who))playerAudio?.swing(e.intensity);break;
    case 'punch_hit':if(!soundscape?.event(e,who))playerAudio?.punchHit(e.intensity);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_PUNCH*(.6+.4*e.intensity));break;
    // PLAN-WEAPONS W1: the katana. A cut lands like a heavy blow; steel on a wall clanks and sparks.
-   case 'blade_hit':player?.rumble?.('cut');if(!soundscape?.event({...e,kind:'punch_hit'},who))playerAudio?.punchHit(1);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_PUNCH*1.2);break;
+   case 'blade_hit':player?.rumble?.('cut');if(!soundscape?.event({...e,kind:'punch_hit'},who))playerAudio?.punchHit(1);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_PUNCH*1.2);
+    // §9ai: the cut catches (hit-stop), bleeds where the blade met them, and sounds like a cut.
+    hitStop.hit('katana');
+    {const y=(who?.height??0)+(who?.hitZone==='head'?1.6:who?.hitZone==='legs'?.6:1.2);
+     arsenal?.effects.blood(e.x,y,e.z,{dir:{x:who?.hitX??0,y:-.2,z:who?.hitZ??1},count:26,spread:.5});gunfire?.slice(e.x,y,e.z,1);}
+    break;
+   // §9ai: a round into a body: it catches, and thumps (the blood is drawn by the arsenal at the hit point).
+   case 'bullet_hit':hitStop.hit(arsenal?.current==='smg'?'smg':'pistol');gunfire?.flesh(e.x,1.2+(who?.height??0),e.z,arsenal?.current==='smg'?.7:1);break;
    case 'blade_clank':arsenal?.event(e);gunfire?.clank(e.x,1.2,e.z);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_PUNCH);break;
    case 'player_bump':soundscape?.event(e,who);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_BUMP*e.intensity);break;
    case 'vehicle_impact':if(!soundscape?.event(e,who))playerAudio?.bodyImpact(e.intensity);break;
@@ -657,7 +665,8 @@ export default function Home(){
    carSpeedLast=Math.abs(c.speed);
    playerAudio?.engine(c.speed,playerCar.def.speed,Math.max(0,drive.forward),c.damage,playerCar.def.engine);
    if(playerCar.state.damage!==damageLast){damageLast=playerCar.state.damage;setCarDamage(damageLast);}}
-  else{player.step(dt);playerCar?.keepOwn?.(dt,player.state.x,player.state.z);{const s=lifeEntry.hooks.current?.sim;if(s)s.postUpdate=(d:number)=>player.settleCrowd(d);}if(player.state.alive)combatDeathReported=false;yieldToPlayer(lifeEntry.hooks.current?.sim,player.state,player.contact.nearby);const combat=melee.update(dt,lifeEntry.hooks.current?.sim,player);if(combat.hits>meleeHitsLast){meleeHitsLast=combat.hits;}playerFigure?.update(player.state,dt);groundPlayerShadow();
+  else{player.step(dt);playerCar?.keepOwn?.(dt,player.state.x,player.state.z);{const s=lifeEntry.hooks.current?.sim;if(s)s.postUpdate=(d:number)=>player.settleCrowd(d);}if(player.state.alive)combatDeathReported=false;yieldToPlayer(lifeEntry.hooks.current?.sim,player.state,player.contact.nearby);// §9ai H1: the player's swing and body run on the hit-stopped clock; the world does not.
+  const hitDt=hitStop.scale(dt);const combat=melee.update(hitDt,lifeEntry.hooks.current?.sim,player);if(combat.hits>meleeHitsLast){meleeHitsLast=combat.hits;}playerFigure?.update(player.state,hitDt);groundPlayerShadow();
    if(!player.state.alive&&!combatDeathReported){combatDeathReported=true;setPlayerHit(player.state.hitBy??'fight');}
    playerMarker?.update(player.state,dt,PLAYER_HEIGHT);
    // Nothing on screen said where the car was: the orange cone is over the player, so a

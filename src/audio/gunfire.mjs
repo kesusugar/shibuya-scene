@@ -9,7 +9,7 @@
 // recordings are unavailable; it is not meant to sound real.
 //
 // The katana's clank on a wall is synthesised: three inharmonic partials of struck steel and a
-// tick of noise. No recording was needed for it.
+// tick of noise. No recording was needed for it. So is a blade or a round meeting a body (§9ai).
 
 export const GUNFIRE = Object.freeze({
  speedOfSound: 343,
@@ -22,7 +22,10 @@ export const GUNFIRE = Object.freeze({
  // §9ah: the submachine gun reuses the recorded gunshot, a little higher and lighter (a smaller
  // round, 12 a second), with only the first reflection each side so a burst does not smear.
  smg: Object.freeze({rate: 1.14, gain: .72, echoes: 2}),
- clankGain: .28
+ clankGain: .28,
+ // §9ai H2: a round or a blade meeting a body. Synthesised: a low, damped thump with a short
+ // wet tick for a round; a thin rising hiss and the same thump, softer, for a cut.
+ fleshGain: .42, sliceGain: .3
 });
 
 /**
@@ -100,6 +103,27 @@ export function createGunfire(getContext, getBank, {solid = () => false} = {}) {
   return true;
  };
 
+ /** The sound of a body taking a blow: a thump (and, for a blade, a hiss before it). */
+ const body = (x, y, z, gain, blade) => {
+  const ctx = getContext?.(), out = bus();
+  if (!ctx || !out || ctx.state !== 'running') return false;
+  const t = ctx.currentTime, pan = placed(ctx, x, y, z), g = ctx.createGain();
+  g.gain.setValueAtTime(gain, t); g.gain.exponentialRampToValueAtTime(.0004, t + .22);
+  const o = ctx.createOscillator(); o.type = 'sine';
+  o.frequency.setValueAtTime(blade ? 140 : 110, t); o.frequency.exponentialRampToValueAtTime(55, t + .12);
+  const og = ctx.createGain(); og.gain.value = blade ? .6 : 1; o.connect(og); og.connect(g);
+  const n = ctx.createBufferSource(); n.buffer = noiseBuffer(ctx);
+  const f = ctx.createBiquadFilter(); f.type = blade ? 'highpass' : 'bandpass';
+  f.frequency.setValueAtTime(blade ? 2500 : 900, t); if (blade) f.frequency.exponentialRampToValueAtTime(6500, t + .09);
+  const ng = ctx.createGain(); ng.gain.setValueAtTime(blade ? .55 : .35, t); ng.gain.exponentialRampToValueAtTime(.001, t + (blade ? .11 : .05));
+  n.connect(f); f.connect(ng); ng.connect(g);
+  g.connect(pan); pan.connect(out);
+  o.start(t); o.stop(t + .24); n.start(t); n.stop(t + .12);
+  stats.bodies = (stats.bodies ?? 0) + 1;
+  o.onended = () => {try {o.disconnect(); og.disconnect(); n.disconnect(); f.disconnect(); ng.disconnect(); g.disconnect(); pan.disconnect();} catch {}};
+  return true;
+ };
+
  return {
   get stats() {return {...stats};},
   /**
@@ -127,6 +151,10 @@ export function createGunfire(getContext, getBank, {solid = () => false} = {}) {
    }
    return true;
   },
+  /** §9ai H2: a round into a body (`strength` 1 for a pistol round, less for an automatic's). */
+  flesh(x, y, z, strength = 1) {return body(x, y, z, GUNFIRE.fleshGain * strength, false);},
+  /** §9ai H2: a blade through a body: a quick hiss and a softer thump. */
+  slice(x, y, z, strength = 1) {return body(x, y, z, GUNFIRE.sliceGain * strength, true);},
   /** Steel on a wall or a car: the katana's clank. Synthesised. */
   clank(x, y, z) {
    const ctx = getContext?.(), out = bus();

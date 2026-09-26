@@ -4,9 +4,10 @@
 // No lights. A point light per flash would recompile every lit material for the new light count
 // and break the night budget (§16a, Police W3), so the flash is emissive and additive: it glows
 // and blooms, but the street is not lit by it. Three draw calls at most, and none while nothing
-// is live: sparks and puffs share one Points, the flash is a second, the tracers one LineSegments.
+// is live: sparks and puffs share one Points, the flash is a second, the tracers one LineSegments,
+// and (§9ai) blood a fourth Points, drawn opaque.
 import {AdditiveBlending,BufferAttribute,BufferGeometry,LineBasicMaterial,LineSegments,Points,
- PointsMaterial,Group} from 'three';
+ PointsMaterial,Group,NormalBlending} from 'three';
 
 export const EFFECTS = Object.freeze({
  sparks: 96,          // particles in the pool
@@ -14,7 +15,11 @@ export const EFFECTS = Object.freeze({
  sparkSpeed: [2.5, 6.5],
  gravity: 9.8,
  flashLife: .05,      // s: a muzzle flash is three frames at 60 Hz
- tracers: 8, tracerLife: .06
+ tracers: 8, tracerLife: .06,
+ // §9ai H2: blood where a blade or a round meets a person -- dark droplets that spray out of the
+ // wound along the blow and fall, not the hot sparks a wall gives. Their own pool, drawn opaque
+ // (sparks are additive and would glow red).
+ blood: 160, bloodLife: [.45, .9], bloodSpeed: [1.2, 4.2], bloodSize: .03
 });
 
 const rand = (() => {let s = 0x2545f491; return () => ((s = Math.imul(s ^ (s >>> 15), 0x2c1b3c6d) ^ 0x5bd1e995) >>> 0) / 4294967296;})();
@@ -46,10 +51,20 @@ export function createWeaponEffects() {
  const tracers = new LineSegments(lineGeometry, new LineBasicMaterial({vertexColors: true, transparent: true,
   depthWrite: false, blending: AdditiveBlending}));
  tracers.frustumCulled = false; tracers.visible = false; tracers.name = 'weapon-tracers';
- root.add(sparks, flash, tracers);
+ // --- blood ------------------------------------------------------------------------------------
+ const B = EFFECTS.blood, bpos = new Float32Array(B * 3), bcol = new Float32Array(B * 3), bvel = new Float32Array(B * 3);
+ const blife = new Float32Array(B), bfull = new Float32Array(B), bshade = new Float32Array(B);
+ const bloodGeometry = new BufferGeometry();
+ bloodGeometry.setAttribute('position', new BufferAttribute(bpos, 3));
+ bloodGeometry.setAttribute('color', new BufferAttribute(bcol, 3));
+ const blood = new Points(bloodGeometry, new PointsMaterial({size: EFFECTS.bloodSize, vertexColors: true, transparent: true,
+  depthWrite: false, blending: NormalBlending}));
+ blood.frustumCulled = false; blood.visible = false; blood.name = 'weapon-blood';
+ root.add(sparks, flash, tracers, blood);
+ let bcursor = 0;
 
  let cursor = 0, fcursor = 0, lcursor = 0, kick = 0;
- const stats = {sparks: 0, flashes: 0, tracers: 0};
+ const stats = {sparks: 0, flashes: 0, tracers: 0, blood: 0};
 
  const api = {
   root,
@@ -74,6 +89,23 @@ export function createWeaponEffects() {
     else {tint[i * 3] = 1.6; tint[i * 3 + 1] = .9 + rand() * .3; tint[i * 3 + 2] = .35;}
    }
    stats.sparks += count; sparks.visible = true;
+  },
+  /**
+   * §9ai H2: blood out of a wound at `x,y,z`, sprayed along `dir` (the way the blow went) in a
+   * cone of `spread`, with a little back-spatter toward the attacker. `count` droplets.
+   */
+  blood(x, y, z, {dir = {x: 0, y: 0, z: 1}, count = 18, spread = .6, back = .25} = {}) {
+   const l = Math.hypot(dir.x, dir.y ?? 0, dir.z) || 1, dx = dir.x / l, dy = (dir.y ?? 0) / l, dz = dir.z / l;
+   for (let k = 0; k < count; k++) {
+    const i = bcursor; bcursor = (bcursor + 1) % B;
+    bpos[i * 3] = x; bpos[i * 3 + 1] = y; bpos[i * 3 + 2] = z;
+    const s = rand() < back ? -.5 : 1, v = EFFECTS.bloodSpeed[0] + rand() * (EFFECTS.bloodSpeed[1] - EFFECTS.bloodSpeed[0]);
+    const jx = (rand() - .5) * 2 * spread, jy = (rand() - .2) * spread, jz = (rand() - .5) * 2 * spread;
+    bvel[i * 3] = (dx * s + jx) * v; bvel[i * 3 + 1] = (dy * s + jy + .25) * v; bvel[i * 3 + 2] = (dz * s + jz) * v;
+    bfull[i] = blife[i] = EFFECTS.bloodLife[0] + rand() * (EFFECTS.bloodLife[1] - EFFECTS.bloodLife[0]);
+    bshade[i] = .55 + rand() * .45;
+   }
+   stats.blood += count; blood.visible = true;
   },
   /** The muzzle flash at `x,y,z`, looking along `dir`: a bright core and two points down the line. */
   muzzle(x, y, z, dir) {
@@ -121,12 +153,25 @@ export function createWeaponEffects() {
    }
    lineGeometry.attributes.position.needsUpdate = lineGeometry.attributes.color.needsUpdate = true;
    tracers.visible = streaks > 0;
-   return live;
+   let drops = 0;
+   for (let i = 0; i < B; i++) {
+    if (blife[i] <= 0) {bcol[i * 3] = bcol[i * 3 + 1] = bcol[i * 3 + 2] = 0; bpos[i * 3 + 1] = -1e4; continue;}
+    blife[i] -= dt; drops++;
+    bvel[i * 3 + 1] -= EFFECTS.gravity * dt;
+    bvel[i * 3] *= 1 - 1.5 * dt; bvel[i * 3 + 2] *= 1 - 1.5 * dt;
+    bpos[i * 3] += bvel[i * 3] * dt; bpos[i * 3 + 1] += bvel[i * 3 + 1] * dt; bpos[i * 3 + 2] += bvel[i * 3 + 2] * dt;
+    // Dark arterial red, darker as it goes.
+    const k = .5 + .5 * Math.max(0, blife[i] / bfull[i]), c = bshade[i] * k;
+    bcol[i * 3] = .42 * c; bcol[i * 3 + 1] = .02 * c; bcol[i * 3 + 2] = .03 * c;
+   }
+   bloodGeometry.attributes.position.needsUpdate = bloodGeometry.attributes.color.needsUpdate = true;
+   blood.visible = drops > 0;
+   return live + drops;
   },
   dispose() {
    root.removeFromParent();
-   sparkGeometry.dispose(); flashGeometry.dispose(); lineGeometry.dispose();
-   sparks.material.dispose(); flash.material.dispose(); tracers.material.dispose();
+   sparkGeometry.dispose(); flashGeometry.dispose(); lineGeometry.dispose(); bloodGeometry.dispose();
+   sparks.material.dispose(); flash.material.dispose(); tracers.material.dispose(); blood.material.dispose();
   }
  };
  return api;

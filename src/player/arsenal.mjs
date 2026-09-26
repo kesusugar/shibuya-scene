@@ -142,9 +142,11 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
   let outcome = null;
   if (hit.kind === 'person') {
    stats.hits++; if (hit.zone === 'head') stats.headshots++;
-   outcome = world.wound?.(hit.target, {damage: w.bodyDamage, head: hit.zone === 'head', dir: hit.dir, weapon: gunId}) ?? null;
+   outcome = world.wound?.(hit.target, {damage: w.bodyDamage, head: hit.zone === 'head', dir: hit.dir, weapon: gunId, part: hit.part}) ?? null;
    if (outcome === 'killed') stats.kills++;
    world.bleed?.(hit.point, hit.dir);
+   // §9ai H2: blood out of the wound, along the round (an automatic's rounds spray less each).
+   effects.blood(hit.point.x, hit.point.y, hit.point.z, {dir: hit.dir, count: w.auto ? 10 : 18, spread: .45});
   } else if (hit.kind === 'wall' || hit.kind === 'ground') {
    stats.walls++;
    effects.burst(hit.point.x, hit.point.y, hit.point.z, {count: 10, nx: -hit.dir.x, nz: -hit.dir.z});

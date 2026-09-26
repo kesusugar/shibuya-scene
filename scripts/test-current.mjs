@@ -17,6 +17,7 @@ const files=[
  'tests/hybrid-clip.test.mjs',
  'tests/cmu-weapon-clip.test.mjs',
  'tests/smg.test.mjs',
+ 'tests/hit-feel.test.mjs',
  'tests/near-characters.test.mjs',
  'tests/near-humanoid.test.mjs',
  'tests/appearance.test.mjs',
