@@ -5,6 +5,8 @@ import {createWanted,WANTED} from './wanted.mjs';
 import {createSirens,createLoudspeaker,createMegaphone,createOfficerVoice,MEGAPHONE} from './siren.mjs';
 import {createPoliceUnits} from './units.mjs';
 import {createPoliceGuns} from './guns.mjs';
+import {createHelicopter} from './helicopter.mjs';
+import {createRotor} from '../audio/rotor.mjs';
 import {lineOfSight} from '../player/ballistics.mjs';
 
 /** What counts as a weapon out, or a weapon kill: the guns (the submachine gun since §9ah) and the katana. */
@@ -85,6 +87,8 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
  // PLAN-WEAPONS W3: the officers' revolvers and their own (unamplified) voices.
  const guns = createPoliceGuns();
  const voice = createOfficerVoice(getAudioContext, getAudioBus);
+ // Roadmap stage 3: at ☆4 and up, a helicopter with a searchlight, and its rotor.
+ const heli = createHelicopter(), rotor = createRotor(getAudioContext, getAudioBus);
  const speaker = createLoudspeaker(speech, Utterance);
  const ttsMode = useTTS();
  let deaths = 0, lastRam = -Infinity, taken = new WeakSet(), time = 0, shotsSeen = 0, lastShooting = -Infinity, gunShotsSeen = 0, worldSolid = null;
@@ -92,7 +96,7 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
  const sources = [];
 
  const api = {
-  wanted, sirens, units, megaphone, guns, voice,
+  wanted, sirens, units, megaphone, guns, voice, heli,
   /** A carjack finished; an officer nearby makes it a crime. */
   carjack(slot, traffic) {
    if (!slot) return;
@@ -103,7 +107,8 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
    * `driving` whether the player is in it, `melee` the combat stats, `traffic` / `crowd` the sims.
    */
   frame(dt, {player, car = null, driving = false, melee = null, traffic = null, crowd = null, listener = null,
-              visible = () => false, hurt = null, weapons = null, solid = null, attackingNow = null}) {
+              visible = () => false, hurt = null, weapons = null, solid = null, attackingNow = null,
+              night = false, ground = null, covered = null}) {
    time += dt; worldSolid = solid;
    const me = driving && car ? car.state : player;
    const pool = traffic?.pool ?? [];
@@ -173,7 +178,12 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
    // --- what the police know --------------------------------------------------------------
    // W4: sneaking -- crouched on foot, the police see the player from a little over half as far.
    const sight = sightRange(player, driving);
-   const seen = officersSee(pool, me.x, me.z, except, sight, solid) || officersOnFootSee(units.officers, me.x, me.z, sight, solid);
+   const ground0 = officersSee(pool, me.x, me.z, except, sight, solid) || officersOnFootSee(units.officers, me.x, me.z, sight, solid);
+   // Stage 3: the helicopter's crew see from above -- in the searchlight at night, near by day.
+   const h = heli.update(dt, {stars: wanted.state.stars, me, seen: ground0, lastSeen: wanted.state.lastSeen, night,
+    ground: ground ?? (() => 0), covered: covered ?? (() => false)});
+   const seen = ground0 || h.sees;
+   rotor.update(h, listener ?? {x: me.x, z: me.z});
    let snap = wanted.update(dt, {x: me.x, z: me.z, t: time, seen});
    if (player && player.alive === false && snap.stars) wanted.clear('death');
 
@@ -248,7 +258,7 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
      }
     }
    }
-   return {...snap, arrested, units: {cars: u.cars, officers: u.officers, yielded: u.yielded}, gunfire};
+   return {...snap, arrested, units: {cars: u.cars, officers: u.officers, yielded: u.yielded}, gunfire, heli: h};
   },
   /** H in a patrol car: siren and lamps on or off. Returns false if this car has none. */
   toggleSiren(car) {
@@ -259,7 +269,7 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
   clear(reason) {wanted.clear(reason); guns.clear();},
   /** W4: the crowd-bump fight cap, for the scene's bump callback. */
   allowBumpFight(crowd) {return allowBumpFight(wanted.state.stars, crowd?.pool, crowd?.time ?? 0);},
-  dispose(traffic, crowd) {sirens.dispose(); megaphone.dispose(); voice.dispose(); units.dispose(traffic, crowd);}
+  dispose(traffic, crowd) {rotor.stop();heli.reset();sirens.dispose(); megaphone.dispose(); voice.dispose(); units.dispose(traffic, crowd);}
  };
  return api;
 }

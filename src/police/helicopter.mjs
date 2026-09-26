@@ -155,7 +155,7 @@ export function createHelicopterMesh() {
    // The cone points down its -Y; turn -Y onto the beam's direction.
    beam.quaternion.setFromUnitVectors(down, dir.set(dx / len, dy / len, dz / len));
    spot.position.set(to.x, to.y + .03, to.z); spot.scale.setScalar(HELI.light);
-   beamMat.opacity = s.leaving ? 0 : night ? .12 : .03; spotMat.opacity = s.leaving ? 0 : night ? .45 : .12;
+   beamMat.opacity = s.leaving ? 0 : night ? .12 : .012; spotMat.opacity = s.leaving ? 0 : night ? .45 : .05;
   },
   dispose() {scene.removeFromParent(); body.dispose(); material.dispose(); main.geometry.dispose(); tail.geometry.dispose(); rotorMat.dispose();
    beam.geometry.dispose(); beamMat.dispose(); spot.geometry.dispose(); spotMat.dispose();}
