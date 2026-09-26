@@ -58,19 +58,48 @@ for(const id of Object.keys(PRESETS)){
  });
 }
 
-test('katana: both hands stay on the handle, 0.15 m apart, the take mirrored to a right-hand lead',()=>{
- const clip=load('katana-cut');
+test('katana: both hands on the handle, mirrored to a right-hand lead, a fast cut, a kept trunk',()=>{
+ const clip=load('katana-cut'),m=clip.measured;
  assert.equal(PRESETS['katana-cut'].mirror,true,'02_07 leads with the left hand; the game\'s katana is in the right');
- assert.ok(clip.measured.handsApartTargetM>=.12&&clip.measured.handsApartTargetM<=.2,`hands ${clip.measured.handsApartTargetM} m apart`);
- assert.ok(clip.measured.leftMissCm<=6,`the left palm misses its place on the handle by ${clip.measured.leftMissCm} cm`);
+ assert.ok(m.handsApartTargetM>=.12&&m.handsApartTargetM<=.2,`hands ${m.handsApartTargetM} m apart`);
+ assert.ok(m.leftMissCm<=5,`the left palm misses its place on the handle by ${m.leftMissCm} cm`);
+ // Captured, the hands peak near 3 m/s; the cut is replayed at 2x.
+ assert.ok(m.gripPeakMs>=5.5,`the fist peaks at ${m.gripPeakMs} m/s`);
+ assert.ok(clip.duration<1.7,`the whole cut takes ${clip.duration} s`);
+ // Captured, the follow-through folds the trunk 52° off vertical.
+ assert.ok(m.trunkMaxDeg.captured>45&&m.trunkMaxDeg.kept<=38,`trunk ${JSON.stringify(m.trunkMaxDeg)}`);
 });
 
-test('the shouldered hold: the gun level, the butt in the shoulder, the left hand on the fore-end',()=>{
- const clip=load('rifle-shouldered');
- assert.ok(clip.perKey.elevationDeg.every(e=>e===0),'levelled');
- assert.ok(clip.perKey.buttToShoulderM.every(d=>d<.08),'the butt within 8 cm of the shoulder joint');
- assert.equal(clip.measured.leftMissCm,0);
- // The capture as taken holds the gun high and off the shoulder: that is why the variant exists.
- const raw=load('rifle-raise'),hold=raw.perKey.elevationDeg.slice(-60);
- assert.ok(hold.reduce((a,b)=>a+b,0)/hold.length>10,'80_03 aims more than 10° up');
+for(const id of Object.keys(PRESETS)){
+ test(`${id}: the wrists stay within a human range, the twist carried by the forearm`,()=>{
+  const {wristDeg}=load(id).measured;
+  for(const [hand,w] of Object.entries(wristDeg)){
+   assert.ok(w.bendMax<=65,`${hand} wrist bends ${w.bendMax}°`);
+   assert.ok(w.twistMax<=45,`${hand} wrist twists ${w.twistMax}° (a wrist hardly twists; the forearm does)`);
+  }
+ });
+}
+
+test('the gun: from a low ready to the shoulder, levelled, the eye on the sights, both hands on',()=>{
+ const raise=load('rifle-raise'),hold=load('rifle-shouldered');
+ const e=raise.perKey.elevationDeg;
+ assert.ok(e[0]<-30,`it starts at a low ready, muzzle ${e[0]}° down`);
+ assert.ok(e.slice(-60).every(x=>Math.abs(x)<.5),'and ends levelled');
+ for(const clip of [raise,hold]){
+  assert.equal(clip.measured.leftMissCm,0,`${clip.preset}: the left hand on the fore-end`);
+  assert.ok(clip.measured.eyeToSightLineCm.median<=1,`${clip.preset}: eye ${clip.measured.eyeToSightLineCm.median} cm off the sight line`);
+ }
+ // The butt is in the pocket inside the shoulder joint (moved in until the sight line is under
+ // the eye), 14-17 cm from the joint's centre; a butt on the arm would be further out.
+ assert.ok(hold.perKey.buttToShoulderM.every(d=>d<.18),'the butt in the shoulder pocket');
+ assert.ok(hold.perKey.elevationDeg.every(x=>x===0),'levelled');
+});
+
+test('the shouldered hold loops: its last key is its first',()=>{
+ const clip=load('rifle-shouldered'),n=clip.times.length;
+ for(const [bone,v] of Object.entries(clip.tracks)){
+  const a=v.slice(0,4),b=v.slice((n-1)*4,n*4),dot=Math.abs(a[0]*b[0]+a[1]*b[1]+a[2]*b[2]+a[3]*b[3]);
+  assert.ok(dot>.9999,`${bone} closes the loop`);
+ }
+ for(let c=0;c<3;c++)assert.ok(Math.abs(clip.rootPos[c]-clip.rootPos[(n-1)*3+c])<1e-4,'the pelvis closes the loop');
 });

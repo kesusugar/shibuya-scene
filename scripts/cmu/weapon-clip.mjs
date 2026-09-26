@@ -54,17 +54,26 @@ export const ASF_MAP=Object.freeze({
  *   samples), and the game's katana is in the right hand, so the take is mirrored left for
  *   right. The left hand then goes 0.15 m behind the right fist on the 0.26 m handle.
  * rifle: 80_03 raises a long gun and holds the aim from 4.5 s to 7 s with the hands 0.44 m
- *   apart, the left ahead. The left hand goes on the fore-end at the source's own spacing.
+ *   apart, the left ahead.
  */
 export const PRESETS=Object.freeze({
- 'katana-cut':{trial:'02_07',subject:'02',fps:120,from:6.2,to:8.4,weapon:'katana',left:-.15,mirror:true},
- 'rifle-raise':{trial:'80_03',subject:'80',fps:60,from:1.9,to:7.0,weapon:'rifle'},
- // The same take's held aim, with the stock put in the shoulder and the barrel levelled (both
- // arms by IK): the capture holds the gun 17° high and in front of the chest. With the stock
- // pulled back to the shoulder the left hand no longer reaches the source's 0.46 m fore-end
- // (13 cm short on this body's 0.48 m arm), so the support hand goes 0.28 m ahead of the grip:
- // a short weapon's fore-end, which is what a submachine gun would have.
- 'rifle-shouldered':{trial:'80_03',subject:'80',fps:60,from:4.2,to:6.8,weapon:'rifle',shoulder:true,spacing:.28}
+ // The cut is replayed faster than it was captured: the subject's hands peak near 3 m/s, a
+ // committed two-handed cut is about twice that. `warp` is [source second, playback speed]
+ // knots (linear between): the raise a little brisker, the cut itself at 2x, the recovery 1.3x.
+ // The subject also folds deep at the hips in the follow-through (the trunk 60° off vertical);
+ // `trunk` softens anything past 28° to a third of the excess.
+ 'katana-cut':{trial:'02_07',subject:'02',fps:120,from:6.2,to:8.4,weapon:'katana',left:-.15,mirror:true,
+  warp:[[6.2,1.25],[6.85,1.25],[7.0,2.0],[7.5,2.0],[7.7,1.3],[8.4,1.3]],trunk:{limit:28,keep:.33}},
+ // The raise, from a low ready to the shouldered aim. The capture holds the gun 17° high and in
+ // front of the chest, and starts with it hanging sideways from the hands: so the gun is at a
+ // low ready (muzzle forward and 40° down) while the source's hands are low, and in the shoulder,
+ // levelled, once they are up -- the blend follows the source's hand height, so the timing is
+ // the capture's. With the stock at the shoulder the left hand cannot reach the source's 0.46 m
+ // fore-end (13 cm short on this body's 0.48 m arm), so it goes 0.28 m ahead of the grip: a
+ // short weapon's fore-end, which is what a submachine gun would have.
+ 'rifle-raise':{trial:'80_03',subject:'80',fps:60,from:1.9,to:7.0,weapon:'rifle',shoulder:'raise',spacing:.28},
+ // The held aim alone, looped (the last 0.4 s eases back onto the first key).
+ 'rifle-shouldered':{trial:'80_03',subject:'80',fps:60,from:4.2,to:6.8,weapon:'rifle',shoulder:'hold',spacing:.28,loop:.4}
 });
 
 // A long gun is held by its pistol grip as the pistol is: the same frame in the right hand.
@@ -99,6 +108,51 @@ function setWorldQuat(bone,q){
  bone.updateMatrixWorld(true);
 }
 const pos=bone=>{bone.updateWorldMatrix(true,false);return new Vector3().setFromMatrixPosition(bone.matrixWorld);};
+
+const smooth=(a,b,x)=>{const t=Math.min(1,Math.max(0,(x-a)/(b-a)));return t*t*(3-2*t);};
+/** Turn a bone by a world-space rotation, keeping its children's world poses only through it. */
+const turnWorld=(bone,q)=>setWorldQuat(bone,q.clone().multiply(worldQuat(bone)));
+
+/**
+ * Forearm twist. A hand turned to hold a weapon mostly TWISTS about the forearm, and a wrist
+ * cannot twist -- pronation and supination happen along the forearm's two bones. So `share` of
+ * the hand's twist about the bone axis (+Y, the hand's origin sits on the forearm's +Y) moves
+ * into the forearm; the hand's world rotation, and the wrist's position, do not change.
+ * Returns the wrist's remaining swing (bend) and twist, in degrees.
+ */
+function shareTwist(forearm,hand,bindHand,share){
+ const local=bindHand.clone().invert().multiply(hand.quaternion);   // the hand's turn from rest
+ const twist=new Quaternion(0,local.y,0,local.w).normalize();
+ const part=new Quaternion().slerp(twist,share);
+ forearm.quaternion.multiply(part);
+ hand.quaternion.premultiply(part.clone().invert());
+ forearm.updateMatrixWorld(true);
+ const after=bindHand.clone().invert().multiply(hand.quaternion);
+ const tw=new Quaternion(0,after.y,0,after.w).normalize(),swing=after.clone().multiply(tw.clone().invert());
+ return {bend:angle(swing,new Quaternion()),twist:angle(tw,new Quaternion())};
+}
+
+/** A wrist's bend from rest with its twist about the bone axis (+Y) taken out, in degrees. */
+function bendOf(handQ,bindQ){
+ const local=bindQ.clone().invert().multiply(handQ),tw=new Quaternion(0,local.y,0,local.w).normalize();
+ return angle(local.multiply(tw.invert()),new Quaternion());
+}
+
+/**
+ * Elbow swivel: turn the upper arm about the shoulder-to-wrist line (the wrist stays where it is),
+ * up to 40° either way, to the angle where the hand -- held at `want` in world -- bends least at
+ * the wrist. Leaves the arm there with the hand set; returns that bend (plus a small cost per
+ * degree of swivel, so a straight wrist is not bought with a flailing elbow).
+ */
+function swivel(upper,hand,want,bindHand){
+ const shoulder=pos(upper),axis=pos(hand).sub(shoulder).normalize(),start=upper.quaternion.clone();
+ let best=Infinity,bestAngle=0;
+ const at=a=>{upper.quaternion.copy(start);upper.updateMatrixWorld(true);
+  turnWorld(upper,new Quaternion().setFromAxisAngle(axis,a*Math.PI/180));setWorldQuat(hand,want);
+  return bendOf(hand.quaternion,bindHand)+Math.abs(a)*.08;};
+ for(let a=-40;a<=40;a+=5){const b=at(a);if(b<best){best=b;bestAngle=a;}}
+ return at(bestAngle);
+}
 
 /** Two-bone IK: move `c`'s origin (the wrist) to `target`, keeping the elbow in its plane. */
 function reach(a,b,c,target){
@@ -174,14 +228,24 @@ export async function weaponClip({dir,preset,glbPath='public/data/character/citi
  const gripR=basis(new Vector3(...grip.forward),new Vector3(...grip.up));
  const gripL=basis(mirror(grip.forward),mirror(grip.up)),atL=mirror(grip.at);
 
- const duration=P.to-P.from,steps=Math.max(2,Math.round(duration*fps)+1);
+ // Playback time -> source time, through the warp (identity without one).
+ const knots=P.warp??[[P.from,1],[P.to,1]];
+ const speedAt=u=>{for(let i=1;i<knots.length;i++)if(u<=knots[i][0]){const [a,sa]=knots[i-1],[b,sb]=knots[i];return sa+(sb-sa)*(u-a)/(b-a);}return knots[knots.length-1][1];};
+ const table=[[0,P.from]];
+ for(let u=P.from,out=0;u<P.to;){const du=Math.min(1/480,P.to-u);out+=du/speedAt(u+du/2);u+=du;table.push([out,u]);}
+ const sourceAt=t=>{let lo=0,hi=table.length-1;while(hi-lo>1){const m=(lo+hi)>>1;if(table[m][0]<=t)lo=m;else hi=m;}
+  const [t0,u0]=table[lo],[t1,u1]=table[hi];return t1>t0?u0+(u1-u0)*(t-t0)/(t1-t0):u0;};
+ const duration=table[table.length-1][0],steps=Math.max(2,Math.round(duration*fps)+1);
  const times=[],tracks=new Map(Object.values(ASF_MAP).map(n=>[n,[]])),rootPos=[];
- const stats={leftMiss:0,wristR:0,wristL:0,handsSource:[],handsTarget:[],wristBend:{r:[],l:[]},elevation:[],butt:[]};
+ // The eye, in the head's frame: 7 cm above and 9 cm in front of the head bone at bind.
+ const headBone=bones.get('Head'),eyeLocal=headBone.worldToLocal(pos(headBone).add(new Vector3(0,.07,.09)));
+ const grips=[],eyeGap=[],trunkMax={before:0,after:0};
+ const stats={leftMiss:0,handsSource:[],handsTarget:[],wrist:{r:[],l:[]},elevation:[],butt:[]};
  // The long gun's butt, in the weapon frame (the bench's proxy has the same stock).
  const BUTT=new Vector3(0,.04,-.33);
  for(let s=0;s<steps;s++){
   const t=s/(steps-1)*duration;times.push(t);
-  const src=pose(at(P.from+t));
+  const src=pose(at(sourceAt(t)));
   for(const [n,b] of bones)b.quaternion.copy(bind.get(n));
   // 1. Rotations, parents first.
   for(const [asf,ue] of Object.entries(ASF_MAP)){
@@ -194,57 +258,153 @@ export async function weaponClip({dir,preset,glbPath='public/data/character/citi
   pelvis.position.copy(pelvis.parent.worldToLocal(world));
   root.updateMatrixWorld(true);
 
+  // The trunk: anything past `limit` degrees off vertical kept at `keep` of the excess, spread
+  // over the three spine bones. The legs are untouched; the weapon turns with the chest.
+  const fix=new Quaternion();
+  if(P.trunk){
+   const trunk=pos(bones.get('neck_01')).sub(pos(bones.get('pelvis'))).normalize();
+   const tilt=Math.acos(Math.min(1,trunk.y))*180/Math.PI;
+   trunkMax.before=Math.max(trunkMax.before,tilt);
+   // Turning the spine does not turn the pelvis-to-spine_01 segment the tilt is measured along,
+   // so the correction is applied until the measured tilt is where it should be.
+   const want=tilt>P.trunk.limit?P.trunk.limit+(tilt-P.trunk.limit)*P.trunk.keep:tilt;
+   for(let i=0;i<4;i++){
+    const now=pos(bones.get('neck_01')).sub(pos(bones.get('pelvis'))).normalize();
+    const excess=Math.acos(Math.min(1,now.y))*180/Math.PI-want;if(excess<.5)break;
+    const axis=now.clone().cross(new Vector3(0,1,0)).normalize();
+    const step=new Quaternion().setFromAxisAngle(axis,excess*Math.PI/180/3);
+    for(const b of ['spine_01','spine_02','spine_03'])turnWorld(bones.get(b),step);
+    fix.premultiply(new Quaternion().setFromAxisAngle(axis,excess*Math.PI/180));
+   }
+   trunkMax.after=Math.max(trunkMax.after,Math.acos(Math.min(1,pos(bones.get('neck_01')).sub(pos(bones.get('pelvis'))).normalize().y))*180/Math.PI);
+  }
+
   // 2. The weapon.
   const L=src.get('lhand').end.clone().applyQuaternion(yaw),R=src.get('rhand').end.clone().applyQuaternion(yaw);
   stats.handsSource.push(L.distanceTo(R));
-  const axis=(P.weapon==='katana'?R.clone().sub(L):L.clone().sub(R)).normalize();
-  let up;
+  const axis=(P.weapon==='katana'?R.clone().sub(L):L.clone().sub(R)).normalize().applyQuaternion(fix);
+  const chest=fix.clone().multiply(yaw).multiply(src.get('thorax').rotation);   // turned further below if bladed
+  let up,weapon,raised=1;
   if(P.weapon==='katana'){
    // The edge leads in the plane of the cut: perpendicular to the blade, across the chest's
    // right-left line (edge down at the middle guard, forward when raised overhead).
-   const right=new Vector3(-1,0,0).applyQuaternion(yaw.clone().multiply(src.get('thorax').rotation));
-   up=axis.clone().cross(right);
+   up=axis.clone().cross(new Vector3(-1,0,0).applyQuaternion(chest));
+   weapon=basis(axis,up);
   }else{
-   up=new Vector3(0,1,0).addScaledVector(axis,-axis.y);
+   // Aimed: level, along the source's heading. Low ready: the same heading, 40° down. The raise
+   // blends between them by the source's hand height above its hips (low below -0.05 m, up
+   // from +0.25 m).
+   const heading=axis.clone().setY(0).normalize();
+   const aim=basis(heading,new Vector3(0,1,0));
+   const down=new Quaternion().setFromAxisAngle(new Vector3(0,1,0).cross(heading).normalize(),40*Math.PI/180);
+   const low=basis(heading.clone().applyQuaternion(down),new Vector3(0,1,0).applyQuaternion(down));
+   const hands=(L.y+R.y)/2-src.get('root').start.y;
+   raised=P.shoulder==='raise'?smooth(-.05,.25,hands):1;
+   weapon=low.clone().slerp(aim,raised);
   }
-  if(P.shoulder){axis.setY(0).normalize();up.set(0,1,0);}
-  const weapon=basis(axis,up);
+  const forward=new Vector3(0,0,1).applyQuaternion(weapon);
   const handR=bones.get('hand_r'),handL=bones.get('hand_l');
-  const before=worldQuat(handR);
   const wantR=weapon.clone().multiply(gripR.clone().invert());
+  const scaleR=new Vector3();handR.getWorldScale(scaleR);
+  const gripOffset=new Vector3(...grip.at).multiply(scaleR).applyQuaternion(wantR);
   if(P.shoulder){
-   // The butt in the shoulder pocket: 5 cm in front of the shoulder joint and 3 cm in toward
-   // the chest, level with it. The grip is then where the stock puts it, and the right arm is
-   // taken there by the same IK as the left.
-   const chest=yaw.clone().multiply(src.get('thorax').rotation);
-   const pocket=pos(bones.get('upperarm_r')).addScaledVector(new Vector3(0,0,1).applyQuaternion(chest),.05).addScaledVector(new Vector3(1,0,0).applyQuaternion(chest),.03);
-   const origin=pocket.sub(BUTT.clone().applyQuaternion(weapon));
-   const scaleR=new Vector3();handR.getWorldScale(scaleR);
-   reach(bones.get('upperarm_r'),bones.get('lowerarm_r'),handR,origin.clone().sub(new Vector3(...grip.at).multiply(scaleR).applyQuaternion(wantR)));
+   // A shouldered long gun wants the body bladed further than the capture's 35° and the stock
+   // under the eye. The spine turns up to 15° more (half at spine_02, half at spine_03), in
+   // whichever direction brings the right shoulder toward the head across the line of fire,
+   // and the neck turns back by the same so the face stays on the target.
+   const side=new Vector3(0,1,0).cross(forward).normalize();      // +side is the player's left
+   const lateral=()=>pos(bones.get('upperarm_r')).sub(headBone.localToWorld(eyeLocal.clone())).dot(side);
+   const blade=15*raised*Math.PI/180,before=Math.abs(lateral());
+   let turn=new Quaternion().setFromAxisAngle(new Vector3(0,1,0),blade);
+   const tryTurn=q=>{for(const b of ['spine_02','spine_03'])turnWorld(bones.get(b),new Quaternion().slerp(q,.5));turnWorld(bones.get('neck_01'),q.clone().invert());};
+   tryTurn(turn);
+   if(Math.abs(lateral())>before){tryTurn(turn.clone().invert());turn=turn.invert();tryTurn(turn);}
+   chest.premultiply(turn);
+   // The butt in the shoulder pocket: 5 cm in front of the shoulder joint, 8 cm in toward the
+   // chest (the pocket is inside the deltoid, not on the joint) and 2 cm below it -- then, as the
+   // gun comes up, moved across the line of fire until the sight line is within 2.5 cm of the eye
+   // (a cheek weld is then a small lean of the head, not an ear on the shoulder).
+   const pocket=pos(bones.get('upperarm_r')).addScaledVector(new Vector3(0,0,1).applyQuaternion(chest),.05)
+    .addScaledVector(new Vector3(1,0,0).applyQuaternion(chest),.08).add(new Vector3(0,-.02,0));
+   const across=headBone.localToWorld(eyeLocal.clone()).sub(pocket).dot(side);
+   if(Math.abs(across)>.025)pocket.addScaledVector(side,(across-Math.sign(across)*.025)*raised);
+   // The low ready keeps the butt in the shoulder and dips the muzzle 40°: the gun pivots about
+   // the butt, so the stock never swings into the chest (tilting it about the grip did).
+   const gripAt=pocket.sub(BUTT.clone().applyQuaternion(weapon));
+   // Whatever the pose, the fore-end must be within the left arm's reach: if it is not, the whole
+   // gun comes toward the left shoulder by the shortfall (97% of the arm, so the elbow keeps a bend).
+   const shoulderL=pos(bones.get('upperarm_l')),arm=pos(bones.get('lowerarm_l')).distanceTo(shoulderL)+pos(handL).distanceTo(pos(bones.get('lowerarm_l')));
+   const fore=gripAt.clone().addScaledVector(forward,spacing),short=fore.distanceTo(shoulderL)-arm*.97;
+   if(short>0)gripAt.addScaledVector(shoulderL.clone().sub(fore).normalize(),short);
+   reach(bones.get('upperarm_r'),bones.get('lowerarm_r'),handR,gripAt.sub(gripOffset));
   }
   setWorldQuat(handR,wantR);
-  stats.wristR=Math.max(stats.wristR,angle(before,worldQuat(handR)));
+  // The right elbow swings about the shoulder-to-wrist line to where the wrist bends least.
+  swivel(bones.get('upperarm_r'),handR,wantR,bind.get('hand_r'));
   const origin=handR.localToWorld(new Vector3(...grip.at));
-  const target=origin.clone().addScaledVector(axis,P.weapon==='katana'?P.left:spacing);
-  const wantL=weapon.clone().multiply(gripL.clone().invert());
-  const beforeL=worldQuat(handL);
-  // Where the wrist must be for the left grip point to land on the target with that rotation.
+  grips.push(origin.clone());
+  const target=origin.clone().addScaledVector(forward,P.weapon==='katana'?P.left:spacing);
+  // The left hand may roll about the weapon's axis (a hand closes round a handle or a fore-end
+  // at any roll), up to 60° either way: the roll that leaves the wrist least bent is kept.
   const scale=new Vector3();handL.getWorldScale(scale);
-  const wrist=target.clone().sub(atL.clone().multiply(scale).applyQuaternion(wantL));
-  reach(bones.get('upperarm_l'),bones.get('lowerarm_l'),handL,wrist);
-  setWorldQuat(handL,wantL);
-  stats.wristL=Math.max(stats.wristL,angle(beforeL,worldQuat(handL)));
+  const placeL=roll=>{
+   const want=new Quaternion().setFromAxisAngle(forward,roll*Math.PI/180).multiply(weapon).multiply(gripL.clone().invert());
+   // Where the wrist must be for the left grip point to land on the target with that rotation.
+   reach(bones.get('upperarm_l'),bones.get('lowerarm_l'),handL,target.clone().sub(atL.clone().multiply(scale).applyQuaternion(want)));
+   return swivel(bones.get('upperarm_l'),handL,want,bind.get('hand_l'))+Math.abs(roll)*.05;
+  };
+  let bestRoll=0,best=Infinity;
+  for(let roll=-60;roll<=60;roll+=10){const b=placeL(roll);if(b<best){best=b;bestRoll=roll;}}
+  placeL(bestRoll);
   stats.leftMiss=Math.max(stats.leftMiss,handL.localToWorld(atL.clone()).distanceTo(target));
   stats.handsTarget.push(handL.localToWorld(atL.clone()).distanceTo(origin));
-  // How far each wrist is from its own rest, relative to the forearm (the angle a hand bends
-  // and twists at the wrist to hold the weapon).
-  stats.wristBend.r.push(angle(handR.quaternion,bind.get('hand_r')));
-  stats.wristBend.l.push(angle(handL.quaternion,bind.get('hand_l')));
-  stats.elevation.push(Math.asin(axis.y)*180/Math.PI);
-  if(P.weapon==='rifle')stats.butt.push(BUTT.clone().applyQuaternion(weapon).add(origin).distanceTo(pos(bones.get('upperarm_r'))));
+  // The wrists: 70% of each hand's twist into its forearm (what is left is measured).
+  stats.wrist.r.push(shareTwist(bones.get('lowerarm_r'),handR,bind.get('hand_r'),.7));
+  stats.wrist.l.push(shareTwist(bones.get('lowerarm_l'),handL,bind.get('hand_l'),.7));
+  stats.elevation.push(Math.asin(forward.y)*180/Math.PI);
+  if(P.weapon==='rifle'){
+   stats.butt.push(BUTT.clone().applyQuaternion(weapon).add(origin).distanceTo(pos(bones.get('upperarm_r'))));
+   // The head down to the sights, as far as the gun is up: the eye 3.5 cm above the sight line
+   // (the rear sight's top, 11.5 cm over the grip), 60% of the turn at the neck, 40% at the head,
+   // at most 25° in all.
+   const sight=new Vector3(0,.115,-.05).applyQuaternion(weapon).add(origin);
+   // The eye can only swing on a sphere about the neck, so its target is where the sight line
+   // (raised 3.5 cm) crosses that sphere, on the side nearest the eye -- the nearest point of
+   // the line would sit inside the sphere and never be reached.
+   const headTurn=()=>{
+    const eye=headBone.localToWorld(eyeLocal.clone()),neck=pos(bones.get('neck_01'));
+    const base=sight.clone().add(new Vector3(0,.035,0)),r=eye.distanceTo(neck);
+    const w=base.clone().sub(neck),b=w.dot(forward),c=w.lengthSq()-r*r,disc=b*b-c;
+    const near=eye.clone().sub(base).dot(forward);
+    const lam=disc>=0?[-b-Math.sqrt(disc),-b+Math.sqrt(disc)].sort((x,y)=>Math.abs(x-near)-Math.abs(y-near))[0]:-b;
+    return {eye,neck,onLine:base.addScaledVector(forward,lam)};
+   };
+   const lineGap=eye=>{const base=sight.clone().add(new Vector3(0,.035,0));return eye.clone().sub(base).projectOnPlane(forward).length();};
+   // Iterated: the head bone pivots above the neck, so one pass lands short.
+   let budget=25*raised;
+   for(let i=0;i<5&&budget>.5;i++){
+    const {eye,neck,onLine}=headTurn();
+    const full=new Quaternion().setFromUnitVectors(eye.clone().sub(neck).normalize(),onLine.clone().sub(neck).normalize());
+    const deg=angle(full,new Quaternion());if(deg<.3)break;
+    const part=new Quaternion().slerp(full,Math.min(1,budget/deg));budget-=Math.min(deg,budget);
+    turnWorld(bones.get('neck_01'),new Quaternion().slerp(part,.6));
+    turnWorld(headBone,new Quaternion().slerp(part,.4));
+   }
+   if(raised>.99)eyeGap.push(lineGap(headBone.localToWorld(eyeLocal.clone())));
+  }
 
   for(const [ue,v] of tracks){const q=bones.get(ue).quaternion;v.push(q.x,q.y,q.z,q.w);}
   rootPos.push(pelvis.position.x,pelvis.position.y,pelvis.position.z);
+ }
+
+ // A loop: the last `loop` seconds ease back onto the first key.
+ if(P.loop){
+  const qa=new Quaternion(),qb=new Quaternion();
+  for(let s=0;s<steps;s++){
+   const u=smooth(duration-P.loop,duration,times[s]);if(!u)continue;
+   for(const [,v] of tracks){qa.fromArray(v,s*4);qb.fromArray(v,0);qa.slerp(qb,u).toArray(v,s*4);}
+   for(let c=0;c<3;c++)rootPos[s*3+c]+=(rootPos[c]-rootPos[s*3+c])*u;
+  }
  }
 
  // 3 (second half). Ground the clip once: the lowest ball of the foot across it onto the floor.
@@ -264,16 +424,23 @@ export async function weaponClip({dir,preset,glbPath='public/data/character/citi
  return {
   source:{dataset:'CMU Graphics Lab Motion Capture Database (mocap.cs.cmu.edu)',trial:P.trial,
    asf:`${P.subject}.asf`,asfSha256:sha(asfText),amc:`${P.trial}.amc`,amcSha256:sha(amcText),from:P.from,to:P.to,fps:P.fps},
-  preset,weapon:P.weapon,duration,fps,times,scale:k,groundOffset:-lowest,spacing,
-  measured:{leftMissCm:+(stats.leftMiss*100).toFixed(1),wristTurnMaxDeg:{right:+stats.wristR.toFixed(0),left:+stats.wristL.toFixed(0)},
+  preset,weapon:P.weapon,duration,fps,times,scale:k,groundOffset:-lowest,spacing,warp:P.warp??null,loop:P.loop??null,
+  measured:{leftMissCm:+(stats.leftMiss*100).toFixed(1),
    handsApartSourceM:+med(stats.handsSource).toFixed(3),handsApartTargetM:+med(stats.handsTarget).toFixed(3),
-   wristBendDeg:{right:{median:+med(stats.wristBend.r).toFixed(0),max:+Math.max(...stats.wristBend.r).toFixed(0)},left:{median:+med(stats.wristBend.l).toFixed(0),max:+Math.max(...stats.wristBend.l).toFixed(0)}}},
+   // The wrist after the forearm takes its share of the twist: bend (flexion and deviation
+   // together) and the twist left in it. A human wrist bends to about 70° and does not twist.
+   wristDeg:Object.fromEntries(['r','l'].map(h=>[h==='r'?'right':'left',{bendMedian:+med(stats.wrist[h].map(w=>w.bend)).toFixed(0),bendMax:+Math.max(...stats.wrist[h].map(w=>w.bend)).toFixed(0),
+    twistMax:+Math.max(...stats.wrist[h].map(w=>w.twist)).toFixed(0)}])),
+   // The weapon grip's peak speed (the fist on the handle), and the katana's tip.
+   gripPeakMs:+Math.max(...grips.slice(1).map((g,i)=>g.distanceTo(grips[i])*fps)).toFixed(1),
+   ...(P.trunk?{trunkMaxDeg:{captured:+trunkMax.before.toFixed(0),kept:+trunkMax.after.toFixed(0)}}:{}),
+   ...(eyeGap.length?{eyeToSightLineCm:{median:+(med(eyeGap)*100).toFixed(1),max:+(Math.max(...eyeGap)*100).toFixed(1)}}:{})},
   perKey:{elevationDeg:stats.elevation.map(x=>+x.toFixed(1)),...(stats.butt.length?{buttToShoulderM:stats.butt.map(x=>+x.toFixed(3))}:{})},
   tracks:Object.fromEntries(tracks),rootPos
  };
 }
 
-if(process.argv[1].endsWith('weapon-clip.mjs')){
+if(process.argv[1]?.endsWith('weapon-clip.mjs')){
  const [,,dir,preset,out]=process.argv;
  if(!out){console.error(`usage: weapon-clip.mjs <cmu dir> <${Object.keys(PRESETS).join('|')}> <out.json>`);process.exit(1);}
  const clip=await weaponClip({dir,preset});
