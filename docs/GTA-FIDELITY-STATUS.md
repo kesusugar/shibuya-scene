@@ -5860,6 +5860,38 @@ crowd's felled body faces against the blow with a slight push; aiming marks the 
 band is skipped yet never more than two frames behind), `tests/dynamic-resolution.test.mjs` (3).
 `npm run test:ci` **736, 731 pass, 0 fail, 5 skipped**.
 
+## 9ak. Hits from how people actually react — a flexion reflex, and a collapse inside joint ranges (same branch)
+
+The user, on the §9ai bench: "のけぞりの角度おかしくね？実際の人間のシミュレーションから考えて欲しい". Two things
+were the film convention, not a body:
+
+- **The flinch** bent the trunk back 40° from a chest hit. A pistol round's momentum moves a 70 kg
+  body a few centimetres per second and a cut is a slice; what a hit visibly causes is the
+  flexion (startle/withdrawal) reflex within about 0.1 s — the trunk curls forward around the
+  wound, the head drops, the shoulders come in. `hit-reaction.mjs` now gives each bone a forward
+  curl whichever way the blow came plus a small lean along it (trunk ~20° over three bones; a head
+  round snaps the head ~15°; a leg round gives both knees ~20° from any direction — a blow from
+  behind used to flip them into hyperextension). Bound per bone 0.6 rad.
+- **The fall** had no joint ranges, and swept the feet back at the start: that was the split and
+  the backward knee in the user's picture. `ragdoll.mjs` now keeps human ranges — knee and elbow
+  as one-way hinges, the hip to 110° flexion / 15° extension / 45° out / 20° across (front to back
+  at most 125°), the head within 50° of the chest — and falls as people do: a collapse (hips drop
+  1.0 m/s, knees give 0.35, the trunk goes forward 0.5) tipped by a modest blow (0.4 m/s for a
+  head shot, which drops a body where it stands; 1.1 for the body; 0.9 for the legs). A killing
+  cut pushes 0.9 m/s along the blade (`COMBAT.cutPush`), not a car victim's 2.2 m/s with lift.
+- Two physics faults found on the way: a joint correction that moves only one point pushes the
+  whole body (it drifted 0.5–0.9 m sideways whatever the blow) — every correction is now split so
+  it conserves momentum; and a point lifted out of the ground kept its old position, which in
+  Verlet is an upward velocity — the body bounced itself back onto its shoulders; the ground is
+  now inelastic. The hip limit is soft (35% a pass) so it does not fight the ground while seated.
+
+The bodies now end as a heap on the side or slumped over the knees, the knees never bend the
+wrong way and the legs never split (`evidence/weapons/hit-bench/hitbench.png`). Tests
+(`tests/hit-feel.test.mjs`, 18): the old "fall along the blow by 0.4 m" became "tip along it by
+0.2 m and go down within 0.9 m of where it stood"; new: no knee bent backward at any step, legs
+never over 125° apart, no thigh far behind the trunk; the chest flinch curls forward from front,
+back and side with only a small lean along the blow; the knees give from front and behind.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
@@ -6203,6 +6235,11 @@ that nothing imports yet, tests and docs are safe to write during a run.
 **§9aj: rerun every test that reads a baked clip after rebaking it.** The §9ah rebake (the stock
 moved in under the eye) pushed the butt to 16–18 cm from the shoulder joint; the §9ah test's 18
 cm bound was not rerun after that last rebake and only `test:ci` caught it two sections later.
+
+**§9ak: in a Verlet ragdoll a position fix IS a velocity.** Two faults came from it: a joint
+limit that moves only the joint drifts the whole body (split every correction so it conserves
+momentum), and a ground clamp that lifts the point but not its previous position launches it
+upward (make contact inelastic: lift the previous position too).
 
 ## 17. Files that matter
 
