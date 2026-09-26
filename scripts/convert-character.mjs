@@ -41,7 +41,11 @@ const CLIPS={
  // poses (0.17 s) blended by pitch; the pistol clips are two-handed, the sword clips one-handed.
  PistolIdle:'Pistol_Idle_Loop', PistolAimUp:'Pistol_Aim_Up', PistolAimNeutral:'Pistol_Aim_Neutral',
  PistolAimDown:'Pistol_Aim_Down', PistolShoot:'Pistol_Shoot', PistolReload:'Pistol_Reload',
- SwordIdle:'Sword_Idle', SwordAttack:'Sword_Attack', Roll:'Roll', CrouchWalk:'Crouch_Fwd_Loop'
+ SwordIdle:'Sword_Idle', SwordAttack:'Sword_Attack', Roll:'Roll', CrouchWalk:'Crouch_Fwd_Loop',
+ // Roadmap stage 2: a person on the ground dragging themselves along. The pack has no crawl; its
+ // forward swim is the body prone, head first, the arms reaching and pulling in turn, which laid
+ // on the pavement reads as a crawl (figure.mjs sets it down at the ground).
+ Crawl:'Swim_Fwd_Loop'
 };
 
 // Attributes nothing samples. Quaternius ships four UV sets for engine-side material layering

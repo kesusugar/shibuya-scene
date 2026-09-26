@@ -90,7 +90,9 @@ export function createStreetReactions() {
   /**
    * One frame. `crowd` the simulation (pool, time, flee); `me` the player {x, y, z, alive,
    * dodging}; `aimedId` whom the player's gun is on (or null); `shotAt` {x, z} of a player's
-   * shot this frame (or null); `solid` the wall test. Returns the armed people's shots.
+   * shot this frame (or null); `solid` the wall test. Returns the armed people's shots.   * @param {number} dt
+   * @param {{crowd?:any, me?:any, aimedId?:number|null, shotAt?:any, solid?:(x:number,z:number)=>boolean}} [options]
+   * @returns {any[]}
    */
   update(dt, {crowd = null, me = null, aimedId = null, shotAt = null, solid = () => false} = {}) {
    time = crowd?.time ?? time + dt;

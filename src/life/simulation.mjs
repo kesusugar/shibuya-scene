@@ -1,3 +1,4 @@
+import {woundedPace} from './street-reactions.mjs';
 import {patrolRoute} from './patrol.mjs';
 import {ScrambleChoreography} from './choreography.mjs';
 import {seededRandom} from '../geo/core.mjs';
@@ -162,7 +163,7 @@ export class CrowdSimulation{
   return next>now+.03;}
  /** One tick of a flight: speed up, steer round what is in the way, ease off, stop. */
  fleeStep(p,dt){const f=p.flee,oldCell=this.cell(p.x,p.z);
-  const going=f.left>0&&this.time<f.until,target=going?f.speed:0;
+  const going=f.left>0&&this.time<f.until,target=going?f.speed*woundedPace(p):0;
   f.v+=Math.max(-FLEE.decel*dt,Math.min(FLEE.accel*dt,target-f.v));
   if(!going&&f.v<=.05){p.flee=null;p.speed=0;this.stats.fleeEnded=(this.stats.fleeEnded??0)+1;return;}
   const step=Math.max(0,f.v)*dt,base=Math.atan2(f.x,f.z),side=p.id%2?1:-1;let moved=false,nx=p.x,nz=p.z;
@@ -326,7 +327,7 @@ export class CrowdSimulation{
   if(leader)nodes=this.candidates.filter(n=>n.component===this.network.nodes[leader.node].component&&Math.hypot(n.x-leader.x,n.z-leader.z)<4);
   for(let attempt=0;attempt<100;attempt++){const n=nodes[Math.floor(this.rng()*nodes.length)];if(!n||this.network.landingNodes.has(n.id)||this.blocked(n.x,n.z,null,.9)||this.vehicleOverlap(n.x,n.z,.6)||this.time>0&&Math.hypot(n.x-this.camera.x,n.z-this.camera.z)<12)continue;
    const jitter=this.rng()*.5-.25,jitterZ=this.rng()*.5-.25,sx=n.x+jitter,sz=n.z+jitterZ,valid=this.network.ctx.safe(sx,sz)&&!this.blocked(sx,sz,null,.65)&&!this.vehicleOverlap(sx,sz,.6),px=valid?sx:n.x,pz=valid?sz:n.z;
-   Object.assign(p,{patrol:null,active:true,choreographed:false,kerbQueue:false,flee:null,fleeOffX:0,fleeOffZ:0,x:px,z:pz,renderX:px,renderZ:pz,previousX:px,previousZ:pz,heading:this.rng()*Math.PI*2,height:this.network.ctx.height(n.x,n.z),archetype:type,mode,state:mode==='idle'?'idle':'walking',group:leader?.group??-1,leader:leader?.id??-1,route:[],routeIndex:0,edge:-1,progress:0,destination:n.id,node:n.id,speed:0,baseSpeed:leader?.baseSpeed??def.speed[0]+this.rng()*(def.speed[1]-def.speed[0]),age:0,stuck:0,pause:mode==='idle'?8+this.rng()*30:0,crossing:null,queueKey:null,lod:'near',elapsed:0,phase:this.rng()*Math.PI*2,color:Math.floor(this.rng()*def.colors.length),travelled:0,voiceUntil:0,voiceSaid:-99,voiceUrgency:0,combatHealth:100,combatTarget:null,combatUntil:0,combatNext:0,combatAction:0,combatDead:false,fatal:false,appearanceId:undefined,cameFromVehicle:undefined,reactionOwned:false,region:n.district});
+   Object.assign(p,{patrol:null,active:true,choreographed:false,kerbQueue:false,flee:null,fleeOffX:0,fleeOffZ:0,x:px,z:pz,renderX:px,renderZ:pz,previousX:px,previousZ:pz,heading:this.rng()*Math.PI*2,height:this.network.ctx.height(n.x,n.z),archetype:type,mode,state:mode==='idle'?'idle':'walking',group:leader?.group??-1,leader:leader?.id??-1,route:[],routeIndex:0,edge:-1,progress:0,destination:n.id,node:n.id,speed:0,baseSpeed:leader?.baseSpeed??def.speed[0]+this.rng()*(def.speed[1]-def.speed[0]),age:0,stuck:0,pause:mode==='idle'?8+this.rng()*30:0,crossing:null,queueKey:null,lod:'near',elapsed:0,phase:this.rng()*Math.PI*2,color:Math.floor(this.rng()*def.colors.length),travelled:0,voiceUntil:0,voiceSaid:-99,voiceUrgency:0,combatHealth:100,combatTarget:null,limp:false,crawling:false,legWounds:0,handsUpUntil:0,handsUpSince:undefined,shooterUntil:0,gunDrawn:false,gunAim:0,combatUntil:0,combatNext:0,combatAction:0,combatDead:false,fatal:false,appearanceId:undefined,cameFromVehicle:undefined,reactionOwned:false,region:n.district});
    if(mode!=='idle'){
     if(cross){const approach=route(this.network,n.id,cross.from);if(n.id!==cross.from&&!approach.length){p.active=false;continue;}p.route=[...approach,cross.id];p.edge=p.route[0];p.destination=cross.to;}
     else if(!this.chooseDestination(p,n,mode==='milling')){p.active=false;continue;}
@@ -367,6 +368,8 @@ export class CrowdSimulation{
   // held group stops every signal on the map (GTA-FIDELITY-STATUS 16a). They finish crossing,
   // `leave()` releases the group at the far kerb, and the fight picks up there.
   if(p.combatTarget&&p.combatUntil>this.time&&!p.crossing){p.state='fighting';p.speed=0;return;}
+  // Roadmap stage 2 (street-reactions.mjs): hands up at gunpoint, or standing to shoot back.
+  if((p.handsUpUntil>this.time||p.shooterUntil>this.time)&&!p.crossing){p.state=p.shooterUntil>this.time?'shooting':'surrender';p.speed=0;p.flee=null;return;}
   if(p.combatTarget){p.combatTarget=null;p.combatAction=0;}
   // Curb waiters and idle actors yield locally to occupied crossing exits.
   // They remain on walkable ground; no recycling or position snap clears a crossing.
@@ -377,7 +380,7 @@ export class CrowdSimulation{
   if(p.edge<0){if(!this.chooseDestination(p,n.nodes[p.node],p.mode==='milling'))this.despawn(p,'invalid-route');return;}
   const e=n.edges[p.edge];if(p.crossing&&p.progress<1&&n.ctx.safe(p.x,p.z)&&this.signals.phase()[0]!=='PEDESTRIAN'){this.leave(p);this.stats.cancelledCurbAdmissions=(this.stats.cancelledCurbAdmissions??0)+1;}if(e.crossingId&&!p.crossing){if(!this.beginCrossing(p,e)){p.state='waiting';p.speed=0;p.stuck=0;p.kerbQueue=false;const key=e.crossingId+':'+e.direction;if(!this.queue.has(key))this.queue.set(key,new Set());this.queue.get(key).add(p.id);p.queueKey=key;return;}}
   p.state=p.crossing?'crossing':p.mode==='milling'?'milling':'walking';
-  let speed=p.baseSpeed;
+  let speed=p.baseSpeed*woundedPace(p);
   if(p.group>=0&&!p.crossing){const g=this.groups[p.group],lead=this.pool[g?.leader];if(lead?.active){if(p.id===lead.id&&g.members.some(id=>this.pool[id].active&&Math.hypot(this.pool[id].x-p.x,this.pool[id].z-p.z)>5))speed*=.45;else if(p.id!==lead.id&&Math.hypot(lead.x-p.x,lead.z-p.z)>4)speed*=1.15;}}
   edgePose(n,e,Math.min(e.length,p.progress+.55),this.next);let dx=this.next.x-p.x,dz=this.next.z-p.z,dist=Math.hypot(dx,dz),step=Math.min(speed*dt,dist);if(dist>.0001){dx/=dist;dz/=dist;}
   // Warned by an oncoming car: lean hard towards the shoulder and run, without ever leaving

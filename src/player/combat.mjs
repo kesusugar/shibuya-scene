@@ -14,6 +14,7 @@
 // go down. The high-fidelity crowd renderer only shows it. Nothing here reaches into the HQ
 // crowd, and the HQ crowd never decides combat -- it reads `struck` and `combatDead` off the
 // pedestrian, exactly as it already reads them for a car.
+import {legWound} from '../life/street-reactions.mjs';
 import {ATTACKS,attackOf,SWORD,swordBearing} from './attack-timing.mjs';
 import {HIT_STOP} from './hit-stop.mjs';
 import {WEAPONS} from './weapons.mjs';
@@ -498,6 +499,8 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
    p.hurtUntil=crowd.time+.45;p.hurtDuration=.45;p.hurtX=ux;p.hurtZ=uz;p.hurtStrong=true;
    if(fatal)kill(crowd,p,state,{x:ux*COMBAT.shotPush,z:uz*COMBAT.shotPush,y:0});
    else if(!onRails(p)){p.combatTarget=null;crowd.flee?.(p,ux,uz,{urgency:1,from:state});}
+   // Roadmap stage 2: a round in the legs that does not kill leaves them limping, or crawling.
+   if(!fatal&&part==='legs')legWound(p);
    // §9ai: the round's kick on the body; an automatic's rounds are lighter each, and add up.
    mark(crowd,p,{dirX:ux,dirZ:uz,zone:part??(head?'head':'body'),strength:weapon==='smg'?.6:1,fatal,kind:weapon==='smg'?'smg':'pistol'});
    lastBlow={victim:p.id,response:'shot',strength:'strong',quarter:'front',fatal,time:crowd.time,weapon};

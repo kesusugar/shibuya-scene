@@ -14,7 +14,7 @@ import {createTwoBoneSolver} from './foot-ik.mjs';
 
 export const BODY = Object.freeze({
  // Hands up: where each palm goes, in the body's frame (+X left, +Y up, +Z forward), at 1.76 m.
- handsUp: Object.freeze({left: Object.freeze([.27, 1.78, .1]), right: Object.freeze([-.27, 1.78, .1]), fade: .2}),
+ handsUp: Object.freeze({left: Object.freeze([.3, 1.58, .14]), right: Object.freeze([-.3, 1.58, .14]), fade: .2}),
  // Limp: how far the knee may bend (share of what the walk bends it), the hip drop and lean (rad).
  limp: Object.freeze({knee: .35, drop: .1, lean: .09, fade: .3}),
  upperFade: .2,

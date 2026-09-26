@@ -52,7 +52,9 @@ const fallen=p=>p.struck!==undefined&&p.combatDead&&!!p.ragdoll;
  * crowd, which draws them just as well at that distance.
  */
 export const PRIORITY_RANGE=55,PRIORITY_HOLD=4;
-const priorityOf=(p,clock)=>(p.aimedUntil>clock)||(clock-(p.hitAt??-1e9)<PRIORITY_HOLD);
+const priorityOf=(p,clock)=>(p.aimedUntil>clock)||(clock-(p.hitAt??-1e9)<PRIORITY_HOLD)
+ // Roadmap stage 2: someone with their hands up, crawling, or shooting back is worth the detail.
+ ||p.handsUpUntil>clock||!!p.crawling||(!p.officer&&!!p.gunDrawn);
 
 // RUN 6.8 moved what a citizen looks like into src/life/appearance.mjs. It used to be eight
 // wardrobes and a skin list right here, which produced eight recolours of one body -- the
@@ -337,8 +339,11 @@ export function createNearCharacters(tier='high',{ctx=null}={}){
      // §9ai: the last blow that landed (a new hitSeq is a flinch), and a ragdoll once killed.
      hitSeq:p.hitSeq,hitAge:clock-(p.hitAt??-1e9),hitX:p.hitX,hitZ:p.hitZ,hitZone:p.hitZone,hitStrength:p.hitStrength,
      ragdoll:fallen(p)?p.ragdoll:null,
+     // Roadmap stage 2: hands up at gunpoint, a leg wound's limp or crawl.
+     handsUp:p.handsUpUntil>clock,limp:!!p.limp,crawling:!!p.crawling,
      // An officer's revolver (src/police/guns.mjs): drawn, aimed at the player, and its recoil.
-     ...(p.officer&&p.gunDrawn?{weapon:'revolver',aim:p.gunAim??0,aimTarget:p.gunTarget,
+     // Stage 2: an armed civilian's handgun is drawn the same way.
+     ...(p.gunDrawn?{weapon:'revolver',aim:p.gunAim??0,aimTarget:p.gunTarget,
       aimHeading:p.gunTarget?Math.atan2(p.gunTarget.x-(p.renderX??p.x),p.gunTarget.z-(p.renderZ??p.z)):p.heading,shotLeft:p.gunShotLeft??0}:{})};
     // §9ai H1: a body that has just been hit catches for the blow's hit-stop.
     if(slot.elapsed>=interval){slot.figure.update(state,victimScale(Math.min(.1,slot.elapsed),clock,p.hitStopUntil));slot.elapsed=0;}
