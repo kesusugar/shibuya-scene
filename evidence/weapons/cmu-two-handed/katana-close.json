@@ -1,5 +1,5 @@
 {
- "url": "http://<local>/qa/gta-upgrade/cmu-weaponbench.html?only=katana-cut&times=0.3,0.95,1.25",
+ "url": "http://<local>/qa/gta-upgrade/cmu-weaponbench.html?only=katana-cut&times=0.45,0.68,0.82",
  "ready": true,
  "bench": {
   "clips": [
@@ -7,7 +7,7 @@
   ],
   "lines": [
    "three-quarter front (player's right) / right side; columns are clip time",
-   "katana: CMU 02_07 overhead cut (source 6.2-8.4 s): 0.30s 0.95s 1.25s | measured {\"leftMissCm\":5.2,\"wristTurnMaxDeg\":{\"right\":72,\"left\":71},\"handsApartSourceM\":0.168,\"handsApartTargetM\":0.15,\"wristBendDeg\":{\"right\":{\"median\":68,\"max\":88},\"left\":{\"median\":77,\"max\":115}}}"
+   "katana: CMU 02_07 overhead cut (source 6.2-8.4 s, the cut replayed at 2x): 0.45s 0.68s 0.82s | measured {\"leftMissCm\":4.4,\"handsApartSourceM\":0.168,\"handsApartTargetM\":0.15,\"wristDeg\":{\"right\":{\"bendMedian\":50,\"bendMax\":62,\"twistMax\":36},\"left\":{\"bendMedian\":21,\"bendMax\":32,\"twistMax\":38}},\"gripPeakMs\":6.7,\"trunkMaxDeg\":{\"captured\":52,\"kept\":36}}"
   ],
   "calls": 8
  },
