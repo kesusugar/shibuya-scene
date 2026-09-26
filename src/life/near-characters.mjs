@@ -341,6 +341,8 @@ export function createNearCharacters(tier='high',{ctx=null}={}){
      ragdoll:fallen(p)?p.ragdoll:null,
      // Roadmap stage 2: hands up at gunpoint, a leg wound's limp or crawl.
      handsUp:p.handsUpUntil>clock,limp:!!p.limp,crawling:!!p.crawling,
+     // Stage 4: an onlooker filming or calling.
+     phone:p.watchUntil>clock?p.phone:null,
      // An officer's revolver (src/police/guns.mjs): drawn, aimed at the player, and its recoil.
      // Stage 2: an armed civilian's handgun is drawn the same way.
      ...(p.gunDrawn?{weapon:'revolver',aim:p.gunAim??0,aimTarget:p.gunTarget,

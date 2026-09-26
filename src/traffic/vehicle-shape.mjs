@@ -141,7 +141,7 @@ const SILHOUETTE={
 };
 const STYLE={taxi:'sedan',sedan:'sedan',kei:'hatch',van:'onebox',bus:'onebox',keiTruck:'cabover',
  longVan:'semibonnet',minivan:'minivan',tallKei:'tallbox',cityTaxi:'mpv',truck2t:'cabover',
- police:'sedan',coupe:'coupe',ownCar:'fastback',unmarked:'sedan',riotBus:'onebox',
+ police:'sedan',coupe:'coupe',ownCar:'fastback',unmarked:'sedan',riotBus:'onebox',ambulance:'semibonnet',
  heroSilver:'coupe',heroDark:'coupe'};
 /** The silhouettes, for tests: every lofted type must name one. */
 export const SILHOUETTES=Object.freeze(Object.keys(SILHOUETTE));

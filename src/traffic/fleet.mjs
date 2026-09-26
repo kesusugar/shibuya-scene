@@ -34,7 +34,9 @@ export const LIVERY=Object.freeze({
  taxiTwoTone:Object.freeze({id:2,lower:0xe7b823,second:0x2f6b45,band:.73}),
  bus:   Object.freeze({id:3,lower:0x2f7d4f,second:0xe9e2c8,band:.40}),
  taxiCream:Object.freeze({id:4,lower:0xe8e1cf,second:0x7a1f2b,band:.73}),
- riot:  Object.freeze({id:5,lower:0x1f3f7a,second:0xe9ecef,band:.52})
+ riot:  Object.freeze({id:5,lower:0x1f3f7a,second:0xe9ecef,band:.52}),
+ // Roadmap stage 4: the ambulance -- a red lower third, white above.
+ ambulance:Object.freeze({id:6,lower:0xc42a2e,second:0xf3f3ef,band:.3})
 });
 const LIVERY_BY_ID=Object.values(LIVERY).sort((a,b)=>a.id-b.id);
 

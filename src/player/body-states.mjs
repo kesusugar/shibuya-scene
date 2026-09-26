@@ -9,11 +9,13 @@
 //              simulation's).
 //  UPPER POSE  any clip's upper body over the legs -- the katana's two-handed guard (Sword_Idle)
 //              held while walking, instead of the walk's swinging arms with a sword in one hand.
-import {Quaternion,Vector3} from 'three';
+import {BoxGeometry,Mesh,MeshStandardMaterial,Quaternion,Vector3} from 'three';
 import {createTwoBoneSolver} from './foot-ik.mjs';
 
 export const BODY = Object.freeze({
  // Hands up: where each palm goes, in the body's frame (+X left, +Y up, +Z forward), at 1.76 m.
+ // Stage 4: a phone in the right hand -- held up in front of the face to film, or at the right ear.
+ phone: Object.freeze({film: Object.freeze([-.08, 1.38, .4]), call: Object.freeze([-.17, 1.47, .04]), fade: .35}),
  handsUp: Object.freeze({left: Object.freeze([.3, 1.58, .14]), right: Object.freeze([-.3, 1.58, .14]), fade: .2}),
  // Limp: how far the knee may bend (share of what the walk bends it), the hip drop and lean (rad).
  limp: Object.freeze({knee: .35, drop: .1, lean: .09, fade: .3}),
@@ -119,5 +121,48 @@ export function createUpperPose(root, clips, name) {
    root.updateMatrixWorld(true);
    return true;
   }
+ };
+}
+
+let phoneGeometry = null, phoneMaterial = null;
+/**
+ * Stage 4: a phone in the right hand. `update(mode, dt)` with 'film', 'call' or null: the hand goes
+ * up in front of the face (filming) or to the right ear (calling), and the phone shows in it.
+ */
+export function createPhone(root) {
+ const bone = n => root.getObjectByName(n);
+ const arm = [bone('upperarm_r'), bone('lowerarm_r'), bone('hand_r')];
+ const ready = arm.every(Boolean);
+ const solve = createTwoBoneSolver(), goal = new Vector3(), hand = new Vector3(), p = new Vector3();
+ phoneGeometry ??= new BoxGeometry(.072, .15, .009);
+ phoneMaterial ??= new MeshStandardMaterial({name: 'phone', color: 0x15171b, metalness: .4, roughness: .3, emissive: 0x2b3a4a, emissiveIntensity: .35});
+ const mesh = ready ? new Mesh(phoneGeometry, phoneMaterial) : null;
+ if (mesh) {
+  const s = new Vector3(); arm[2].getWorldScale(s);
+  mesh.scale.setScalar(1 / (s.x || 1)); mesh.position.set(-.03 / (s.x || 1), .1 / (s.x || 1), 0); mesh.visible = false; mesh.name = 'phone';
+  arm[2].add(mesh);
+ }
+ let w = 0, mode = null;
+ return {
+  get ready() {return ready;},
+  get weight() {return w;},
+  get mesh() {return mesh;},
+  update(want, dt) {
+   if (want) mode = want;
+   w += Math.max(-dt / BODY.phone.fade, Math.min(dt / BODY.phone.fade, (want ? 1 : 0) - w));
+   if (mesh) mesh.visible = w > .4;
+   if (!ready || w <= 1e-3 || !mode) return false;
+   root.updateMatrixWorld(true);
+   const [upper, lower, wrist] = arm, k = w * w * (3 - 2 * w);
+   wrist.updateWorldMatrix(true, false);
+   hand.setFromMatrixPosition(wrist.matrixWorld);
+   p.set(0, palm, 0).applyMatrix4(wrist.matrixWorld).sub(hand);
+   goal.set(...BODY.phone[mode]).applyQuaternion(root.quaternion).add(root.position).sub(p);
+   goal.sub(hand).multiplyScalar(k).add(hand);
+   solve(upper, lower, wrist, goal);
+   return true;
+  },
+  reset() {w = 0; mode = null; if (mesh) mesh.visible = false;},
+  dispose() {mesh?.removeFromParent();}
  };
 }

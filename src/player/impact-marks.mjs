@@ -257,6 +257,13 @@ export function createImpactMarks() {
    if (!livePools && pools.count) used(pools, false);
    return liveHoles + liveCasings + liveMags + puffs + livePools;
   },
+  /** Roadmap stage 4: wash the blood within `r` m of (x, z) -- the pools go. Returns how many. */
+  clearNear(x, z, r) {
+   let n = 0;
+   for (let i = 0; i < P; i++) if (pon[i] && Math.hypot(pp[i * 3] - x, pp[i * 3 + 2] - z) <= r) {pon[i] = 0; pools.setMatrixAt(i, hide); n++;}
+   if (n) pools.instanceMatrix.needsUpdate = true;
+   return n;
+  },
   clear() {
    holeAge.fill(-1); clife.fill(0); mlife.fill(0); slife.fill(0); pon.fill(0);
    for (const mesh of [holes, casings, mags, pools]) {for (let i = 0; i < mesh.instanceMatrix.count; i++) mesh.setMatrixAt(i, hide); used(mesh, false);}

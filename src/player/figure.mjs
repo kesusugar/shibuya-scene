@@ -6,7 +6,7 @@ import {attackOf} from './attack-timing.mjs';
 import {createWeaponRig} from './weapon-mesh.mjs';
 import {createAimLayer} from './aim-layer.mjs';
 import {createHands} from './hands.mjs';
-import {createHandsUp,createLimp,createUpperPose} from './body-states.mjs';
+import {createHandsUp,createLimp,createUpperPose,createPhone} from './body-states.mjs';
 import {createHitReaction} from './hit-reaction.mjs';
 import {createRagdoll} from './ragdoll.mjs';
 import pack from './generated/character.mjs';
@@ -186,6 +186,8 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
  // Roadmap stage 2: hands up at gunpoint, a limp, and the katana's guard held while walking.
  const handsUp=root.getObjectByName('upperarm_l')?createHandsUp(root):null;
  const limp=root.getObjectByName('calf_r')?createLimp(root):null;
+ // Stage 4: an onlooker's phone (built on first use: most bodies never hold one).
+ let phone=null;
  const swordWalk=weaponRig&&weapons.includes('katana')?createUpperPose(root,instance.clips,'SwordIdle'):null;
  let swordK=0;
  // §9ai: a blow you can see land (hit-reaction.mjs), and a body that falls the way it was hit
@@ -364,6 +366,8 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
    if(hands&&!SWINGS.has(overlay)&&!UNGROUNDED.has(overlay))hands.update(posed,dt);
    // Stage 2: hands up (over whatever the arms were doing), and the limp (before the feet are planted).
    handsUp?.update(!!state.handsUp&&!SWINGS.has(overlay)&&!UNGROUNDED.has(overlay)&&state.alive!==false,dt);
+   if(state.phone&&!phone&&handsUp)phone=createPhone(root);
+   phone?.update(state.phone&&!state.handsUp&&!SWINGS.has(overlay)&&!UNGROUNDED.has(overlay)?state.phone:null,dt);
    limp?.update(!!state.limp&&!state.crawling&&!SWINGS.has(overlay)&&!UNGROUNDED.has(overlay),gait.phase,dt,speed>LOCOMOTION.idleSpeed);
 
    // Feet last, on top of the finished pose, because it corrects what the animation produced
@@ -392,7 +396,7 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
    mixer.stopAllAction();
    for(const action of Object.values(actions))action.reset();
    overlay=null;previousAttack=0;seeded=false;dominant='Idle';strike.Punch=strike.PunchCross=strike.SwordAttack=0;
-   stance.SwordIdle=stance.PistolIdle=0;aimLayer?.reset();hands?.reset();handsUp?.reset();limp?.reset();swordK=0;strike.Crawl=0;strike.Roll=0;crouchK=0;crouchIdle?.stop();
+   stance.SwordIdle=stance.PistolIdle=0;aimLayer?.reset();hands?.reset();handsUp?.reset();phone?.reset();limp?.reset();swordK=0;strike.Crawl=0;strike.Roll=0;crouchK=0;crouchIdle?.stop();
    hitReaction?.reset();ragdoll?.reset();hitSeq=null;ragdollSeq=null;
    gait.reset();facing.reset(0);
    for(const name of GAIT)actions[name]?.play().setEffectiveWeight(0);
@@ -403,6 +407,8 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
   },
   /** PLAN-WEAPONS: the carried weapons, or null on a body that carries none. */
   get weapons(){return weaponRig;},
+  /** Stage 4: the phone an onlooker holds (null until first used). */
+  get phone(){return phone;},
   /** Stage 1: the weapon-change and reload hands (null on a body that carries nothing). */
   get hands(){return hands;},
   /** §9ai: the blow springs and the ragdoll (null on a rig without them / until first used). */
@@ -420,7 +426,7 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
   dispose(){
    if(disposed)return;disposed=true;
    mixer.stopAllAction();mixer.uncacheRoot(root);
-   weaponRig?.dispose();
+   weaponRig?.dispose();phone?.dispose();
    instance.dispose();
   }
  };
