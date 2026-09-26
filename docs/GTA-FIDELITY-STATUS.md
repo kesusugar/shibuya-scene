@@ -5781,6 +5781,52 @@ head to below the waist.
 two-handed cut); the game-figure bench `qa/gta-upgrade/weaponbench.html` gains smg-low, smg-aim,
 smg-aim-walk, smg-recoil and smg-walk; `qa/gta-upgrade/weapons-scene.mjs` gains the SMG steps.
 
+## 9ai. Hits that land — hit-stop, the wound, a flinch by where it struck, a light ragdoll (same branch)
+
+The user: a cut or a shot "passes through" (通り抜けている感じ); wanted hits that feel physical, **no
+camera shake and no rumble** added for it. What was missing, read in the code: damage came off at
+the right frame, but the swing sailed on through the body at full speed; a round into a person
+made no sound (`bullet_hit` had no handler); the victim's Hit clip barely moves and figure.mjs's
+recoil bent every blow the same way; and a killed pedestrian was handed straight to the mass
+crowd, which plays one fall whatever the blow was.
+
+- **H1 hit-stop (`src/player/hit-stop.mjs`).** On a landed blow the attacker's swing and body
+  (`melee.update` and the player's figure run on `hitStop.scale(dt)`) and the victim's body
+  (`victimScale`, via `p.hitStopUntil`) run at 6% for 0.07 s on a cut, 0.045 s on a pistol round,
+  0.025 s on a submachine-gun round (at most one per 0.12 s, so a burst does not stutter). The
+  city, the traffic and the crowd run on, so it never reads as a dropped frame.
+- **H2 the wound.** Blood sprayed out along the blow from its own opaque particle pool
+  (`weapon-effects.mjs` `blood()`, one more draw call while live; sparks are additive and would
+  glow red), with a little back-spatter: at the round's hit point, and for a cut at the height
+  the blade met them. A synthesised thump for a round and a hiss-and-thump for a cut
+  (`gunfire.mjs` `flesh()`/`slice()`), on top of the existing blow sound.
+- **H3 a flinch by where it struck (`src/player/hit-reaction.mjs`).** Each blow is an impulse
+  into damped springs on the bones that would take it, in the body's frame: head → the head
+  snaps (about 35°) and the neck after it; body → the trunk folds away (about 40° over three
+  bones) with the head lagging; legs → the knees buckle and the trunk folds forward. Rounds add
+  up over a burst (an automatic's are 0.6 each), bounded per bone. Where it struck: for a round
+  the new `castShot` `part` (legs below 0.85 m on a 1.76 m body; `zone`, and so damage, is
+  unchanged); for a cut the blade tip's height at the victim's bearing (SWORD's sweep comes down
+  from 2.25 m to 0.69 m), and its direction is across the body left→right and away.
+- **H4 a light ragdoll (`src/player/ragdoll.mjs`).** 18 points on the joints, taken from the pose
+  the blow found; Verlet with gravity, a ground plane, every bone's length, a braced torso box and
+  a few "no closer than" limits (a knee or elbow cannot fold shut, the head stays off the
+  shoulders); the blow is a velocity at the point it struck on top of the crowd's own knock-down
+  push. The skeleton follows the points (pelvis and chest by their frames, limbs by aiming, the
+  head by the point above it) and it sleeps once still (about 1 s). The near pool keeps a body it
+  was already holding when it was killed (at most `RAGDOLL_LIMIT` 3) so the fall plays out; a body
+  picked up afterwards would stand up and then fall, so those stay with the mass crowd as before.
+
+**Checks.** `tests/hit-feel.test.mjs` (13): each zone falls to the ground along the blow with no
+bone stretched more than 5% and nothing below the ground; the fall follows the blow's direction;
+a head round moves the head more than the chest; a chest hit comes back; a leg hit closes the
+knee angle; the hit-stop runs a swing at under 10% through its stop and resumes, and an automatic
+stops at most once per gap; a cut records where and which way and hands a kill its ragdoll with
+the knock-down push; a round below the hips is `legs` without changing `zone`; blood is its own
+opaque pool, sprays along the blow and falls; a figure told it is a ragdoll stays where it fell
+and ends lying down. `qa/gta-upgrade/hitbench.html` draws the flinches and the falls (the flinch
+was sized on it: the first kicks moved the neck 11 cm for 0.2 s, a twitch at play distance).
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
@@ -6110,6 +6156,16 @@ keeps the butt in the shoulder; pivoting there keeps the stock outside the body.
 the eye at the nearest point of the sight line never converged (that point is inside the
 sphere): the target is where the line crosses the sphere. And when the line is 15 cm to the side,
 no neck reaches it — the body has to blade and the stock move in, or the head ends ear-on-shoulder.
+
+**Hits that land (§9ai): a new JSDoc'd helper between a function and its JSDoc breaks the
+types again.** `spreadDirection` was inserted between `createArsenal`'s `@param` block and the
+function (W1 hit this with `katanaSweep`); TypeScript then read the options as `null` and
+rejected the scene's callbacks. Put helpers ABOVE the documented function's comment.
+
+**Hits that land (§9ai): editing ANY module the app imports reloads a running headless capture.**
+Already known for `src/player/*`; it bit again through `src/player/ballistics.mjs` while
+`weapons-scene.mjs` was waiting on its police step, which then could never finish. New modules
+that nothing imports yet, tests and docs are safe to write during a run.
 
 ## 17. Files that matter
 
