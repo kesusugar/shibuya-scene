@@ -35,23 +35,56 @@ async function fall(zone,dir={x:0,z:1},push={x:0,y:0,z:0}){
 for(const zone of ['head','body','legs'])test(`H4: a blow to the ${zone} puts the body on the ground, along the blow, in one piece`,async()=>{
  const {figure,rag,p0,p1,h0,h1,t}=await fall(zone,{x:1,z:0});
  assert.ok(rag.asleep,`still moving after ${t.toFixed(1)} s`);
- assert.ok(p1.y<.35,`the pelvis is ${p1.y.toFixed(2)} m up: not down`);
+ // Down: lying, or slumped over the knees (§9ak: a real collapse ends either way), never standing.
+ assert.ok(p1.y<.55,`the pelvis is ${p1.y.toFixed(2)} m up: not down`);
  assert.ok(h1.y<.45,`the head is ${h1.y.toFixed(2)} m up: not down`);
  // Along the blow: the head ends further along +x than it started -- or, for a blow to the legs,
  // the legs are taken out along it (and the body comes down the other way, which is right).
- if(zone==='legs'){const k=rag.points.calf_l.x+rag.points.calf_r.x;assert.ok(k/2>.25,`the knees moved ${(k/2).toFixed(2)} m along the blow`);}
- else assert.ok(h1.x-h0.x>.4,`the head moved ${(h1.x-h0.x).toFixed(2)} m along the blow`);
+ // §9ak: a body collapses rather than being thrown, so "along the blow" is a tip, not a flight.
+ if(zone==='legs'){const k=rag.points.calf_l.x+rag.points.calf_r.x;assert.ok(k/2>.05,`the knees moved ${(k/2).toFixed(2)} m along the blow`);}
+ else assert.ok(h1.x-h0.x>.2,`the head moved ${(h1.x-h0.x).toFixed(2)} m along the blow`);
+ // It goes down where it stood: the pelvis ends within a body's width or so of where it was.
+ assert.ok(Math.hypot(p1.x-p0.x,p1.z-p0.z)<.9,`the pelvis travelled ${Math.hypot(p1.x-p0.x,p1.z-p0.z).toFixed(2)} m`);
  for(const s of rag.sticks)assert.ok(Math.abs(s.now-s.rest)<.05*s.rest+.01,`${s.a}-${s.b} stretched to ${s.now.toFixed(3)} from ${s.rest.toFixed(3)}`);
  for(const [name,p] of Object.entries(rag.points)){assert.ok([p.x,p.y,p.z].every(Number.isFinite),name);assert.ok(p.y>=-.001,`${name} under the ground`);}
  // The skeleton follows the points.
  assert.ok(p1.distanceTo(rag.points.pelvis)<.02,'the pelvis bone is not on its point');
- void p0;figure.dispose();
+ figure.dispose();
 });
 
-test('H4: the direction of the blow decides where the body falls',async()=>{
+test('H4: hit from behind the body goes down forward, further than when hit from the front',async()=>{
+ // §9ak: a collapse curls the trunk forward whichever way the blow came, so a body shot from the
+ // front may still end up forward; the blow only tips it.
  const a=await fall('body',{x:0,z:1}),b=await fall('body',{x:0,z:-1});
- assert.ok(a.h1.z>a.h0.z+.3&&b.h1.z<b.h0.z-.3,`forward ${(a.h1.z-a.h0.z).toFixed(2)}, back ${(b.h1.z-b.h0.z).toFixed(2)}`);
+ assert.ok(a.h1.z>a.h0.z+.3,`from behind, the head went ${(a.h1.z-a.h0.z).toFixed(2)} m forward`);
+ assert.ok(a.h1.z-a.h0.z>b.h1.z-b.h0.z+.2,`from behind ${(a.h1.z-a.h0.z).toFixed(2)} m, from the front ${(b.h1.z-b.h0.z).toFixed(2)} m`);
  a.figure.dispose();b.figure.dispose();
+});
+
+test('§9ak: the ragdoll keeps to a human range -- no knee bent backward, no split, no hip far behind',async()=>{
+ const asset=await humanoid();
+ for(const [zone,dir] of [['body',{x:1,z:0}],['legs',{x:0,z:-1}],['legs',{x:0,z:1}],['head',{x:-1,z:0}]]){
+  const figure=createPlayerFigure(asset);const state={x:0,y:0,z:0,speed:0,heading:0,bodyHeading:0,alive:true,attackTime:0};
+  for(let i=0;i<20;i++)figure.update(state,1/30);
+  const rag=createRagdoll(figure.root);rag.start({dir,zone,ground:0});
+  let worstSplit=0,worstBack=0;
+  for(let t=0;t<4&&rag.update(1/30);t+=1/30){
+   const P=rag.points,up=P.spine_03.clone().sub(P.pelvis).normalize(),left=P.thigh_l.clone().sub(P.thigh_r);
+   left.addScaledVector(up,-left.dot(up)).normalize();const fwd=left.clone().cross(up);
+   const tl=P.calf_l.clone().sub(P.thigh_l).normalize(),tr=P.calf_r.clone().sub(P.thigh_r).normalize();
+   worstSplit=Math.max(worstSplit,Math.acos(Math.max(-1,Math.min(1,tl.dot(tr)))));
+   worstBack=Math.max(worstBack,-tl.dot(fwd),-tr.dot(fwd));
+   for(const s of ['l','r']){   // the knee in front of the hip-ankle line (or on it)
+    const H=P['thigh_'+s],K=P['calf_'+s],A=P['foot_'+s],e=A.clone().sub(H),k=K.clone().sub(H).dot(e)/e.lengthSq();
+    const off=K.clone().sub(H.clone().addScaledVector(e,k)).dot(fwd);
+    assert.ok(off>-.03,`${zone}: the ${s} knee bent backward by ${(-off*100).toFixed(1)} cm`);
+   }
+  }
+  // Hip range front-to-back plus side to side: a sprawled fall can reach about 120°, never a split.
+  assert.ok(worstSplit<125*Math.PI/180,`${zone}: the legs split ${(worstSplit*180/Math.PI).toFixed(0)}°`);
+  assert.ok(worstBack<.5,`${zone}: a thigh went ${(Math.asin(Math.min(1,worstBack))*180/Math.PI).toFixed(0)}° behind the trunk`);
+  figure.dispose();
+ }
 });
 
 // H3 ---------------------------------------------------------------------------------------------
@@ -84,24 +117,30 @@ async function reaction(zone,dir){
 
 test('H3: shot in the head from the front, the head snaps back more than the chest moves',async()=>{
  const {peak,settled}=await reaction('head',{x:0,z:-1});   // travelling toward -z: from the front
- assert.ok(peak.head.z<-.05,`the head moved ${peak.head.z.toFixed(3)} m along the facing`);
+ assert.ok(peak.head.z<-.03,`the head moved ${peak.head.z.toFixed(3)} m along the facing`);
  assert.ok(Math.abs(peak.head.z)>2*Math.abs(peak.chest.z),'the chest took the blow, not the head');
- assert.ok(settled,"still moving after 1.5 s");
+ assert.ok(settled,'still moving after 1.5 s');
 });
 
-test('H3: hit in the chest from the side, the chest gives sideways and comes back',async()=>{
- const {peak,frames}=await reaction('body',{x:1,z:0});     // travelling toward +x: the body's left
- const moved=Math.max(...frames.map(f=>Math.abs(f.now.chest.x-f.base.chest.x)));
- assert.ok(moved>.02,`the chest moved ${moved.toFixed(3)} m`);
- const last=frames[frames.length-1];assert.ok(last.now.chest.distanceTo(last.base.chest)<.01,'did not settle');
- void peak;
+test('§9ak H3: hit in the chest, the trunk curls FORWARD whichever side it came from, with only a small lean along the blow',async()=>{
+ for(const dir of [{x:0,z:-1},{x:0,z:1},{x:1,z:0}]){
+  const {frames}=await reaction('body',dir);
+  const fwd=Math.max(...frames.map(f=>f.now.head.z-f.base.head.z));
+  assert.ok(fwd>.04,`from ${JSON.stringify(dir)} the head went ${fwd.toFixed(3)} m forward (no curl)`);
+  const back=Math.min(...frames.map(f=>f.now.head.z-f.base.head.z));
+  assert.ok(back>-.05,`from ${JSON.stringify(dir)} the trunk was thrown back ${(-back).toFixed(3)} m`);
+  if(dir.x){const side=Math.max(...frames.map(f=>f.now.chest.x-f.base.chest.x));assert.ok(side>0&&side<fwd,'the lean along the blow is not small');}
+  const last=frames[frames.length-1];assert.ok(last.now.head.distanceTo(last.base.head)<.01,'did not settle');
+ }
 });
 
-test('H3: hit in the legs, the knees buckle (the knee angle closes)',async()=>{
- const {frames}=await reaction('legs',{x:0,z:-1});
- const knee=f=>{const a=f.hip.clone().sub(f.knee).normalize(),b=f.ankle.clone().sub(f.knee).normalize();return Math.acos(a.dot(b));};
- const straight=knee(frames[0].base),least=Math.min(...frames.map(f=>knee(f.now)));
- assert.ok(least<straight-.12,`the knee went from ${straight.toFixed(2)} to ${least.toFixed(2)} rad`);
+test('§9ak H3: hit in the legs, the knees give -- from the front and from behind (never backward)',async()=>{
+ for(const dir of [{x:0,z:-1},{x:0,z:1}]){
+  const {frames}=await reaction('legs',dir);
+  const knee=f=>{const a=f.hip.clone().sub(f.knee).normalize(),b=f.ankle.clone().sub(f.knee).normalize();return Math.acos(a.dot(b));};
+  const straight=knee(frames[0].base),least=Math.min(...frames.map(f=>knee(f.now)));
+  assert.ok(least<straight-.12,`from ${JSON.stringify(dir)} the knee went from ${straight.toFixed(2)} to ${least.toFixed(2)} rad`);
+ }
 });
 
 test('H3: a burst adds up, and the springs stay bounded',()=>{

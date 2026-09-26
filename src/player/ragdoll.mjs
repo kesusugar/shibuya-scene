@@ -11,9 +11,15 @@
 //    constraints that stop a knee or an elbow folding flat or the head sinking into the chest.
 //    No joint-angle solver: a bone chain that can only keep its lengths already falls like a
 //    body, and it costs a few microseconds.
-//  - The blow is a velocity added at the point it struck (the head, the chest or the legs) on
-//    top of the whole body's push, so a head shot snaps the head back first and a cut to the legs
-//    takes them out from under it.
+//  - §9ak: joint ranges, from human anatomy, so no pose is one a body cannot take: the knee and
+//    the elbow are hinges that bend one way only (no hyperextension), the hip stays inside its
+//    range (90° of flexion, 20° of extension behind the trunk, 45° out to the side, 20° across), and the
+//    head stays within 50° of the chest's line.
+//  - §9ak: how a person actually goes down. A round's momentum is tiny next to a body's (a
+//    pistol round moves a 70 kg body a few centimetres per second) and a cut is a slice, not a
+//    shove: people are not thrown, they lose their footing. So the fall starts as a collapse --
+//    the knees buckle forward and the hips drop -- with only a modest push where the blow struck
+//    deciding which way the collapse tips.
 //  - Each frame the skeleton is turned to follow the points: the pelvis and chest by the frame
 //    their spine and hip / shoulder lines make, every limb bone by aiming it at its child point.
 //  - It goes to sleep once nothing has moved for half a second; a sleeping ragdoll costs nothing.
@@ -26,15 +32,26 @@ export const RAGDOLL = Object.freeze({
  step: 1 / 60,              // s per integration step
  maxSteps: 4,               // per frame, so a slow frame does not spiral
  iterations: 8,             // constraint passes per step
- damping: .995,             // velocity kept per step (air)
- friction: .8,              // horizontal velocity kept per step while touching the ground
+ damping: .99,              // velocity kept per step (a limp body loses energy in its joints)
+ friction: .7,              // horizontal velocity kept per step while touching the ground
  radius: .06,               // m, a joint's clearance off the ground (the head's is larger)
  headRadius: .11,
  sleepSpeed: .06,           // m/s: below this for `sleepAfter` s, the body stops
  sleepAfter: .5,
  maxAwake: 6,               // s: asleep by then whatever it is doing
- // The blow: m/s added at the point it struck, and half that at its neighbours.
- blow: Object.freeze({head: 3.2, body: 2.6, legs: 3.0})
+ // The blow: m/s added at the point it struck, and 0.6 of it at its neighbours (§9ak: modest).
+ blow: Object.freeze({head: .4, body: 1.1, legs: .9}),   // a head shot drops a body where it stands
+ // The collapse (§9ak): the knees go forward and the hips drop as the legs stop holding.
+ // The trunk goes forward over them: the head is heavy and the back muscles let go too.
+ // Mostly the hips dropping: a strong knee kick reads as a marching step, then a roll onto the back.
+ buckle: Object.freeze({knee: .35, pelvis: 1.0, trunk: .5}),
+ // Joint ranges (§9ak), as components of the thigh's direction in the pelvis's frame and a cone
+ // for the neck.
+ // sin 15° of extension, ~45° out, sin 20° across, and flexion to sin 20° above level (110°):
+ // front to back at most 125°, never a split. `soft` is the share of the correction per pass:
+ // a hard limit fought the ground while seated and pumped the pelvis back up.
+ hip: Object.freeze({extension: .26, abduction: .7, adduction: .34, flexion: .34, soft: .35}),
+ neck: Math.cos(50 * Math.PI / 180)
 });
 
 // The points, and the bone each one is read from at the start.
@@ -102,7 +119,79 @@ export function createRagdoll(root) {
   setWorld(b, new Quaternion().setFromUnitVectors(from.normalize(), to.normalize()).multiply(q));
  };
 
+ /** §9ak: the pelvis's and chest's frames from the points: x to the body's left, y up the spine, z forward. */
+ const frame = (lo, hi, l, r, out) => {
+  const y = out.y.subVectors(pos[hi], pos[lo]).normalize(), x = out.x.subVectors(pos[l], pos[r]);
+  x.addScaledVector(y, -x.dot(y)).normalize(); out.z.crossVectors(x, y); return out;
+ };
+ const pf = {x: new Vector3(), y: new Vector3(), z: new Vector3()}, cf = {x: new Vector3(), y: new Vector3(), z: new Vector3()};
+ const e = new Vector3(), m2 = new Vector3(), t = new Vector3();
+ /** A hinge: `mid` may only sit on the `side` of the line from `a` to `b` (no hyperextension). */
+ const hinge = (a, mid, b, side, sign = 1) => {
+  const A = pos[I[a]], M = pos[I[mid]], B = pos[I[b]];
+  e.subVectors(B, A); const len2 = e.lengthSq(); if (len2 < 1e-8) return;
+  const k = m2.subVectors(M, A).dot(e) / len2;
+  m2.copy(A).addScaledVector(e, k);                     // the nearest point on the line
+  const off = t.subVectors(M, m2).dot(side) * sign;
+  if (off >= 0) return;
+  // Momentum-conserving: the joint moves two thirds of the way, the two ends a sixth each the
+  // other way. Moving the joint alone would push the whole body along a little every step.
+  const d = -off * sign;
+  M.addScaledVector(side, d * 2 / 3); A.addScaledVector(side, -d / 3); B.addScaledVector(side, -d / 3);
+ };
+ /** The hip's range: the thigh's direction in the pelvis frame, clamped, the knee put back on it. */
+ const hip = (thigh, knee, left) => {
+  const H = pos[I[thigh]], K = pos[I[knee]], len = H.distanceTo(K);
+  t.subVectors(K, H).normalize();
+  let fx = t.dot(pf.x), fz = t.dot(pf.z);
+  const up = t.dot(pf.y);
+  const out = left ? fx : -fx;                           // positive: away from the body's midline
+  const J = RAGDOLL.hip;
+  let changed = false;
+  if (fz < -J.extension) {fz = -J.extension; changed = true;}
+  if (out > J.abduction) {fx = (left ? 1 : -1) * J.abduction; changed = true;}
+  if (out < -J.adduction) {fx = (left ? -1 : 1) * J.adduction; changed = true;}
+  let fy;
+  if (up > J.flexion) {
+   // Flexed past its range (the knee above the hip): back to the range's edge.
+   fy = J.flexion; const k = Math.sqrt((1 - fy * fy) / Math.max(1e-6, fx * fx + fz * fz)); fx *= k; fz *= k; changed = true;
+  }
+  if (!changed) return;
+  // What is left of the unit length goes along the spine, on the side the thigh was on.
+  fy ??= (up > 0 ? 1 : -1) * Math.sqrt(Math.max(0, 1 - fx * fx - fz * fz));
+  t.set(0, 0, 0).addScaledVector(pf.x, fx).addScaledVector(pf.y, fy).addScaledVector(pf.z, fz).normalize();
+  // Half to the knee, half (the other way) to the hip and pelvis, so the correction is internal.
+  const d = e.copy(H).addScaledVector(t, len).sub(K);
+  const k = J.soft;
+  K.addScaledVector(d, .5 * k); H.addScaledVector(d, -.25 * k); pos[I.pelvis].addScaledVector(d, -.25 * k);
+ };
+ /** The neck: the head stays within RAGDOLL.neck of the chest's line. */
+ const neck = () => {
+  const C = pos[I.spine_03], Hd = pos[I.Head], len = C.distanceTo(Hd);
+  t.subVectors(Hd, C).normalize(); const c = t.dot(cf.y);
+  if (c >= RAGDOLL.neck) return;
+  // Swing it back to the cone's edge, in the plane of the chest's line and where it is now.
+  e.copy(t).addScaledVector(cf.y, -c); if (e.lengthSq() < 1e-8) e.copy(cf.z); e.normalize();
+  const s = Math.sqrt(1 - RAGDOLL.neck * RAGDOLL.neck);
+  t.copy(cf.y).multiplyScalar(RAGDOLL.neck).addScaledVector(e, s);
+  const move = m2.copy(C).addScaledVector(t, len).sub(Hd);
+  // The head and the point above it move toward the cone, the chest and shoulders the other way.
+  Hd.addScaledVector(move, .6); pos[I.headTop].addScaledVector(move, .6);
+  C.addScaledVector(move, -.6); pos[I.upperarm_l].addScaledVector(move, -.3); pos[I.upperarm_r].addScaledVector(move, -.3);
+ };
+ function joints() {
+  if (globalThis.__RAGDOLL_OFF__?.all) return;
+  frame(I.pelvis, I.spine_03, I.thigh_l, I.thigh_r, pf);
+  frame(I.spine_03, I.Head, I.upperarm_l, I.upperarm_r, cf);
+  const off = globalThis.__RAGDOLL_OFF__ ?? {};
+  if (!off.knee) {hinge('thigh_l', 'calf_l', 'foot_l', pf.z); hinge('thigh_r', 'calf_r', 'foot_r', pf.z);}       // knees bend forward
+  if (!off.elbow) {hinge('upperarm_l', 'lowerarm_l', 'hand_l', cf.z, -1); hinge('upperarm_r', 'lowerarm_r', 'hand_r', cf.z, -1);}  // elbows backward
+  if (!off.hip) {hip('thigh_l', 'calf_l', true); hip('thigh_r', 'calf_r', false);}
+  if (!off.neck) neck();
+ }
+
  function satisfy() {
+  joints();
   for (const [a, b, rest] of sticks) {
    v.subVectors(pos[b], pos[a]); const d = v.length() || 1e-6, k = (d - rest) / d * .5;
    pos[a].addScaledVector(v, k); pos[b].addScaledVector(v, -k);
@@ -111,9 +200,22 @@ export function createRagdoll(root) {
    v.subVectors(pos[b], pos[a]); const d = v.length() || 1e-6; if (d >= min) continue;
    const k = (d - min) / d * .5; pos[a].addScaledVector(v, k); pos[b].addScaledVector(v, -k);
   }
+  floor();
+  // The joint ranges again, last, so the lengths pass cannot leave a knee bent the wrong way;
+  // and the floor after them, so they cannot leave a joint in the ground.
+  joints();
+  floor();
+ }
+ /**
+  * §9ak: the ground, inelastic. Lifting a point out of the ground without also lifting where it
+  * was a step ago hands it an upward velocity -- in Verlet the correction IS velocity -- and a
+  * body lying down bounced itself back up onto its shoulders. A point that touches the ground
+  * keeps no downward or upward motion.
+  */
+ function floor() {
   for (let i = 0; i < n; i++) {
    const r = i === I.Head || i === I.headTop ? RAGDOLL.headRadius : RAGDOLL.radius;
-   if (pos[i].y < ground + r) pos[i].y = ground + r;
+   if (pos[i].y < ground + r) {pos[i].y = ground + r; if (prev[i].y < pos[i].y) prev[i].y = pos[i].y;}
   }
  }
 
@@ -198,10 +300,11 @@ export function createRagdoll(root) {
     const vx = push.x + dx * hit * strength * at, vz = push.z + dz * hit * strength * at, vy = (push.y ?? 0);
     prev[i].set(pos[i].x - vx * RAGDOLL.step, pos[i].y - vy * RAGDOLL.step, pos[i].z - vz * RAGDOLL.step);
    }
-   // A cut to the legs, or any blow while standing, also takes the weight off them: the feet are
-   // pulled the other way a little, which is what starts a fall rather than a slide.
-   const sweep = zone === 'legs' ? 1.4 : .5;
-   for (const f of ['foot_l', 'foot_r', 'ball_l', 'ball_r']) {const i = I[f]; prev[i].x += dx * sweep * RAGDOLL.step; prev[i].z += dz * sweep * RAGDOLL.step;}
+   // §9ak: the collapse -- the knees go forward and the hips drop as the legs stop holding.
+   frame(I.pelvis, I.spine_03, I.thigh_l, I.thigh_r, pf);
+   for (const k of ['calf_l', 'calf_r']) prev[I[k]].addScaledVector(pf.z, -RAGDOLL.buckle.knee * RAGDOLL.step);
+   for (const k of ['pelvis', 'thigh_l', 'thigh_r']) prev[I[k]].y += RAGDOLL.buckle.pelvis * RAGDOLL.step;
+   for (const k of ['Head', 'headTop', 'spine_03']) prev[I[k]].addScaledVector(pf.z, -RAGDOLL.buckle.trunk * RAGDOLL.step);
    active = true; asleep = false; age = 0; still = 0; carry = 0;
    return true;
   },

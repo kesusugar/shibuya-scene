@@ -40,7 +40,9 @@ export const COMBAT=Object.freeze({range:1.75,notice:4.5,playerDamage:25,npcDama
  katanaFast:1.12,clankHold:.16,bodyRadius:.3,katanaWitness:.9,
  // PLAN-WEAPONS R11: how hard a fatal shot pushes the body, m/s, with no lift. A car's throw is
  // 2.4 m/s and up; a bullet does not carry a person.
- shotPush:.7});
+ shotPush:.7,
+ // §9ak: the push a killing cut gives the body (m/s, horizontal): a stumble, not a throw.
+ cutPush:.9});
 
 export const PHASE=Object.freeze({IDLE:'idle',WINDUP:'windup',ACTIVE:'active',RECOVERY:'recovery'});
 
@@ -278,16 +280,19 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
    p.hurtUntil=crowd.time+blow.hold;p.hurtDuration=blow.hold;
    {const l=Math.hypot(blow.impulse.x,blow.impulse.z)||1;p.hurtX=blow.impulse.x/l;p.hurtZ=blow.impulse.z/l;p.hurtStrong=true;}
    stats.hits++;stats.byResponse[RESPONSE.FIGHT]++;
-   if(fatal)kill(crowd,p,state);
-   else{engage(crowd,p,state);if(!onRails(p)){p.staggerX=blow.impulse.x;p.staggerZ=blow.impulse.z;p.staggerLeft=blow.hold;}}
    // Where the blade met them, from how far through its sweep it was at their bearing (the tip
    // comes down from over the head to the knee), and the way it was going: across the body from
    // its left to its right, and away from the swordsman.
-   {const h=state.attackHeading??state.bodyHeading??state.heading??0,rel=turn(h,angleTo(state,p));
-    const u=Math.max(0,Math.min(1,(SWORD.sweepFrom-rel)/(SWORD.sweepFrom-SWORD.sweepTo||1)));
-    const tip=SWORD.tipHeight[1]+(SWORD.tipHeight[0]-SWORD.tipHeight[1])*u;
-    const away=angleTo(state,p),ax=Math.sin(away),az=Math.cos(away),rx=-Math.cos(h),rz=Math.sin(h);
-    mark(crowd,p,{dirX:ax*.6+rx*.8,dirZ:az*.6+rz*.8,zone:tip>1.45?'head':tip<.8?'legs':'body',strength:1.2,fatal,kind:'katana'});}
+   const h=state.attackHeading??state.bodyHeading??state.heading??0,rel=turn(h,angleTo(state,p));
+   const u=Math.max(0,Math.min(1,(SWORD.sweepFrom-rel)/(SWORD.sweepFrom-SWORD.sweepTo||1)));
+   const tip=SWORD.tipHeight[1]+(SWORD.tipHeight[0]-SWORD.tipHeight[1])*u;
+   const away=angleTo(state,p),rx=-Math.cos(h),rz=Math.sin(h);
+   let bx=Math.sin(away)*.6+rx*.8,bz=Math.cos(away)*.6+rz*.8;{const l=Math.hypot(bx,bz)||1;bx/=l;bz/=l;}
+   // §9ak: a cut does not throw a body like a car does. It gives way where it stands, carried a
+   // little along the blade (COMBAT.cutPush m/s, no lift), and the ragdoll does the rest.
+   if(fatal)kill(crowd,p,state,{x:bx*COMBAT.cutPush,z:bz*COMBAT.cutPush,y:0});
+   else{engage(crowd,p,state);if(!onRails(p)){p.staggerX=blow.impulse.x;p.staggerZ=blow.impulse.z;p.staggerLeft=blow.hold;}}
+   mark(crowd,p,{dirX:bx,dirZ:bz,zone:tip>1.45?'head':tip<.8?'legs':'body',strength:1.2,fatal,kind:'katana'});
    onBlow?.({victim:p.id,blow,response:RESPONSE.FIGHT,time:crowd.time});
    lastBlow={victim:p.id,response:RESPONSE.FIGHT,strength:'strong',quarter:blow.quarter,fatal,time:crowd.time,weapon:'katana'};
    onEvent?.('blade_hit',{x:p.x,z:p.z,intensity:1,id:p.id});

@@ -1,35 +1,38 @@
-// A hit you can see land (GTA-FIDELITY-STATUS §9ai, H3): where the blow struck and which way it
-// was going decide how the body gives.
+// A hit you can see land (GTA-FIDELITY-STATUS §9ai H3, reworked §9ak): where the blow struck and
+// which way it was going decide how the body gives.
 //
-// The Hit clip barely moves a body (UAL2's Hit_Knockback is not pinned), and figure.mjs's older
-// recoil bends the spine and head by one envelope whatever was hit. Here each blow is an impulse
-// into small damped springs on the bones that would take it, in the body's own frame:
+// §9ak, from how people actually react. A round's momentum is tiny next to a body's and a cut is a
+// slice, so a hit does not throw the trunk back (the first version bent it 40°, which is the film
+// convention, not the body). What shows is the REFLEX: within about a tenth of a second the body
+// flexes -- the trunk curls forward around the wound, the head drops, the shoulders come in -- and
+// only a small part of the motion goes the way the blow travelled. So each bone gets two kicks:
 //
-//   head  -- the head snaps away from the blow and the neck after it; the chest barely moves.
-//   body  -- the chest and upper spine fold away from it, the head lagging the other way (the
-//            whiplash that makes a torso hit read as a hit and not a lean).
-//   legs  -- the knees buckle and the hips drop a little, and the trunk folds forward over them.
+//   flex   a fixed forward curl (a flexion reflex), whichever side the blow came from;
+//   along  a small push the way the blow went (a few degrees; the head, being light, a little more).
 //
-// Every blow adds to what is already moving, so a burst from the submachine gun shakes the body
-// round after round instead of restarting one pose. The springs are underdamped (they overshoot
-// once and settle in about half a second) and each bone is bounded, so a burst cannot twist
-// anyone into a knot. Applied after the mixer, on top of whatever the body is doing.
+//   head  -- the head snaps along the blow (about 15°) and then the neck curls it down.
+//   body  -- the trunk curls forward about 20° over three bones, the head drops, a lean of a few
+//            degrees along the blow.
+//   legs  -- both knees give (about 20°), the hip flexes, the trunk curls forward.
+//
+// The knees FLEX whichever way the blow came (the first version flipped them into hyperextension
+// for a blow from behind). Every blow adds to what is moving, so a burst shakes the body round
+// after round; the springs are underdamped (one overshoot, still in about 0.7 s) and each bone is
+// bounded. Applied after the mixer, on top of whatever the body is doing.
 import {Quaternion,Vector3} from 'three';
 
 export const HIT_REACTION = Object.freeze({
  stiffness: 90,         // 1/s^2
  damping: 10,           // 1/s: about 0.53 of critical -- one overshoot, still in about 0.7 s
- limit: .85,            // rad, per bone and axis
- // Per zone: [bone, kick back (rad/s per unit strength), kick across, sign]. `back` bends the bone
- // away from the blow's direction; a negative kick bends it toward (a lag or a fold).
+ limit: .6,             // rad, per bone and axis (§9ak: no bone bends past ~35° in a flinch)
+ // Per zone: [bone, along (rad/s per unit strength, the way the blow went), across, flex (rad/s
+ // of forward curl, whichever way it came)]. With these springs 1 rad/s peaks at about 3°.
  zones: Object.freeze({
-  // Sized by eye on qa/gta-upgrade/hitbench.html (§9ai): half these read as a twitch at play
-  // distance. A head round snaps the head about 35° and the neck after it; a chest round bends the
-  // trunk about 40° over three bones; a leg round drops the knees about 35°.
-  head: Object.freeze([['Head', 17, 13], ['neck_01', 9, 7], ['spine_03', 3, 2]]),
-  body: Object.freeze([['spine_03', 10, 7.5], ['spine_02', 7, 5.5], ['spine_01', 3.5, 2.5], ['Head', -6, -4.5]]),
-  legs: Object.freeze([['spine_01', -5.5, 2.5], ['spine_02', -3.5, 1.5], ['thigh_l', 5, 2.5], ['thigh_r', 5, 2.5],
-   ['calf_l', -11, 0], ['calf_r', -11, 0]])
+  head: Object.freeze([['Head', 6, 5, 0], ['neck_01', 2.5, 2, .8], ['spine_03', .3, .2, 1.2]]),
+  body: Object.freeze([['spine_03', 1.4, 1.2, 3.2], ['spine_02', 1, .8, 2.4], ['spine_01', .4, .3, 1.2],
+   ['neck_01', 0, 0, 2], ['Head', 0, 0, 2.5], ['clavicle_l', 0, 0, 2], ['clavicle_r', 0, 0, 2]]),
+  legs: Object.freeze([['calf_l', 0, 0, 7], ['calf_r', 0, 0, 7], ['thigh_l', 0, .6, 3.5], ['thigh_r', 0, .6, 3.5],
+   ['spine_01', .5, .4, 2.5], ['spine_02', .3, .2, 1.5]])
  })
 });
 
@@ -60,11 +63,14 @@ export function createHitReaction(root) {
    const along = dx * Math.sin(heading) + dz * Math.cos(heading), left = dx * Math.cos(heading) - dz * Math.sin(heading);
    // A blow travelling backward through the body (along < 0, hit from the front) bends it back.
    const back = -along, across = left;
-   for (const [bone, kb, ka] of HIT_REACTION.zones[zone] ?? HIT_REACTION.zones.body) {
+   for (const [bone, along, side, flex] of HIT_REACTION.zones[zone] ?? HIT_REACTION.zones.body) {
     const s = spring.get(bone); if (!s) continue;
-    s.vp += kb * back * strength;
+    // + pitch bends back: a blow travelling back through the body (back > 0) pushes it back;
+    // the flex curls it forward (- pitch) whichever way the blow came. For a calf, - pitch closes
+    // the knee (the shin swings back): that is the flex too.
+    s.vp += (along * back - flex) * strength;
     // Across: pushed to its left, a bone leans to its left, which is +roll.
-    s.vr += ka * across * strength * Math.sign(kb || 1);
+    s.vr += side * across * strength;
    }
    awake = true; hits++;
   },
