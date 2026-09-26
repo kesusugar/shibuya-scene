@@ -209,6 +209,7 @@ export function buildCrowd(data,options={}){
   setHQCamera(p){hqCamera=p;},
   setHQBudget(n){hq?.setBudget(n);hqStats.budget=n;nearCharacters?.setHQCovered(!!hq&&n>0);},
   get hqCrowd(){return hq;},
+  muzzleOf(id,point,direction){return nearCharacters?.muzzleOf(id,point,direction)??false;},
   setNearPaused(v){nearPaused=!!v;if(nearCharacters)nearCharacters.root.visible=!v;},
   /** The near pool, for QA: which body and which reaction a held citizen shows. */
   get nearCharacters(){return nearCharacters;},

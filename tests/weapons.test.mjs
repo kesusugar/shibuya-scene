@@ -25,15 +25,17 @@ test('the weapon clips are in the character pack, on the same skeleton',()=>{
  assert.ok(Math.abs(sword.seconds-SWORD.duration)<.01,'SWORD was measured on a different clip');
 });
 
-test('inventory: 1/2/3 and the wheel, refused mid-action; a car holsters, stepping out is fists',()=>{
+test('inventory: 1/2/3/4 and the wheel, refused mid-action; a car holsters, stepping out is fists',()=>{
  const inv=createInventory();
  assert.equal(inv.current,'fists');
- assert.deepEqual(SLOTS,['fists','pistol','katana']);
+ assert.deepEqual(SLOTS,['fists','pistol','katana','smg']);
  assert.ok(inv.select(3));assert.equal(inv.current,'katana');
  assert.ok(!inv.select(2,{busy:true}),'a swing in progress must not change weapons');
  assert.equal(inv.current,'katana');
+ assert.ok(inv.cycle(1));assert.equal(inv.current,'smg','the submachine gun is after the katana');
  assert.ok(inv.cycle(1));assert.equal(inv.current,'fists','the wheel wraps round');
- assert.ok(inv.cycle(-1));assert.equal(inv.current,'katana');
+ assert.ok(inv.cycle(-1));assert.equal(inv.current,'smg');
+ assert.ok(!inv.select(4),'already out');assert.ok(inv.select(3));assert.ok(inv.select(4));assert.equal(inv.current,'smg');
  inv.select('pistol');inv.holster();assert.equal(inv.current,'fists','in a car nothing is drawn');
  inv.unholster();assert.equal(inv.current,'fists','out of the car the fists, not the last weapon');
 });
@@ -49,6 +51,22 @@ test('the pistol: eight rounds, a refire gap, a reload the length of its clip',(
  assert.ok(inv.fire());assert.ok(!inv.fire(),'two shots inside the refire gap');
  const clip=REPORT.clips.find(c=>c.name==='PistolReload');
  assert.ok(Math.abs(clip.seconds-WEAPONS.pistol.reloadSeconds)<.01,'the reload does not follow its clip');
+});
+
+test('§9ah the submachine gun: thirty rounds at its own rate, its own magazine, its own reload',()=>{
+ const inv=createInventory();inv.select('smg');
+ assert.equal(WEAPONS.smg.auto,true);
+ let fired=0,t=0,last=0;for(let i=0;i<400;i++){if(inv.fire()){fired++;last=t;}inv.update(.01);t+=.01;}
+ assert.equal(fired,WEAPONS.smg.magazine,'an automatic empties its magazine');
+ assert.ok(last<(WEAPONS.smg.magazine-1)*(WEAPONS.smg.refire+.01)+.01,`the last round at ${last.toFixed(2)} s: slower than its rate`);
+ assert.ok(WEAPONS.smg.refire<.1&&WEAPONS.smg.refire>.06,'about 600-1000 rounds a minute');
+ // The pistol's magazine is its own: emptying the submachine gun leaves it full.
+ inv.select('pistol');assert.equal(inv.state.rounds,WEAPONS.pistol.magazine);
+ inv.select('smg');assert.equal(inv.state.rounds,0);
+ assert.ok(inv.reload());inv.update(WEAPONS.smg.reloadSeconds+.01);assert.equal(inv.state.rounds,WEAPONS.smg.magazine);
+ assert.ok(!inv.reload(),'a full magazine does not reload');
+ // Fists and the katana cannot fire.
+ inv.select('katana');assert.ok(!inv.canFire&&!inv.fire());
 });
 
 // R3. The grip is attached to hand_r, so it moves with it by construction; what can go wrong is
@@ -102,16 +120,18 @@ test('R3: a stowed weapon rides its bone -- the pistol at the right hip, the kat
  figure.dispose();
 });
 
-test('R4 (a): the katana is one-handed, as the clip is',()=>{
- assert.equal(WEAPONS.katana.hands,1);
+test('R4 (b): the katana is two-handed, as the clip is (§9ah, CMU 02_07)',()=>{
+ assert.equal(WEAPONS.katana.hands,2);
  assert.equal(SWORD.hand,'right');
 });
 
 // R6 ---------------------------------------------------------------------------------------------
-test('R6: the cut sweeps only inside its measured window, right to left in front',()=>{
+test('R6: the cut sweeps only inside its measured window, left to right in front',()=>{
  assert.ok(SWORD.windup>0&&SWORD.activeEnd>SWORD.windup&&SWORD.activeEnd<SWORD.duration);
- assert.ok(SWORD.sweepFrom<0&&SWORD.sweepTo>0,'the cut goes from the right to the left');
- assert.ok(swordBearing(SWORD.windup+.02)>swordBearing(SWORD.windup),'the sweep runs the wrong way');
+ // The two-handed cut (§9ah) comes down from high on the left to the right knee.
+ assert.ok(SWORD.sweepFrom>0&&SWORD.sweepTo<0,'the cut goes from the left to the right');
+ assert.ok(swordBearing(SWORD.windup+.02)<swordBearing(SWORD.windup),'the sweep runs the wrong way');
+ assert.ok(SWORD.tipHeight[1]>2&&SWORD.tipHeight[0]<1,'from over the head to below the waist');
  const me={x:0,z:0,heading:0},victim={id:1,x:0,z:1.4};
  assert.equal(katanaSweep(me,0,SWORD.windup-.01,{people:[victim]}).people.length,0,'cut before the window');
  assert.equal(katanaSweep(me,SWORD.activeEnd+.01,SWORD.duration,{people:[victim]}).people.length,0,'cut after the window');
@@ -122,14 +142,14 @@ test('R6: the cut sweeps only inside its measured window, right to left in front
 
 test('R6: a wall in the arc stops the blade there; nobody past it is cut',()=>{
  const me={x:0,z:0,heading:0};
- // A wall on the right-front (the cut starts on the right): x < -0.35, z > 0.
- const solid=(x,z)=>x<-.35&&z>0;
- const left={id:1,x:1.0,z:1.0};
- const r=katanaSweep(me,SWORD.windup,SWORD.activeEnd,{people:[left],solid});
+ // A wall on the left-front (the cut starts on the left, +x): x > 0.35, z > 0.
+ const solid=(x,z)=>x>.35&&z>0;
+ const right={id:1,x:-1.0,z:1.0};
+ const r=katanaSweep(me,SWORD.windup,SWORD.activeEnd,{people:[right],solid});
  assert.ok(r.stop,'the blade went through the wall');
  assert.equal(r.stop.what,'wall');
- assert.equal(r.people.length,0,'the cut carried on past the wall to the left');
- const car=katanaSweep(me,SWORD.windup,SWORD.activeEnd,{people:[left],car:(x,z)=>x>.2&&z>.2});
+ assert.equal(r.people.length,0,'the cut carried on past the wall to the right');
+ const car=katanaSweep(me,SWORD.windup,SWORD.activeEnd,{people:[right],car:(x,z)=>x<-.2&&z>.2});
  assert.equal(car.stop?.what,'car');
 });
 
@@ -168,7 +188,7 @@ test('R6: in combat the katana lands in the window, cuts everyone in the arc, an
 });
 
 test('R6: in combat a wall stops the cut with a clank, and the clip holds where it struck',()=>{
- const behindWall=npc(1,.8,1.0),c=crowd([behindWall],{solid:(x,z)=>x<-.35&&z>0}),p=player(),events=[];
+ const behindWall=npc(1,-.8,1.0),c=crowd([behindWall],{solid:(x,z)=>x>.35&&z>0}),p=player(),events=[];
  const melee=createMeleeCombat({weapon:()=>'katana',onEvent:(k)=>events.push(k)});
  melee.request();
  let held=null;

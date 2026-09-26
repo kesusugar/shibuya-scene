@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-25",
+ "generated": "2026-09-26",
  "source": "Quaternius Universal Base Characters [Standard] + Universal Animation Library [Standard], CC0-1.0",
  "body": {
   "meshes": 3,
@@ -178,15 +178,15 @@
   },
   {
    "name": "SwordIdle",
-   "upstream": "Sword_Idle",
-   "seconds": 1.667,
-   "tracks": 50
+   "upstream": "CMU 02_07 (scripts/cmu/weapon-clip.mjs)",
+   "seconds": 0.75,
+   "tracks": 23
   },
   {
    "name": "SwordAttack",
-   "upstream": "Sword_Attack",
-   "seconds": 1.533,
-   "tracks": 50
+   "upstream": "CMU 02_07 (scripts/cmu/weapon-clip.mjs)",
+   "seconds": 1.526,
+   "tracks": 23
   },
   {
    "name": "Roll",
@@ -199,6 +199,18 @@
    "upstream": "Crouch_Fwd_Loop",
    "seconds": 2,
    "tracks": 50
+  },
+  {
+   "name": "SmgLow",
+   "upstream": "CMU 80_03 (scripts/cmu/weapon-clip.mjs)",
+   "seconds": 0.033,
+   "tracks": 23
+  },
+  {
+   "name": "SmgAim",
+   "upstream": "CMU 80_03 (scripts/cmu/weapon-clip.mjs)",
+   "seconds": 2.6,
+   "tracks": 23
   }
  ],
  "gait": {
@@ -207,7 +219,6 @@
   "Sprint": 8.25,
   "Fall": 0.2708,
   "Death": 0.2708,
-  "SwordAttack": 0.9786,
   "Roll": 3.4032,
   "CrouchWalk": 0.75
  },
@@ -218,14 +229,59 @@
   "upperBody": "Quaternius Universal Animation Library [Standard], Jog_Fwd_Loop, CC0-1.0",
   "boundary": "spine_01"
  },
+ "cmuWeapons": {
+  "clips": [
+   {
+    "name": "SwordAttack",
+    "file": "katana-cut",
+    "trial": "02_07",
+    "from": 6.2,
+    "to": 8.4,
+    "amcSha256": "6171216b0bd691843096798431a5f201b9d1340503cf89ce20180b6143597cd8",
+    "seconds": 1.526,
+    "tracks": 23
+   },
+   {
+    "name": "SwordIdle",
+    "file": "katana-guard",
+    "trial": "02_07",
+    "from": 17.95,
+    "to": 18.7,
+    "amcSha256": "6171216b0bd691843096798431a5f201b9d1340503cf89ce20180b6143597cd8",
+    "seconds": 0.75,
+    "tracks": 23
+   },
+   {
+    "name": "SmgLow",
+    "file": "rifle-raise",
+    "trial": "80_03",
+    "from": 1.9,
+    "to": 7,
+    "amcSha256": "b572134d41441a4e77b9ea5602e758c1d641ec5e1cc8e110a8e89fb03e04f30f",
+    "seconds": 0.033,
+    "tracks": 23
+   },
+   {
+    "name": "SmgAim",
+    "file": "rifle-shouldered",
+    "trial": "80_03",
+    "from": 4.2,
+    "to": 6.8,
+    "amcSha256": "b572134d41441a4e77b9ea5602e758c1d641ec5e1cc8e110a8e89fb03e04f30f",
+    "seconds": 2.6,
+    "tracks": 23
+   }
+  ],
+  "acknowledgment": "The data used in this project was obtained from mocap.cs.cmu.edu. The database was created with funding from NSF EIA-0196217."
+ },
  "output": {
   "file": "public/data/character/citizen.glb",
-  "bytes": 2767956,
-  "sha256": "3e7089633f8218a83df5975f8dbc6877ed09d3e8640fd0bc6534f82d5c4bfc07"
+  "bytes": 2749552,
+  "sha256": "4644c3d15244384a35467b5959c3bcb78da40c5fdfe93d525635bddf571375df"
  },
  "gaitDetail": {
   "samples": 120,
-  "measured": "2026-09-25",
+  "measured": "2026-09-26",
   "ankleHeight": 0.1119,
   "clips": {
    "Walk": {
@@ -282,17 +338,6 @@
     "airborne": 0.742,
     "contactOffset": 0,
     "leftContact": 0.058
-   },
-   "SwordAttack": {
-    "seconds": 1.533,
-    "speed": 0.9786,
-    "stride": 1.501,
-    "step": 0.75,
-    "cadence": 78.3,
-    "duty": 0.35,
-    "airborne": 0.3,
-    "contactOffset": 0.825,
-    "leftContact": 0.783
    },
    "Roll": {
     "seconds": 1.467,

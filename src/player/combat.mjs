@@ -15,6 +15,7 @@
 // crowd, and the HQ crowd never decides combat -- it reads `struck` and `combatDead` off the
 // pedestrian, exactly as it already reads them for a car.
 import {ATTACKS,attackOf,SWORD,swordBearing} from './attack-timing.mjs';
+import {HIT_STOP} from './hit-stop.mjs';
 import {WEAPONS} from './weapons.mjs';
 import {blowOn,RESPONSE} from '../life/temperament.mjs';
 
@@ -39,7 +40,9 @@ export const COMBAT=Object.freeze({range:1.75,notice:4.5,playerDamage:25,npcDama
  katanaFast:1.12,clankHold:.16,bodyRadius:.3,katanaWitness:.9,
  // PLAN-WEAPONS R11: how hard a fatal shot pushes the body, m/s, with no lift. A car's throw is
  // 2.4 m/s and up; a bullet does not carry a person.
- shotPush:.7});
+ shotPush:.7,
+ // §9ak: the push a killing cut gives the body (m/s, horizontal): a stumble, not a throw.
+ cutPush:.9});
 
 export const PHASE=Object.freeze({IDLE:'idle',WINDUP:'windup',ACTIVE:'active',RECOVERY:'recovery'});
 
@@ -212,6 +215,20 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
   crowd.strike(p,dx,dz,2.4,impulse);p.fatal=true;
  }
 
+ /**
+  * §9ai: record a blow on the person for the body that draws them -- which way it went, where it
+  * struck and how hard (figure.mjs flinches on a new `hitSeq`), and, if it killed them, how the
+  * ragdoll starts: the crowd's own knock-down push, plus the blow at the point it struck.
+  */
+ function mark(crowd,p,{dirX,dirZ,zone,strength=1,fatal=false,kind='pistol'}){
+  const l=Math.hypot(dirX,dirZ)||1;
+  p.hitSeq=(p.hitSeq??0)+1;p.hitAt=crowd.time??0;p.hitX=dirX/l;p.hitZ=dirZ/l;p.hitZone=zone;p.hitStrength=strength;
+  // H1: the victim's body catches for the blow's hit-stop, as the attacker's swing does.
+  p.hitStopUntil=Math.max(p.hitStopUntil??0,(crowd.time??0)+(HIT_STOP[kind]??HIT_STOP.pistol));
+  if(fatal)p.ragdoll={seq:p.hitSeq,dir:{x:dirX/l,z:dirZ/l},zone,strength,
+   push:{x:p.flyX??0,y:(p.flyY??0)*.5,z:p.flyZ??0},ground:p.flyGround??p.height??0};
+ }
+
  /** Tell whoever is listening that a punch was thrown here. Bounded by the listener. */
  function witness(crowd,state,victim,severity){
   if(!onWitness)return;
@@ -263,8 +280,19 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
    p.hurtUntil=crowd.time+blow.hold;p.hurtDuration=blow.hold;
    {const l=Math.hypot(blow.impulse.x,blow.impulse.z)||1;p.hurtX=blow.impulse.x/l;p.hurtZ=blow.impulse.z/l;p.hurtStrong=true;}
    stats.hits++;stats.byResponse[RESPONSE.FIGHT]++;
-   if(fatal)kill(crowd,p,state);
+   // Where the blade met them, from how far through its sweep it was at their bearing (the tip
+   // comes down from over the head to the knee), and the way it was going: across the body from
+   // its left to its right, and away from the swordsman.
+   const h=state.attackHeading??state.bodyHeading??state.heading??0,rel=turn(h,angleTo(state,p));
+   const u=Math.max(0,Math.min(1,(SWORD.sweepFrom-rel)/(SWORD.sweepFrom-SWORD.sweepTo||1)));
+   const tip=SWORD.tipHeight[1]+(SWORD.tipHeight[0]-SWORD.tipHeight[1])*u;
+   const away=angleTo(state,p),rx=-Math.cos(h),rz=Math.sin(h);
+   let bx=Math.sin(away)*.6+rx*.8,bz=Math.cos(away)*.6+rz*.8;{const l=Math.hypot(bx,bz)||1;bx/=l;bz/=l;}
+   // §9ak: a cut does not throw a body like a car does. It gives way where it stands, carried a
+   // little along the blade (COMBAT.cutPush m/s, no lift), and the ragdoll does the rest.
+   if(fatal)kill(crowd,p,state,{x:bx*COMBAT.cutPush,z:bz*COMBAT.cutPush,y:0});
    else{engage(crowd,p,state);if(!onRails(p)){p.staggerX=blow.impulse.x;p.staggerZ=blow.impulse.z;p.staggerLeft=blow.hold;}}
+   mark(crowd,p,{dirX:bx,dirZ:bz,zone:tip>1.45?'head':tip<.8?'legs':'body',strength:1.2,fatal,kind:'katana'});
    onBlow?.({victim:p.id,blow,response:RESPONSE.FIGHT,time:crowd.time});
    lastBlow={victim:p.id,response:RESPONSE.FIGHT,strength:'strong',quarter:blow.quarter,fatal,time:crowd.time,weapon:'katana'};
    onEvent?.('blade_hit',{x:p.x,z:p.z,intensity:1,id:p.id});
@@ -293,6 +321,8 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
   const timing=rate===1?base:{...base,duration:base.duration/rate,windup:base.windup/rate,activeEnd:base.activeEnd/rate,peak:base.peak/rate};
   const state=player.state,aim=crowd?lockOn(crowd,state):null;
   swing={id:swingIndex,name,timing,elapsed:0,phase:PHASE.WINDUP,hitConsumed:false,aim,katana,rate,cut:new Set(),stopped:null};
+  // §9aj G1: the one the swing is thrown at gets a detailed body before it lands.
+  if(aim)aim.aimedUntil=(crowd?.time??0)+timing.duration+.3;
   stats.swings++;
   aimAt(state,aim?angleTo(state,aim):forwardOf(state));
   // The renderer plays the clip for as long as the clip lasts, not for a fixed 0.42 s.
@@ -457,7 +487,7 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
    * unless they are on rails (a crossing, the cast's track), who keep walking -- being stopped
    * there would hold the signals (§16a). Returns 'killed', 'wounded' or null (not a valid target).
    */
-  wound(crowd,player,p,{damage=50,head=false,dir={x:0,z:1},weapon='pistol'}={}){
+  wound(crowd,player,p,{damage=50,head=false,dir={x:0,z:1},weapon='pistol',part=null}={}){
    if(disposed||!crowd||!p||!eligible(p,crowd))return null;
    const state=player?.state??{x:p.x-dir.x,z:p.z-dir.z};
    p.combatHealth=(p.combatHealth??100)-(head?Infinity:damage);
@@ -466,6 +496,8 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
    p.hurtUntil=crowd.time+.45;p.hurtDuration=.45;p.hurtX=ux;p.hurtZ=uz;p.hurtStrong=true;
    if(fatal)kill(crowd,p,state,{x:ux*COMBAT.shotPush,z:uz*COMBAT.shotPush,y:0});
    else if(!onRails(p)){p.combatTarget=null;crowd.flee?.(p,ux,uz,{urgency:1,from:state});}
+   // §9ai: the round's kick on the body; an automatic's rounds are lighter each, and add up.
+   mark(crowd,p,{dirX:ux,dirZ:uz,zone:part??(head?'head':'body'),strength:weapon==='smg'?.6:1,fatal,kind:weapon==='smg'?'smg':'pistol'});
    lastBlow={victim:p.id,response:'shot',strength:'strong',quarter:'front',fatal,time:crowd.time,weapon};
    onBlow?.({victim:p.id,blow:{hold:.45,fatal,impulse:{x:ux,z:uz},strength:'strong'},response:'backoff',time:crowd.time});
    onEvent?.('bullet_hit',{x:p.x,z:p.z,intensity:1,id:p.id,head});

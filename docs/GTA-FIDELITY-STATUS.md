@@ -5610,6 +5610,288 @@ curved stick (said in the test). Fails before (no module).
 **Limitations.** C5 (gyro aim through WebHID) is not done. Joy-Con pairs are recognised by name
 but untested. Steam Input can capture the controller before Chrome sees it.
 
+## 9ae. After the device check of §9ac/§9ad — the measurement button, the patrol-car ram, the officer's muzzle (same branch, from `master` `d3b4785`)
+
+The user's check on the Windows PC (Chrome, HIGH): the Switch Pro Controller "works quite well";
+the scene ran at **13.1 fps** at the scramble camera (the header's own counter, one screenshot,
+not a sweep); and there was **no 「JSON を保存」**.
+
+- **No save button (`2b7dcf8`, `9c6a342`).** The panel only existed with `?perf=` in the URL, and
+  its save button stayed hidden until a sweep had finished. Now 詳細設定 has a 「パフォーマンス計測
+  （約2分）」 button that starts the sweep without any URL and returns to the full scene view first
+  (the inspection layout shrinks the canvas); the save and copy buttons are always visible,
+  disabled until the result exists; and the JSON downloads by itself when the sweep ends.
+  Headless: the button flow brings the panel up, the sweep starts, 0 console errors
+  (`evidence/perf-pad/p0-button.png`).
+- **Rammed by a patrol car, the player's car stopped (`553307b`).** A chasing patrol car stopped
+  4.5 m centre to centre — inside two car half-lengths — so it sat pressed into the player's car,
+  and the player's move test refused every move, away from it included (the car reported
+  `stalled`). Now the player's car may always move *out of* an overlap it is already in (a move
+  that increases the distance to that car); driving further into any car is still a contact. And
+  a patrol car stops at both half-lengths plus 1.2 m and never steps into the player's box.
+  Standing still next to it for 3 s is still the in-car arrest. `tests/police-ram.test.mjs` (3):
+  two fail on the old code with exactly the device symptom (0.00 m moved; the patrol car inside
+  the player's car).
+- **The officer's flash (`5e5030a`)** now starts at the drawn revolver's own muzzle when a near
+  humanoid draws the officer (`near-characters muzzleOf`), the estimate only otherwise.
+
+**Checked and not possible with these clips: the two-handed katana (R4 option (b)).** Measured
+through `Sword_Idle` and the whole cut, the handle is 0.73–1.02 m from the left shoulder; the left
+arm reaches 0.48 m (upper arm 0.243 + forearm 0.236). No IK can close that without moving the
+torso and the right arm, which would change the measured cut. It needs a two-handed sword clip.
+Quaternius' Universal Animation Library 2 (CC0, same skeleton, a sword theme) might have one, but
+it has no pinned source in `assets/character/upstream.lock.json` (§9h, `docs/RUN5-5-ANIMATION`), so
+adding it is an asset decision for the user, not something to fetch from an unverified mirror.
+
+**Gates at `9c6a342`.** `npm run typecheck` clean; `npm test` **695 tests, 690 pass, 0 fail, 5 skipped**.
+
+## 9af. The two-handed trial — CMU motion capture for the katana and a shouldered gun (same branch; bench only, not in the game)
+
+The user asked for the two-handed motions §9ae found missing. UAL2 (the user's zip, CC0) has no
+two-handed sword or long-gun clip. The CMU Graphics Lab database does (licence: "may be copied,
+modified, or redistributed without permission"; the acknowledgment to carry if adopted: "The data
+used in this project was obtained from mocap.cs.cmu.edu. The database was created with funding
+from NSF EIA-0196217."). Screened by forward kinematics of the official ASF/AMC, hands apart:
+
+| trial | hands apart | verdict |
+| --- | --- | --- |
+| 02_07 swordplay | 0.14–0.23 m for all 18.8 s | two-handed sword; 6.8–7.6 s is an overhead cut |
+| 02_08, 02_09 swordplay | > 1 m half the time | mixed one/two-handed |
+| 80_03 shooting a gun | 0.44 m, steady, left ahead | long gun, raised and held |
+| 79_96 shooting a gun | 0.35–0.6 m | long gun, less steady |
+| 139_05 Pulling a Gun | left hand down | one-handed pistol |
+
+**What was built (offline + a bench; nothing in `src/` changed).**
+- `scripts/cmu/asf.mjs` reads ASF/AMC (units 1/0.45 inch; a bone's rotation is C·Rz·Ry·Rx·C⁻¹;
+  the zero pose is a T facing +Z, as the game rig is bound).
+- `scripts/cmu/weapon-clip.mjs <cmu dir> <preset> <out>` retargets onto `citizen.glb` and puts both
+  hands on the weapon: the weapon's axis from the SOURCE hands, the right hand turned to hold it
+  (the edge in the plane of the cut for the katana; level for the gun), the left hand placed on
+  the handle / fore-end by two-bone IK. Presets `katana-cut` (02_07 6.2–8.4 s, mirrored — see
+  §16a), `rifle-raise` (80_03 1.9–7.0 s) and `rifle-shouldered` (80_03 4.2–6.8 s with the stock in
+  the shoulder, levelled, both arms by IK). Output in `assets/character/cmu-weapons/` with the
+  source files' SHA-256; the raw CMU files are not committed.
+- `qa/gta-upgrade/cmu-weaponbench.html` plays the clips on the game's humanoid with the game's
+  katana and a grey proxy gun (仮). `?only=<clip>&times=…` for close-ups.
+  `weaponbench-capture.mjs` takes the page name as a third argument.
+
+**Result (`evidence/weapons/cmu-two-handed/`).**
+- **Katana: works.** The arms do not break: right hand at the guard, left hand 0.15 m behind at the
+  pommel end, both wrapped round the handle through the whole cut (left palm off its place by at
+  most 5.2 cm). The overhead cut reads clearly: raised at 0.3–0.95 s, the cut at 1.1 s,
+  follow-through to 1.5 s, back to guard at 2.0 s. Against it: the subject bends deep at the
+  follow-through; the hand speed is about 3–4 m/s (slower than the current one-handed cut); the
+  wrists are 68–77° from rest at median (forearm twist lands in the wrist, since CMU keeps it in
+  `lwrist`).
+- **Gun as captured: hands right, pose not a shooting stance.** Both hands on the gun (3.1 cm), but
+  aimed about 17° up and held in front of the chest, the butt 15–17 cm off the shoulder joint.
+- **Gun shouldered: usable for a short weapon.** Levelled, the butt 5.8 cm from the shoulder joint,
+  both hands on. With the stock at the shoulder the left hand misses the source's 0.46 m fore-end
+  by 13 cm (the arm is 0.48 m), so the support hand is 0.28 m ahead — a submachine gun's length.
+  The gun sits at chin height; the head does not lower to the sights.
+
+Not done, and needed before any of it is in the game: timing (hit frame, reach) measured on the
+clip like `SWORD` (§9y); a loopable hold and a fire recoil for the gun; the walk with the upper
+body layered over it (as the pistol aim is); citizen.glb conversion; a device look. `tests/cmu-weapon-clip.test.mjs` (6).
+
+## 9ag. The two-handed trial, made natural — every concern §9af listed, fixed in the bake (same branch; still bench only)
+
+The user: "今実装したところで気になる点は全部治して自然な感じにして". Each §9af concern, what
+`scripts/cmu/weapon-clip.mjs` now does about it, and the number before → after (the clip's own
+`measured` block, asserted by `tests/cmu-weapon-clip.test.mjs`, 10 tests; 6 of them fail on the
+§9af clips):
+
+| concern (§9af) | fix | before → after |
+| --- | --- | --- |
+| cut too slow (hands ~3 m/s) | a time warp (`warp` knots): raise 1.25x, the cut 2x, recovery 1.3x | grip peak 3.3 → **6.7 m/s**; the clip 2.2 → **1.53 s** |
+| trunk folds deep in the follow-through | past 28° off vertical only a third of the excess is kept, spread over spine_01-03 (iterated, since the tilt is measured from the pelvis); the blade turns with the chest | 52° → **36°** |
+| wrists bent 68-77° (median) | 70% of each hand's twist moves into its forearm (a wrist cannot twist; the rig has no twist bones, and the hand sits on the forearm's +Y so the wrist does not move); the elbow swivels ±40° about the shoulder-wrist line to the least bend; the left hand may roll ±60° round the handle/fore-end | katana R 68 → **50** (max 62), L 77 → **21** (max 32); gun R 78 → **28**, L 38 → **11** |
+| gun 17° up, in front of the chest | the raise goes from a low ready (butt in the shoulder, muzzle 40° down, the gun pivoting about the butt) to level, blended by the source's own hand height, so the timing is the capture's | 17° → **0°** at the hold; −40° at the start |
+| butt off the shoulder, head not on the sights | the chest bladed up to 15° more (the neck turns back so the face stays on the target); the butt in the pocket 8 cm inside the shoulder joint, moved across the line of fire until the sight line is within 2.5 cm of the eye; the head brought down to the sights (≤25°, neck 60% / head 40%, aimed at where the sight line crosses the sphere the eye can reach) | eye to sight line 12 → **0.1 cm** (max 2.1 in the raise) |
+| left hand out of reach | if the fore-end is past 97% of the left arm, the gun comes toward the left shoulder by the shortfall | 13 cm → **0** |
+| hold not loopable | the last 0.4 s eases back onto the first key | loop closes exactly |
+
+The katana's left palm can still sit up to 4.4 cm from its intended place on the handle (along
+the handle, in the overhead frames; the hand stays on it — `katana-close.png`). Pulling the sword
+into reach instead bent the right wrist to 92°, so that was reverted. The right wrist at 50°
+(max 62°) is set by the edge having to lead the cut.
+
+Still not done before the game: the cut's hit frame and reach measured like `SWORD`, a fire
+recoil, the walk under the upper body, citizen.glb, and a device look.
+
+## 9ah. The two-handed weapons in the game — the katana (slot 3) and a submachine gun (slot 4) (same branch)
+
+The user: "残っている点とゲームに組み込むための作業を行なってほしい" — the two points §9ag left on the
+katana, and everything §9ag listed as missing before the game.
+
+**The two remaining katana points (the bake, `scripts/cmu/weapon-clip.mjs`).**
+- *The left palm 4.4 cm off its place on the handle* in the overhead frames: the left clavicle now
+  turns toward the handle (≤ 20°) when the place is past 97% of the left arm, which brings the
+  shoulder joint closer. **4.4 → 0 cm.** (Pulling the sword into reach with the right arm instead
+  bent the right wrist to 92°; that was reverted in §9ag.)
+- *The right wrist at 50°* (median): the right hand may turn the blade up to 15° off the plane of
+  the cut, at a cost of 0.6° of bend per degree so the edge still leads, together with the elbow
+  swivel. **50 → 10° at median** (max 60°).
+
+**Into citizen.glb (`scripts/convert-character.mjs`).** A CMU-weapons section, like the hybrid
+Run, reads `assets/character/cmu-weapons/` and replaces or adds clips:
+`SwordAttack` ← katana-cut and `SwordIdle` ← katana-guard (the SAME names, so the hit test, the
+hold on a wall and the stance play them unchanged), `SmgLow` ← the raise's first key (the low
+ready), `SmgAim` ← the shouldered hold (looped). A new `katana-guard` preset is 02_07's one quiet
+stretch with both hands on the handle (17.95–18.7 s). The report carries each clip's trial,
+window and AMC SHA-256, and CMU's acknowledgment text. The upstream `SwordAttack` travel is
+dropped from `gait` (these clips play in place; the cut's pelvis moves 7 cm). `citizen.glb`
+2.77 → 2.75 MB. The bake now reads the gun's grip frame and shape from `GRIP.smg` / `SHAPE.smg`
+(its output was byte-identical after the change), so the clips and the mesh cannot drift apart.
+
+**The katana's hit timing and reach, measured (`qa/gta-upgrade/sword-timing.mjs` → `SWORD`).**
+The two-handed cut is raised over the head and comes down as a diagonal from high on the LEFT
+(the tip 2.25 m up) to the right knee (0.69 m) — the one-handed Quaternius cut ran right to
+left. Window **0.674–0.890 s** of 1.526 s (peak 0.814), the tip at **17 m/s**, tip reach
+**1.42 m**; `WEAPONS.katana.reach` 1.9 → 1.7 (tip reach + a body radius), `hands` 1 → 2. The R6
+tests now assert the left-to-right sweep, the wall on the starting side, and a tip from over the
+head to below the waist.
+
+**The submachine gun (slot 4).** Generic (`サブマシンガン`), no real model or maker.
+- `weapons.mjs`: 30 rounds, a 0.085 s refire (about 700 a minute), 25 per body hit (a head hit
+  still kills), 50 m, a 2.0 s reload; spread 0.004 rad on the first round, +0.006 a round to
+  0.06, closing at 0.25/s when the trigger is let go; recoil 0.035 rad of climb a round, settling
+  at 9/s, the camera taking 35% of it. Each gun keeps its own magazine (`state.ammo`).
+- The mesh (`weapon-mesh.mjs`) is built to the numbers the clips were baked against: the butt
+  0.33 m behind the grip, the fore-end the left hand closes on 0.28 m ahead, the rear sight's top
+  0.115 m up. Hidden when not in the hand.
+- **Walking with it (the upper-body layer, `aim-layer.mjs`).** Drawn, the upper body holds SmgLow
+  over whatever the legs do; aimed it blends to SmgAim (shouldered, the head down to the sights,
+  looped) and the pistol's spine correction puts the muzzle on the target; each round's recoil
+  is added after the correction so the climb shows. Reloading drops it to the low ready with a
+  dip. Walking 45° off the aim the muzzle ray passes within 0.25 m at 10 m (the pistol's R1 bound).
+- **Firing (`arsenal.mjs`).** The attack button HELD — the mouse's left, E, the pad's ZR
+  (`input-map` `fire`), the touch button — keeps an automatic firing (`hold()`); the pistol still
+  fires once a press. Each round's direction is the aim plus the recoil so far inside the burst's
+  spread (`spreadDirection`, a deterministic spiral). The crosshair opens with the spread. The
+  gunshot is the recorded CC0 clip a little higher and lighter with one reflection each side, so a
+  burst does not smear.
+- **The street and the police.** A burst is heard 55 m out and can send up to 80 running; an
+  officer counts it as a weapon out, a kill with it as a weapon kill (`WEAPON_IDS`).
+- The head tilt at the aim was 30° in the game figure (read as lolling); the bake now keeps the
+  head's turn to 10° and moves the stock under the eye instead: 15° sideways, eye on the sights.
+
+**Checks.** `tests/smg.test.mjs` (8), `tests/cmu-weapon-clip.test.mjs` (12),
+`tests/weapons.test.mjs` updated (the inventory's four slots, the SMG's magazine and rate, the
+two-handed cut); the game-figure bench `qa/gta-upgrade/weaponbench.html` gains smg-low, smg-aim,
+smg-aim-walk, smg-recoil and smg-walk; `qa/gta-upgrade/weapons-scene.mjs` gains the SMG steps.
+
+## 9ai. Hits that land — hit-stop, the wound, a flinch by where it struck, a light ragdoll (same branch)
+
+The user: a cut or a shot "passes through" (通り抜けている感じ); wanted hits that feel physical, **no
+camera shake and no rumble** added for it. What was missing, read in the code: damage came off at
+the right frame, but the swing sailed on through the body at full speed; a round into a person
+made no sound (`bullet_hit` had no handler); the victim's Hit clip barely moves and figure.mjs's
+recoil bent every blow the same way; and a killed pedestrian was handed straight to the mass
+crowd, which plays one fall whatever the blow was.
+
+- **H1 hit-stop (`src/player/hit-stop.mjs`).** On a landed blow the attacker's swing and body
+  (`melee.update` and the player's figure run on `hitStop.scale(dt)`) and the victim's body
+  (`victimScale`, via `p.hitStopUntil`) run at 6% for 0.07 s on a cut, 0.045 s on a pistol round,
+  0.025 s on a submachine-gun round (at most one per 0.12 s, so a burst does not stutter). The
+  city, the traffic and the crowd run on, so it never reads as a dropped frame.
+- **H2 the wound.** Blood sprayed out along the blow from its own opaque particle pool
+  (`weapon-effects.mjs` `blood()`, one more draw call while live; sparks are additive and would
+  glow red), with a little back-spatter: at the round's hit point, and for a cut at the height
+  the blade met them. A synthesised thump for a round and a hiss-and-thump for a cut
+  (`gunfire.mjs` `flesh()`/`slice()`), on top of the existing blow sound.
+- **H3 a flinch by where it struck (`src/player/hit-reaction.mjs`).** Each blow is an impulse
+  into damped springs on the bones that would take it, in the body's frame: head → the head
+  snaps (about 35°) and the neck after it; body → the trunk folds away (about 40° over three
+  bones) with the head lagging; legs → the knees buckle and the trunk folds forward. Rounds add
+  up over a burst (an automatic's are 0.6 each), bounded per bone. Where it struck: for a round
+  the new `castShot` `part` (legs below 0.85 m on a 1.76 m body; `zone`, and so damage, is
+  unchanged); for a cut the blade tip's height at the victim's bearing (SWORD's sweep comes down
+  from 2.25 m to 0.69 m), and its direction is across the body left→right and away.
+- **H4 a light ragdoll (`src/player/ragdoll.mjs`).** 18 points on the joints, taken from the pose
+  the blow found; Verlet with gravity, a ground plane, every bone's length, a braced torso box and
+  a few "no closer than" limits (a knee or elbow cannot fold shut, the head stays off the
+  shoulders); the blow is a velocity at the point it struck on top of the crowd's own knock-down
+  push. The skeleton follows the points (pelvis and chest by their frames, limbs by aiming, the
+  head by the point above it) and it sleeps once still (about 1 s). The near pool keeps a body it
+  was already holding when it was killed (at most `RAGDOLL_LIMIT` 3) so the fall plays out; a body
+  picked up afterwards would stand up and then fall, so those stay with the mass crowd as before.
+
+**Checks.** `tests/hit-feel.test.mjs` (13): each zone falls to the ground along the blow with no
+bone stretched more than 5% and nothing below the ground; the fall follows the blow's direction;
+a head round moves the head more than the chest; a chest hit comes back; a leg hit closes the
+knee angle; the hit-stop runs a swing at under 10% through its stop and resumes, and an automatic
+stops at most once per gap; a cut records where and which way and hands a kill its ragdoll with
+the knock-down push; a round below the hips is `legs` without changing `zone`; blood is its own
+opaque pool, sprays along the blow and falls; a figure told it is a ragdoll stays where it fell
+and ends lying down. `qa/gta-upgrade/hitbench.html` draws the flinches and the falls (the flinch
+was sized on it: the first kicks moved the neck 11 cm for 0.2 s, a twitch at play distance).
+
+## 9aj. Every pedestrian you hit reacts like it — who gets the detailed body, the crowd's falls, a smoother frame (same branch)
+
+The user: "結局少人数しか実装無理か。…本物のgtaみたいに滑らかにみんなプレイできるようにしたい". GTA
+does not simulate every pedestrian in detail either; what it guarantees is that the one you
+shoot is. So:
+
+- **G1 who gets the detailed body (`near-characters.mjs`).** Whoever is on the crosshair (the
+  lock-on, or the person the camera ray meets: `arsenal.mjs` writes `aimedUntil`), whoever the
+  katana is thrown at (`combat.mjs`), and anyone hit in the last 4 s (`hitAt`) outranks everyone
+  merely nearer for a humanoid slot, out to `PRIORITY_RANGE` 55 m (the submachine gun's 50 m
+  reach). The flinch (§9ai H3) and the ragdoll (H4) therefore play on the person you hit, not
+  only on the eight nearest. A body killed this instant is picked up for its ragdoll even if it
+  was not held (it was standing, which is the pose the ragdoll starts from); one killed a while
+  ago is left alone (it would stand up and then fall). `RAGDOLL_LIMIT` 3 → 4.
+- **G2 the mass crowd's falls (`hq-layer.mjs`).** A body felled by a blade or a round is turned at
+  once to face against the blow (`hitX/hitZ`), so the baked backward fall goes along it. Before,
+  only a strong push turned it, and a gunshot's 0.7 m/s never did. (The HQ atlas has one fall;
+  more fall clips would need a new bake — not done.)
+- **G3 smoothness without device numbers.** Dynamic resolution
+  (`src/quality/dynamic-resolution.mjs`): over budget and GPU-bound (≥ 35% of the frame not CPU
+  work), the render scale drops 10% (floor 60%, one change per 1.25 s); comfortably inside, it
+  climbs back 5% at a time; CPU-bound frames are left alone; `?dynres=0` turns it off; fixed
+  during the `?perf` sweep; the overlay shows `res`. The far HQ band (L2) doing nothing in
+  particular is placed every third frame, staggered, its skipped time carried into its pace.
+  Not done: a lighter default tier (the user plays HIGH, which stays as it is) and anything the
+  device JSON should decide (P1–P4 remain waiting on it).
+
+**Checks.** `tests/hit-feel.test.mjs` +4 (the aimed-at person 45 m out is promoted past 40
+nearer people and let go after the hold; a fresh kill is picked up, an old one is not; the mass
+crowd's felled body faces against the blow with a slight push; aiming marks the target; the far
+band is skipped yet never more than two frames behind), `tests/dynamic-resolution.test.mjs` (3).
+`npm run test:ci` **736, 731 pass, 0 fail, 5 skipped**.
+
+## 9ak. Hits from how people actually react — a flexion reflex, and a collapse inside joint ranges (same branch)
+
+The user, on the §9ai bench: "のけぞりの角度おかしくね？実際の人間のシミュレーションから考えて欲しい". Two things
+were the film convention, not a body:
+
+- **The flinch** bent the trunk back 40° from a chest hit. A pistol round's momentum moves a 70 kg
+  body a few centimetres per second and a cut is a slice; what a hit visibly causes is the
+  flexion (startle/withdrawal) reflex within about 0.1 s — the trunk curls forward around the
+  wound, the head drops, the shoulders come in. `hit-reaction.mjs` now gives each bone a forward
+  curl whichever way the blow came plus a small lean along it (trunk ~20° over three bones; a head
+  round snaps the head ~15°; a leg round gives both knees ~20° from any direction — a blow from
+  behind used to flip them into hyperextension). Bound per bone 0.6 rad.
+- **The fall** had no joint ranges, and swept the feet back at the start: that was the split and
+  the backward knee in the user's picture. `ragdoll.mjs` now keeps human ranges — knee and elbow
+  as one-way hinges, the hip to 110° flexion / 15° extension / 45° out / 20° across (front to back
+  at most 125°), the head within 50° of the chest — and falls as people do: a collapse (hips drop
+  1.0 m/s, knees give 0.35, the trunk goes forward 0.5) tipped by a modest blow (0.4 m/s for a
+  head shot, which drops a body where it stands; 1.1 for the body; 0.9 for the legs). A killing
+  cut pushes 0.9 m/s along the blade (`COMBAT.cutPush`), not a car victim's 2.2 m/s with lift.
+- Two physics faults found on the way: a joint correction that moves only one point pushes the
+  whole body (it drifted 0.5–0.9 m sideways whatever the blow) — every correction is now split so
+  it conserves momentum; and a point lifted out of the ground kept its old position, which in
+  Verlet is an upward velocity — the body bounced itself back onto its shoulders; the ground is
+  now inelastic. The hip limit is soft (35% a pass) so it does not fight the ground while seated.
+
+The bodies now end as a heap on the side or slumped over the knees, the knees never bend the
+wrong way and the legs never split (`evidence/weapons/hit-bench/hitbench.png`). Tests
+(`tests/hit-feel.test.mjs`, 18): the old "fall along the blow by 0.4 m" became "tip along it by
+0.2 m and go down within 0.9 m of where it stood"; new: no knee bent backward at any step, legs
+never over 125° apart, no thigh far behind the trunk; the chest flinch curls forward from front,
+back and side with only a small lean along the blow; the knees give from front and behind.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
@@ -5918,6 +6200,46 @@ is nothing to show. Also worth knowing: geometry changes to `src/traffic/vehicle
 by `bake:static` (the traffic fleet, not just `bake:playable`'s close-up pack) — `tests/static-key
 .test.mjs` and `tests/static-models.test.mjs` catch a stale bake, but only if the bake is rerun
 before the PR, not just the playable pack.
+
+**The two-handed trial (§9af): two T poses are not the same T.** Copying each bone's turn from
+rest onto the target's rest (RUN 5.6) assumes the rests agree. CMU's ASF rest splays the thighs
+20° out (`axis 0 0 20`, direction 0.34 −0.94 0) where the game rig's legs hang straight: every
+frame came out with the legs crossed by that 20°. Each target bone is now swung onto the source
+bone's rest direction first. The same step is what RUN 5.7's "shoulder 10° high" was.
+
+**The two-handed trial (§9af): check which hand leads on a grip before retargeting a weapon.**
+02_07's subject holds the sword with the LEFT hand at the guard (the left→right hand line points
+back at the chest in 170 of 188 samples). Taking the blade axis as left→right turned the katana
+backwards and the yaw that aligns it turned the whole figure away from the camera. The take is
+mirrored left for right, since the game's katana is in the right hand.
+
+**The two-handed trial (§9ag): a low ready tilts the gun about the butt, not the grip.**
+Dipping the muzzle 40° about the pistol grip swung the stock up through the chest. A low ready
+keeps the butt in the shoulder; pivoting there keeps the stock outside the body.
+
+**The two-handed trial (§9ag): a head can only swing its eye on a sphere about the neck.** Aiming
+the eye at the nearest point of the sight line never converged (that point is inside the
+sphere): the target is where the line crosses the sphere. And when the line is 15 cm to the side,
+no neck reaches it — the body has to blade and the stock move in, or the head ends ear-on-shoulder.
+
+**Hits that land (§9ai): a new JSDoc'd helper between a function and its JSDoc breaks the
+types again.** `spreadDirection` was inserted between `createArsenal`'s `@param` block and the
+function (W1 hit this with `katanaSweep`); TypeScript then read the options as `null` and
+rejected the scene's callbacks. Put helpers ABOVE the documented function's comment.
+
+**Hits that land (§9ai): editing ANY module the app imports reloads a running headless capture.**
+Already known for `src/player/*`; it bit again through `src/player/ballistics.mjs` while
+`weapons-scene.mjs` was waiting on its police step, which then could never finish. New modules
+that nothing imports yet, tests and docs are safe to write during a run.
+
+**§9aj: rerun every test that reads a baked clip after rebaking it.** The §9ah rebake (the stock
+moved in under the eye) pushed the butt to 16–18 cm from the shoulder joint; the §9ah test's 18
+cm bound was not rerun after that last rebake and only `test:ci` caught it two sections later.
+
+**§9ak: in a Verlet ragdoll a position fix IS a velocity.** Two faults came from it: a joint
+limit that moves only the joint drifts the whole body (split every correction so it conserves
+momentum), and a ground clamp that lifts the point but not its previous position launches it
+upward (make contact inelastic: lift the previous position too).
 
 ## 17. Files that matter
 

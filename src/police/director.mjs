@@ -6,6 +6,9 @@ import {createSirens,createLoudspeaker,createMegaphone,createOfficerVoice,MEGAPH
 import {createPoliceUnits} from './units.mjs';
 import {createPoliceGuns} from './guns.mjs';
 import {lineOfSight} from '../player/ballistics.mjs';
+
+/** What counts as a weapon out, or a weapon kill: the guns (the submachine gun since §9ah) and the katana. */
+export const WEAPON_IDS = new Set(['pistol', 'smg', 'katana']);
 import {VEHICLES} from '../traffic/config.mjs';
 
 /**
@@ -116,8 +119,8 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
      if (!p.active || p.combatDead || p.fatal) continue;
      if (Math.hypot(p.x - player.x, p.z - player.z) <= POLICE.witnessRange && ++witnesses >= 3) break;
     }
-    // PLAN-WEAPONS §2: a kill with the pistol or the katana is a weapon kill (at least ☆2).
-    const armed = melee?.lastBlow?.weapon === 'pistol' || melee?.lastBlow?.weapon === 'katana';
+    // PLAN-WEAPONS §2: a kill with a gun or the katana is a weapon kill (at least ☆2).
+    const armed = WEAPON_IDS.has(melee?.lastBlow?.weapon);
     wanted.crime(armed ? 'weaponKill' : 'meleeKill', {x: player.x, z: player.z, t: time, witnesses,
      seenByOfficer: officersSee(pool, player.x, player.z, except, undefined, solid) || officersOnFootSee(units.officers, player.x, player.z, undefined, solid)});
    }
@@ -139,7 +142,7 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
     }
    }
    // A drawn weapon in an officer's sight: ☆1, once.
-   const drawn = !driving && (weapons?.current === 'pistol' || weapons?.current === 'katana');
+   const drawn = !driving && WEAPON_IDS.has(weapons?.current);
    if (drawn && wanted.state.stars < 1 && (officersSee(pool, player.x, player.z, except, undefined, solid) || officersOnFootSee(units.officers, player.x, player.z, undefined, solid)))
     wanted.crime('weaponSeen', {x: player.x, z: player.z, t: time, seenByOfficer: true});
    for (const e of car?.impacts ?? []) {
@@ -184,7 +187,7 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
    // --- revolvers (PLAN-WEAPONS W3) ----------------------------------------------------------
    // ☆3 and up: officers draw; the first round is a warning shot with 「撃つぞ！」; after it they
    // fire only at a threat (a drawn weapon, an attack, a ram), never without a clear line (R9).
-   const armed = weapons?.current === 'pistol' || weapons?.current === 'katana';
+   const armed = WEAPON_IDS.has(weapons?.current);
    const shotNow = (weapons?.shots ?? 0) > gunShotsSeen; gunShotsSeen = weapons?.shots ?? 0;
    const threat = {armed, ramming: time - lastRam < .5,
     attacking: (attackingNow ?? attacking) || shotNow};

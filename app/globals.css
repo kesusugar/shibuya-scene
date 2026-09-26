@@ -171,6 +171,8 @@ body.tc-on .player-hint{display:none}
 .play-weapon[data-weapon="pistol"]{color:#ffd9a8}
 .play-crosshair{position:fixed;left:50%;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;pointer-events:none;z-index:20}
 .play-crosshair[hidden]{display:none}
+/* §9ah: the automatic's spread opens the crosshair. */
+.play-crosshair{transform:scale(calc(1 + var(--spread,0) * 1.4));transition:transform .06s linear}
 .play-crosshair::before,.play-crosshair::after{content:"";position:absolute;background:#fffc;box-shadow:0 0 2px #000}
 .play-crosshair::before{left:12px;top:0;width:2px;height:26px}
 .play-crosshair::after{left:0;top:12px;width:26px;height:2px}
@@ -184,3 +186,5 @@ body.tc-on .player-hint{display:none}
 .perf-overlay button{padding:3px 8px;background:#152230;border:1px solid #f2a25c88;border-radius:8px;color:#f6e6d6;font:inherit;cursor:pointer}
 .perf-result{margin-top:6px;border-top:1px solid #34495a;padding-top:6px}
 .perf-result button{margin:6px 6px 0 0}
+.perf-start{margin-top:10px;width:100%}
+.perf-overlay button:disabled{opacity:.45;cursor:default}

@@ -5,6 +5,8 @@ import {createFootIK} from './foot-ik.mjs';
 import {attackOf} from './attack-timing.mjs';
 import {createWeaponRig} from './weapon-mesh.mjs';
 import {createAimLayer} from './aim-layer.mjs';
+import {createHitReaction} from './hit-reaction.mjs';
+import {createRagdoll} from './ragdoll.mjs';
 import pack from './generated/character.mjs';
 
 export const FIGURE=Object.freeze({height:1.76,shirt:0xc94d38,trousers:0x263443,skin:0xdfb994,hair:0x25282a,cycle:1.55});
@@ -170,8 +172,12 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
  // set, which is the pose the carry positions in weapon-mesh.mjs were placed against.
  const weaponRig=weapons?.length?createWeaponRig(root,{carry:weapons}):null;
  // PLAN-WEAPONS W2: a gun is aimed by an upper-body layer with a muzzle correction (aim-layer.mjs).
- const aimLayer=weaponRig&&weapons.some(w=>w==='pistol'||w==='revolver')
+ const aimLayer=weaponRig&&weapons.some(w=>w==='pistol'||w==='revolver'||w==='smg')
   ?createAimLayer(root,instance.clips,weaponRig,{correction:aimCorrection}):null;
+ // §9ai: a blow you can see land (hit-reaction.mjs), and a body that falls the way it was hit
+ // (ragdoll.mjs). Only on a rig that has the bones; the eleven-bone baked figure goes without.
+ const hitReaction=root.getObjectByName('spine_02')?createHitReaction(root):null;
+ let ragdoll=null,hitSeq=null,ragdollSeq=null;
 
  /** Play a one-shot or a held pose over the legs, or hand the body back to the gait. */
  function setOverlay(next,state){
@@ -194,6 +200,15 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
   update(state,dt=0){
    if(disposed)return;
    dt=Math.max(0,Math.min(.1,Number(dt)||0));root.visible=true;
+   // §9ai H4: killed by a blade or a bullet, the body falls under physics from the pose it had.
+   // The ragdoll owns every bone from then on; the root stays where the blow found it.
+   if(state.ragdoll&&state.ragdoll.seq!==ragdollSeq){
+    ragdollSeq=state.ragdoll.seq;
+    ragdoll??=hitReaction?createRagdoll(root):null;
+    if(ragdoll?.ready){hitReaction?.reset();footIK?.reset();weaponRig?.show(null,{hidden:true});
+     ragdoll.start(state.ragdoll);}
+   }
+   if(ragdoll?.active){ragdoll.update(dt);return;}
    const speed=Math.abs(state.speed??0);
 
    // Legs first: an overlay covers them rather than replacing them, so a hit taken at speed
@@ -333,6 +348,17 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
     if(!grounded||teleported(state))footIK.reset();
     else footIK.update({phase:gait.phase,...gait.stance()},dt);
    }
+   // §9ai H3: each blow that lands (a new `hitSeq`) kicks the bones that took it, on top of all
+   // of the above; a burst adds up round after round.
+   if(hitReaction){
+    if(Number.isFinite(state.hitSeq)&&state.hitSeq!==hitSeq){
+     // A blow older than a quarter second (a body picked up by the near pool after it was hit)
+     // is history, not something to flinch at now.
+     if(!((state.hitAge??0)>.25))hitReaction.hit({dirX:state.hitX??0,dirZ:state.hitZ??1,heading:facing.heading,zone:state.hitZone??'body',strength:state.hitStrength??1});
+     hitSeq=state.hitSeq;
+    }
+    hitReaction.update(dt,facing.heading);
+   }
   },
   get footIK(){return footIK;},
   reset(){
@@ -341,6 +367,7 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
    for(const action of Object.values(actions))action.reset();
    overlay=null;previousAttack=0;seeded=false;dominant='Idle';strike.Punch=strike.PunchCross=strike.SwordAttack=0;
    stance.SwordIdle=stance.PistolIdle=0;aimLayer?.reset();strike.Roll=0;crouchK=0;crouchIdle?.stop();
+   hitReaction?.reset();ragdoll?.reset();hitSeq=null;ragdollSeq=null;
    gait.reset();facing.reset(0);
    for(const name of GAIT)actions[name]?.play().setEffectiveWeight(0);
    for(const name of GAIT)if(actions[name])actions[name].paused=true;
@@ -350,6 +377,9 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
   },
   /** PLAN-WEAPONS: the carried weapons, or null on a body that carries none. */
   get weapons(){return weaponRig;},
+  /** §9ai: the blow springs and the ragdoll (null on a rig without them / until first used). */
+  get hitReaction(){return hitReaction;},
+  get ragdoll(){return ragdoll;},
   /** PLAN-WEAPONS W2: the aim layer (weight, and how far the muzzle ray passed from the target). */
   get aim(){return aimLayer;},
   recolour(palette){instance.recolour(palette);},

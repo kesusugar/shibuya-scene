@@ -163,7 +163,9 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
   // W4: Q rolls, C crouches (on a pad RB and the right stick's click).
   // C1-C4: `driving()` says which half of the pad layout applies; `onSiren`, `onHornOnly` and
   // `onMap` are the pad's d-pad up, left-stick press in a car, and −.
-  attach(element, {onExit, onDrive, onAttack, onHorn, onWeapon, onWeaponCycle, onReload, onAim, onRoll, onCrouch,
+  // §9ah: `onAttackHold(true|false)` reports the attack button HELD (the mouse's left, E, the
+  // pad's ZR), for the submachine gun's automatic fire; 4 selects it.
+  attach(element, {onExit, onDrive, onAttack, onAttackHold, onHorn, onWeapon, onWeaponCycle, onReload, onAim, onRoll, onCrouch,
                    onSiren, onHornOnly, onMap, driving = () => false} = {}) {
    if (detach) return;
    const down = (e) => {
@@ -173,17 +175,17 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
     if(k==='tab'){e.preventDefault();if(document.pointerLockElement===element)document.exitPointerLock?.();else element.requestPointerLock?.()?.catch?.(()=>{});return;}
     if (k === 'escape') {keys.clear(); onExit?.(); return;}
     if (k === 'f') {onDrive?.(); e.preventDefault(); return;}
-    if (k === 'e') {onAttack?.(); e.preventDefault(); return;}
+    if (k === 'e') {onAttack?.(); onAttackHold?.(true); e.preventDefault(); return;}
     if (k === 'h') {onHorn?.(); e.preventDefault(); return;}   // RUN 12.1: the horn, while driving
-    if (k === '1' || k === '2' || k === '3') {onWeapon?.(Number(k)); e.preventDefault(); return;}
+    if (k === '1' || k === '2' || k === '3' || k === '4') {onWeapon?.(Number(k)); e.preventDefault(); return;}
     if (k === 'r') {onReload?.(); e.preventDefault(); return;}
     if (k === 'q') {onRoll?.(); e.preventDefault(); return;}
     if (k === 'c') {onCrouch?.(); e.preventDefault(); return;}
     if (!'wasd'.includes(k) && k !== 'shift' && k !== ' ') return;
     keys.add(k === ' ' ? 'shift' : k); e.preventDefault();
    };
-   const up = (e) => {const k = e.key.toLowerCase(); keys.delete(k === ' ' ? 'shift' : k);};
-   const blur = () => {keys.clear(); touch.forward = 0; touch.strafe = 0; touch.running = false; onAim?.(false);};
+   const up = (e) => {const k = e.key.toLowerCase(); if (k === 'e') onAttackHold?.(false); keys.delete(k === ' ' ? 'shift' : k);};
+   const blur = () => {keys.clear(); touch.forward = 0; touch.strafe = 0; touch.running = false; onAim?.(false); onAttackHold?.(false);};
    const move = (e) => {
     if (document.pointerLockElement !== element) return;
     lastDevice = 'mouse';
@@ -192,9 +194,9 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    };
    const click = (e) => {if (e.pointerType === 'touch') return; if (document.pointerLockElement !== element) element.requestPointerLock?.()?.catch?.(()=>{});};
    const punch = e => {if(document.pointerLockElement!==element)return;
-    if(e.button===0){onAttack?.();e.preventDefault();}
+    if(e.button===0){onAttack?.();onAttackHold?.(true);e.preventDefault();}
     else if(e.button===2){onAim?.(true);e.preventDefault();}};
-   const release = e => {if(e.button===2)onAim?.(false);};
+   const release = e => {if(e.button===2)onAim?.(false);if(e.button===0)onAttackHold?.(false);};
    const menu = e => e.preventDefault();
    // The wheel steps through the weapons, one notch at a time however fast it spins.
    let wheelAt = 0;
@@ -218,7 +220,7 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    };
    const touchEnd = e => {if (e.pointerId === touchId) {touchId = null; touchLast = null;}};
    // The pad, as actions: one poll a frame, edges fired once, held states kept for input().
-   let padAim = false;
+   let padAim = false, padFire = false;
    padPoll = (dt) => {
     const pad = gamepad();
     const mode = driving() ? 'car' : 'foot';
@@ -240,6 +242,7 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
      else if (action === 'menu') {keys.clear(); onExit?.();}
     }
     if (f.aim !== padAim) {padAim = f.aim; onAim?.(f.aim);}
+    if (!!f.fire !== padFire) {padFire = !!f.fire; onAttackHold?.(padFire);}
     const k = PLAYER.padLook * settings.look * dt;
     if (f.look.x) state.heading -= f.look.x * k;
     if (f.look.y) state.pitch = Math.max(-PLAYER.pitchLimit, Math.min(PLAYER.pitchLimit, state.pitch - f.look.y * k * (settings.invertY ? -1 : 1)));
@@ -255,7 +258,7 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
     window.removeEventListener('blur', blur);
     element.removeEventListener('mousemove', move); element.removeEventListener('click', click);element.removeEventListener('mousedown',punch);
     element.removeEventListener('mouseup',release);element.removeEventListener('contextmenu',menu);element.removeEventListener('wheel',wheel);
-    onAim?.(false);
+    onAim?.(false); onAttackHold?.(false);
     element.removeEventListener('pointerdown', touchStart); element.removeEventListener('pointermove', touchMove);
     for (const type of ['pointerup', 'pointercancel']) element.removeEventListener(type, touchEnd);
     if (document.pointerLockElement === element) document.exitPointerLock?.();

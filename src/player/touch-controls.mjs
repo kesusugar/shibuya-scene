@@ -25,10 +25,10 @@ export const wantsTouch = () =>
  * PLAN-WEAPONS R16: a phone has no mouse to aim with, so the weapon button steps through the
  * weapons and the attack button does what the weapon does -- with the pistol out it fires at
  * whoever the lock-on picks (the nearest person in the view cone). Its label says which.
- * @param {{onAxes?:(axes:any)=>void, onDrive?:()=>void, onAttack?:()=>void, onExit?:()=>void, onWeapon?:()=>void}} [options]
+ * @param {{onAxes?:(axes:any)=>void, onDrive?:()=>void, onAttack?:()=>void, onAttackHold?:(on:boolean)=>void, onExit?:()=>void, onWeapon?:()=>void}} [options]
  */
-export const ATTACK_LABEL = Object.freeze({fists: '殴る', pistol: '撃つ', katana: '斬る'});
-export function createTouchControls({onAxes, onDrive, onAttack, onExit, onWeapon} = {}) {
+export const ATTACK_LABEL = Object.freeze({fists: '殴る', pistol: '撃つ', katana: '斬る', smg: '撃つ'});
+export function createTouchControls({onAxes, onDrive, onAttack, onAttackHold, onExit, onWeapon} = {}) {
  if (typeof document === 'undefined') return {show() {}, hide() {}, setDriving() {}, setWeapon() {}, dispose() {}};
 
  const root = document.createElement('div');
@@ -101,6 +101,10 @@ export function createTouchControls({onAxes, onDrive, onAttack, onExit, onWeapon
  for (const type of ['pointerup', 'pointercancel', 'pointerleave']) runBtn.addEventListener(type, () => holdRun(false));
  driveBtn.addEventListener('click', e => {e.preventDefault(); onDrive?.();});
  root.querySelector('.tc-attack').addEventListener('click',e=>{e.preventDefault();onAttack?.();});
+ // §9ah: the attack button held keeps an automatic firing.
+ {const b=root.querySelector('.tc-attack');
+  b.addEventListener('pointerdown',()=>onAttackHold?.(true));
+  for(const t of ['pointerup','pointercancel','pointerleave'])b.addEventListener(t,()=>onAttackHold?.(false));}
  root.querySelector('.tc-exit').addEventListener('click', e => {e.preventDefault(); onExit?.();});
  const weaponBtn = root.querySelector('.tc-weapon');
  weaponBtn.addEventListener('click', e => {e.preventDefault(); onWeapon?.();});

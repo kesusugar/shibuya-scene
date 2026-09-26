@@ -337,6 +337,43 @@ if(hybridRun){
  }
 }
 
+// ---- The two-handed weapons (GTA-FIDELITY-STATUS §9af-§9ah) ---------------------------------
+//
+// CMU captures, retargeted and put on the weapon offline by scripts/cmu/weapon-clip.mjs, in
+// assets/character/cmu-weapons/. Like the hybrid Run they are ordinary clips by the time they
+// get here. The katana's two replace the one-handed Quaternius pair under the SAME names, so the
+// game's katana (the hit test, the hold on a wall, the stance) plays them without a rename:
+//   SwordAttack <- katana-cut (02_07's overhead cut, both hands on the handle)
+//   SwordIdle   <- katana-guard (02_07's two-handed guard)
+// and the submachine gun's are new:
+//   SmgLow <- the first key of rifle-raise (the low ready: butt in the shoulder, muzzle down)
+//   SmgAim <- rifle-shouldered (the shouldered aim, looped)
+// Each is only used if its file is present; absent, the Quaternius clip stays.
+const CMU_WEAPONS=[
+ {name:'SwordAttack',file:'katana-cut'},{name:'SwordIdle',file:'katana-guard'},
+ {name:'SmgLow',file:'rifle-raise',firstKey:true},{name:'SmgAim',file:'rifle-shouldered'}
+];
+const cmuWeapons=[];
+for(const {name,file,firstKey} of CMU_WEAPONS){
+ let data=null;try{data=JSON.parse(readFileSync(`assets/character/cmu-weapons/${file}.json`,'utf8'));}catch{}
+ if(!data){console.warn(`no ${file}.json: ${name} stays as it was`);continue;}
+ // A held pose is two identical keys a frame apart, which a looping action holds still.
+ const times=firstKey?[0,1/30]:data.times;
+ const pick=(values,width)=>firstKey?[...values.slice(0,width),...values.slice(0,width)]:values;
+ const tracks=[];
+ for(const [bone,values] of Object.entries(data.tracks))
+  tracks.push(new T.QuaternionKeyframeTrack(`${bone}.quaternion`,times,pick(values,4)));
+ tracks.push(new T.VectorKeyframeTrack('pelvis.position',times,pick(data.rootPos,3)));
+ const clip=new T.AnimationClip(name,firstKey?1/30:data.duration,tracks);clip.optimize();
+ const index=clips.findIndex(c=>c.name===name);
+ if(index>=0)clips[index]=clip;else clips.push(clip);
+ // The upstream clip's measured travel belongs to the upstream clip; these are played in place.
+ delete gait[name];
+ cmuWeapons.push({name,file,trial:data.source.trial,from:data.source.from,to:data.source.to,
+  amcSha256:data.source.amcSha256,seconds:+clip.duration.toFixed(3),tracks:clip.tracks.length});
+}
+if(cmuWeapons.length)console.log(`CMU weapon clips: ${cmuWeapons.map(c=>`${c.name} (${c.trial})`).join(', ')}`);
+
 root.animations=clips;
 
 const report={
@@ -363,14 +400,17 @@ const report={
   triangles:(hairGeometry.get(name).index?.count
    ??hairGeometry.get(name).attributes.position.count)/3})),
  clips:clips.map(c=>({name:c.name,
-  upstream:c.name==='Run'&&hybridRun?.applied?'hybrid (CMU 16_45 legs + Quaternius upper)':CLIPS[c.name],
+  upstream:c.name==='Run'&&hybridRun?.applied?'hybrid (CMU 16_45 legs + Quaternius upper)'
+   :cmuWeapons.find(w=>w.name===c.name)?`CMU ${cmuWeapons.find(w=>w.name===c.name).trial} (scripts/cmu/weapon-clip.mjs)`:CLIPS[c.name],
   seconds:Number(c.duration.toFixed(3)),tracks:c.tracks.length})),
  gait,
  ...(hybridRun?.applied?{hybridRun:{
   stride:hybridRun.gait.stride,speed:hybridRun.gait.speed,
   lowerBody:hybridRun.provenance.lowerBody.source,
   upperBody:hybridRun.provenance.upperBody.source,
-  boundary:hybridRun.provenance.boundary.bone}}:{})
+  boundary:hybridRun.provenance.boundary.bone}}:{}),
+ // The acknowledgment CMU asks for, carried with the clips that use its data.
+ ...(cmuWeapons.length?{cmuWeapons:{clips:cmuWeapons,acknowledgment:'The data used in this project was obtained from mocap.cs.cmu.edu. The database was created with funding from NSF EIA-0196217.'}}:{})
 };
 
 mkdirSync(OUT,{recursive:true});

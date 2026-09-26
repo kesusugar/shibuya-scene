@@ -35,17 +35,22 @@ export const activeWindow=a=>({from:a.windup/a.duration,to:a.activeEnd/a.duratio
 /**
  * The katana's cut (PLAN-WEAPONS W1, R6). MEASURED like the punches, by
  * `node qa/gta-upgrade/sword-timing.mjs`: the blade tip placed where the game holds it and
- * followed through Sword_Attack. The window is the first fast pass of the tip in front of the
+ * followed through SwordAttack. The window is the first fast pass of the tip in front of the
  * body; `sweep` is the tip's bearing through it (radians in the body frame, + is the body's left),
- * sampled, because the cut is fast at the start and slows into the follow-through. It is a
- * diagonal cut from high on the right (the tip over 2 m up) down to the left knee (0.4 m).
+ * sampled, because the cut accelerates through the middle.
+ *
+ * Since §9ah SwordAttack is the TWO-HANDED cut retargeted from CMU 02_07 (scripts/cmu/
+ * weapon-clip.mjs, baked by convert-character.mjs): raised over the head, then a diagonal from
+ * high on the left (the tip 2.25 m up) across to the right at knee height (0.69 m), the tip at
+ * 17 m/s. The one-handed Quaternius cut it replaced ran the other way, right to left.
  *
  * Kept apart from ATTACKS: those alternate as the fists' one-two.
  */
-export const SWORD=Object.freeze({name:'SwordAttack',hand:'right',duration:1.533,windup:0.383,activeEnd:0.473,peak:0.447,
- sweepFrom:-1.211,sweepTo:0.761,tipReach:1.593,
- sweep:Object.freeze([[0.383,-1.211],[0.396,-0.649],[0.409,-0.359],[0.422,-0.172],[0.434,0.034],[0.447,0.286],[0.46,0.542],[0.473,0.761]]),
- tipHeight:Object.freeze([0.39,2.04])});
+export const SWORD=Object.freeze({name:'SwordAttack',hand:'right',duration:1.526,windup:0.674,activeEnd:0.89,peak:0.814,
+ sweepFrom:1.362,sweepTo:-0.592,tipReach:1.424,
+ sweep:Object.freeze([[0.674,1.362],[0.686,1.17],[0.699,1.013],[0.712,0.844],[0.725,0.723],[0.737,0.607],[0.75,0.495],[0.763,0.395],
+  [0.775,0.29],[0.788,0.189],[0.801,0.087],[0.814,-0.02],[0.826,-0.132],[0.839,-0.231],[0.852,-0.328],[0.864,-0.425],[0.877,-0.511],[0.89,-0.592]]),
+ tipHeight:Object.freeze([0.69,2.25])});
 
 /** The katana tip's bearing (body frame) `t` seconds into a cut at normal speed, clamped to the window. */
 export function swordBearing(t){

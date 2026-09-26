@@ -7,8 +7,10 @@
 // Names: the shapes are a generic automatic pistol, a generic revolver and a generic katana.
 // No maker or model name belongs in src/ (tests/name-guard.test.mjs).
 
-/** The three slots, in key order: 1, 2, 3. */
-export const SLOTS = Object.freeze(['fists', 'pistol', 'katana']);
+/** The slots, in key order: 1, 2, 3, 4 (§9ah: the submachine gun is the fourth). */
+export const SLOTS = Object.freeze(['fists', 'pistol', 'katana', 'smg']);
+/** The player's guns: each keeps its own magazine. */
+export const GUNS = Object.freeze(['pistol', 'smg']);
 
 export const WEAPONS = Object.freeze({
  fists: Object.freeze({id: 'fists', label: '素手', kind: 'melee'}),
@@ -25,9 +27,26 @@ export const WEAPONS = Object.freeze({
   witnessRadius: 40, witnessSeverity: 1, panicCap: 60}),
  katana: Object.freeze({id: 'katana', label: '日本刀', kind: 'melee',
   damage: 50,             // two cuts put a person down
-  reach: 1.9,             // m, centre to centre: the blade tip at its furthest plus a body radius
-  // R4 option (a): the clip is a one-handed cut, and the katana is held in the right hand only.
-  hands: 1}),
+  reach: 1.7,             // m, centre to centre: the blade tip at its furthest (SWORD.tipReach 1.42) plus a body radius
+  // R4 option (b) since §9ah: the cut is CMU 02_07's two-handed cut, the left hand on the handle
+  // 0.15 m behind the right fist (scripts/cmu/weapon-clip.mjs).
+  hands: 2}),
+ // §9ah: a generic submachine gun, held in both hands and fired from the shoulder (the CMU 80_03
+ // clips). Automatic: the trigger held fires every `refire` s; each shot opens the spread, which
+ // closes again when the trigger is let go. Weaker per round than the pistol, and much louder in
+ // the street.
+ smg: Object.freeze({id: 'smg', label: 'サブマシンガン', kind: 'gun', auto: true,
+  magazine: 30, bodyDamage: 25, range: 50, headHeight: 1.5,
+  refire: .085,           // s between rounds: about 700 a minute
+  shotSeconds: .12,       // the recoil kick's length, per round
+  reloadSeconds: 2.0,
+  // Spread, radians off the aim: where the first round goes, how much each round in a burst adds,
+  // the most it opens to, and how fast it closes (per second) when the trigger is released.
+  spread: Object.freeze({first: .004, perShot: .006, max: .06, recover: .25}),
+  // Recoil, per round: the muzzle climbs this much (radians) and comes back at `settle` per second;
+  // the camera shares `camera` of the climb.
+  recoil: Object.freeze({climb: .035, settle: 9, camera: .35}),
+  witnessRadius: 55, witnessSeverity: 1, panicCap: 80}),
  // The police weapon (W3). Not in the player's inventory.
  revolver: Object.freeze({id: 'revolver', label: '回転式拳銃', kind: 'gun',
   cylinder: 5, damage: [10, 15], range: 45, shotSeconds: .633, refire: 1.1})
@@ -51,7 +70,10 @@ export const GRIP = Object.freeze({
  revolver: Object.freeze({at: [-.032, .075, -.018], forward: [.03, .98, -.18], up: [-.04, .19, .98]}),
  // The blade leaves the fist on the index side (+Z); its edge leads along the fingers (+Y), which
  // is the way Sword_Attack's sweep travels.
- katana: Object.freeze({at: [-.03, .085, .0], forward: [0, 0, 1], up: [0, 1, 0]})
+ katana: Object.freeze({at: [-.03, .085, .0], forward: [0, 0, 1], up: [0, 1, 0]}),
+ // §9ah: the submachine gun is held by its pistol grip as the pistol is. scripts/cmu/weapon-clip.mjs
+ // put the right hand on the gun with exactly this frame, so the two must stay the same.
+ smg: Object.freeze({at: [-.032, .075, -.018], forward: [.03, .98, -.18], up: [-.04, .19, .98]})
 });
 
 /** The palm, in hand_r space: where a held grip's centre belongs (R3 measures against this). */
@@ -66,26 +88,34 @@ export const SHAPE = Object.freeze({
  revolver: Object.freeze({muzzle: [0, .07, .19]}),
  // A generic katana: a 0.26 m handle, a guard, and a 0.70 m blade with a slight curve. The tip is
  // 0.75 m from the fist.
- katana: Object.freeze({handle: .26, blade: .70, tip: .75, sori: .018})
+ katana: Object.freeze({handle: .26, blade: .70, tip: .75, sori: .018}),
+ // §9ah: the numbers the SmgLow/SmgAim clips were baked against (scripts/cmu/weapon-clip.mjs):
+ // the butt 0.33 m behind the grip, the left hand's fore-end 0.28 m ahead, the rear sight 0.115 m
+ // above it. The mesh is built from the same numbers.
+ smg: Object.freeze({muzzle: [0, .07, .45], butt: [0, .04, -.33], foreEnd: .28, sight: [0, .115, -.05]})
 });
 
 const wrap = i => ((i % SLOTS.length) + SLOTS.length) % SLOTS.length;
 
 /**
- * The player's inventory: which slot is out, and the pistol's magazine.
+ * The player's inventory: which slot is out, and each gun's magazine.
  *
  * Switching is refused mid-action (a swing, a shot, a reload) and while driving -- a weapon
  * change is a hand movement too. Entering a car holsters everything (R18); leaving it brings back
  * fists, not the last weapon, so a player never steps out of a car already aiming.
  */
 export function createInventory({start = 'fists'} = {}) {
- const state = {current: SLOTS.includes(start) ? start : 'fists', rounds: WEAPONS.pistol.magazine,
-  reloading: 0, cooldown: 0, holstered: false, switches: 0, shots: 0};
+ const ammo = Object.fromEntries(GUNS.map(g => [g, WEAPONS[g].magazine]));
+ const state = {current: SLOTS.includes(start) ? start : 'fists', ammo,
+  reloading: 0, cooldown: 0, holstered: false, switches: 0, shots: 0,
+  /** The drawn gun's rounds (the pistol's when no gun is drawn). */
+  get rounds() {return ammo[GUNS.includes(api.current) ? api.current : 'pistol'];}};
+ const gun = () => GUNS.includes(api.current) ? api.current : null;
  const api = {
   state,
   get current() {return state.holstered ? 'fists' : state.current;},
   get weapon() {return WEAPONS[api.current];},
-  /** Out by slot name or number (1-3). False when refused. */
+  /** Out by slot name or number (1-4). False when refused. */
   select(which, {busy = false} = {}) {
    const id = typeof which === 'number' ? SLOTS[which - 1] : which;
    if (!SLOTS.includes(id) || busy || state.reloading > 0) return false;
@@ -99,31 +129,35 @@ export function createInventory({start = 'fists'} = {}) {
   },
   holster() {state.holstered = true; state.reloading = 0;},
   unholster() {if (state.holstered) {state.holstered = false; state.current = 'fists';}},
-  /** Can the pistol fire this instant? */
-  get canFire() {return api.current === 'pistol' && state.rounds > 0 && state.cooldown <= 0 && state.reloading <= 0;},
-  /** Spend a round. Returns false (and does nothing) when the pistol cannot fire. */
+  /** Can the drawn gun fire this instant? */
+  get canFire() {const g = gun(); return !!g && ammo[g] > 0 && state.cooldown <= 0 && state.reloading <= 0;},
+  /** Spend a round. Returns false (and does nothing) when the gun cannot fire. */
   fire() {
    if (!api.canFire) return false;
-   state.rounds--; state.shots++; state.cooldown = WEAPONS.pistol.refire;
+   const g = gun(); ammo[g]--; state.shots++; state.cooldown = WEAPONS[g].refire;
    return true;
   },
-  /** R, or an empty magazine: the reload clip's length, then a full magazine. */
+  /** R, or an empty magazine: the reload's length, then a full magazine. */
   reload() {
-   if (api.current !== 'pistol' || state.reloading > 0 || state.rounds >= WEAPONS.pistol.magazine) return false;
-   state.reloading = WEAPONS.pistol.reloadSeconds; return true;
+   const g = gun();
+   if (!g || state.reloading > 0 || ammo[g] >= WEAPONS[g].magazine) return false;
+   state.reloading = WEAPONS[g].reloadSeconds; state.reloadingGun = g; return true;
   },
   update(dt) {
    dt = Math.max(0, dt || 0);
    state.cooldown = Math.max(0, state.cooldown - dt);
    if (state.reloading > 0) {
     state.reloading = Math.max(0, state.reloading - dt);
-    if (state.reloading === 0) state.rounds = WEAPONS.pistol.magazine;
+    if (state.reloading === 0) ammo[state.reloadingGun ?? 'pistol'] = WEAPONS[state.reloadingGun ?? 'pistol'].magazine;
    }
   },
-  /** Respawn: fists out, a full magazine. */
-  reset() {Object.assign(state, {current: 'fists', rounds: WEAPONS.pistol.magazine, reloading: 0, cooldown: 0, holstered: false});},
-  snapshot() {return {current: api.current, rounds: state.rounds, magazine: WEAPONS.pistol.magazine,
-   reloading: state.reloading > 0, holstered: state.holstered, shots: state.shots};}
+  /** Respawn: fists out, full magazines. */
+  reset() {
+   Object.assign(state, {current: 'fists', reloading: 0, cooldown: 0, holstered: false});
+   for (const g of GUNS) ammo[g] = WEAPONS[g].magazine;
+  },
+  snapshot() {const g = gun() ?? 'pistol'; return {current: api.current, rounds: ammo[g], magazine: WEAPONS[g].magazine,
+   reloading: state.reloading > 0, holstered: state.holstered, shots: state.shots, ammo: {...ammo}};}
  };
  return api;
 }
