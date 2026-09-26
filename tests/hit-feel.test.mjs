@@ -266,3 +266,18 @@ test('G1: aiming at someone marks them for a detailed body before the round is f
  arsenal.frame(1/60,{player,world,camera:{position:{x:0,y:1.3,z:0},direction:{x:0,y:0,z:1}}});
  assert.ok(target.aimedUntil>crowd.time,'the person on the crosshair was not marked');
 });
+
+import {HQ_LOD} from '../src/life/hq-layer.mjs';
+test('G3: the far band is placed every few frames but never falls behind; the near band every frame',()=>{
+ const manifest=JSON.parse(readFileSync('public/data/crowd/hq-crowd.json','utf8'));
+ const raw=readFileSync('public/data/crowd/hq-crowd.bin');
+ const layer=createHQLayer(manifest,raw.buffer.slice(raw.byteOffset,raw.byteOffset+raw.byteLength),{budget:40});
+ const walker=(id,z)=>({id,active:true,controlled:false,archetype:'adult',state:'walking',x:0,z,renderX:0,renderZ:z,height:0,heading:0,speed:1.3,crossing:null,queueKey:null,edge:3,route:[3]});
+ const near=walker(1,5),far=walker(2,80),people=[near,far];
+ for(let f=0;f<120;f++){for(const p of people){p.z+=1.3/60;p.renderZ=p.z;}layer.sync(people,{x:0,z:0},1/60,{time:f/60});}
+ const at=p=>layer.crowd.state.z[layer.crowd.indexOf(p.id)];
+ assert.ok(layer.stats.farSkipped>0,'the far band was never skipped');
+ assert.ok(Math.abs(at(near)-near.z)<1e-6,'the near citizen lags');
+ assert.ok(Math.abs(at(far)-far.z)<=1.3/60*(HQ_LOD.farEvery-1)+1e-6,`the far citizen is ${(far.z-at(far)).toFixed(3)} m behind`);
+ layer.dispose();
+});

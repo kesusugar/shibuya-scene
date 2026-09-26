@@ -32,7 +32,12 @@ import {appearanceOf} from './appearance.mjs';
 export const HQ_LOD=Object.freeze({
  bands:[{lod:'L0',in:14,out:17},{lod:'L1',in:38,out:44},{lod:'L2',in:Infinity,out:Infinity}],
  movesPerFrame:24,      // bounded: an LOD change is a slot swap, but not thousands at once
- reviewInterval:.25     // seconds between LOD reviews; the camera does not move that fast
+ reviewInterval:.25,    // seconds between LOD reviews; the camera does not move that fast
+ // §9aj G3: the far band (L2, beyond ~44 m) is placed every `farEvery` frames, staggered by id,
+ // with the time it skipped carried into the next placement. Walking pace is 1.3 m/s, so that is
+ // a 4 cm step at 60 fps seen from over 44 m away; the walk itself runs on the GPU every frame.
+ // A body reacting, falling or rising is always placed every frame.
+ farEvery:3
 });
 
 /**
@@ -80,6 +85,7 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
  const scratch=[];
  const rendered=new Set();          // pedestrian ids this layer is drawing
  const candidates=[];               // pooled {p,d} records, reused every frame
+ const farSkipped=new Map();        // id -> seconds of placement a far citizen has skipped (G3)
  const laneCache=new Map();         // `${archetypeId}|${lod}` -> lane index
  const disowned=new Set();          // ids whose movement the reaction system has taken
  const rising=new Map();            // id -> m/s, for a body closing on its simulation position
@@ -202,7 +208,15 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
     rendered.add(p.id);
 
     // A body the reaction system owns is NOT repositioned from the route: it is mid-flight.
-    if(!disowned.has(p.id)){
+    // G3: a far citizen doing nothing in particular is placed every farEvery frames.
+    let placeDt=dt;
+    if(!born&&crowd.lanes[crowd.state.lane[i]]?.lod==='L2'&&crowd.state.behaviour[i]===STATE.NORMAL
+     &&!rising.has(p.id)&&p.struck===undefined){
+     const skipped=(farSkipped.get(p.id)??0)+dt;
+     if((syncFrame+p.id)%HQ_LOD.farEvery!==0){farSkipped.set(p.id,skipped);stats.farSkipped=(stats.farSkipped??0)+1;}
+     else{farSkipped.delete(p.id);placeDt=skipped;}
+    }else farSkipped.delete(p.id);
+    if(!disowned.has(p.id)&&!farSkipped.has(p.id)){
      let x=p.renderX??p.x,z=p.renderZ??p.z;
      if(crowd.state.behaviour[i]===STATE.RECOVER||rising.has(p.id)){
       const cx=crowd.state.x[i],cz=crowd.state.z[i],gap=Math.hypot(x-cx,z-cz);
@@ -220,7 +234,7 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
      // How far the drawn body actually moved this frame decides Idle/Walk/Run and the cadence
      // (src/life/pace.mjs). `p.speed` is the simulation's intent, not the body's motion.
      // A body spawned this frame has no previous position to measure from.
-     if(!born)crowd.pace(i,x-crowd.state.x[i],z-crowd.state.z[i],dt);
+     if(!born)crowd.pace(i,x-crowd.state.x[i],z-crowd.state.z[i],placeDt);
      crowd.place(i,x,p.height??0,z,p.heading??0,p.speed??0);
     }else if(p.struck!==undefined){
      // RUN 11.1: a body the SIMULATION threw is where its flight says, arc included. The crowd
