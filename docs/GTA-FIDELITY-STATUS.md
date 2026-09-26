@@ -5827,6 +5827,39 @@ opaque pool, sprays along the blow and falls; a figure told it is a ragdoll stay
 and ends lying down. `qa/gta-upgrade/hitbench.html` draws the flinches and the falls (the flinch
 was sized on it: the first kicks moved the neck 11 cm for 0.2 s, a twitch at play distance).
 
+## 9aj. Every pedestrian you hit reacts like it — who gets the detailed body, the crowd's falls, a smoother frame (same branch)
+
+The user: "結局少人数しか実装無理か。…本物のgtaみたいに滑らかにみんなプレイできるようにしたい". GTA
+does not simulate every pedestrian in detail either; what it guarantees is that the one you
+shoot is. So:
+
+- **G1 who gets the detailed body (`near-characters.mjs`).** Whoever is on the crosshair (the
+  lock-on, or the person the camera ray meets: `arsenal.mjs` writes `aimedUntil`), whoever the
+  katana is thrown at (`combat.mjs`), and anyone hit in the last 4 s (`hitAt`) outranks everyone
+  merely nearer for a humanoid slot, out to `PRIORITY_RANGE` 55 m (the submachine gun's 50 m
+  reach). The flinch (§9ai H3) and the ragdoll (H4) therefore play on the person you hit, not
+  only on the eight nearest. A body killed this instant is picked up for its ragdoll even if it
+  was not held (it was standing, which is the pose the ragdoll starts from); one killed a while
+  ago is left alone (it would stand up and then fall). `RAGDOLL_LIMIT` 3 → 4.
+- **G2 the mass crowd's falls (`hq-layer.mjs`).** A body felled by a blade or a round is turned at
+  once to face against the blow (`hitX/hitZ`), so the baked backward fall goes along it. Before,
+  only a strong push turned it, and a gunshot's 0.7 m/s never did. (The HQ atlas has one fall;
+  more fall clips would need a new bake — not done.)
+- **G3 smoothness without device numbers.** Dynamic resolution
+  (`src/quality/dynamic-resolution.mjs`): over budget and GPU-bound (≥ 35% of the frame not CPU
+  work), the render scale drops 10% (floor 60%, one change per 1.25 s); comfortably inside, it
+  climbs back 5% at a time; CPU-bound frames are left alone; `?dynres=0` turns it off; fixed
+  during the `?perf` sweep; the overlay shows `res`. The far HQ band (L2) doing nothing in
+  particular is placed every third frame, staggered, its skipped time carried into its pace.
+  Not done: a lighter default tier (the user plays HIGH, which stays as it is) and anything the
+  device JSON should decide (P1–P4 remain waiting on it).
+
+**Checks.** `tests/hit-feel.test.mjs` +4 (the aimed-at person 45 m out is promoted past 40
+nearer people and let go after the hold; a fresh kill is picked up, an old one is not; the mass
+crowd's felled body faces against the blow with a slight push; aiming marks the target; the far
+band is skipped yet never more than two frames behind), `tests/dynamic-resolution.test.mjs` (3).
+`npm run test:ci` **736, 731 pass, 0 fail, 5 skipped**.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
@@ -6166,6 +6199,10 @@ rejected the scene's callbacks. Put helpers ABOVE the documented function's comm
 Already known for `src/player/*`; it bit again through `src/player/ballistics.mjs` while
 `weapons-scene.mjs` was waiting on its police step, which then could never finish. New modules
 that nothing imports yet, tests and docs are safe to write during a run.
+
+**§9aj: rerun every test that reads a baked clip after rebaking it.** The §9ah rebake (the stock
+moved in under the eye) pushed the butt to 16–18 cm from the shoulder joint; the §9ah test's 18
+cm bound was not rerun after that last rebake and only `test:ci` caught it two sections later.
 
 ## 17. Files that matter
 
