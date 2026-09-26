@@ -92,9 +92,10 @@ test('the gun: from a low ready to the shoulder, levelled, the eye on the sights
   assert.equal(clip.measured.leftMissCm,0,`${clip.preset}: the left hand on the fore-end`);
   assert.ok(clip.measured.eyeToSightLineCm.median<=1,`${clip.preset}: eye ${clip.measured.eyeToSightLineCm.median} cm off the sight line`);
  }
- // The butt is in the pocket inside the shoulder joint (moved in until the sight line is under
- // the eye), 14-17 cm from the joint's centre; a butt on the arm would be further out.
- assert.ok(hold.perKey.buttToShoulderM.every(d=>d<.18),'the butt in the shoulder pocket');
+ // The butt is in the pocket inside the shoulder joint, moved in until the sight line is within
+ // 0.5 cm of the eye (§9ah: that is what keeps the head's tilt to 15°): 16-18 cm from the joint's
+ // centre, toward the collarbone. A butt on the arm would be out past the joint.
+ assert.ok(hold.perKey.buttToShoulderM.every(d=>d<.2),'the butt in the shoulder pocket');
  assert.ok(hold.perKey.elevationDeg.every(x=>x===0),'levelled');
 });
 
