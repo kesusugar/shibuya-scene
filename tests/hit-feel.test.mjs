@@ -74,7 +74,7 @@ async function reaction(zone,dir){
  const at=n=>figure.root.getObjectByName(n).getWorldPosition(new Vector3());
  r.hit({dirX:dir.x,dirZ:dir.z,heading:0,zone,strength:1});
  const peak={};const frames=[];
- for(let i=0;i<30;i++){figure.update(state,1/30);const base={head:at('crown'),knee:at('calf_l'),ankle:at('foot_l'),hip:at('thigh_l'),chest:at('spine_03')};
+ for(let i=0;i<45;i++){figure.update(state,1/30);const base={head:at('crown'),knee:at('calf_l'),ankle:at('foot_l'),hip:at('thigh_l'),chest:at('spine_03')};
   r.update(1/30,0);const now={head:at('crown'),knee:at('calf_l'),ankle:at('foot_l'),hip:at('thigh_l'),chest:at('spine_03')};frames.push({base,now});}
  for(const k of ['head','chest'])peak[k]=frames.reduce((m,f)=>Math.abs(f.now[k].z-f.base[k].z)>Math.abs(m.z)?{z:f.now[k].z-f.base[k].z,x:f.now[k].x-f.base[k].x}:m,{z:0,x:0});
  const settled=!r.awake;
@@ -86,7 +86,7 @@ test('H3: shot in the head from the front, the head snaps back more than the che
  const {peak,settled}=await reaction('head',{x:0,z:-1});   // travelling toward -z: from the front
  assert.ok(peak.head.z<-.05,`the head moved ${peak.head.z.toFixed(3)} m along the facing`);
  assert.ok(Math.abs(peak.head.z)>2*Math.abs(peak.chest.z),'the chest took the blow, not the head');
- assert.ok(settled,'still moving after a second');
+ assert.ok(settled,"still moving after 1.5 s");
 });
 
 test('H3: hit in the chest from the side, the chest gives sideways and comes back',async()=>{

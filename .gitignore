@@ -55,6 +55,7 @@ next-env.d.ts
 !/qa/gta-upgrade/weaponbench.html
 !/qa/gta-upgrade/weaponbench-capture.mjs
 !/qa/gta-upgrade/cmu-weaponbench.html
+!/qa/gta-upgrade/hitbench.html
 !/qa/gta-upgrade/weapons-scene.mjs
 !/qa/gta-upgrade/page-capture.mjs
 !/qa/gta-upgrade/sword-timing.mjs

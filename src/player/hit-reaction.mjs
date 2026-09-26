@@ -17,16 +17,19 @@
 import {Quaternion,Vector3} from 'three';
 
 export const HIT_REACTION = Object.freeze({
- stiffness: 140,        // 1/s^2
- damping: 13,           // 1/s: about 0.55 of critical -- one overshoot, then still
- limit: .75,            // rad, per bone and axis
+ stiffness: 90,         // 1/s^2
+ damping: 10,           // 1/s: about 0.53 of critical -- one overshoot, still in about 0.7 s
+ limit: .85,            // rad, per bone and axis
  // Per zone: [bone, kick back (rad/s per unit strength), kick across, sign]. `back` bends the bone
  // away from the blow's direction; a negative kick bends it toward (a lag or a fold).
  zones: Object.freeze({
-  head: Object.freeze([['Head', 11, 9], ['neck_01', 6, 5], ['spine_03', 1.5, 1]]),
-  body: Object.freeze([['spine_03', 6.5, 5], ['spine_02', 4.5, 3.5], ['spine_01', 2, 1.5], ['Head', -4, -3]]),
-  legs: Object.freeze([['spine_01', -3.5, 1.5], ['spine_02', -2, 1], ['thigh_l', 3, 1.5], ['thigh_r', 3, 1.5],
-   ['calf_l', -7, 0], ['calf_r', -7, 0]])
+  // Sized by eye on qa/gta-upgrade/hitbench.html (§9ai): half these read as a twitch at play
+  // distance. A head round snaps the head about 35° and the neck after it; a chest round bends the
+  // trunk about 40° over three bones; a leg round drops the knees about 35°.
+  head: Object.freeze([['Head', 17, 13], ['neck_01', 9, 7], ['spine_03', 3, 2]]),
+  body: Object.freeze([['spine_03', 10, 7.5], ['spine_02', 7, 5.5], ['spine_01', 3.5, 2.5], ['Head', -6, -4.5]]),
+  legs: Object.freeze([['spine_01', -5.5, 2.5], ['spine_02', -3.5, 1.5], ['thigh_l', 5, 2.5], ['thigh_r', 5, 2.5],
+   ['calf_l', -11, 0], ['calf_r', -11, 0]])
  })
 });
 
