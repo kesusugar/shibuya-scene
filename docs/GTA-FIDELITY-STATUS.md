@@ -6010,6 +6010,40 @@ Not yet seen in the real scene or on a device: the whole of stage 2 (the headles
 at 0.1 fps and lost its WebGL context in stage 1). The crawl is a laid-down swim and should be
 judged by eye; `CRAWL.lift` is a first guess.
 
+## 9ao. Roadmap stage 3 — ☆4–5 and getting away (branch restarted from `master` `4f30a57`)
+
+The wanted model already had ☆4–5, the search circle and escaping by staying outside it unseen
+(wanted.mjs, PLAN-POLICE W1) and a ☆4 roadblock in a random direction (units.mjs). Stage 3 makes
+them something the player can see and has to play against:
+
+- **The helicopter** (`police/helicopter.mjs`, driven by the director). At ☆4+ it comes in from
+  260 m out, holds a 26 m orbit at 42 m over the player and keeps a searchlight on them. Its crew's
+  eye counts for the wanted level's `seen`: in the light's 7 m spot (not under cover), or by day
+  within 70 m. When it loses the player it sweeps the light in a widening spiral round where they
+  were last seen; below ☆4 it climbs away and is gone. Drawn as a merged white-and-navy body, two
+  spinning rotors, and a fake light (an additive cone and a spot on the ground, bright at night,
+  barely there by day) -- no real light (§16a). A synthesised rotor (`audio/rotor.mjs`: low noise
+  chopped at the 13 Hz blade pass, a faint turbine whine), panned and fading with distance.
+- **The search circle on the minimap.** While the stars flash, a circle of the level's search
+  radius round where the police last saw the player, red and blue in turn; the helicopter as a white
+  cross and its light as a ring.
+- **The pincer.** units.mjs now estimates the player's travel (a smoothed velocity). At ☆4+ every
+  other new patrol car comes from ahead of it (within the `aheadCone` 0.55 cosine) when there is a
+  lane sample there, and the roadblock is set across the road 80–140 m ahead of a player moving
+  faster than 3 m/s (random, as before, when they are not).
+
+Tests: `tests/stage3.test.mjs` (7 — the helicopter's arrival, orbit and light; the lost sweep and
+the light finding them; day sight and leaving; the mesh; the pincer and the roadblock ahead on the
+real HIGH lane graph, and nothing "ahead" of a player standing still; the director keeping the player
+seen in the searchlight so the escape clock does not run; the rotor's fall-off). Stills:
+`evidence/roadmap/stage3/stage3bench.png` (qa/gta-upgrade/stage3bench.html: the helicopter by day,
+at night with the light on the player, at night sweeping after losing them; a top-down ☆4 chase
+with the cars from ahead, the roadblock ahead and the search circle).
+
+Not yet seen in the real scene or on a device: the helicopter over the real skyline, the rotor's
+level against the sirens, whether ☆4–5 are escapable (the searchlight makes night escapes harder,
+day escapes need 70 m from the helicopter).
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
