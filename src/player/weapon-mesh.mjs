@@ -96,7 +96,6 @@ const BUILD={
    box(.044,.064,.3,COLOUR.gunmetal,{at:[0,.055,.08]}),                  // receiver
    box(.05,.05,.16,COLOUR.black,{at:[0,.045,foreEnd]}),                  // fore-end
    tube(.012,muzzle[2]-.33,COLOUR.steel,{at:[0,muzzle[1],(muzzle[2]+.33)/2]}),   // barrel
-   box(.028,.13,.034,COLOUR.black,{at:[0,-.035,.14],rx:.12}),            // magazine
    box(.022,.03,.26,COLOUR.black,{at:[0,.05,-.16]}),                     // stock, top bar
    box(.022,.022,.2,COLOUR.black,{at:[0,.005,-.2],rx:-.12}),             // stock, lower bar
    box(.036,.095,.02,COLOUR.black,{at:[0,butt[1]-.005,butt[2]+.01]}),     // butt plate
@@ -105,6 +104,9 @@ const BUILD={
    box(.006,.008,.04,COLOUR.black,{at:[0,.012,.03]})                     // trigger guard
   ];
  },
+ // Stage 1: the submachine gun's magazine, its own mesh so a reload can take it out of the gun.
+ // Built about its own top (where it seats), which sits at SMG_MAG in the gun's frame.
+ smgMag:()=>[box(.028,.13,.034,COLOUR.black,{at:[0,-.065,0],rx:.12})],
  // The katana in its scabbard, for the back: the same handle and guard, and a lacquered saya over
  // the blade's length.
  sheathed:()=>{
@@ -124,6 +126,9 @@ const BUILD={
   box(.027,.03,.04,COLOUR.gunmetal,{at:[0,.062,-.02]}),
  ]
 };
+
+/** Stage 1: where the magazine seats, in the submachine gun's frame (its top, in the receiver). */
+export const SMG_MAG=Object.freeze([0,.03,.148]);
 
 const geometries=new Map();
 let material=null;
@@ -155,7 +160,10 @@ const CARRY=Object.freeze({
  hip:{bone:'pelvis',at:[-.185,.93,-.02],forward:[0,-1,.08],up:[0,.08,1],kind:'holstered'},
  // The katana across the back, the handle over the right shoulder and the scabbard's end at the
  // left hip, the edge facing out.
- back:{bone:'spine_03',at:[-.2,1.46,-.19],forward:[.42,-.9,0],up:[0,0,-1],kind:'sheathed'}
+ back:{bone:'spine_03',at:[-.2,1.46,-.19],forward:[.42,-.9,0],up:[0,0,-1],kind:'sheathed'},
+ // Stage 1: the submachine gun slung behind the right shoulder, muzzle down to the left, the grip
+ // where the right hand finds it over the shoulder blade.
+ sling:{bone:'spine_03',at:[-.17,1.33,-.2],forward:[.3,-.95,0],up:[0,0,-1],kind:'smg'}
 });
 
 /**
@@ -193,7 +201,13 @@ export function createWeaponRig(root,{carry=['pistol','katana']}={}){
  };
  if(carry.includes('pistol'))stowed.pistol=place('hip');
  if(carry.includes('katana')){stowed.katana=place('back');stowed.saya=place('back','saya');}
- let current=null;
+ if(carry.includes('smg'))stowed.smg=place('sling');
+ // Stage 1: the magazine in the gun, and a second one on the sling (a slung gun has one too).
+ const mag=inHand.smg?make('smgMag',inHand.smg):null;
+ if(mag)mag.position.set(...SMG_MAG);
+ if(stowed.smg){const m2=make('smgMag',stowed.smg);m2.position.set(...SMG_MAG);m2.visible=true;}
+ let current=null,magFree=false,magHidden=false;
+ const inv=new Matrix4();
  const v=new Vector3(),q=new Quaternion();
  return {
   meshes,
@@ -204,6 +218,26 @@ export function createWeaponRig(root,{carry=['pistol','katana']}={}){
    if(stowed.pistol)stowed.pistol.visible=!hidden&&current!=='pistol';
    if(stowed.katana)stowed.katana.visible=!hidden&&current!=='katana';
    if(stowed.saya)stowed.saya.visible=!hidden&&current==='katana';
+   if(stowed.smg)stowed.smg.visible=!hidden&&current!=='smg';
+   if(mag){mag.visible=!hidden&&current==='smg'&&!magHidden;if(!magFree)mag.position.set(...SMG_MAG);}
+  },
+  /**
+   * Stage 1: where the right hand goes to put `kind` away or take it out (its grip where it is
+   * carried), in world space. False for what is not carried anywhere (the fists).
+   */
+  stowPoint(kind,out){const m=stowed[kind];if(!m)return false;m.updateWorldMatrix(true,false);out.setFromMatrixPosition(m.matrixWorld);return true;},
+  /** Stage 1: a point in the drawn submachine gun's frame, in world space (for the reload's hand). */
+  gunPoint(local,out){const m=current==='smg'?inHand.smg:null;if(!m)return false;m.updateWorldMatrix(true,false);out.set(local[0],local[1],local[2]).applyMatrix4(m.matrixWorld);return true;},
+  /**
+   * Stage 1: the magazine during a reload. `at` a world point to hold it at (the left hand), or
+   * null for seated in the gun; `hidden` while it is dropped and the fresh one not yet in hand.
+   */
+  magazine(at,{hidden=false}={}){
+   if(!mag)return false;
+   magHidden=hidden;mag.visible=current==='smg'&&!hidden;
+   if(at){inHand.smg.updateWorldMatrix(true,false);inv.copy(inHand.smg.matrixWorld).invert();mag.position.copy(at).applyMatrix4(inv);magFree=true;}
+   else{mag.position.set(...SMG_MAG);magFree=false;}
+   return true;
   },
   get current(){return current;},
   /** The drawn gun's muzzle and barrel direction, in world space. False when no gun is drawn. */

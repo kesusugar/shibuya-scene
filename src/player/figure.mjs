@@ -5,6 +5,7 @@ import {createFootIK} from './foot-ik.mjs';
 import {attackOf} from './attack-timing.mjs';
 import {createWeaponRig} from './weapon-mesh.mjs';
 import {createAimLayer} from './aim-layer.mjs';
+import {createHands} from './hands.mjs';
 import {createHitReaction} from './hit-reaction.mjs';
 import {createRagdoll} from './ragdoll.mjs';
 import pack from './generated/character.mjs';
@@ -174,6 +175,8 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
  // PLAN-WEAPONS W2: a gun is aimed by an upper-body layer with a muzzle correction (aim-layer.mjs).
  const aimLayer=weaponRig&&weapons.some(w=>w==='pistol'||w==='revolver'||w==='smg')
   ?createAimLayer(root,instance.clips,weaponRig,{correction:aimCorrection}):null;
+ // Stage 1: weapon changes and the submachine gun's magazine are hand movements (hands.mjs).
+ const hands=weaponRig?createHands(root,weaponRig):null;
  // §9ai: a blow you can see land (hit-reaction.mjs), and a body that falls the way it was hit
  // (ragdoll.mjs). Only on a rig that has the bones; the eleven-bone baked figure goes without.
  const hitReaction=root.getObjectByName('spine_02')?createHitReaction(root):null;
@@ -334,11 +337,15 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
     head?.rotateX(-snap*k*back);head?.rotateZ(-snap*k*across*.8);
    }
    root.updateMatrixWorld(true);
-   // The weapon in the hand, and the rest where they are carried (PLAN-WEAPONS R3).
-   weaponRig?.show(state.weapon??null);
+   // The weapon in the hand, and the rest where they are carried (PLAN-WEAPONS R3). Stage 1: while
+   // the hand is changing weapons it holds the old one until it has put it away.
+   const inHand=hands?hands.begin(state,dt):state.weapon??null;
+   weaponRig?.show(inHand);
    // The gun arm over whatever the legs are doing, pointed at the target (R1). Not during a
-   // swing, a fall or a car.
-   if(aimLayer&&!SWINGS.has(overlay)&&!UNGROUNDED.has(overlay))aimLayer.update(state,dt);
+   // swing, a fall or a car. Mid-change it poses the weapon actually in the hand, lowered.
+   const posed=inHand!==(state.weapon??null)?{...state,weapon:inHand,aim:0,shotLeft:0}:state;
+   if(aimLayer&&!SWINGS.has(overlay)&&!UNGROUNDED.has(overlay))aimLayer.update(posed,dt);
+   if(hands&&!SWINGS.has(overlay)&&!UNGROUNDED.has(overlay))hands.update(posed,dt);
 
    // Feet last, on top of the finished pose, because it corrects what the animation produced
    // rather than producing it. A teleport or a state where the feet are not on anything drops
@@ -366,7 +373,7 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
    mixer.stopAllAction();
    for(const action of Object.values(actions))action.reset();
    overlay=null;previousAttack=0;seeded=false;dominant='Idle';strike.Punch=strike.PunchCross=strike.SwordAttack=0;
-   stance.SwordIdle=stance.PistolIdle=0;aimLayer?.reset();strike.Roll=0;crouchK=0;crouchIdle?.stop();
+   stance.SwordIdle=stance.PistolIdle=0;aimLayer?.reset();hands?.reset();strike.Roll=0;crouchK=0;crouchIdle?.stop();
    hitReaction?.reset();ragdoll?.reset();hitSeq=null;ragdollSeq=null;
    gait.reset();facing.reset(0);
    for(const name of GAIT)actions[name]?.play().setEffectiveWeight(0);
@@ -377,6 +384,8 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
   },
   /** PLAN-WEAPONS: the carried weapons, or null on a body that carries none. */
   get weapons(){return weaponRig;},
+  /** Stage 1: the weapon-change and reload hands (null on a body that carries nothing). */
+  get hands(){return hands;},
   /** §9ai: the blow springs and the ragdoll (null on a rig without them / until first used). */
   get hitReaction(){return hitReaction;},
   get ragdoll(){return ragdoll;},

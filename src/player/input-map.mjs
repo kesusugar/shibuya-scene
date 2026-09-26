@@ -17,6 +17,7 @@
 //  left (2)       roll                        —
 //  top (3)        get in                      get out
 //  L (4) / R (5)  previous / next weapon      — / handbrake (hold)
+//                 (stage 1: on release; held, the weapon wheel -- the right stick picks)
 //  d-pad up (12)  —                           siren (patrol car)
 //  − (8) / + (9)  map / menu (back to observe)
 //
@@ -24,6 +25,8 @@
 // to full lurches the car, so digital triggers RAMP (`INPUT.ramp`); an analogue trigger passes
 // straight through. Sticks get a radial deadzone (a square one makes diagonals sticky) and a
 // response curve for the camera.
+
+import {WHEEL} from './weapon-wheel.mjs';
 
 export const BUTTON = Object.freeze({bottom: 0, right: 1, left: 2, top: 3, L: 4, R: 5, ZL: 6, ZR: 7,
  minus: 8, plus: 9, LS: 10, RS: 11, up: 12, down: 13, dleft: 14, dright: 15, home: 16, capture: 17});
@@ -71,13 +74,17 @@ export function radial(x, y, {deadzone = INPUT.deadzone, outer = INPUT.outer, cu
 
 /** Actions fired on the press (edges), per mode. Held states are read separately. */
 const PRESS = Object.freeze({
- foot: Object.freeze([['ZR', 'fire'], ['right', 'reload'], ['left', 'roll'], ['top', 'enter'], ['L', 'weaponPrev'],
-  ['R', 'weaponNext'], ['LS', 'crouch'], ['minus', 'map'], ['plus', 'menu']]),
+ foot: Object.freeze([['ZR', 'fire'], ['right', 'reload'], ['left', 'roll'], ['top', 'enter'],
+  ['LS', 'crouch'], ['minus', 'map'], ['plus', 'menu']]),
  car: Object.freeze([['top', 'exit'], ['LS', 'horn'], ['up', 'siren'], ['minus', 'map'], ['plus', 'menu']])
 });
 
-export function createInputMap() {
+/** Stage 1: L and R are a tap (previous / next weapon, on release) or, held this long, the wheel. */
+const WHEEL_BUTTONS = Object.freeze([['L', 'weaponPrev'], ['R', 'weaponNext']]);
+
+export function createInputMap({wheelHold = WHEEL.hold} = {}) {
  let prev = new Array(18).fill(false);
+ const held = {L: 0, R: 0};
  let throttle = 0, brake = 0;
  const value = (pad, i) => pad?.buttons?.[i]?.value ?? (pad?.buttons?.[i]?.pressed ? 1 : 0);
  const down = (pad, i) => !!(pad?.buttons?.[i]?.pressed || value(pad, i) > .5);
@@ -95,8 +102,8 @@ export function createInputMap() {
    */
   poll(pad, dt = 0, mode = 'foot') {
    const profile = profileOf(pad);
-   const none = {profile, move: {x: 0, y: 0}, look: {x: 0, y: 0}, aim: false, fire: false, run: false, throttle: 0, brake: 0, handbrake: false, pressed: []};
-   if (!pad) {prev = prev.fill(false); throttle = brake = 0; return none;}
+   const none = {profile, move: {x: 0, y: 0}, look: {x: 0, y: 0}, aim: false, fire: false, run: false, throttle: 0, brake: 0, handbrake: false, wheel: false, stick: {x: 0, y: 0}, pressed: []};
+   if (!pad) {prev = prev.fill(false); throttle = brake = 0; held.L = held.R = 0; return none;}
    // Outside the standard mapping the button indices mean nothing in particular, so no button
    // is read; the first two sticks are the same on every pad we know of, so they still work.
    if (profile === 'raw' || profile === 'switch-raw') {
@@ -109,6 +116,13 @@ export function createInputMap() {
    const edge = name => now[BUTTON[name]] && !prev[BUTTON[name]];
    const pressed = [];
    for (const [button, action] of PRESS[mode] ?? PRESS.foot) if (edge(button)) pressed.push(action);
+   let wheel = false;
+   for (const [button, action] of WHEEL_BUTTONS) {
+    const i = BUTTON[button];
+    if (mode !== 'foot') {held[button] = 0; continue;}
+    if (now[i]) {held[button] += dt; if (held[button] >= wheelHold) wheel = true;}
+    else {if (prev[i] && held[button] < wheelHold) pressed.push(action); held[button] = 0;}
+   }
    const move = radial(pad.axes[0] ?? 0, -(pad.axes[1] ?? 0));
    const look = radial(pad.axes[2] ?? 0, pad.axes[3] ?? 0, {curve: INPUT.lookCurve});
    throttle = trigger(throttle, value(pad, BUTTON.ZR), dt);
@@ -117,9 +131,11 @@ export function createInputMap() {
    return {profile, move: {x: move.x, y: move.y}, look: {x: look.x, y: look.y},
     aim: mode === 'foot' && now[BUTTON.ZL], fire: mode === 'foot' && now[BUTTON.ZR], run: mode === 'foot' && now[BUTTON.bottom],
     throttle: mode === 'car' ? throttle : 0, brake: mode === 'car' ? brake : 0,
-    handbrake: mode === 'car' && now[BUTTON.R], pressed};
+    handbrake: mode === 'car' && now[BUTTON.R], wheel,
+    // The right stick as it is (no curve), for the wheel's pick.
+    stick: {x: pad.axes[2] ?? 0, y: pad.axes[3] ?? 0}, pressed};
   },
-  reset() {prev = new Array(18).fill(false); throttle = brake = 0;}
+  reset() {prev = new Array(18).fill(false); throttle = brake = 0; held.L = held.R = 0;}
  };
  return api;
 }

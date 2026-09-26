@@ -7,7 +7,7 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {humanoidCitizen} from '../src/player/character-asset.mjs';
 import {createPlayerFigure} from '../src/player/figure.mjs';
 import {SWORD,swordBearing} from '../src/player/attack-timing.mjs';
-import {createInventory,WEAPONS,SLOTS,PALM} from '../src/player/weapons.mjs';
+import {createInventory,WEAPONS,SLOTS,PALM,DRAW} from '../src/player/weapons.mjs';
 import {createMeleeCombat,katanaSweep,COMBAT} from '../src/player/combat.mjs';
 
 globalThis.ProgressEvent??=class{constructor(type,init={}){Object.assign(this,{type},init);}};
@@ -114,7 +114,11 @@ test('R3: a stowed weapon rides its bone -- the pistol at the right hip, the kat
  // Behind the chest, whatever the walk's lean does to both.
  back.getWorldPosition(a);figure.root.getObjectByName('spine_03').getWorldPosition(b);
  assert.ok(a.z-b.z<-.05,`the katana is ${(a.z-b.z).toFixed(2)} m from the chest along the facing, not on the back`);
+ // Stage 1: drawing is a hand movement -- the hand goes over the shoulder first, and the katana
+ // comes out of the scabbard when it gets there (hands.mjs), not on the key press.
  state.weapon='katana';figure.update(state,1/30);
+ assert.ok(back.visible&&!figure.root.getObjectByName('weapon-katana').visible,'the katana left the back before the hand reached it');
+ for(let t=0;t<DRAW.holster+DRAW.draw;t+=1/30)figure.update(state,1/30);
  assert.ok(!back.visible&&figure.root.getObjectByName('weapon-saya').visible,'a drawn katana leaves its scabbard on the back');
  assert.ok(figure.root.getObjectByName('weapon-katana').visible);
  figure.dispose();

@@ -6,8 +6,9 @@
 // It owns what the player is holding, and writes it onto the player's state -- `weapon`, and for
 // the pistol `aim`, `aimTarget`, `aimHeading`, `shotLeft`, `reloadLeft` -- which is what the
 // figure draws (figure.mjs, aim-layer.mjs) and combat reads.
-import {createInventory,WEAPONS,GUNS} from './weapons.mjs';
+import {createInventory,WEAPONS,GUNS,SHAPE} from './weapons.mjs';
 import {createWeaponEffects} from './weapon-effects.mjs';
+import {createImpactMarks,wallNormal} from './impact-marks.mjs';
 import {castShot,peopleAlong,BALLISTICS} from './ballistics.mjs';
 import {onRails} from './combat.mjs';
 import {VEHICLES} from '../traffic/config.mjs';
@@ -82,9 +83,15 @@ export function spreadDirection(dir, {spread = 0, climb = 0, index = 0} = {}) {
  * @param {any} [options.effects]
  * @param {null|((shot:any)=>void)} [options.onShot] every shot: the scene's sound, bloom and crimes
  * @param {null|((event:any)=>number)} [options.onWitness] the HQ crowd's visual reaction (bounded there)
+ * @param {null|((x:number,y:number,z:number,kind:string)=>any)} [options.onLand] stage 1: a casing or magazine hits the ground
  */
-export function createArsenal({effects = createWeaponEffects(), onShot = null, onWitness = null} = {}) {
+export function createArsenal({effects = createWeaponEffects(), onShot = null, onWitness = null, onLand = null} = {}) {
  const inventory = createInventory();
+ // Stage 1: holes, casings, smoke, dropped magazines and blood pools (impact-marks.mjs), drawn
+ // with the rest of the weapon effects. `onLand` hears a casing or a magazine hit the ground.
+ const marks = createImpactMarks(); effects.root.add(marks.root);
+ let groundOf = null;
+ const dropMag = at => marks.magazine(at);
  let wasDriving = false, aimHeld = false, pendingShot = 0, lastShot = null, touchAim = 0;
  // §9ah: the automatic's trigger, held; its spread and recoil, and the round index in the burst.
  let triggerHeld = false, spread = 0, recoil = 0, burst = 0;
@@ -142,6 +149,11 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
   s.shotLeft = w.shotSeconds;
   effects.muzzle(from.x, from.y, from.z, hit.dir);
   effects.tracer(from, hit.point);
+  // Stage 1: the spent case out of the port (above the grip, behind the muzzle) and a breath of
+  // smoke off the muzzle; an automatic's rounds each leave a little, and it gathers.
+  {const port = (SHAPE[gunId]?.muzzle?.[2] ?? .2) - (w.auto ? .12 : .05), d = hit.dir;
+   marks.casing({x: from.x - d.x * port, y: from.y - d.y * port + .02, z: from.z - d.z * port}, d);
+   marks.smoke(from, d, w.auto ? 1 : 3);}
   let outcome = null;
   if (hit.kind === 'person') {
    stats.hits++; if (hit.zone === 'head') stats.headshots++;
@@ -152,6 +164,8 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
    effects.blood(hit.point.x, hit.point.y, hit.point.z, {dir: hit.dir, count: w.auto ? 10 : 18, spread: .45});
   } else if (hit.kind === 'wall' || hit.kind === 'ground') {
    stats.walls++;
+   // Stage 1: the hole it leaves.
+   marks.hole(hit.point, hit.kind === 'ground' ? {x: 0, y: 1, z: 0} : wallNormal(hit.point, hit.dir, world.solid));
    effects.burst(hit.point.x, hit.point.y, hit.point.z, {count: 10, nx: -hit.dir.x, nz: -hit.dir.z});
    effects.burst(hit.point.x, hit.point.y, hit.point.z, {count: 6, dust: true, nx: -hit.dir.x, nz: -hit.dir.z});
   } else if (hit.kind === 'car') {
@@ -170,7 +184,7 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
  }
 
  const api = {
-  inventory, effects,
+  inventory, effects, marks,
   get current() {return inventory.current;},
   get weapon() {return WEAPONS[inventory.current];},
   get aiming() {return aimHeld;},
@@ -227,6 +241,10 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
    if (!driving && wasDriving) inventory.unholster();
    wasDriving = driving;
    effects.update(dt);
+   if (world?.ground) groundOf = world.ground;
+   marks.update(dt, {ground: groundOf ?? undefined, onLand});
+   // A magazine the hand lets go of during the automatic's reload falls to the ground (hands.mjs).
+   if (figure?.hands) figure.hands.onDrop = dropMag;
    const s = player?.state; if (!s) return;
    if (driving) s.crouching = false;              // W4: nobody crouches in a car seat
    s.weapon = inventory.current;
@@ -263,7 +281,8 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
     if ((s.speed ?? 0) < .16) s.bodyHeading = s.aimHeading;
    }
    // Fire once the gun is up (or at once without a figure to wait for).
-   const up = !figure?.aim || figure.aim.aimWeight >= ARSENAL.raiseWeight;
+   // Stage 1: and not while the hand is still changing weapons (hands.mjs).
+   const up = (!figure?.aim || figure.aim.aimWeight >= ARSENAL.raiseWeight) && !figure?.hands?.busy;
    if (pendingShot > 0 && s.aim && up && inventory.canFire) {
     // The pistol fires once per press; an automatic, every refire while the trigger is held.
     if (!auto || !triggerHeld) pendingShot = 0;
@@ -272,8 +291,8 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
   },
   /** Respawn or leaving play: fists, a full magazine, nothing in flight. */
   reset() {inventory.reset(); wasDriving = false; aimHeld = false; pendingShot = 0; touchAim = 0; triggerHeld = false; spread = 0; recoil = 0; burst = 0;},
-  snapshot() {return {...inventory.snapshot(), ...stats, aiming: aimHeld, lastShot, effects: effects.stats};},
-  dispose() {effects.dispose();}
+  snapshot() {return {...inventory.snapshot(), ...stats, aiming: aimHeld, lastShot, effects: effects.stats, marks: marks.stats};},
+  dispose() {marks.dispose(); effects.dispose();}
  };
  return api;
 }

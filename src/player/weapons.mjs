@@ -46,11 +46,20 @@ export const WEAPONS = Object.freeze({
   // Recoil, per round: the muzzle climbs this much (radians) and comes back at `settle` per second;
   // the camera shares `camera` of the climb.
   recoil: Object.freeze({climb: .035, settle: 9, camera: .35}),
-  witnessRadius: 55, witnessSeverity: 1, panicCap: 80}),
+  witnessRadius: 55, witnessSeverity: 1, panicCap: 80,
+  // Stage 1: shouldered, the view closes in further than over a pistol (PLAYER.aimFov is 40).
+  aimFov: 30}),
  // The police weapon (W3). Not in the player's inventory.
  revolver: Object.freeze({id: 'revolver', label: '回転式拳銃', kind: 'gun',
   cylinder: 5, damage: [10, 15], range: 45, shotSeconds: .633, refire: 1.1})
 });
+
+/**
+ * Stage 1: changing weapons is a hand movement (hands.mjs). The hand goes to where the weapon out
+ * is carried (`holster` s), puts it away, goes to where the next one is carried and brings it up
+ * (`draw` s). A shot waits for it.
+ */
+export const DRAW = Object.freeze({holster: .22, draw: .3});
 
 /**
  * How each weapon sits in the right hand, in hand_r's own frame.
@@ -157,7 +166,9 @@ export function createInventory({start = 'fists'} = {}) {
    for (const g of GUNS) ammo[g] = WEAPONS[g].magazine;
   },
   snapshot() {const g = gun() ?? 'pistol'; return {current: api.current, rounds: ammo[g], magazine: WEAPONS[g].magazine,
-   reloading: state.reloading > 0, holstered: state.holstered, shots: state.shots, ammo: {...ammo}};}
+   reloading: state.reloading > 0, holstered: state.holstered, shots: state.shots, ammo: {...ammo},
+   // Stage 1: how far the reload has got, 0..1, for the HUD's bar.
+   reloadProgress: state.reloading > 0 ? 1 - state.reloading / WEAPONS[state.reloadingGun ?? g].reloadSeconds : 0};}
  };
  return api;
 }

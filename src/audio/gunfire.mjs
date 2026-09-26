@@ -155,6 +155,23 @@ export function createGunfire(getContext, getBank, {solid = () => false} = {}) {
   flesh(x, y, z, strength = 1) {return body(x, y, z, GUNFIRE.fleshGain * strength, false);},
   /** §9ai H2: a blade through a body: a quick hiss and a softer thump. */
   slice(x, y, z, strength = 1) {return body(x, y, z, GUNFIRE.sliceGain * strength, true);},
+  /**
+   * Stage 1: a spent case on the pavement (a high, short brass ring) or a magazine (a dull clack).
+   * Synthesised, quiet, and at most a few at once (the casings arrive in a scatter).
+   */
+  tink(x, y, z, kind = 'casing') {
+   const ctx = getContext?.(), out = bus();
+   if (!ctx || !out || ctx.state !== 'running') return false;
+   const now = ctx.currentTime; if (now - (stats.lastTink ?? -1) < .025) return false; stats.lastTink = now;
+   const mag = kind === 'magazine', t = now, pan = placed(ctx, x, y, z), g = ctx.createGain();
+   g.gain.setValueAtTime(mag ? .22 : .09, t); g.gain.exponentialRampToValueAtTime(.0004, t + (mag ? .12 : .18));
+   const base = mag ? 520 : 3900 + Math.random() * 900;
+   const oscs = (mag ? [1, 1.7] : [1, 2.4]).map((k, i) => {const o = ctx.createOscillator(); o.type = mag ? 'triangle' : 'sine'; o.frequency.value = base * k;
+    const og = ctx.createGain(); og.gain.value = i ? .35 : 1; o.connect(og); og.connect(g); o.start(t); o.stop(t + .2); return [o, og];});
+   g.connect(pan); pan.connect(out); stats.tinks = (stats.tinks ?? 0) + 1;
+   oscs[0][0].onended = () => {try {for (const [o, og] of oscs) {o.disconnect(); og.disconnect();} g.disconnect(); pan.disconnect();} catch {}};
+   return true;
+  },
   /** Steel on a wall or a car: the katana's clank. Synthesised. */
   clank(x, y, z) {
    const ctx = getContext?.(), out = bus();

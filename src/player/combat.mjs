@@ -213,6 +213,8 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
   // A shot (PLAN-WEAPONS R11) hands in its own small push along the bullet, with no lift: the
   // body goes down where it stood instead of being thrown like a car's victim.
   crowd.strike(p,dx,dz,2.4,impulse);p.fatal=true;
+  // Stage 1: told once per death, for the blood pool under the body and the kill marker.
+  {const l=Math.hypot(dx,dz)||1;onEvent?.('npc_killed',{x:p.x,z:p.z,intensity:1,id:p.id,dirX:dx/l,dirZ:dz/l});}
  }
 
  /**

@@ -1,5 +1,6 @@
 import {createDelivery} from './objective.mjs';
 import {createPlayerMarker} from './marker.mjs';
+import {WHEEL} from './weapon-wheel.mjs';
 
 // Canvas minimap uses the existing road/walk network; no extra renderer or map download.
 export function createPlayUI(network,parent,{onExit,onDrive}={}){
@@ -12,8 +13,12 @@ export function createPlayUI(network,parent,{onExit,onDrive}={}){
  root.insertAdjacentHTML('beforeend','<div class="play-wanted-banner" role="status" aria-live="polite" hidden></div>');
  // PLAN-WEAPONS W2: the crosshair, only while a gun is up. The aim is the centre of the view.
  root.insertAdjacentHTML('beforeend','<div class="play-crosshair" aria-hidden="true" hidden><i></i></div>');
+ // Stage 1: the hit marker over the crosshair, the ammunition panel, and the weapon wheel.
+ root.insertAdjacentHTML('beforeend','<div class="play-hitmarker" aria-hidden="true" data-kind="hit"><i></i><i></i><i></i><i></i></div>');
+ root.insertAdjacentHTML('beforeend','<div class="play-ammo" role="status" aria-label="残弾" hidden><small class="play-ammo-name"></small><div><b class="play-ammo-rounds"></b><span class="play-ammo-mag"></span></div><span class="play-ammo-bar"><i></i></span></div>');
+ root.insertAdjacentHTML('beforeend',`<div class="play-wheel" role="dialog" aria-label="武器を選ぶ" hidden><div class="play-wheel-ring">${WHEEL.order.map((id,i)=>`<div class="play-wheel-slot" data-slot="${id}" style="--a:${i*360/WHEEL.order.length}deg"><b></b><small></small></div>`).join('')}<div class="play-wheel-centre"><b></b><small></small></div></div></div>`);
  document.body.appendChild(root);
- const query=s=>root.querySelector(s),canvas=query('canvas'),c=canvas.getContext('2d'),task=query('.play-task'),timer=query('.play-timer'),start=query('.play-start'),cancel=query('.play-cancel'),progress=query('.play-progress'),speed=query('.play-speed'),health=query('.play-health'),healthBar=query('.play-health-bar i'),healthValue=query('.play-health-value'),damage=query('.play-damage'),drive=query('.play-drive'),wanted=query('.play-wanted'),stars=[...root.querySelectorAll('.play-wanted i')],banner=query('.play-wanted-banner'),weaponLabel=query('.play-weapon'),crosshair=query('.play-crosshair');
+ const query=s=>root.querySelector(s),canvas=query('canvas'),c=canvas.getContext('2d'),task=query('.play-task'),timer=query('.play-timer'),start=query('.play-start'),cancel=query('.play-cancel'),progress=query('.play-progress'),speed=query('.play-speed'),health=query('.play-health'),healthBar=query('.play-health-bar i'),healthValue=query('.play-health-value'),damage=query('.play-damage'),drive=query('.play-drive'),wanted=query('.play-wanted'),stars=[...root.querySelectorAll('.play-wanted i')],banner=query('.play-wanted-banner'),weaponLabel=query('.play-weapon'),crosshair=query('.play-crosshair'),hitmarker=query('.play-hitmarker'),ammo=query('.play-ammo'),ammoName=query('.play-ammo-name'),ammoRounds=query('.play-ammo-rounds'),ammoMag=query('.play-ammo-mag'),ammoBar=query('.play-ammo-bar i'),wheelBox=query('.play-wheel'),wheelSlots=[...root.querySelectorAll('.play-wheel-slot')],wheelCentre=query('.play-wheel-centre');
  let bannerFor=0,bannerSeq=0;
  let current=null,visible=false,clock=0,disposed=false;
  query('.play-exit').onclick=()=>onExit?.();drive.onclick=()=>onDrive?.();
@@ -44,20 +49,47 @@ export function createPlayUI(network,parent,{onExit,onDrive}={}){
  /** PLAN-WEAPONS: the weapon out, the magazine, and the crosshair (on a person when locked). */
  const NAMES={fists:'素手',pistol:'ピストル',katana:'日本刀',smg:'サブマシンガン'};
  const GUN=new Set(['pistol','smg']);
+ let lastAmmo='';
  function setWeapon(w,{aiming=false,locked=false,spread=0}={}){
   if(disposed||!w)return;
   weaponLabel.dataset.weapon=w.current;
-  weaponLabel.textContent=GUN.has(w.current)?`${NAMES[w.current]} ${w.reloading?'装填中':`${w.rounds}/${w.magazine}`}`:(NAMES[w.current]??w.current);
+  weaponLabel.textContent=NAMES[w.current]??w.current;
   crosshair.hidden=!(aiming&&GUN.has(w.current));crosshair.dataset.locked=String(!!locked);
   // §9ah: the automatic's crosshair opens with its spread.
   crosshair.style.setProperty('--spread',String(Math.round(Math.min(1,spread/.06)*100)/100));
+  // Stage 1: the rounds in the magazine, large, and the reload as a bar filling back up.
+  const gun=GUN.has(w.current),key=gun?`${w.current}:${w.rounds}:${w.magazine}:${w.reloading?Math.round((w.reloadProgress??0)*20):'-'}`:'none';
+  if(key===lastAmmo)return;lastAmmo=key;
+  ammo.hidden=!gun;if(!gun)return;
+  ammo.dataset.weapon=w.current;ammo.dataset.low=String(!w.reloading&&w.rounds<=Math.ceil(w.magazine/4));ammo.dataset.reloading=String(!!w.reloading);
+  ammoName.textContent=NAMES[w.current];ammoRounds.textContent=w.reloading?'装填中':String(w.rounds);ammoMag.textContent=w.reloading?'':`/ ${w.magazine}`;
+  ammoBar.style.width=`${Math.round((w.reloading?(w.reloadProgress??0):w.rounds/w.magazine)*100)}%`;
+  ammo.setAttribute('aria-label',w.reloading?`${NAMES[w.current]} 装填中`:`${NAMES[w.current]} 残弾 ${w.rounds}/${w.magazine}`);
+ }
+ /** Stage 1: a round or a cut landed (`kill`: it put them down). A short X over the crosshair. */
+ let markerTimer=0;
+ function hitMarker(kill=false){
+  if(disposed)return;
+  hitmarker.dataset.kind=kill?'kill':'hit';
+  hitmarker.classList.remove('on');void hitmarker.offsetWidth;hitmarker.classList.add('on');
+  clearTimeout(markerTimer);markerTimer=setTimeout(()=>hitmarker.classList.remove('on'),kill?420:240);
+ }
+ /** Stage 1: the weapon wheel -- open with each weapon's rounds, the highlighted one lit. */
+ function setWheel(open,highlighted=null,snapshot=null){
+  if(disposed)return;
+  wheelBox.hidden=!open;if(!open)return;
+  for(const slot of wheelSlots){const id=slot.dataset.slot;
+   slot.dataset.on=String(id===highlighted);slot.querySelector('b').textContent=NAMES[id]??id;
+   slot.querySelector('small').textContent=GUN.has(id)&&snapshot?.ammo?`${snapshot.ammo[id]} 発`:id==='fists'?'':'近接';}
+  wheelCentre.querySelector('b').textContent=highlighted?NAMES[highlighted]:'';
+  wheelCentre.querySelector('small').textContent=highlighted&&GUN.has(highlighted)&&snapshot?.ammo?`残弾 ${snapshot.ammo[highlighted]}`:'';
  }
  /** C1: the controls line follows the device in use (keyboard, or the pad's own button names). */
  const hint=query('.play-hint'),mapBox=query('.play-map');
  function setControls(text){if(!disposed&&hint)hint.textContent=text;}
  /** C2: − on the pad shows or hides the map. */
  function toggleMap(){if(!disposed&&mapBox)mapBox.hidden=!mapBox.hidden;}
- return {mission,setWanted,setWeapon,setControls,toggleMap,show(){visible=true;root.hidden=false;clock=1;},hide(){visible=false;root.hidden=true;marker.hide();mission.cancel();},
+ return {mission,setWanted,setWeapon,hitMarker,setWheel,setControls,toggleMap,show(){visible=true;root.hidden=false;clock=1;},hide(){visible=false;root.hidden=true;wheelBox.hidden=true;marker.hide();mission.cancel();},
   update(dt,position,car,driving,entry,hits=0){if(disposed||!visible)return;current=position;mission.tick(dt,position,{driving,alive:position.alive,hits});const s=mission.snapshot();
    if(s.target)marker.update({x:s.target.x,z:s.target.z,y:network.ctx.height(s.target.x,s.target.z)},dt,2.4);else marker.hide();
    clock+=dt;if(clock<.2)return;clock=0;draw(position,car,s.target);
