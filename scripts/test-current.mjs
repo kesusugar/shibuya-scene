@@ -68,6 +68,7 @@ const files=[
  'tests/roll-crouch.test.mjs',
  'tests/perf-probe.test.mjs',
  'tests/input-map.test.mjs',
+ 'tests/pad-aim.test.mjs',
  'tests/gyro.test.mjs',
  'tests/stage1.test.mjs',
  'tests/stage2.test.mjs',

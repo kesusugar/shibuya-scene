@@ -105,7 +105,8 @@ test('the controller: ZR attacks, ZL aims while held, L/R cycle, B runs -- on a 
  press(p,'ZR');player.updateInput(1/60);release(p,'ZR');player.updateInput(1/60);
  press(p,'ZL');player.updateInput(1/60);release(p,'ZL');player.updateInput(1/60);
  press(p,'R');player.updateInput(1/60);release(p,'R');player.updateInput(1/60);
- assert.deepEqual(calls,[['attack'],['aim',true],['aim',false],['cycle',1]]);
+ // Item 3: the pad's calls say they came from the pad (the arsenal hard-locks, and ZR alone fires no gun).
+ assert.deepEqual(calls,[['attack',{pad:true}],['aim',true,{pad:true}],['aim',false,{pad:true}],['cycle',1]]);
  press(p,'bottom');p.axes=[0,-1,0,0];player.updateInput(1/60);
  const i=player.input();assert.ok(i.running&&i.forward>.99);
  assert.equal(player.lastDevice,'pad');assert.equal(player.padProfile,'switch');
@@ -118,6 +119,16 @@ test('the controller in a car: X gets out, ZR ramps the throttle into input().fo
  let f=player.input().forward;assert.ok(f>0&&f<.2,`throttle ${f} on the first frame`);
  for(let t=0;t<.35;t+=1/60)player.updateInput(1/60);
  assert.ok(player.input().forward>.99);assert.ok(player.input().handbrake);
+});
+
+test('item 3: locked on, the right stick flicks (no camera turn); unlocked, it turns the camera',()=>{
+ let locked=false;const p=pad(),{player,calls}=attached(p,{locked:()=>locked,onLockFlick:d=>calls.push(['flick',d])});
+ press(p,'ZL');player.updateInput(1/60);locked=true;
+ const h=player.state.heading;p.axes=[0,0,.95,0];player.updateInput(.1);player.updateInput(.1);
+ assert.equal(player.state.heading,h,'the stick turned the camera while locked');
+ p.axes=[0,0,0,0];player.updateInput(.1);p.axes=[0,0,0,-.95];player.updateInput(.1);
+ assert.deepEqual(calls.filter(c=>c[0]==='flick'),[['flick','right'],['flick','up']]);
+ locked=false;p.axes=[0,0,.95,0];player.updateInput(.1);assert.ok(player.state.heading<h,'unlocked, the stick did not turn');
 });
 
 test('the controller: the right stick turns the camera, and invert-Y flips the pitch',()=>{

@@ -7,11 +7,18 @@
 // (Switch Y), 3 the top (Switch X). So the layout is the same under the thumb on either pad; only
 // the names printed in the HUD change (`GLYPHS`).
 //
+// Owner's plan, item 3 (GTA on a Switch Pro Controller): ZL raises the gun and locks onto the
+// nearest person in view; ZR attacks. A gun does NOT go off on ZR alone -- without ZL the pad's
+// ZR only punches or cuts (arsenal.mjs `trigger({pad})`). The keyboard and mouse keep their own
+// rules (a click raises and fires).
+//
 //                 on foot                     in a car
 //  left stick     move / press: crouch        steer / press: horn
 //  right stick    camera                      camera
-//  ZL (6)         aim (hold)                  brake, reverse
-//  ZR (7)         fire / punch / cut          throttle
+//  ZL (6)         raise + lock on (hold)      brake, reverse
+//  ZR (7)         fire (only with ZL held)    throttle
+//                 / punch / cut
+//  right stick    while locked: flick ←/→ to the next target, ↑ to the head, ↓ back to the chest
 //  bottom (0)     run (hold)                  —
 //  right (1)      reload                      —
 //  left (2)       roll                        —
@@ -37,7 +44,9 @@ export const INPUT = Object.freeze({
  outer: .94,             // the Switch Pro's sticks do not always reach 1 on the diagonals
  lookCurve: 1.6,         // camera response: fine near the centre, fast at the edge
  ramp: Object.freeze({up: .3, down: .15}),   // s for a digital trigger to reach full / let go
- digital: .999           // a trigger reporting only 0 or ≥ this is treated as digital
+ digital: .999,          // a trigger reporting only 0 or ≥ this is treated as digital
+ // A right-stick flick (item 3): out past `flick` from inside `rest`, once until it comes back.
+ flick: .7, rest: .35
 });
 
 /** What the pad is, from the id Chrome reports. */
@@ -62,7 +71,7 @@ export function controlHints(profile, driving = false) {
    : 'E/クリック 攻撃 · 1/2/3/4 武器 · 右ボタン 構える · R 装填 · Q 回避 · C しゃがむ';
  const g = GLYPHS[profile] ?? GLYPHS.standard;
  return driving ? `${g.ZR} アクセル · ${g.ZL} ブレーキ · ${g.R} サイドブレーキ · ${g.top} 降りる · ${g.LS} ホーン · ${g.up} サイレン · 十字←→ ラジオ`
-  : `${g.ZR} 攻撃 · ${g.ZL} 構える · ${g.L}/${g.R} 武器 · ${g.right} 装填 · ${g.left} 回避 · ${g.bottom} 走る · ${g.top} 乗る · ${g.LS} しゃがむ`;
+  : `${g.ZL} 構える・ロックオン · ${g.ZR} 攻撃 · 構え中 右スティック弾き ←→ 標的切替 ↑ 頭 · ${g.L}/${g.R} 武器 · ${g.right} 装填 · ${g.left} 回避 · ${g.bottom} 走る · ${g.top} 乗る · ${g.LS} しゃがむ`;
 }
 
 /** A radial deadzone, rescaled so the edge of the zone is 0 and `outer` is 1. Pure. */
@@ -83,8 +92,21 @@ const PRESS = Object.freeze({
 /** Stage 1: L and R are a tap (previous / next weapon, on release) or, held this long, the wheel. */
 const WHEEL_BUTTONS = Object.freeze([['L', 'weaponPrev'], ['R', 'weaponNext']]);
 
+/**
+ * A right-stick flick: the stick out past `INPUT.flick` along its stronger axis, having been back
+ * inside `INPUT.rest` since the last one. Pure over `armed` (the stick has been at rest). Returns
+ * {flick: 'left'|'right'|'up'|'down'|null, armed}. Up is the stick pushed away (axis 3 negative).
+ */
+export function flickOf(x, y, armed) {
+ const m = Math.hypot(x, y);
+ if (m < INPUT.rest) return {flick: null, armed: true};
+ if (!armed || m < INPUT.flick) return {flick: null, armed};
+ const flick = Math.abs(x) >= Math.abs(y) ? (x > 0 ? 'right' : 'left') : (y < 0 ? 'up' : 'down');
+ return {flick, armed: false};
+}
+
 export function createInputMap({wheelHold = WHEEL.hold} = {}) {
- let prev = new Array(18).fill(false);
+ let prev = new Array(18).fill(false), stickRest = true;
  const held = {L: 0, R: 0};
  let throttle = 0, brake = 0;
  const value = (pad, i) => pad?.buttons?.[i]?.value ?? (pad?.buttons?.[i]?.pressed ? 1 : 0);
@@ -103,8 +125,8 @@ export function createInputMap({wheelHold = WHEEL.hold} = {}) {
    */
   poll(pad, dt = 0, mode = 'foot') {
    const profile = profileOf(pad);
-   const none = {profile, move: {x: 0, y: 0}, look: {x: 0, y: 0}, aim: false, fire: false, run: false, throttle: 0, brake: 0, handbrake: false, wheel: false, stick: {x: 0, y: 0}, pressed: []};
-   if (!pad) {prev = prev.fill(false); throttle = brake = 0; held.L = held.R = 0; return none;}
+   const none = {profile, move: {x: 0, y: 0}, look: {x: 0, y: 0}, aim: false, fire: false, run: false, throttle: 0, brake: 0, handbrake: false, wheel: false, stick: {x: 0, y: 0}, flick: null, pressed: []};
+   if (!pad) {prev = prev.fill(false); throttle = brake = 0; held.L = held.R = 0; stickRest = true; return none;}
    // Outside the standard mapping the button indices mean nothing in particular, so no button
    // is read; the first two sticks are the same on every pad we know of, so they still work.
    if (profile === 'raw' || profile === 'switch-raw') {
@@ -126,6 +148,7 @@ export function createInputMap({wheelHold = WHEEL.hold} = {}) {
    }
    const move = radial(pad.axes[0] ?? 0, -(pad.axes[1] ?? 0));
    const look = radial(pad.axes[2] ?? 0, pad.axes[3] ?? 0, {curve: INPUT.lookCurve});
+   const fl = flickOf(pad.axes[2] ?? 0, pad.axes[3] ?? 0, stickRest); stickRest = fl.armed;
    throttle = trigger(throttle, value(pad, BUTTON.ZR), dt);
    brake = trigger(brake, value(pad, BUTTON.ZL), dt);
    prev = now;
@@ -134,9 +157,11 @@ export function createInputMap({wheelHold = WHEEL.hold} = {}) {
     throttle: mode === 'car' ? throttle : 0, brake: mode === 'car' ? brake : 0,
     handbrake: mode === 'car' && now[BUTTON.R], wheel,
     // The right stick as it is (no curve), for the wheel's pick.
-    stick: {x: pad.axes[2] ?? 0, y: pad.axes[3] ?? 0}, pressed};
+    stick: {x: pad.axes[2] ?? 0, y: pad.axes[3] ?? 0},
+    // Item 3: a right-stick flick this frame, on foot (the controller uses it only while locked on).
+    flick: mode === 'foot' ? fl.flick : null, pressed};
   },
-  reset() {prev = new Array(18).fill(false); throttle = brake = 0; held.L = held.R = 0;}
+  reset() {prev = new Array(18).fill(false); throttle = brake = 0; held.L = held.R = 0; stickRest = true;}
  };
  return api;
 }
