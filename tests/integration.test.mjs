@@ -62,19 +62,29 @@ test('riding into a wall throws the rider off and breaks no glass; the bike is d
  sim.dispose();
 });
 
-test('on a bike the police\'s rounds reach the rider; in a car they hit the car', () => {
+let bikePerHit = 0;
+test('roadmap ②: the police\'s rounds reach a rider in full, a driver through the car -- a little less', () => {
  const officer = (id, x, z) => ({id, x, z, active: true, officer: true, combatDead: false, heading: Math.atan2(-x, -z)});
  for (const type of ['motorbike', 'sedan']) {
   const director = createPoliceDirector({getAudioContext: () => null, getAudioBus: () => null, speech: null});
   director.units.officers.add(officer(1, 0, 8));
   director.wanted.crime('policeCarTaken', {x: 0, z: 0, t: 0});
   const car = {state: {x: 0, z: 0, y: 0, type, damage: 0, speed: 0, slot: null}};
-  let hurt = 0;
-  for (let t = 0; t < 20; t += 1 / 30)
-   director.frame(1 / 30, {player: {x: 0, z: 0, y: 0, alive: true}, car, driving: true, attackingNow: true,
-    weapons: {current: 'fists', shots: 0}, solid: () => false, hurt: n => {hurt += n;}});
-  if (type === 'motorbike') assert.ok(hurt > 0, 'the rider was hit');
-  else {assert.equal(hurt, 0, 'the car took it'); assert.ok(car.state.damage > 0);}
+  let hurt = 0, hits = 0, cabin = 0;
+  for (let t = 0; t < 60; t += 1 / 30) {
+   const w = director.frame(1 / 30, {player: {x: 0, z: 0, y: 0, alive: true}, car, driving: true,
+    weapons: {current: 'fists', shots: 0}, solid: () => false, hurt: (n, src, o) => {hurt += n; if (o?.cabin) cabin++;}});
+   for (const e of w.gunfire ?? []) if (e.kind === 'shot' && e.hit) hits++;
+  }
+  assert.ok(hits > 3, `${type}: only ${hits} hits in a minute of fleeing at ☆2+`);
+  const perHit = hurt / hits;
+  if (type === 'motorbike') {assert.ok(perHit >= 10, 'the rider did not take the whole round'); bikePerHit = perHit;}
+  else {
+   assert.ok(car.state.damage > 0, 'the car was not battered');
+   assert.ok(cabin > 0 && cabin < hits, `${cabin} of ${hits} rounds reached the cabin`);
+   const ratio = bikePerHit / perHit;
+   assert.ok(ratio > 1.1 && ratio < 2.2, `a car lasts ${ratio.toFixed(2)}x a bike, not "a little longer"`);
+  }
  }
 });
 

@@ -14,6 +14,17 @@ export const WEAPON_IDS = new Set(['pistol', 'smg', 'katana']);
 // Roadmap ④: an officer who fired at the player is marked (`shotAtPlayerLeft`, s) so the pad's
 // lock-on takes them first (arsenal.mjs `threatTier`).
 export const SHOOTER_MEMORY = 6;
+
+// Roadmap ②: a round that hits the player's car. Most go on into the cabin (`cabin`), more once
+// the car is battered (`damage` over `batteredAt`: the glass gone, the panels holed), and wound the
+// driver for `damage` of a round in the open -- so a car lasts a little longer than the motorbike
+// (about 1.6x the hits new, 1.2x battered), not for ever. Every hit still batters the car.
+export const CAR_ROUNDS = Object.freeze({cabin: .7, batteredCabin: .9, batteredAt: .5, damage: .9, carDamage: .02});
+/** Whether the `n`th round into the car reaches the cabin. Deterministic over `n`. */
+export function intoCabin(n, carDamage = 0) {
+ let h = Math.imul((n | 0) + 0x51ed27, 0x9e3779b1); h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d); h ^= h >>> 13;
+ return (h >>> 0) / 4294967296 < (carDamage >= CAR_ROUNDS.batteredAt ? CAR_ROUNDS.batteredCabin : CAR_ROUNDS.cabin);
+}
 import {VEHICLES} from '../traffic/config.mjs';
 
 /**
@@ -94,7 +105,7 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
  const heli = createHelicopter(), rotor = createRotor(getAudioContext, getAudioBus);
  const speaker = createLoudspeaker(speech, Utterance);
  const ttsMode = useTTS();
- let lastPoliceHit = -Infinity;
+ let lastPoliceHit = -Infinity, carRounds = 0;
  let deaths = 0, lastRam = -Infinity, taken = new WeakSet(), time = 0, shotsSeen = 0, lastShooting = -Infinity, gunShotsSeen = 0, worldSolid = null;
  const runovers = new Set();
  const sources = [];
@@ -215,9 +226,14 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
     if (e.kind === 'shout') voice.shout(e.line, p.id, p.x, p.z, time);
     if (e.kind === 'warn' || e.kind === 'shot') {p.gunShotLeft = .633; p.shotAtPlayerLeft = SHOOTER_MEMORY;}
     if (e.kind === 'shot' && e.hit) {
-     // A car takes the round; a motorbike's rider does not have one round them (stage 6).
-     if (driving && car?.state && !VEHICLES[car.state.type]?.twoWheel) car.state.damage = Math.min(1, (car.state.damage ?? 0) + .02);
-     else {lastPoliceHit = time; hurt?.(e.damage, 'police');}
+     // A car takes the round, and most go on into the cabin (roadmap ②); a motorbike's rider does
+     // not have one round them (stage 6).
+     if (driving && car?.state && !VEHICLES[car.state.type]?.twoWheel) {
+      const before = car.state.damage ?? 0;
+      car.state.damage = Math.min(1, before + CAR_ROUNDS.carDamage);
+      e.car = true; e.cabin = intoCabin(++carRounds, before);
+      if (e.cabin) {e.damage = Math.max(1, Math.round(e.damage * CAR_ROUNDS.damage)); lastPoliceHit = time; hurt?.(e.damage, 'police', {cabin: true});}
+     } else {lastPoliceHit = time; hurt?.(e.damage, 'police');}
     }
    }
    for (const p of units.officers) {
