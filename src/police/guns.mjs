@@ -2,6 +2,9 @@
 // player and a wall test each frame, and gets back what happened -- who drew, who shouted, who
 // fired and where the round went. Nothing here draws, plays a sound or touches the crowd.
 //
+// (The owner's rules since then -- item 2 and roadmap ② -- replace the star levels below: on foot
+// from ☆1, in a car or on a motorbike from ☆2, and after the warning shot anyone fleeing is fired
+// on. See GUNS and docs §9aw/§9az.)
 // Japanese police do not open fire casually, and this is built around that:
 //  - ☆1-☆2: batons and the arrest only (units.mjs). Revolvers stay holstered.
 //  - ☆3 and up: officers near the player draw. To a player holding a weapon they shout
@@ -19,9 +22,10 @@ import {WEAPONS} from '../player/weapons.mjs';
 
 export const GUNS = Object.freeze({
  // Owner's plan, item 2: the police shoot a player on foot at any wanted level (after the warning
- // shot); in a car only a threat (a ram, an attack) is fired on, and only from ☆3 as before.
+ // shot). Roadmap ②: in a car or on a motorbike from ☆2, and fleeing is reason enough -- no ram or
+ // attack needed (a car's rounds mostly reach the cabin, director.mjs CAR_ROUNDS).
  fromStars: 1,
- carFromStars: 3,
+ carFromStars: 2,
  drawRange: 35,                // m: officers this close draw
  range: WEAPONS.revolver.range,// m: and fire from no further than this
  holdAt: 11,                   // m: an officer facing an armed threat stops here instead of closing in
@@ -65,7 +69,7 @@ export function createPoliceGuns() {
    const events = [];
    if (threat.attacking || threat.ramming) lastThreat = time;
    const armed = !!threat.armed && !driving;
-   const isThreat = alive && (!driving || armed || time - lastThreat <= GUNS.threatSeconds);
+   const isThreat = alive && (!driving || armed || time - lastThreat <= GUNS.threatSeconds || stars >= GUNS.carFromStars);
    if (stars < (driving ? GUNS.carFromStars : GUNS.fromStars) || !alive) {
     for (const p of officers) holster(p);
     if (stars === 0) {warned = false; warnedAt = -Infinity; lastThreat = -Infinity;}

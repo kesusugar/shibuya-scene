@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createPoliceGuns,GUNS,hitChance} from '../src/police/guns.mjs';
-import {officersSee,officersOnFootSee,createPoliceDirector} from '../src/police/director.mjs';
+import {officersSee,officersOnFootSee,createPoliceDirector,intoCabin,CAR_ROUNDS} from '../src/police/director.mjs';
 import {POLICE_LINES,policeLine,ONSETS} from '../src/player/voices.mjs';
 import {createOfficerVoice} from '../src/police/siren.mjs';
 
@@ -13,12 +13,14 @@ function run(guns,seconds,frame){
  const all=[];for(let t=0;t<seconds;t+=1/30)all.push(...guns.update(1/30,frame()));return all;
 }
 
-test('owner\'s plan: in a car at ☆1 and ☆2 the revolvers stay holstered; on foot they are drawn from ☆1',()=>{
- for(const stars of [1,2]){
-  const guns=createPoliceGuns(),p=officer(1,0,8);
-  const events=run(guns,10,()=>({officers:[p],me,stars,driving:true,threat:{armed:true,attacking:true}}));
-  assert.equal(events.length,0,`☆${stars} in a car: ${events.map(e=>e.kind).join(',')}`);
+test('roadmap ②: in a car at ☆1 the revolvers stay holstered (from ☆2 they come out); on foot they are drawn from ☆1',()=>{
+ {const guns=createPoliceGuns(),p=officer(1,0,8);
+  const events=run(guns,10,()=>({officers:[p],me,stars:1,driving:true,threat:{armed:true,attacking:true}}));
+  assert.equal(events.length,0,`☆1 in a car: ${events.map(e=>e.kind).join(',')}`);
   assert.ok(!p.gunDrawn);
+  const g=createPoliceGuns(),q=officer(3,0,8);
+  assert.ok(run(g,10,()=>({officers:[q],me,stars:2,driving:true,threat:{}})).some(e=>e.kind==='shot'),'☆2 in a car: never fired');}
+ for(const stars of [1,2]){
   const g2=createPoliceGuns(),q=officer(2,0,8);
   const ev=run(g2,10,()=>({officers:[q],me,stars,threat:{}}));
   assert.ok(ev.some(e=>e.kind==='warn'),`☆${stars} on foot: no warning shot`);
@@ -40,19 +42,18 @@ test('R15: at ☆3 officers draw, and the first round is a warning shot into the
  assert.ok(events.indexOf(shots[0])>w,'fired before the warning');
 });
 
-test('owner\'s plan: on foot the police fire after the warning, threat or not; in a car only at a threat',()=>{
+test('owner\'s plan / roadmap ②: the police fire after the warning, threat or not -- on foot, and in a car fleeing from ☆2',()=>{
  const guns=createPoliceGuns(),p=officer(1,0,8);
  const events=run(guns,12,()=>({officers:[p],me,stars:3,threat:{armed:false,attacking:false}}));
  assert.equal(events.filter(e=>e.kind==='warn').length,1);
  assert.ok(events.filter(e=>e.kind==='shot').length>0,'an unarmed player on foot was not fired on');
- // In a car: covered, not shot, until an attack (a ram) makes them a threat for a while.
+ // Roadmap ②: in a car a driver who is only fleeing is fired on too (the car no longer shields
+ // them); the warning shot still comes first.
  const g1=createPoliceGuns();
- const e1=run(g1,12,()=>({officers:[p],me,stars:3,driving:true,threat:{}}));
- assert.equal(e1.filter(e=>e.kind==='shot').length,0,'a driver doing nothing was fired on');
- assert.ok(g1.snapshot().held>0);
- const g2=createPoliceGuns();let t=0;
- const ev=[];for(;t<10;t+=1/30)ev.push(...g2.update(1/30,{officers:[p],me,stars:3,driving:true,threat:{attacking:t>3&&t<3.1}}));
- assert.ok(ev.filter(e=>e.kind==='shot').length>0,'an attack did not draw fire');
+ const e1=run(g1,12,()=>({officers:[p],me,stars:2,driving:true,threat:{}}));
+ assert.equal(e1.find(e=>e.kind==='warn'||e.kind==='shot')?.kind,'warn','no warning first in a car');
+ assert.ok(e1.filter(e=>e.kind==='shot').length>0,'a fleeing driver at ☆2 was not fired on');
+ assert.equal(g1.snapshot().held,0);
 });
 test('R9: no police shot without a line of sight -- a building between them blocks every round',()=>{
  const wall=(x,z)=>z>3&&z<5;                 // a building between the officer (z 8) and the player (z 0)
@@ -161,4 +162,27 @@ test('owner\'s plan: shot dead by the police is the arrest; dying any other way 
   assert.equal(arrested,expect,`${cause}: arrested ${arrested}`);
   assert.equal(director.wanted.state.stars,0);
  }
+});
+
+test('roadmap ②: most rounds into a car reach the cabin, more once it is battered',()=>{
+ const share=d=>{let n=0;for(let i=1;i<=4000;i++)if(intoCabin(i,d))n++;return n/4000;};
+ const fresh=share(0),battered=share(.8);
+ assert.ok(Math.abs(fresh-CAR_ROUNDS.cabin)<.03,`new car: ${fresh}`);
+ assert.ok(Math.abs(battered-CAR_ROUNDS.batteredCabin)<.03,`battered: ${battered}`);
+ assert.equal(intoCabin(17,0),intoCabin(17,0),'not deterministic');
+});
+
+test('roadmap ②: shot dead at the wheel by the police is the arrest too',()=>{
+ const director=createPoliceDirector({getAudioContext:()=>null,getAudioBus:()=>null,speech:null});
+ director.units.officers.add(officer(1,0,8));
+ director.wanted.crime('policeCarTaken',{x:0,z:0,t:0});
+ const me={x:0,z:0,y:0,alive:true,health:100},car={state:{x:0,z:0,y:0,type:'sedan',damage:0,speed:0,slot:null}};
+ let arrested=false,cabin=0;
+ for(let t=0;t<180&&!arrested;t+=1/30){
+  const w=director.frame(1/30,{player:me,car,driving:true,weapons:{current:'fists',shots:0},solid:()=>false,
+   hurt:(n,src,o)=>{if(o?.cabin)cabin++;me.health-=n;if(me.health<=0)me.alive=false;}});
+  if(w.arrested)arrested=true;
+ }
+ assert.ok(cabin>0,'no round reached the cabin');
+ assert.ok(arrested,'shot dead in the car was not an arrest');
 });

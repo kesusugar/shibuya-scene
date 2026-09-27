@@ -814,11 +814,16 @@ export default function Home(){
     const dx=e.to.x-e.from.x,dy=e.to.y-e.from.y,dz=e.to.z-e.from.z,l=Math.hypot(dx,dy,dz)||1,dir={x:dx/l,y:dy/l,z:dz/l};
     arsenal?.effects.muzzle(e.from.x,e.from.y,e.from.z,dir);
     let end=e.to;
+    // Roadmap ②: a round into the player's car strikes it where the line meets it -- a dent, a crack or
+    // a pane gone (stage 6) -- and, into the cabin, the driver bleeds.
+    if(e.kind==='shot'&&e.car){const r=castShot({from:e.from,dir,range:WEAPONS.revolver.range,solid:weaponWorld.solid,ground:weaponWorld.ground,cars:weaponWorld.cars,dimsOf:weaponWorld.dimsOf});
+     if(r.kind==='car'){end=r.point;const g=weaponWorld.shootCar(r.target,r.point,r.dir);
+      if(g?.kind==='glass')arsenal?.effects.glass?.(end.x,end.y,end.z,{dir:r.dir,count:g.glass==='shatter'?40:8});else arsenal?.effects.burst(end.x,end.y,end.z,{count:12,nx:-dir.x,nz:-dir.z});}}
     if(e.kind==='shot'&&!e.hit){const r=castShot({from:e.from,dir,range:WEAPONS.revolver.range,solid:weaponWorld.solid,ground:weaponWorld.ground,cars:weaponWorld.cars,dimsOf:weaponWorld.dimsOf});
      end=r.point;if(r.kind!=='none')arsenal?.effects.burst(end.x,end.y,end.z,{count:8,nx:-dir.x,nz:-dir.z});}
     if(e.kind==='shot')arsenal?.effects.tracer(e.from,end);
     gunfire?.shot(e.from.x,e.from.y,e.from.z,Math.atan2(dir.x,dir.z),{kind:'revolver',hit:e.kind==='shot'&&!e.hit?{kind:'wall',point:end}:null});
-    if(e.hit&&(!driving||playerCar?.def?.twoWheel)){if(e.civilian)player.hurt?.(e.damage,'fight');weaponWorld.bleed({x:player.state.x,y:0,z:player.state.z},dir);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_PUNCH*1.4);}};
+    if(e.hit&&(!driving||playerCar?.def?.twoWheel||e.cabin)){if(e.civilian)player.hurt?.(e.damage,'fight');weaponWorld.bleed({x:player.state.x,y:0,z:player.state.z},dir);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_PUNCH*1.4);}};
   // Roadmap stage 2 (street-reactions.mjs): hands up at gunpoint, and the armed few shooting back.
   {const crowdNow=lifeEntry.hooks.current?.sim;
    for(const e of timed('s2-reactions',()=>streetReactions.update(dt,{crowd:crowdNow,me:{x:player.state.x,y:player.state.y,z:player.state.z,alive:player.state.alive!==false,dodging:!!player.state.dodging},
@@ -832,7 +837,7 @@ export default function Home(){
    timed('s4-onlookers',()=>onlookers.update(crowdNow,{lastGunshotAt}));
    timed('s4-aftermath',()=>aftermath.update(dt,{traffic:trafficEntry.hooks.current?.sim,crowd:crowdNow,stars:police?.wanted?.state?.stars??0,marks:arsenal?.marks}));}
   if(police){policeFrustum.setFromProjectionMatrix(policeMatrix.multiplyMatrices(view.projectionMatrix,view.matrixWorldInverse));
-   const w=timed('s3-police',()=>police.frame(dt,{player:player.state,car:playerCar,driving,melee:melee.snapshot(),weapons:arsenal?.snapshot()??null,solid:weaponWorld.solid,traffic:trafficEntry.hooks.current?.sim,crowd:crowdSim,listener:{x:view.position.x,z:view.position.z,vx:0,vz:0},visible:inView,hurt:(n:number,src:string)=>{if(!driving||playerCar?.def?.twoWheel)player.hurt?.(n,src);},
+   const w=timed('s3-police',()=>police.frame(dt,{player:player.state,car:playerCar,driving,melee:melee.snapshot(),weapons:arsenal?.snapshot()??null,solid:weaponWorld.solid,traffic:trafficEntry.hooks.current?.sim,crowd:crowdSim,listener:{x:view.position.x,z:view.position.z,vx:0,vz:0},visible:inView,hurt:(n:number,src:string,o:any)=>{if(!driving||playerCar?.def?.twoWheel||o?.cabin)player.hurt?.(n,src);},
     night:clock.value==='night'||clock.value==='dusk',ground:weaponWorld.ground}));
    timed('s3-heli',()=>heliMesh?.update(w.heli??{active:false},{night:clock.value==='night'||clock.value==='dusk'}));
    playUI?.setWanted(w,dt);(window as any).__SHIBUYA_POLICE__=police;
