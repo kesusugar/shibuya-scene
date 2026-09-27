@@ -14,6 +14,7 @@ import {createCrowdContact} from './crowd-contact.mjs';
 import {createInputMap,createRumble} from './input-map.mjs';
 import {sharedGyro} from './gyro.mjs';
 import {WHEEL} from './weapon-wheel.mjs';
+import {absorb} from '../game/shop.mjs';
 
 // The camera arm. Solids are tested at the camera's own height rather than on the ground,
 // so it is a facade that pulls the camera in and not a bollard it is sailing well above.
@@ -109,7 +110,7 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
   // a character walk diagonally without sliding and turn the view without spinning on a heel.
   course: heading, bodyHeading: heading, targetSpeed: 0,
   speed: 0, running: false, moving: false, alive: true,
-  runOver: 0, hitBy: null, health: 100, attackTime: 0, hurtTime: 0, vehiclePhase: 0,
+  runOver: 0, hitBy: null, health: 100, armor: 0, attackTime: 0, hurtTime: 0, vehiclePhase: 0,
   carGrace: 0, stunTime: 0, knockX: 0, knockZ: 0, knockLeft: 0
  };
  const keys = new Set();
@@ -524,8 +525,11 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
   // double speed, after the hit had already landed, and never the cross.
   startAttack(seconds=.42,name='Punch'){if(!state.alive)return false;state.attackTime=Math.max(state.attackTime,seconds);state.attackDuration=seconds;state.attackName=name;return true;},
   hurt(amount=0,source='fight'){
-   if(!state.alive||state.hurtTime>0)return false;state.health=Math.max(0,state.health-Math.max(0,amount));state.hurtTime=.34;
-   if(state.health<=0){state.alive=false;state.runOver=0;state.hitBy=source;}return true;
+   if(!state.alive||state.hurtTime>0)return false;
+   // Roadmap stage 5: body armour from the shop takes most of each blow while it lasts.
+   const hit=absorb(Math.max(0,amount),state.armor??0);state.armor=hit.armor;
+   state.health=Math.max(0,state.health-hit.damage);state.hurtTime=.34;
+   if(state.health<=0){state.alive=false;state.runOver=0;state.hitBy=source;state.armor=0;}return true;
   },
   revive() {return api.place();},
   /** C4: rumble the pad for an event ('shot', 'cut', 'hurt', 'crash'); nothing without one. */

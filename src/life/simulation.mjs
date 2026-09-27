@@ -329,7 +329,7 @@ export class CrowdSimulation{
   if(leader)nodes=this.candidates.filter(n=>n.component===this.network.nodes[leader.node].component&&Math.hypot(n.x-leader.x,n.z-leader.z)<4);
   for(let attempt=0;attempt<100;attempt++){const n=nodes[Math.floor(this.rng()*nodes.length)];if(!n||this.network.landingNodes.has(n.id)||this.blocked(n.x,n.z,null,.9)||this.vehicleOverlap(n.x,n.z,.6)||this.time>0&&Math.hypot(n.x-this.camera.x,n.z-this.camera.z)<12)continue;
    const jitter=this.rng()*.5-.25,jitterZ=this.rng()*.5-.25,sx=n.x+jitter,sz=n.z+jitterZ,valid=this.network.ctx.safe(sx,sz)&&!this.blocked(sx,sz,null,.65)&&!this.vehicleOverlap(sx,sz,.6),px=valid?sx:n.x,pz=valid?sz:n.z;
-   Object.assign(p,{patrol:null,active:true,choreographed:false,kerbQueue:false,flee:null,fleeOffX:0,fleeOffZ:0,x:px,z:pz,renderX:px,renderZ:pz,previousX:px,previousZ:pz,heading:this.rng()*Math.PI*2,height:this.network.ctx.height(n.x,n.z),archetype:type,mode,state:mode==='idle'?'idle':'walking',group:leader?.group??-1,leader:leader?.id??-1,route:[],routeIndex:0,edge:-1,progress:0,destination:n.id,node:n.id,speed:0,baseSpeed:leader?.baseSpeed??def.speed[0]+this.rng()*(def.speed[1]-def.speed[0]),age:0,stuck:0,pause:mode==='idle'?8+this.rng()*30:0,crossing:null,queueKey:null,lod:'near',elapsed:0,phase:this.rng()*Math.PI*2,color:Math.floor(this.rng()*def.colors.length),travelled:0,voiceUntil:0,voiceSaid:-99,voiceUrgency:0,combatHealth:100,combatTarget:null,collected:false,watchUntil:0,phone:null,limp:false,crawling:false,legWounds:0,handsUpUntil:0,handsUpSince:undefined,shooterUntil:0,gunDrawn:false,gunAim:0,combatUntil:0,combatNext:0,combatAction:0,combatDead:false,fatal:false,appearanceId:undefined,cameFromVehicle:undefined,reactionOwned:false,region:n.district});
+   Object.assign(p,{patrol:null,active:true,choreographed:false,kerbQueue:false,flee:null,fleeOffX:0,fleeOffZ:0,x:px,z:pz,renderX:px,renderZ:pz,previousX:px,previousZ:pz,heading:this.rng()*Math.PI*2,height:this.network.ctx.height(n.x,n.z),archetype:type,mode,state:mode==='idle'?'idle':'walking',group:leader?.group??-1,leader:leader?.id??-1,route:[],routeIndex:0,edge:-1,progress:0,destination:n.id,node:n.id,speed:0,baseSpeed:leader?.baseSpeed??def.speed[0]+this.rng()*(def.speed[1]-def.speed[0]),age:0,stuck:0,pause:mode==='idle'?8+this.rng()*30:0,crossing:null,queueKey:null,lod:'near',elapsed:0,phase:this.rng()*Math.PI*2,color:Math.floor(this.rng()*def.colors.length),travelled:0,voiceUntil:0,voiceSaid:-99,voiceUrgency:0,combatHealth:100,combatTarget:null,follow:null,missionRole:null,collected:false,watchUntil:0,phone:null,limp:false,crawling:false,legWounds:0,handsUpUntil:0,handsUpSince:undefined,shooterUntil:0,gunDrawn:false,gunAim:0,combatUntil:0,combatNext:0,combatAction:0,combatDead:false,fatal:false,appearanceId:undefined,cameFromVehicle:undefined,reactionOwned:false,region:n.district});
    if(mode!=='idle'){
     if(cross){const approach=route(this.network,n.id,cross.from);if(n.id!==cross.from&&!approach.length){p.active=false;continue;}p.route=[...approach,cross.id];p.edge=p.route[0];p.destination=cross.to;}
     else if(!this.chooseDestination(p,n,mode==='milling')){p.active=false;continue;}
@@ -375,6 +375,14 @@ export class CrowdSimulation{
   if(p.combatTarget&&p.combatUntil>this.time&&!p.crossing){p.state='fighting';p.speed=0;return;}
   // Roadmap stage 2 (street-reactions.mjs): hands up at gunpoint, or standing to shoot back.
   if((p.handsUpUntil>this.time||p.shooterUntil>this.time)&&!p.crossing){p.state=p.shooterUntil>this.time?'shooting':'surrender';p.speed=0;p.flee=null;return;}
+  // Roadmap stage 5 (game/missions.mjs): a mission's client or thief goes where it is told, off
+  // the route network (walls still stop them), at the pace it is told.
+  if(p.follow&&!p.crossing){const f=p.follow,dx=f.x-p.x,dz=f.z-p.z,d=Math.hypot(dx,dz),step=Math.min(d,Math.max(0,f.speed??0)*dt);
+   if(step>1e-4){const nx=p.x+dx/d*step,nz=p.z+dz/d*step;
+    if(!n.ctx.solid?.(nx,nz,.25)){const old=this.cell(p.x,p.z);p.previousX=p.x;p.previousZ=p.z;p.x=nx;p.z=nz;p.renderX=nx;p.renderZ=nz;p.height=n.ctx.height(nx,nz);
+     if(this.cell(nx,nz)!==old){const b=this.grid.get(old),i=b?.indexOf(p);if(i>=0)b.splice(i,1);this.insert(p);}}
+    const h=Math.atan2(dx,dz),diff=Math.atan2(Math.sin(h-p.heading),Math.cos(h-p.heading));p.heading+=Math.max(-6*dt,Math.min(6*dt,diff));}
+   p.speed=step/Math.max(dt,1e-6);p.state=p.speed>2.5?'running':'walking';return;}
   // Roadmap stage 4 (onlookers.mjs): stopped to watch a body, phone out.
   if(p.watchUntil>this.time&&!p.crossing){p.state='watching';p.speed=0;if(Number.isFinite(p.watchX))p.heading=Math.atan2(p.watchX-p.x,p.watchZ-p.z);return;}
   if(p.combatTarget){p.combatTarget=null;p.combatAction=0;}

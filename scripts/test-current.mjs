@@ -73,6 +73,7 @@ const files=[
  'tests/stage2.test.mjs',
  'tests/stage3.test.mjs',
  'tests/stage4.test.mjs',
+ 'tests/stage5.test.mjs',
  'tests/police-ram.test.mjs',
  'tests/own-car.test.mjs',
  'tests/kaze-detail.test.mjs',

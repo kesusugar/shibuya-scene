@@ -215,3 +215,30 @@ body.tc-on .player-hint{display:none}
 .play-wheel-centre{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center}
 .play-wheel-centre b{display:block;font-size:17px}.play-wheel-centre small{color:#a9bcc7;font-size:12px}
 @media(pointer:coarse){.play-ammo{top:auto;bottom:230px;right:16px;min-width:104px}.play-ammo b{font-size:24px}}
+/* Stage 5: the mission board, money, the shop */
+.play-mission-list{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;pointer-events:auto}
+.play-mission-list[hidden]{display:none}
+.play-mission-list button{display:flex;justify-content:space-between;align-items:center;gap:6px;padding:7px 9px;font-size:12px;color:#eef5f6;background:#16263599;border:1px solid #ffffff26;border-radius:8px;cursor:pointer}
+.play-mission-list button small{color:#9fe0b8;font-size:11px}
+.play-mission-list button:hover{background:#24384b}
+.play-money{display:block;margin-top:4px;font-size:18px;color:#9fe0b8;letter-spacing:.02em}
+.play-armor{display:block;color:#9fc6ff;font-size:11px}
+.play-shop{position:absolute;right:22px;bottom:200px;width:min(400px,calc(100vw - 32px));padding:12px 14px;background:#0b1724ee;border:1px solid #ffd23f66;border-radius:12px;pointer-events:auto}
+.play-shop[hidden]{display:none}
+.play-shop strong{color:#ffd23f}
+.play-shop-items{display:grid;gap:6px;margin:8px 0}
+.play-shop-items button{display:grid;grid-template-columns:1fr auto;grid-template-rows:auto auto;column-gap:10px;text-align:left;padding:8px 10px;color:#eef5f6;background:#16263599;border:1px solid #ffffff26;border-radius:8px;cursor:pointer}
+.play-shop-items button b{font-size:13px}.play-shop-items button small{grid-column:1;color:#a9bcc7;font-size:11px}
+.play-shop-items button span{grid-column:2;grid-row:1 / span 2;align-self:center;color:#9fe0b8;font-weight:700}
+.play-shop-msg{min-height:16px;margin:0 0 6px;color:#ffd9a0;font-size:12px}
+.play-save{width:100%;padding:8px;color:#0b1724;background:#9fe0b8;border:0;border-radius:8px;font-weight:700;cursor:pointer}
+.play-armor[hidden]{display:none}
+/* Stage 5 on a short screen (a phone on its side): the board is one row of small chips, and the
+   shop's counter sits on the right, clear of the mission panel and the dashboard. */
+@media(max-height:550px){
+ .play-mission-list{display:flex;flex-wrap:nowrap;overflow-x:auto;gap:4px;margin-top:4px}
+ .play-mission-list button{flex:0 0 auto;padding:4px 7px;font-size:11px}
+ .play-mission-list button small{display:none}
+ .play-shop{left:auto;right:16px;top:48px;bottom:auto;transform:none;width:min(300px,calc(100vw - 32px));padding:8px 10px}
+ .play-shop-items{gap:4px;margin:6px 0}.play-shop-items button{padding:5px 8px}.play-shop-items button small{display:none}
+}
