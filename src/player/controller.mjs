@@ -174,7 +174,7 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
   // Stage 1: `onWheel(kind, x, y)` is the weapon wheel -- 'open', 'move' (mouse px), 'point' (a
   // stick, -1..1) and 'close' -- held open by Tab or the pad's L/R (a tap is what it was before).
   attach(element, {onExit, onDrive, onAttack, onAttackHold, onHorn, onWeapon, onWeaponCycle, onReload, onAim, onRoll, onCrouch,
-                   onSiren, onHornOnly, onMap, onWheel, driving = () => false} = {}) {
+                   onSiren, onHornOnly, onMap, onWheel, onRadio, driving = () => false} = {}) {
    if (detach) return;
    let tabAt = null, wheelOpen = false, padWheel = false;
    const openWheel = () => {if (!wheelOpen && !driving()) {wheelOpen = true; onWheel?.('open');}};
@@ -190,7 +190,8 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
     if (k === 'e') {onAttack?.(); onAttackHold?.(true); e.preventDefault(); return;}
     if (k === 'h') {onHorn?.(); e.preventDefault(); return;}   // RUN 12.1: the horn, while driving
     if (k === '1' || k === '2' || k === '3' || k === '4') {onWeapon?.(Number(k)); e.preventDefault(); return;}
-    if (k === 'r') {onReload?.(); e.preventDefault(); return;}
+    // Stage 6: in a car R is the radio (Shift+R back along the dial); on foot it reloads.
+    if (k === 'r') {if (driving()) onRadio?.(e.shiftKey ? -1 : 1); else onReload?.(); e.preventDefault(); return;}
     if (k === 'q') {onRoll?.(); e.preventDefault(); return;}
     if (k === 'c') {onCrouch?.(); e.preventDefault(); return;}
     if (!'wasd'.includes(k) && k !== 'shift' && k !== ' ') return;
@@ -268,6 +269,8 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
      else if (action === 'horn') (onHornOnly ?? onHorn)?.();
      else if (action === 'siren') (onSiren ?? onHorn)?.();
      else if (action === 'map') onMap?.();
+     else if (action === 'radioNext') onRadio?.(1);
+     else if (action === 'radioPrev') onRadio?.(-1);
      else if (action === 'menu') {keys.clear(); onExit?.();}
     }
     // Stage 1: L/R held is the wheel; the right stick picks and does not turn the camera.

@@ -7,6 +7,9 @@ import {WHEEL} from './weapon-wheel.mjs';
 // Canvas minimap uses the existing road/walk network; no extra renderer or map download.
 // Roadmap stage 5: the mission panel is a board (the scene runs the missions, game/missions.mjs);
 // money in the dashboard; the shop's counter and the save when standing at its door.
+/** Stage 6: seconds the radio's station and song stay on screen after they change. */
+export const RADIO_BANNER=4;
+
 export function createPlayUI(network,parent,{onExit,onDrive,onMission,onCancelMission,onBuy,onSave}={}){
  const marker=createPlayerMarker(0x68e7b4);parent.add(marker.mesh);let snap={status:'idle'};
  const root=document.createElement('section');root.className='play-hud';root.setAttribute('aria-label','プレイ情報');
@@ -16,6 +19,8 @@ export function createPlayUI(network,parent,{onExit,onDrive,onMission,onCancelMi
  <div class="play-map"><canvas width="320" height="320" aria-label="周辺地図・北が上"></canvas><span>N · 北 / 緑：目的地 / 青：車</span></div>
  <div class="play-dashboard"><div><div class="play-wanted" role="img" aria-label="手配度 0" data-stars="0" data-flash="false"><i>★</i><i>★</i><i>★</i><i>★</i><i>★</i></div><b class="play-speed">徒歩</b><div class="play-health" role="meter" aria-label="体力" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100" data-level="ok"><span>体力</span><span class="play-health-bar"><i></i></span><b class="play-health-value">100</b></div><b class="play-money" aria-label="所持金">¥0</b><small class="play-armor" hidden></small><small class="play-weapon" data-weapon="fists">素手</small><small class="play-hint">E/クリック 攻撃 · 1/2/3/4 武器 · 右ボタン 構える · R 装填 · Q 回避 · C しゃがむ</small><small class="play-damage"></small></div><button class="play-drive" type="button">車を探す</button></div>`;
  root.insertAdjacentHTML('beforeend','<div class="play-wanted-banner" role="status" aria-live="polite" hidden></div>');
+ // Stage 6: the radio -- the station and what is on, for a few seconds after tuning or a new song.
+ root.insertAdjacentHTML('beforeend','<div class="play-radio" role="status" aria-live="polite" hidden><b class="play-radio-station"></b><span class="play-radio-song"></span></div>');
  // PLAN-WEAPONS W2: the crosshair, only while a gun is up. The aim is the centre of the view.
  root.insertAdjacentHTML('beforeend','<div class="play-crosshair" aria-hidden="true" hidden><i></i></div>');
  // Stage 1: the hit marker over the crosshair, the ammunition panel, and the weapon wheel.
@@ -24,7 +29,8 @@ export function createPlayUI(network,parent,{onExit,onDrive,onMission,onCancelMi
  root.insertAdjacentHTML('beforeend',`<div class="play-wheel" role="dialog" aria-label="武器を選ぶ" hidden><div class="play-wheel-ring">${WHEEL.order.map((id,i)=>`<div class="play-wheel-slot" data-slot="${id}" style="--a:${i*360/WHEEL.order.length}deg"><b></b><small></small></div>`).join('')}<div class="play-wheel-centre"><b></b><small></small></div></div></div>`);
  document.body.appendChild(root);
  const query=s=>root.querySelector(s),canvas=query('canvas'),c=canvas.getContext('2d'),task=query('.play-task'),timer=query('.play-timer'),cancel=query('.play-cancel'),missionName=query('.play-mission-name'),missionList=query('.play-mission-list'),money=query('.play-money'),armorLabel=query('.play-armor'),shop=query('.play-shop'),shopMsg=query('.play-shop-msg'),progress=query('.play-progress'),speed=query('.play-speed'),health=query('.play-health'),healthBar=query('.play-health-bar i'),healthValue=query('.play-health-value'),damage=query('.play-damage'),drive=query('.play-drive'),wanted=query('.play-wanted'),stars=[...root.querySelectorAll('.play-wanted i')],banner=query('.play-wanted-banner'),weaponLabel=query('.play-weapon'),crosshair=query('.play-crosshair'),hitmarker=query('.play-hitmarker'),ammo=query('.play-ammo'),ammoName=query('.play-ammo-name'),ammoRounds=query('.play-ammo-rounds'),ammoMag=query('.play-ammo-mag'),ammoBar=query('.play-ammo-bar i'),wheelBox=query('.play-wheel'),wheelSlots=[...root.querySelectorAll('.play-wheel-slot')],wheelCentre=query('.play-wheel-centre');
- let bannerFor=0,bannerSeq=0,lastWanted=null,shopAt=null;
+ let bannerFor=0,bannerSeq=0,lastWanted=null,shopAt=null,radioFor=0,radioKey='';
+ const radioBox=root.querySelector('.play-radio'),radioStation=root.querySelector('.play-radio-station'),radioSong=root.querySelector('.play-radio-song');
  let current=null,visible=false,clock=0,disposed=false;
  query('.play-exit').onclick=()=>onExit?.();drive.onclick=()=>onDrive?.();
  for(const b of missionList.querySelectorAll('button'))b.onclick=()=>{if(current&&current.alive!==false){onMission?.(b.dataset.mission);document.exitPointerLock?.();clock=1;}};
@@ -115,6 +121,17 @@ export function createPlayUI(network,parent,{onExit,onDrive,onMission,onCancelMi
   setMoney(n,armor=0){if(disposed)return;money.textContent=yen(n);armorLabel.hidden=!(armor>0);armorLabel.textContent=`ベスト ${Math.round(armor)}`;},
   /** Stage 5: the shop's counter, open while standing at its door; `message` after a purchase. */
   setShop(open,message=null){if(disposed)return;if(shop.hidden===!open&&message===null)return;shop.hidden=!open;if(message!==null)shopMsg.textContent=message;else if(!open)shopMsg.textContent='';},
+  /**
+   * Stage 6: what the radio is playing (radio.nowPlaying(), or null for off). Shown when it
+   * changes -- a new station, a new song -- for a few seconds, like a car's head unit.
+   */
+  setRadio(now,dt=0){if(disposed)return;
+   const key=now?`${now.station}|${now.title??''}`:'off';
+   if(key!==radioKey){radioKey=key;radioFor=RADIO_BANNER;
+    radioStation.textContent=now?`📻 ${now.freq} ${now.station}`:'📻 ラジオ オフ';
+    radioSong.textContent=now?(now.title?`${now.title} — ${now.artist}`:now.genre):'';radioBox.hidden=false;}
+   if(radioFor>0){radioFor-=dt;if(radioFor<=0)radioBox.hidden=true;}},
+  hideRadio(){radioKey='';radioFor=0;if(radioBox)radioBox.hidden=true;},
   setWanted,setWeapon,hitMarker,setWheel,setControls,toggleMap,show(){visible=true;root.hidden=false;clock=1;},hide(){visible=false;root.hidden=true;wheelBox.hidden=true;shop.hidden=true;marker.hide();},
   update(dt,position,car,driving,entry,hits=0){if(disposed||!visible)return;current=position;void hits;const s=snap;
    if(s.target)marker.update({x:s.target.x,z:s.target.z,y:network.ctx.height(s.target.x,s.target.z)},dt,2.4);else marker.hide();

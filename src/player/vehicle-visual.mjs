@@ -8,7 +8,11 @@
 // in the runtime that loaded the baked result -- and they had drifted over whether body roll
 // feeds wheel height. There is one now, and the generator is a generator.
 import {Group,ObjectLoader} from 'three';
-import {adoptVehicleAsset,popupTarget,POPUP} from './vehicle-asset.mjs';
+import {adoptVehicleAsset,createMotorbikeAsset,popupTarget,POPUP} from './vehicle-asset.mjs';
+import {createDamageVisual} from './car-damage.mjs';
+import {bikeLean} from '../traffic/motorbike-shape.mjs';
+export {bikeLean};
+import {VEHICLES} from '../traffic/config.mjs';
 import {flashPhase} from '../police/siren.mjs';
 import {createVehicleShadows} from '../traffic/vehicle-shadow.mjs';
 import vehiclePack from './generated/vehicles.mjs';
@@ -25,21 +29,45 @@ const CONTACTS=['rearLeftWheel','rearRightWheel','frontLeftWheel','frontRightWhe
  * rather than this wrapper's means a vehicle that changes type is re-registered rather than
  * silently losing its headlights.
  */
-export function createVehicleVisual({onAssetReady=null}={}){
+export function createVehicleVisual({onAssetReady=null,onShatter=null}={}){
  const root=new Group();root.name='player-vehicle-detail';
  // One vehicle, five shadow instances: the floorpan and four tyres.
  const shadows=createVehicleShadows(5);root.add(shadows.mesh);
  let asset=null,type=null,slot=null,disposed=false;
- let lastSpeed=0,pitch=0,roll=0,spin=0,elapsed=0;
+ let lastSpeed=0,pitch=0,roll=0,spin=0,elapsed=0,lean=0;
+ // Stage 6: dents and broken glass on the model, from the slot's wear.
+ const damage=createDamageVisual();
 
  function build(next){
-  asset?.dispose();asset=null;
+  damage.dispose();asset?.dispose();asset=null;
   type=next;
-  const parsed=new ObjectLoader().parse(vehiclePack.models[type]);
-  asset=adoptVehicleAsset(type,parsed,{dimensions:vehiclePack.dimensions?.[type],
-   anchors:vehiclePack.anchors?.[type]});
+  if(VEHICLES[type]?.twoWheel)asset=createMotorbikeAsset(type);
+  else{
+   const parsed=new ObjectLoader().parse(vehiclePack.models[type]);
+   asset=adoptVehicleAsset(type,parsed,{dimensions:vehiclePack.dimensions?.[type],
+    anchors:vehiclePack.anchors?.[type]});
+  }
   root.add(asset.root);
+  if(!asset.twoWheel)damage.attach(asset);
   onAssetReady?.(asset.root,asset);
+ }
+
+ /** Stage 6: a bike -- no suspension roll: it leans into the turn, both wheels spin, the front steers. */
+ function bike(state,dt){
+  const target=bikeLean(state.speed,state.yawRate);
+  lean+=(target-lean)*(1-Math.exp(-6*dt));
+  asset.lean.rotation.z=lean;
+  asset.body.rotation.set((state.pitch??0)*.5,0,0);
+  root.position.set(state.x,state.y,state.z);root.rotation.y=state.heading;
+  spin+=state.speed*dt/asset.dimensions.radius;
+  asset.wheels.front.spin.rotation.x=spin;asset.wheels.rear.spin.rotation.x=spin;
+  asset.wheels.front.steer.rotation.y=-(state.steerAngle??state.steering*.35)*.8;
+  elapsed+=dt;
+  asset.setRear(!!state.slot?.brake,0);
+  shadows.begin();
+  shadows.add({x:0,y:0,z:0,heading:0},{...asset.dimensions,width:.5},
+   [[-.12,0,asset.anchorPoints.rearWheel[2]],[.12,0,asset.anchorPoints.rearWheel[2]],[-.12,0,asset.anchorPoints.frontWheel[2]],[.12,0,asset.anchorPoints.frontWheel[2]]]);
+  shadows.end();
  }
 
  return {
@@ -51,8 +79,11 @@ export function createVehicleVisual({onAssetReady=null}={}){
    slot=state?.slot;
    // Scooters keep their existing two-wheel model in the instanced traffic renderer.
    if(!state?.active||state.type==='scooter'){root.visible=false;if(slot)slot.playerVisual=false;return;}
-   if(type!==state.type){build(state.type);lastSpeed=state.speed;pitch=0;roll=0;spin=0;}
+   if(type!==state.type){build(state.type);lastSpeed=state.speed;pitch=0;roll=0;spin=0;lean=0;}
    root.visible=true;if(slot)slot.playerVisual=true;
+   if(asset.twoWheel){bike(state,dt);return;}
+   // Stage 6: the dents and the glass, when the slot's wear has moved on.
+   for(const s of damage.apply(slot?.wear))onShatter?.(s,asset.root);
 
    // Body lean. The suspension supplies real pitch and roll when it has ground under it; the
    // damped fallback covers the frame or two before it does.
@@ -103,13 +134,16 @@ export function createVehicleVisual({onAssetReady=null}={}){
      ??[asset.wheels[name].position.x,0,asset.wheels[name].position.z]));
    shadows.end();
   },
+  /** Stage 6: the rider's lean this frame (the figure leans with the bike). */
+  get lean(){return lean;},
+  get damage(){return damage;},
   hide(){root.visible=false;if(slot)slot.playerVisual=false;slot=null;},
   inspect(){return asset?{type,triangles:asset.triangles,materials:asset.materials.length,
    meshes:root.children.length}:{type:null,triangles:0,materials:0,meshes:0};},
   dispose(){
    if(disposed)return;disposed=true;
    if(slot)slot.playerVisual=false;slot=null;
-   asset?.dispose();asset=null;shadows.dispose();root.removeFromParent();root.clear();
+   damage.dispose();asset?.dispose();asset=null;shadows.dispose();root.removeFromParent();root.clear();
   }
  };
 }

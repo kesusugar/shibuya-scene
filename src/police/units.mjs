@@ -176,7 +176,7 @@ export function createPoliceUnits({koban = {x: 48.5, z: 20.4}, buildBudget = 150
   const s = from[(clock * 997 | 0) % from.length];
   const lane = traffic.graph.lanes[s.lane];
   pose(lane.path, s.d, scratch);
-  Object.assign(slot, {active: true, parked: false, controlled: true, service: false, platoon: undefined,
+  Object.assign(slot, {active: true, wear: null, kept: false, parked: false, controlled: true, service: false, platoon: undefined,
    type, x: scratch.x, z: scratch.z, heading: scratch.heading, speed: 0, brake: false, blinker: 0,
    lane: s.lane, transition: -1, next: -1, progress: s.d, age: 0, stuck: 0, junction: null, siren: true,
    pursuit: {leaving: false, ahead: !!front.length}});
@@ -245,7 +245,7 @@ export function createPoliceUnits({koban = {x: 48.5, z: 20.4}, buildBudget = 150
    const half = VEHICLES.police.length / 2 + .3;
    free.slice(0, 2).forEach((slot, i) => {
     const k = i ? 1 : -1;
-    Object.assign(slot, {active: true, parked: false, controlled: true, service: false, platoon: undefined,
+    Object.assign(slot, {active: true, wear: null, kept: false, parked: false, controlled: true, service: false, platoon: undefined,
      type: 'police', x: x + Math.sin(across) * half * k, z: z + Math.cos(across) * half * k, heading: across,
      speed: 0, brake: true, blinker: 0, lane: -1, transition: -1, next: -1, progress: 0, age: 0, stuck: 0,
      junction: null, siren: true, pursuit: {leaving: false, roadblock: true}});

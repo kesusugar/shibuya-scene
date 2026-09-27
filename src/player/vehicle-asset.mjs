@@ -13,6 +13,7 @@
 // definition of what the graph looks like instead of two copies that drift.
 import {Group,Mesh,MeshStandardMaterial,MeshPhysicalMaterial,Object3D} from 'three';
 import {buildVehicleShape} from '../traffic/vehicle-shape.mjs';
+import {buildMotorbikeShape} from '../traffic/motorbike-shape.mjs';
 import {VEHICLES} from '../traffic/config.mjs';
 
 /** Rear lamp colours. Amber wins over red, because an indicator is the one you must not miss. */
@@ -178,3 +179,55 @@ export function adoptVehicleAsset(type,root,{paint=null,dimensions=null,anchors=
  }
  return wrap(type,root,materials,{owned:false,dimensions,anchors:points});
 }
+
+/**
+ * Roadmap stage 6: the motorbike's close-range model, from traffic/motorbike-shape.mjs.
+ *
+ * The same object a car's asset is, as far as the visual and the damage need it -- `root`,
+ * `body`, `materials`, `dimensions`, `setRear`, `dispose` -- with two wheels (`wheels.front` and
+ * `wheels.rear`) and a `lean` node between the root and everything else, pivoting on the line
+ * the tyres touch the road along, so leaning into a turn keeps both tyres on the tarmac.
+ */
+export function createMotorbikeAsset(type='motorbike'){
+ const shape=buildMotorbikeShape();
+ const materials=materialsFor(paintOrDefault(type),0x8d949b,true);
+ const root=new Group();root.name='vehicle-'+type;
+ const lean=new Group();lean.name='vehicle-lean';root.add(lean);
+ const body=new Group();body.name='vehicle-body';lean.add(body);
+ const partMaterial={paint:'paint',dark:'dark',rim:'rim',glass:'glass',lamp:'lamp',tail:'tail'};
+ for(const [part,geometry] of Object.entries(shape.geometry)){
+  const mesh=new Mesh(geometry,materials[partMaterial[part]]);mesh.name=NAMES[partMaterial[part]];body.add(mesh);
+ }
+ const wheels={};
+ for(const [key,anchor] of [['front','frontWheel'],['rear','rearWheel']]){
+  const steer=new Group();steer.name=anchor+'-steer';steer.position.fromArray(shape.anchors[anchor]);
+  const spin=new Group();spin.name=anchor;steer.add(spin);
+  const tyre=new Mesh(shape.wheel.rubber,materials.tyre);tyre.name=NAMES.tyre;
+  const rim=new Mesh(shape.wheel.rim,materials.rim);rim.name=NAMES.rim;
+  spin.add(tyre,rim);lean.add(steer);wheels[key]={steer,spin};
+ }
+ let triangles=0,disposed=false;const geometries=new Set();
+ root.traverse(o=>{if(!o.isMesh)return;geometries.add(o.geometry);
+  triangles+=(o.geometry.index?o.geometry.index.count:o.geometry.attributes.position.count)/3;
+  o.castShadow=true;o.receiveShadow=true;o.frustumCulled=false;});
+ return {
+  type,root,body,lean,wheels,twoWheel:true,doors:[],anchors:{},dimensions:shape.dimensions,anchorPoints:shape.anchors,
+  materials:Object.values(materials),triangles,
+  setPaint(hex){materials.paint.color.setHex(hex);},
+  setDoor(){},
+  get popups(){return null;},
+  get lampLevel(){return materials.lamp.emissiveIntensity;},
+  setPopups(){},
+  setRear(brake,indicator,override=null){
+   const hex=override??(indicator?LAMP.indicator:brake?LAMP.brake:LAMP.off);
+   materials.tail.color.setHex(hex);materials.tail.emissive.setHex(hex);
+  },
+  dispose(){
+   if(disposed)return;disposed=true;
+   root.removeFromParent();
+   Object.values(materials).forEach(m=>m.dispose());geometries.forEach(g=>g.dispose());
+   root.clear();
+  }
+ };
+}
+const paintOrDefault=type=>VEHICLES[type]?.color??0xb3161c;

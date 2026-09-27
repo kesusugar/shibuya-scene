@@ -31,6 +31,10 @@ export const VEHICLES={
  // Roadmap stage 4: an ambulance, sent only to collect the dead (life/aftermath.mjs). Weight 0:
  // never ordinary traffic. White with a red lower band and a red lightbar; generic, unlettered.
  ambulance:{width:1.88,length:5.3,height:2.4,speed:12,accel:1.8,brake:4.2,weight:0,color:0xf3f3ef,name:'Ambulance',livery:'ambulance',lightbar:true,steer:.52,grip:11,handDriven:true},
+ // Roadmap stage 6: a street motorbike the player can ride (traffic/motorbike-shape.mjs). Weight 0:
+ // never ordinary traffic; a few stand parked round the map. Quicker off the line (`power`) and
+ // faster than any car, narrow, and a hard hit throws the rider off. Generic, unbadged.
+ motorbike:{width:.8,length:2.1,height:1.2,speed:17,accel:3.6,brake:6.5,weight:0,color:0xb3161c,name:'Street Naked',fixedPaint:true,twoWheel:true,handDriven:true,power:1.4,steer:.85,grip:15,slide:1.2,engine:{idleHz:74,revHz:310,wave:'square'}},
  riotBus:{width:2.3,length:7.6,height:2.9,speed:10,accel:1.3,brake:3.2,weight:0,color:0x1f3f7a,name:'Riot Transport',livery:'riot',steer:.45,grip:10,police:true},
  coupe:{width:1.78,length:4.4,height:1.3,speed:13,accel:2.4,brake:4.5,weight:2,color:0x9c1d22,name:'Street GT',steer:.68,grip:14},
  // PLAN-POLICE-AND-OWN-CAR Step H: the player's own drift fastback. Weight 0 and `owned`: traffic

@@ -18,6 +18,7 @@ import {corners, boxOverlap, pose} from '../traffic/path.mjs';
 import {bounds, inPolygon} from '../geo/core.mjs';
 import {worldAnchor} from '../traffic/vehicle-anchors.mjs';
 import {vehicleImpact, slowBy} from './vehicle-impact.mjs';
+import {crash, personStrike, wearOf} from './car-damage.mjs';
 
 /**
  * PLAN-POLICE-AND-OWN-CAR Step H: the player's own car. It is lost when it is gone from the
@@ -60,6 +61,7 @@ export const CAR = Object.freeze({
  // Damage. A hit costs speed proportional to how fast it was taken, and a wrecked car keeps
  // only `wreckFloor` of its performance -- it never becomes undriveable.
  damagePerSpeed: .025, wreckFloor: .45,
+ throwOff: 6.5,                          // m/s lost in one hit that throws a rider off two wheels
  takeOverRange: 6,                       // how far you can reach another car to take it over
  stealRange: 3.8,                        // stopped traffic can be pulled from the driver's door
  // The camera rides further back and higher than the walking one: at 11 m/s the walking
@@ -235,7 +237,7 @@ export function createPlayerVehicle(sim, ctx) {
  /** Stand a pool slot, parked, at a pose, as the player's own car. */
  const park = (slot, x, z, heading) => {
   Object.assign(slot, {
-   active: true, controlled: false, parked: true, service: false, platoon: undefined, owned: true,
+   active: true, wear: null, kept: false, controlled: false, parked: true, service: false, platoon: undefined, owned: true,
    type: CAR.type, x, z, heading, speed: 0, brake: false, blinker: 0, doorPhase: 0,
    lane: 0, transition: -1, next: -1, progress: 0, age: 0, stuck: 0, junction: null
   });
@@ -260,6 +262,21 @@ export function createPlayerVehicle(sim, ctx) {
    own = slot; ownLostFor = 0; ownDamage = 0;
    state.active = true;
    return true;
+  },
+
+  /**
+   * Stage 6: stand a vehicle of `type` parked near `x,z` for anyone to take -- the motorbikes. It is
+   * `kept`: a tier change does not recycle it as surplus parked traffic. Returns the slot or null.
+   */
+  parkNear(type, x, z) {
+   const slot = sim.pool.find(v => !v.active); if (!slot) return null;
+   const spot = findParking(x, z, type); if (!spot) return null;
+   Object.assign(slot, {active: true, wear: null, controlled: false, parked: true, service: false, platoon: undefined,
+    owned: false, kept: true, type, x: spot.x, z: spot.z, heading: spot.heading, speed: 0, brake: false, blinker: 0,
+    doorPhase: 0, lane: 0, transition: -1, next: -1, progress: 0, age: 0, stuck: 0, junction: null});
+   slot.locks?.clear?.(); slot.passed?.clear?.(); slot.yellowStops?.clear?.();
+   sim.rebuildGrid?.();
+   return slot;
   },
 
   /** The player's own car's slot, or null. */
@@ -473,7 +490,11 @@ export function createPlayerVehicle(sim, ctx) {
     const hit=contact;
     const lost=hit?respondToContact(state,def,hit):Math.abs(state.speed);
     if(!hit){state.speed=0;state.lateral=0;state.yawRate=0;}
-    if(lost>1&&impactCooldown===0){state.damage=Math.min(1,state.damage+lost*CAR.damagePerSpeed);impactCooldown=.25;}
+    if(lost>1&&impactCooldown===0){state.damage=Math.min(1,state.damage+lost*CAR.damagePerSpeed);impactCooldown=.25;
+     // Stage 6: the dent where it hit, and the pane on that side if it was hard enough.
+     if(hit&&state.slot){const r=crash(wearOf(state.slot),state,def,hit,lost);if(r?.glass)state.glassEvent={pane:r.pane,kind:r.glass,x:state.x,z:state.z};}
+     // Stage 6: a hard hit on two wheels throws the rider off.
+     if(def.twoWheel&&lost>=CAR.throwOff)state.thrownOff={speed:lost,heading:state.course??state.heading,nx:hit?.nx??0,nz:hit?.nz??0};}
     state.stalled=true;
     // Keep the last safe pose, then try tangent motion and a tiny outward separation.
     // Each proposal still passes the complete geometry/traffic gate.
@@ -551,6 +572,8 @@ export function createPlayerVehicle(sim, ctx) {
      } else landed = crowd.strike(p, 0, 0, r.closing, r.impulse);
      if (!landed) continue;
      hit++;
+     // Stage 6: thrown up onto the windscreen.
+     if(state.slot&&!def.twoWheel&&r.kind!=='push'){const g=personStrike(wearOf(state.slot),r.closing);if(g)state.glassEvent={pane:'front',kind:g,x:state.x,z:state.z};}
      // Every body the car goes through costs it speed; a crowd costs it a lot.
      state.speed = slowBy(state.speed, r.speedLoss);
      impacts.push({id: p.id, kind: r.kind, contact: r.contact, x: p.x, z: p.z, closing: r.closing,
