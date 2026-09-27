@@ -6227,6 +6227,50 @@ Test: `tests/weapon-orientation.test.mjs` (elbows below the shoulder, pointing d
 left hand on the handle, at 0, 1.4 and 3.5 m/s; fails on the old code). Stills:
 `evidence/roadmap/katana-guard/before.png` and `after.png` (standing and walking, four views each).
 
+## 9au. Real-scene stills, the frame's cost per situation, and where the stages meet
+
+**1. Real-scene stills headless** (`qa/gta-upgrade/scene-stills.mjs`, `__SHIBUYA_QA__.render/view/frames`).
+Measured first (`qa/gta-upgrade/scene-probe.mjs`): SwiftShader draws the scene at 0.2 fps
+(about 10 M triangles at 960×540), and the game advances one clamped 0.1 s step per frame, so a
+scripted play-through took hours. The WebGL context was NOT lost this time. Under `?qa=1` the
+capture now turns drawing off (the existing `perfOff` 'render' switch) so the game runs its own
+loop at full speed, and on again for each still; `view({dist,height,yaw,target})` places a camera
+round the player for a close still, and the HUD panels are hidden unless they are the point. Stills
+in `evidence/roadmap/scene/` (JPEG): the crossing; the katana guard walking and standing (elbows
+down, as §9at); the pistol; mounting the motorbike, riding, leaning into a turn; the radio's banner
+in a car and on the bike; a car into the crowd (a dent and the windscreen cracked by a person on
+the bonnet); a parked car shot through a side window (the crack seen on its close model).
+
+**2. The frame's CPU cost per situation** (`qa/gta-upgrade/scene-cost.mjs`, `evidence/roadmap/scene/cost.json`).
+Drawing off, `?perf=1`, HIGH, the stages' systems each timed as a probe section (`timed(...)` in
+ShibuyaScene), 120 frames each, in this container's CPU:
+
+| situation | frame mean / p95 ms | crowd (life) | traffic | stages 1–6 systems |
+|---|---|---|---|---|
+| on foot, idle | 18.0 / 31.9 | 13.1 | 2.8 | 0.9 |
+| SMG firefight into the crowd, ☆2 | 36.1 / 68.0 | 26.5 | 5.1 | 2.3 (arsenal 1.5, reactions 0.5) |
+| ☆3, units closing | 16.5 / 26.3 | 12.5 | 2.6 | 0.4 |
+| aftermath (onlookers, ambulance) | 13.2 / 18.1 | 9.2 | 2.4 | 0.35 |
+| motorbike, radio on | 16.2 / 25.5 | 8.3 | 6.3 | 0.4 |
+| chase mission, riding | 16.9 / 26.5 | 8.9 | 6.6 | 0.4 |
+
+The stages' own systems are small everywhere (the radio's scheduling 0.004 ms; its audio thread is
+not measured here). The worst case, the firefight, is the crowd: a CPU profile of it
+(`PROFILE=b-firefight`) is the fleeing crowd's walkable and collision queries (the solid grid's
+query 5.8 %, ground height 4.1 %, vehicle overlap 3.6 %, ring tests 3.4 %, `safe` 2.9 %, `blocked`
+2.9 %), all older than the roadmap. Nothing was trimmed: the stages' systems do not need it, and
+the crowd's flee is a core system tuned over many runs -- a candidate for its own change (cap how
+many fleeing people probe directions per frame) if the device shows the firefight dropping frames.
+
+**3. Where the stages meet** (`tests/integration.test.mjs`). Bugs found and fixed:
+- A motorbike was treated as having glass: a round at rider height "cracked a pane" and a hard
+  crash "shattered the windscreen" (sound and shards). A bike now only dents (`car-damage.mjs`).
+- On a motorbike the rider was bulletproof: the police's hits went to the vehicle as for a car, and
+  the scene ignored hurt while driving. The rider is hit now, bleeds, and a rider shot dead falls off
+  (director.mjs, ShibuyaScene).
+Also covered: riding into a wall throws the rider off; a recycled pool slot comes back with no dents
+and not `kept`; the parked bikes survive a change of tier; a chase mission can be ridden.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle

@@ -208,7 +208,8 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
     if (e.kind === 'shout') voice.shout(e.line, p.id, p.x, p.z, time);
     if (e.kind === 'warn' || e.kind === 'shot') p.gunShotLeft = .633;
     if (e.kind === 'shot' && e.hit) {
-     if (driving && car?.state) car.state.damage = Math.min(1, (car.state.damage ?? 0) + .02);
+     // A car takes the round; a motorbike's rider does not have one round them (stage 6).
+     if (driving && car?.state && !VEHICLES[car.state.type]?.twoWheel) car.state.damage = Math.min(1, (car.state.damage ?? 0) + .02);
      else hurt?.(e.damage);
     }
    }

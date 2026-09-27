@@ -90,8 +90,9 @@ export function crash(wear, car, dims, contact, lost) {
  const dent = {x: dx * t, y: Math.min(dims.height * .42, .62), z: dz * t, dx: -dx, dy: -.12, dz: -dz,
   depth: Math.min(WEAR.maxDepth, lost * WEAR.depthPerSpeed), r: WEAR.radius[0] + (WEAR.radius[1] - WEAR.radius[0]) * k};
  addDent(wear, dent);
- const pane = paneFacing(dx, dz, dims);
- const glass = lost >= WEAR.shatter ? bump(wear, pane, 2) : lost >= WEAR.crack ? bump(wear, pane, 1) : null;
+ // A bike has no glass (stage 6 integration): only the dent.
+ const pane = dims.twoWheel ? null : paneFacing(dx, dz, dims);
+ const glass = !pane ? null : lost >= WEAR.shatter ? bump(wear, pane, 2) : lost >= WEAR.crack ? bump(wear, pane, 1) : null;
  wear.seq++;
  return {dent, pane, glass};
 }
@@ -104,7 +105,7 @@ export function crash(wear, car, dims, contact, lost) {
 export function shot(wear, car, dims, point, dir) {
  const p = toLocal(car, point.x, point.z, point.y);
  const d = dirToLocal(car, dir.x, dir.z);
- if (p.y > dims.height * WEAR.beltline) {
+ if (!dims.twoWheel && p.y > dims.height * WEAR.beltline) {
   // The pane it came in through faces back along the round.
   const pane = paneFacing(-d.x, -d.z, dims);
   const glass = bump(wear, pane, wear.panes[pane] + 1);
