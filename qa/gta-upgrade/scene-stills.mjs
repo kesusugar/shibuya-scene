@@ -41,7 +41,9 @@ const until=async(expr,seconds,label)=>{for(let i=0;i<seconds*4;i++){if(await js
 /** Let the game run `seconds` of its own time, drawing nothing. */
 const run=async(seconds,{each=null}={})=>{await js('window.__SHIBUYA_QA__.render(false)');
  const t0=await js('window.__SHIBUYA_LIFE__?.sim?.time??0');
- for(let i=0;i<seconds*40;i++){if(each)await js(each);const t=await js('window.__SHIBUYA_LIFE__?.sim?.time??0');if(t-t0>=seconds)break;await sleep(25);}};
+ // By game time, not by polls: headless Chrome can stall for seconds with no frame at all (§9ay).
+ const wall=Date.now()+90000;
+ while(Date.now()<wall){if(each)await js(each);const t=await js('window.__SHIBUYA_LIFE__?.sim?.time??0');if(t-t0>=seconds)break;await sleep(25);}};
 /** Run the game, drawing nothing, until `expr` holds or `seconds` of game time pass. */
 const runUntil=async(expr,seconds,label)=>{await js('window.__SHIBUYA_QA__.render(false)');const t0=await js('window.__SHIBUYA_LIFE__?.sim?.time??0');
  for(let i=0;i<seconds*80;i++){if(await js(`(()=>{try{return !!(${expr})}catch{return false}})()`))return true;const t=await js('window.__SHIBUYA_LIFE__?.sim?.time??0');if(t-t0>seconds)break;await sleep(25);}
@@ -136,6 +138,24 @@ if(want('car')){
  await still('42-car-crash-hud','the same, the damage in the HUD',{hud:true});
  await js(`window.dispatchEvent(new KeyboardEvent('keydown',{key:'s'}))`);await run(1);await js(`window.dispatchEvent(new KeyboardEvent('keyup',{key:'s'}))`);
  await runUntil('Math.abs(window.__SHIBUYA_CAR__.state.speed)<.3',6,'stopped');await dismount();await where('out of the car');
+}
+if(want('smoke')){
+ // Roadmap ③: the smoke off a crash and off a damaged car, close up -- in the own car, into a
+ // parked one, then left standing at 60% and 95% damage.
+ await dismount();
+ await js(`(()=>{const c=window.__SHIBUYA_CAR__,own=c.own,p=window.__SHIBUYA_PLAYER__;if(!own)return;for(const side of [-1,1]){const a=c.anchors(own,side).entry;p.place(a.x,a.z,0);if(c.nearestEntry(p.state.x,p.state.z)?.slot===own&&c.nearestEntry(p.state.x,p.state.z).inRange)return;}})()`);
+ await run(.5);await drive();await runUntil(`!(${onFoot})&&window.__SHIBUYA_CAR__.state.type!=="motorbike"`,25,'in the car');await run(1);
+ await js(`(()=>{const c=window.__SHIBUYA_CAR__.state;let best=null;
+  for(const v of window.__SHIBUYA_TRAFFIC__.sim.pool){if(!v.active||v===c.slot||!v.parked)continue;const d=Math.hypot(v.x-c.x,v.z-c.z);if(d<8||d>45)continue;if(!best||d<best.d)best={v,d};}
+  if(!best)return;const h=Math.atan2(best.v.x-c.x,best.v.z-c.z);c.heading=h;c.course=h;c.speed=14;})()`);
+ await js(`window.dispatchEvent(new KeyboardEvent('keydown',{key:'w'}))`);
+ await runUntil('(window.__SHIBUYA_CAR__.state.damage??0)>.1',4,'a crash');
+ await js(`window.dispatchEvent(new KeyboardEvent('keyup',{key:'w'}))`);await run(.25);
+ await still('60-crash-smoke','a moment after the crash: the burst of smoke and sparks off the front',{view:{dist:5,height:1.8,yaw:2.3,target:.9}});
+ await js(`window.__SHIBUYA_CAR__.state.damage=.6`);await run(2.5);
+ await still('61-damaged-smoke','standing at 60% damage: grey smoke off the bonnet',{view:{dist:5.5,height:2,yaw:2.3,target:1.2}});
+ await js(`window.__SHIBUYA_CAR__.state.damage=.95`);await run(2.5);
+ await still('62-wrecked-smoke','standing at 95% damage: dark smoke',{view:{dist:5.5,height:2,yaw:2.3,target:1.2}});
 }
 if(want('shoot')){
  await dismount();

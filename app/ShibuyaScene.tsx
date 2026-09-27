@@ -780,7 +780,7 @@ export default function Home(){
   // Stage 6: the radio plays while the player is in a car, on that car's station.
   if(radio){const slot=driving?playerCar?.state.slot:null;if(slot&&slot!==radioSlot){radio.tune(stationFor(slot));slot.radio=radio.station;}radioSlot=slot;
    timed('s6-radio',()=>radio.update(dt,{on:!!slot}));if(slot)playUI?.setRadio(radio.nowPlaying(),dt);else playUI?.hideRadio?.();}
-  syncCrowdSlot(dt);timed('s6-vehicle-visual',()=>vehicleVisual?.update(playerCar?.state,dt));vehicleEffects?.update(dt,playerCar?.state);lifeEntry.hooks.current?.setPlayerFocus(player.state);
+  syncCrowdSlot(dt);timed('s6-vehicle-visual',()=>vehicleVisual?.update(playerCar?.state,dt));vehicleEffects?.setLight?.(clock.value==='night'?.3:clock.value==='dusk'?.6:1);vehicleEffects?.update(dt,playerCar?.state);lifeEntry.hooks.current?.setPlayerFocus(player.state);
   localCrowdClock+=dt;if(localCrowdClock>=.1){settleNearbyWaiters(lifeEntry.hooks.current?.sim,player.state,localCrowdClock);localCrowdClock=0;}
  }blood?.update(dt);perfProbe?.end('player');if(!qaBusyNow)system.update(dt);perfProbe?.begin('player-late');
  if(playerMode&&player){const crowdSim=lifeEntry.hooks.current?.sim;const queue=crowdSim?.splashes;if(queue?.length){for(const q of queue)blood?.splash(q.x,q.y,q.z,q.dx,q.dz,q.scale,q.life);queue.length=0;}
