@@ -156,7 +156,9 @@ export default function Home(){
  const persist=()=>saveSlot.save({money:wallet.money,armor:player?.state?.armor??savedArmor,completed:progress.completed,best:progress.best});
  const missionWorld=()=>({player:player?.state,driving,car:playerCar?.state,traffic:trafficEntry.hooks.current?.sim,crowd:lifeEntry.hooks.current?.sim,
   wanted:police?.wanted?.snapshot?.()??{stars:0},hits:frameHits,
-  raiseWanted:(n:number)=>{const sim=lifeEntry.hooks.current?.sim;police?.wanted.crime(n>=2?'shooting':'weaponSeen',{x:player.state.x,z:player.state.z,t:sim?.time??0,seenByOfficer:true});}});let seatedDrivers:any=null;let radio:any=null,radioSlot:any=null;let riderLean=0;const rider:any={x:0,y:0,z:0,heading:0,speed:0,alive:true,attackTime:0,riding:true,riderLean:0};let seatedHidden=false;let transitionSeated=false;let carjackSide=-1,carjackStage:string|null=null,lastCarjack:any=null;let vehicleVisual:any=null,vehicleEffects:any=null,playUI:any=null,localCrowdClock=0,frameHits=0,combatDeathReported=false;const followCamera=createFollowCamera(),feedback=createFeedbackBus(),melee=createMeleeCombat({
+  raiseWanted:(n:number)=>{const sim=lifeEntry.hooks.current?.sim;police?.wanted.crime(n>=2?'shooting':'weaponSeen',{x:player.state.x,z:player.state.z,t:sim?.time??0,seenByOfficer:true});}});let seatedDrivers:any=null;
+ // ?perf=: a named section of the frame (the probe's sums), or just the call when not measuring.
+ const timed=<T,>(name:string,f:()=>T):T=>perfProbe?perfProbe.time(name,f):f();let qaView:any=null;let radio:any=null,radioSlot:any=null;let riderLean=0;const rider:any={x:0,y:0,z:0,heading:0,speed:0,alive:true,attackTime:0,riding:true,riderLean:0};let seatedHidden=false;let transitionSeated=false;let carjackSide=-1,carjackStage:string|null=null,lastCarjack:any=null;let vehicleVisual:any=null,vehicleEffects:any=null,playUI:any=null,localCrowdClock=0,frameHits=0,combatDeathReported=false;const followCamera=createFollowCamera(),feedback=createFeedbackBus(),melee=createMeleeCombat({
   // PLAN-WEAPONS W1: the katana's cut goes through the same swing clock as a punch.
   weapon:()=>arsenal?.current??'fists',
   // RUN 8: a punch is an event the crowd can see. The HQ layer bounds it by its own spatial
@@ -286,6 +288,8 @@ export default function Home(){
   const state=inCar?playerCar.state:player.state;aimCamera+=(((!inCar&&player.state.aim>0)?1:0)-aimCamera)*(1-Math.exp(-10*dt));// §9ah: an automatic's recoil lifts the view with the muzzle (its `recoil.camera` share of the climb); it settles with the recoil.
   const kick=!inCar&&arsenal?arsenal.recoil*(arsenal.weapon?.recoil?.camera??0):0;
   const desired=inCar?vehicleCamera(state,followPose,ctx):playerCamera(kick?{...state,pitch:state.pitch+kick}:state,followPose,ctx,aimCamera);const c:any={...followCamera.update(desired,{x:state.x,y:state.y+(driving?CAR.eye:PLAYER.eye),z:state.z},ctx,dt,driving?'drive':'walk')};
+  // QA stills: a camera placed round the player (or the car) by the capture script, in place of the follow camera.
+  if(qaView){const h=state.heading+(qaView.yaw??0),d=qaView.dist??3,ty=state.y+(qaView.target??1.2);c.x=state.x-Math.sin(h)*d;c.z=state.z-Math.cos(h)*d;c.y=state.y+(qaView.height??1.6);c.tx=state.x;c.ty=ty;c.tz=state.z;}
   if(shake>.002){const t=performance.now()/1000;
    // Two frequencies that do not divide into each other, so it reads as a knock rather than
    // a hum, and it only moves the eye -- the look-at point stays put or the view swims.
@@ -574,7 +578,13 @@ export default function Home(){
  const waitFrames=(count:number)=>waitForRenderedFrames({count,getFrame:()=>renderedFrames,isDisposed:()=>disposed});
  const samplePerformance=async(count=120)=>{frameSamples.begin(count);await waitFrames(count+1);const result=frameSamples.snapshot();if(!result.complete)throw new Error('Incomplete frame sample; keep the tab visible');return result;};
  const capture=async({download=true}:{download?:boolean}={})=>{const api=(window as any).__SHIBUYA_QA__;if(!api?.ready)throw new Error('Shibuya QA is not ready');if(qaBusyNow)throw new Error('Shibuya QA capture is already running');qaBusyNow=true;const restore={camera:currentCamera,time:solar.phase};try{const initial=metricsFor(),captures=[];for(const item of QA_CAPTURES){preset(item.camera,false);solar.select(item.time,false);await waitFrames(3);const frameTiming=await samplePerformance();renderScene();const blob=await canvasToPng(canvas);captures.push({...item,camera:publicCameraName(item.camera),metrics:{...metricsFor(),frameTiming,playableLoading:vehicleVisual?.inspect?.()??{status:"idle",requests:0}},blob});}const metrics={...initial,captures:captures.map(({blob,...item})=>item)};const pack=await createQAPack(captures,metrics);if(download)downloadBlob(pack.zip,'shibuya-qa-pack.zip');return Object.freeze({files:pack.files.map((file:{name:string})=>file.name),metrics,zip:pack.zip,captures:Object.freeze(captures.map(c=>Object.freeze({file:c.file,blob:c.blob})))});}finally{if(!disposed){preset(restore.camera,false);solar.select(restore.time,false);}qaBusyNow=false;}};
- let qaApi:any=null;if(config.qa){qaApi=Object.freeze({get ready(){return qaReadyRef;},get tier(){return currentTier;},get time(){return clock.value;},get camera(){return publicCameraName(currentCamera);},get metrics(){return Object.freeze(metricsFor());},get playableLoading(){return vehicleVisual?.inspect?.()??{status:"idle",requests:0};},capture});(window as any).__SHIBUYA_QA__=qaApi;(window as any).__SHIBUYA_MIRROR__=roadReflection;}
+ let qaApi:any=null;if(config.qa){qaApi=Object.freeze({get ready(){return qaReadyRef;},get tier(){return currentTier;},get time(){return clock.value;},get camera(){return publicCameraName(currentCamera);},get metrics(){return Object.freeze(metricsFor());},get playableLoading(){return vehicleVisual?.inspect?.()??{status:"idle",requests:0};},capture,
+  // Headless stills: a software renderer takes seconds a frame and the game advances one clamped
+  // step per frame, so a capture turns drawing off to let the game run, and on again for a still.
+  render(on:boolean){if(on)perfOff.delete("render");else perfOff.add("render");return !perfOff.has("render");},
+  get frames(){return renderedFrames;},
+  // {dist, height, yaw (from the player's heading), target (height looked at)} or null for the follow camera.
+  view(v:any){qaView=v?{...v}:null;return !!qaView;}});(window as any).__SHIBUYA_QA__=qaApi;(window as any).__SHIBUYA_MIRROR__=roadReflection;}
  // ?diag=1 (or ?pad=1, which opens straight on the controller tab) -- a panel that can be
  // read and driven with a thumb, because "why will the car not move?" gets asked on a phone
  // where there is no console. Its own controls feed the same axes the keys and the pad do,
@@ -645,8 +655,8 @@ export default function Home(){
  // Roadmap stage 4: how many people are out follows the time of day.
  lifeEntry.hooks.current?.sim?.setPopulation?.(populationFor(clock.value));const frameStart=performance.now(),updateStart=frameStart;const playElapsed=document.hidden?0:Math.max(0,(now-lastPlayTick)/1000);lastPlayTick=now;frameHits=0;{const s=lifeEntry.hooks.current?.sim;if(s)s.postUpdate=null;}
  if((perfMode||perfWanted)&&!perfProbe&&renderer)ensurePerf();
- perfProbe?.frameStart();perfProbe?.begin('player');if(playerMode&&player)player.updateInput(dt);if(playerMode&&player){view.getWorldDirection(viewDirection);arsenal?.frame(dt,{player,figure:playerFigure,driving:driving||!!vehicleTransition.active,world:weaponWorld,
-  camera:{position:view.position,direction:viewDirection},touch:touchEnabled&&document.pointerLockElement!==canvas,pad:player.lastDevice==='pad',time:lifeEntry.hooks.current?.sim?.time??0});
+ perfProbe?.frameStart();perfProbe?.begin('player');if(playerMode&&player)player.updateInput(dt);if(playerMode&&player){view.getWorldDirection(viewDirection);timed('s1-arsenal',()=>arsenal?.frame(dt,{player,figure:playerFigure,driving:driving||!!vehicleTransition.active,world:weaponWorld,
+  camera:{position:view.position,direction:viewDirection},touch:touchEnabled&&document.pointerLockElement!==canvas,pad:player.lastDevice==='pad',time:lifeEntry.hooks.current?.sim?.time??0}));
   BLOOM_KICK.value=arsenal?.effects.kick??0;}else BLOOM_KICK.value=0;if(playerMode&&player){
   if(vehicleTransition.active){const pose=vehicleTransition.update(dt);if(pose){
     // The DOOR comes from the stage, not from the overall phase. `sin(phase * PI)` opened the
@@ -741,13 +751,15 @@ export default function Home(){
     Object.assign(rider,{x:c.x+lx*ch+rz*sh,y:(c.y??0)+ly,z:c.z-lx*sh+rz*ch,heading:c.heading,riderLean,weapon:player.state.weapon});
     playerFigure.update(rider,dt);}
    // ...and a hard enough hit throws them off it.
+   // A rider shot dead falls off too (the police's rounds reach a rider: director.mjs).
+   if(playerCar.def.twoWheel&&player.state.alive===false&&!c.thrownOff)c.thrownOff={speed:0,heading:c.course??c.heading,nx:0,nz:0};
    if(c.thrownOff){const t=c.thrownOff;c.thrownOff=null;driving=false;playerAudio?.silence();playerCar.state.speed=0;playerCar.sync();playerCar.vacateSeat();setDriving(false);touchPad?.setDriving(false);riderLean=0;
     const fx=Math.sin(t.heading),fz=Math.cos(t.heading);player.place(c.x-fz*.9,c.z+fx*.9,t.heading);
-    player.knockDown({x:c.x,z:c.z,heading:t.heading,speed:Math.max(t.speed,8),type:'motorbike'});
-    if(!player.state.alive&&!combatDeathReported){combatDeathReported=true;setPlayerHit('motorbike');}
+    if(player.state.alive!==false)player.knockDown({x:c.x,z:c.z,heading:t.heading,speed:Math.max(t.speed,8),type:'motorbike'});
+    if(!player.state.alive&&!combatDeathReported){combatDeathReported=true;setPlayerHit(player.state.hitBy??'motorbike');}
     playerFigure?.update(player.state,0);groundPlayerShadow();}}
   else{player.step(dt);playerCar?.keepOwn?.(dt,player.state.x,player.state.z);{const s=lifeEntry.hooks.current?.sim;if(s)s.postUpdate=(d:number)=>player.settleCrowd(d);}if(player.state.alive)combatDeathReported=false;yieldToPlayer(lifeEntry.hooks.current?.sim,player.state,player.contact.nearby);// §9ai H1: the player's swing and body run on the hit-stopped clock; the world does not.
-  const hitDt=hitStop.scale(dt);const combat=melee.update(hitDt,lifeEntry.hooks.current?.sim,player);if(combat.hits>meleeHitsLast){meleeHitsLast=combat.hits;}playerFigure?.update(player.state,hitDt);groundPlayerShadow();
+  const hitDt=hitStop.scale(dt);const combat=timed('melee',()=>melee.update(hitDt,lifeEntry.hooks.current?.sim,player));if(combat.hits>meleeHitsLast){meleeHitsLast=combat.hits;}timed('figure',()=>playerFigure?.update(player.state,hitDt));groundPlayerShadow();
    if(!player.state.alive&&!combatDeathReported){combatDeathReported=true;setPlayerHit(player.state.hitBy??'fight');}
    playerMarker?.update(player.state,dt,PLAYER_HEIGHT);
    // Nothing on screen said where the car was: the orange cone is over the player, so a
@@ -763,8 +775,8 @@ export default function Home(){
    playerReach=entry?{distance:entry.distance,range:entry.range,inRange:entry.inRange,kind:entry.kind}:null;}
   // Stage 6: the radio plays while the player is in a car, on that car's station.
   if(radio){const slot=driving?playerCar?.state.slot:null;if(slot&&slot!==radioSlot){radio.tune(stationFor(slot));slot.radio=radio.station;}radioSlot=slot;
-   radio.update(dt,{on:!!slot});if(slot)playUI?.setRadio(radio.nowPlaying(),dt);else playUI?.hideRadio?.();}
-  syncCrowdSlot(dt);vehicleVisual?.update(playerCar?.state,dt);vehicleEffects?.update(dt,playerCar?.state);lifeEntry.hooks.current?.setPlayerFocus(player.state);
+   timed('s6-radio',()=>radio.update(dt,{on:!!slot}));if(slot)playUI?.setRadio(radio.nowPlaying(),dt);else playUI?.hideRadio?.();}
+  syncCrowdSlot(dt);timed('s6-vehicle-visual',()=>vehicleVisual?.update(playerCar?.state,dt));vehicleEffects?.update(dt,playerCar?.state);lifeEntry.hooks.current?.setPlayerFocus(player.state);
   localCrowdClock+=dt;if(localCrowdClock>=.1){settleNearbyWaiters(lifeEntry.hooks.current?.sim,player.state,localCrowdClock);localCrowdClock=0;}
  }blood?.update(dt);perfProbe?.end('player');if(!qaBusyNow)system.update(dt);perfProbe?.begin('player-late');
  if(playerMode&&player){const crowdSim=lifeEntry.hooks.current?.sim;const queue=crowdSim?.splashes;if(queue?.length){for(const q of queue)blood?.splash(q.x,q.y,q.z,q.dx,q.dz,q.scale,q.life);queue.length=0;}
@@ -774,9 +786,9 @@ export default function Home(){
    soundscape.update(dt,{ear:{x:view.position.x,y:view.position.y,z:view.position.z,fx:earFacing.x/flat,fz:earFacing.z/flat},
     player:driving?null:player.state,car:driving?playerCar?.state:null,people:crowdSim?.pool,cars:trafficEntry.hooks.current?.sim?.pool,
     pedestrianGreen:crowdSim?.signals?.phase?.()[0]==='PEDESTRIAN'});}
-  playUI?.update(playElapsed,player.state,playerCar?.state,driving,playerReach,frameHits);
+  timed('hud',()=>playUI?.update(playElapsed,player.state,playerCar?.state,driving,playerReach,frameHits));
   // Roadmap stage 5: the mission board, the pay, the shop at its door, the bill for dying or arrest.
-  if(board){const pay=board.tick(playElapsed,missionWorld());const snap=board.snapshot();playUI?.setMission(snap);
+  if(board){const pay=timed('s5-missions',()=>board.tick(playElapsed,missionWorld()));const snap=board.snapshot();playUI?.setMission(snap);
    if(pay>0){wallet.earn(pay,snap.id);progress.completed[snap.id]=(progress.completed[snap.id]??0)+1;progress.best[snap.id]=Math.max(progress.best[snap.id]??0,pay);persist();}}
   if(wasAlive&&player.state.alive===false){wallet.penalty(player.state.hitBy==='arrested'?'arrest':'death');persist();}wasAlive=player.state.alive!==false;
   playUI?.setMoney?.(wallet.money,player.state.armor??0);
@@ -798,23 +810,23 @@ export default function Home(){
      end=r.point;if(r.kind!=='none')arsenal?.effects.burst(end.x,end.y,end.z,{count:8,nx:-dir.x,nz:-dir.z});}
     if(e.kind==='shot')arsenal?.effects.tracer(e.from,end);
     gunfire?.shot(e.from.x,e.from.y,e.from.z,Math.atan2(dir.x,dir.z),{kind:'revolver',hit:e.kind==='shot'&&!e.hit?{kind:'wall',point:end}:null});
-    if(e.hit&&!driving){if(e.civilian)player.hurt?.(e.damage,'fight');weaponWorld.bleed({x:player.state.x,y:0,z:player.state.z},dir);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_PUNCH*1.4);}};
+    if(e.hit&&(!driving||playerCar?.def?.twoWheel)){if(e.civilian)player.hurt?.(e.damage,'fight');weaponWorld.bleed({x:player.state.x,y:0,z:player.state.z},dir);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_PUNCH*1.4);}};
   // Roadmap stage 2 (street-reactions.mjs): hands up at gunpoint, and the armed few shooting back.
   {const crowdNow=lifeEntry.hooks.current?.sim;
-   for(const e of streetReactions.update(dt,{crowd:crowdNow,me:{x:player.state.x,y:player.state.y,z:player.state.z,alive:player.state.alive!==false,dodging:!!player.state.dodging},
-    aimedId:driving?null:arsenal?.aimedAt??null,shotAt:frameShotAt,solid:weaponWorld.solid}))enemyShot(e);
+   for(const e of timed('s2-reactions',()=>streetReactions.update(dt,{crowd:crowdNow,me:{x:player.state.x,y:player.state.y,z:player.state.z,alive:player.state.alive!==false,dodging:!!player.state.dodging},
+    aimedId:driving?null:arsenal?.aimedAt??null,shotAt:frameShotAt,solid:weaponWorld.solid})))enemyShot(e);
    frameShotAt=null;
    // What a falling body can strike besides the ground: the walls, and the cars near the player.
    ragdollCars.length=0;for(const v of (trafficEntry.hooks.current?.sim?.pool??[])){if(!v.active||Math.abs(v.x-player.state.x)>40||Math.abs(v.z-player.state.z)>40)continue;const d=(VEHICLES as any)[v.type];if(d)ragdollCars.push({x:v.x,z:v.z,y:v.y??0,heading:v.heading,width:d.width,length:d.length,height:d.height});}
    setRagdollWorld({solid:weaponWorld.solid,cars:ragdollCars});
    // Roadmap stage 4: once it is quiet, people stop to film or call it in; with no chase on, an
    // ambulance and a patrol car come for the dead and the blood is washed away.
-   onlookers.update(crowdNow,{lastGunshotAt});
-   aftermath.update(dt,{traffic:trafficEntry.hooks.current?.sim,crowd:crowdNow,stars:police?.wanted?.state?.stars??0,marks:arsenal?.marks});}
+   timed('s4-onlookers',()=>onlookers.update(crowdNow,{lastGunshotAt}));
+   timed('s4-aftermath',()=>aftermath.update(dt,{traffic:trafficEntry.hooks.current?.sim,crowd:crowdNow,stars:police?.wanted?.state?.stars??0,marks:arsenal?.marks}));}
   if(police){policeFrustum.setFromProjectionMatrix(policeMatrix.multiplyMatrices(view.projectionMatrix,view.matrixWorldInverse));
-   const w=police.frame(dt,{player:player.state,car:playerCar,driving,melee:melee.snapshot(),weapons:arsenal?.snapshot()??null,solid:weaponWorld.solid,traffic:trafficEntry.hooks.current?.sim,crowd:crowdSim,listener:{x:view.position.x,z:view.position.z,vx:0,vz:0},visible:inView,hurt:(n:number,src:string)=>{if(!driving)player.hurt?.(n,src);},
-    night:clock.value==='night'||clock.value==='dusk',ground:weaponWorld.ground});
-   heliMesh?.update(w.heli??{active:false},{night:clock.value==='night'||clock.value==='dusk'});
+   const w=timed('s3-police',()=>police.frame(dt,{player:player.state,car:playerCar,driving,melee:melee.snapshot(),weapons:arsenal?.snapshot()??null,solid:weaponWorld.solid,traffic:trafficEntry.hooks.current?.sim,crowd:crowdSim,listener:{x:view.position.x,z:view.position.z,vx:0,vz:0},visible:inView,hurt:(n:number,src:string)=>{if(!driving||playerCar?.def?.twoWheel)player.hurt?.(n,src);},
+    night:clock.value==='night'||clock.value==='dusk',ground:weaponWorld.ground}));
+   timed('s3-heli',()=>heliMesh?.update(w.heli??{active:false},{night:clock.value==='night'||clock.value==='dusk'}));
    playUI?.setWanted(w,dt);(window as any).__SHIBUYA_POLICE__=police;
    // PLAN-WEAPONS W3: an officer's revolver -- the flash, the round's streak and where it went, the
    // recorded revolver shot with the street's echo. A hit on the player bleeds and knocks the view.
