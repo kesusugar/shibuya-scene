@@ -91,6 +91,7 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
  const heli = createHelicopter(), rotor = createRotor(getAudioContext, getAudioBus);
  const speaker = createLoudspeaker(speech, Utterance);
  const ttsMode = useTTS();
+ let lastPoliceHit = -Infinity;
  let deaths = 0, lastRam = -Infinity, taken = new WeakSet(), time = 0, shotsSeen = 0, lastShooting = -Infinity, gunShotsSeen = 0, worldSolid = null;
  const runovers = new Set();
  const sources = [];
@@ -185,14 +186,17 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
    const seen = ground0 || h.sees;
    rotor.update(h, listener ?? {x: me.x, z: me.z});
    let snap = wanted.update(dt, {x: me.x, z: me.z, t: time, seen});
-   if (player && player.alive === false && snap.stars) wanted.clear('death');
+   // Owner's plan, item 2: shot dead by the police is the arrest (the only way to be taken).
+   let shotDead = false;
+   if (player && player.alive === false && snap.stars) {shotDead = time - lastPoliceHit <= 1.5; wanted.clear(shotDead ? 'arrested' : 'death');}
 
    // --- units (W2) ----------------------------------------------------------------------------
    const attacking = !!melee && melee.phase !== undefined && melee.phase !== 'idle';
    const u = units.update(dt, {stars: wanted.state.stars, traffic, crowd, me, visible, attacking, driving,
-    carSpeed: car?.state?.speed ?? 0, alive: player?.alive !== false, hurt: amount => hurt?.(amount, 'police')});
-   let arrested = false;
-   if (u.result === 'arrested') {arrested = true; wanted.clear('arrested'); snap = wanted.snapshot();}
+    carSpeed: car?.state?.speed ?? 0, alive: player?.alive !== false, hurt: amount => {lastPoliceHit = time; hurt?.(amount, 'police');}});
+   let arrested = shotDead;
+   if (u.result === 'arrested') {arrested = true; wanted.clear('arrested');}
+   if (arrested) snap = wanted.snapshot();
 
    // --- revolvers (PLAN-WEAPONS W3) ----------------------------------------------------------
    // ☆3 and up: officers draw; the first round is a warning shot with 「撃つぞ！」; after it they
@@ -210,7 +214,7 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
     if (e.kind === 'shot' && e.hit) {
      // A car takes the round; a motorbike's rider does not have one round them (stage 6).
      if (driving && car?.state && !VEHICLES[car.state.type]?.twoWheel) car.state.damage = Math.min(1, (car.state.damage ?? 0) + .02);
-     else hurt?.(e.damage);
+     else {lastPoliceHit = time; hurt?.(e.damage, 'police');}
     }
    }
    for (const p of units.officers) if (p.gunShotLeft > 0) p.gunShotLeft = Math.max(0, p.gunShotLeft - dt);

@@ -13,15 +13,18 @@ function run(guns,seconds,frame){
  const all=[];for(let t=0;t<seconds;t+=1/30)all.push(...guns.update(1/30,frame()));return all;
 }
 
-test('R15: at ☆1 and ☆2 the revolvers stay holstered, whatever the player does',()=>{
+test('owner\'s plan: in a car at ☆1 and ☆2 the revolvers stay holstered; on foot they are drawn from ☆1',()=>{
  for(const stars of [1,2]){
   const guns=createPoliceGuns(),p=officer(1,0,8);
-  const events=run(guns,10,()=>({officers:[p],me,stars,threat:{armed:true,attacking:true}}));
-  assert.equal(events.length,0,`☆${stars}: ${events.map(e=>e.kind).join(',')}`);
+  const events=run(guns,10,()=>({officers:[p],me,stars,driving:true,threat:{armed:true,attacking:true}}));
+  assert.equal(events.length,0,`☆${stars} in a car: ${events.map(e=>e.kind).join(',')}`);
   assert.ok(!p.gunDrawn);
+  const g2=createPoliceGuns(),q=officer(2,0,8);
+  const ev=run(g2,10,()=>({officers:[q],me,stars,threat:{}}));
+  assert.ok(ev.some(e=>e.kind==='warn'),`☆${stars} on foot: no warning shot`);
+  assert.ok(ev.some(e=>e.kind==='shot'),`☆${stars} on foot: never fired`);
  }
 });
-
 test('R15: at ☆3 officers draw, and the first round is a warning shot into the air with 撃つぞ！',()=>{
  const guns=createPoliceGuns(),p=officer(1,0,8);
  const events=run(guns,6,()=>({officers:[p],me,stars:3,threat:{armed:true}}));
@@ -37,19 +40,20 @@ test('R15: at ☆3 officers draw, and the first round is a warning shot into the
  assert.ok(events.indexOf(shots[0])>w,'fired before the warning');
 });
 
-test('R15: after the warning, a player who is no threat is covered, not shot',()=>{
+test('owner\'s plan: on foot the police fire after the warning, threat or not; in a car only at a threat',()=>{
  const guns=createPoliceGuns(),p=officer(1,0,8);
  const events=run(guns,12,()=>({officers:[p],me,stars:3,threat:{armed:false,attacking:false}}));
  assert.equal(events.filter(e=>e.kind==='warn').length,1);
- assert.equal(events.filter(e=>e.kind==='shot').length,0,'an unarmed, still player was fired on');
- assert.ok(guns.snapshot().held>0);
- // An attack makes them a threat for a while; then they stop again.
+ assert.ok(events.filter(e=>e.kind==='shot').length>0,'an unarmed player on foot was not fired on');
+ // In a car: covered, not shot, until an attack (a ram) makes them a threat for a while.
+ const g1=createPoliceGuns();
+ const e1=run(g1,12,()=>({officers:[p],me,stars:3,driving:true,threat:{}}));
+ assert.equal(e1.filter(e=>e.kind==='shot').length,0,'a driver doing nothing was fired on');
+ assert.ok(g1.snapshot().held>0);
  const g2=createPoliceGuns();let t=0;
- const ev=[];for(;t<10;t+=1/30)ev.push(...g2.update(1/30,{officers:[p],me,stars:3,threat:{attacking:t>3&&t<3.1}}));
- const shots=ev.filter(e=>e.kind==='shot');
- assert.ok(shots.length>0,'an attack did not draw fire');
+ const ev=[];for(;t<10;t+=1/30)ev.push(...g2.update(1/30,{officers:[p],me,stars:3,driving:true,threat:{attacking:t>3&&t<3.1}}));
+ assert.ok(ev.filter(e=>e.kind==='shot').length>0,'an attack did not draw fire');
 });
-
 test('R9: no police shot without a line of sight -- a building between them blocks every round',()=>{
  const wall=(x,z)=>z>3&&z<5;                 // a building between the officer (z 8) and the player (z 0)
  const guns=createPoliceGuns(),p=officer(1,0,8);
@@ -137,4 +141,24 @@ test('an officer drawn by a near body reports the drawn revolver\'s muzzle; nobo
  const near=createNearCharacters('high',{});
  assert.equal(near.muzzleOf(1,new Vector3(),new Vector3()),false,'a citizen the pool is not holding has no muzzle');
  near.dispose();
+});
+
+test('owner\'s plan: shot dead by the police is the arrest; dying any other way is not',()=>{
+ for(const [cause,expect] of [['police',true],['fight',false]]){
+  const director=createPoliceDirector({getAudioContext:()=>null,getAudioBus:()=>null,speech:null});
+  // A fight death: no officer near firing (a death within 1.5 s of a police hit counts as theirs).
+  if(cause==='police')director.units.officers.add(officer(1,0,8));
+  director.wanted.crime('policeCarTaken',{x:0,z:0,t:0});
+  const me={x:0,z:0,y:0,alive:true,health:100};
+  const hurt=(n)=>{if(cause!=='police')return;me.health-=n;if(me.health<=0)me.alive=false;};
+  let arrested=false;
+  for(let t=0;t<40&&!arrested;t+=1/30){
+   if(cause==='fight'&&t>5)me.alive=false;
+   const w=director.frame(1/30,{player:me,weapons:{current:'fists',shots:0},solid:()=>false,hurt});
+   if(w.arrested)arrested=true;
+   if(!me.alive&&cause==='fight'&&t>6)break;
+  }
+  assert.equal(arrested,expect,`${cause}: arrested ${arrested}`);
+  assert.equal(director.wanted.state.stars,0);
+ }
 });

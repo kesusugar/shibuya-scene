@@ -31,7 +31,10 @@ export const UNITS = Object.freeze({
  // Roadmap stage 3: at ☆4 and up the police get in front of a player who is going somewhere. Every
  // other new patrol car comes from ahead of the way they are travelling (inside `aheadCone` of it),
  // and the roadblock is set across the road ahead, once they are moving faster than `movingAt`.
- pincerFrom: 4, aheadCone: .55, movingAt: 3
+ pincerFrom: 4, aheadCone: .55, movingAt: 3,
+ // Owner's plan, item 2: a patrol car that reaches a player on foot stops within `dismountAt` and
+ // its crew (`crew` officers) gets out to shoot; the empty car is left parked, and can be taken.
+ dismountAt: 25, crew: 2, crewMax: 10
 });
 
 /** Lane sample points, for "the lane nearest this point" without scanning every path. */
@@ -185,7 +188,33 @@ export function createPoliceUnits({koban = {x: 48.5, z: 20.4}, buildBudget = 150
   if (front.length) stats.ahead++;
   return true;
  }
- const stats = {ahead: 0, roadblocks: 0, roadblocksAhead: 0};
+ const stats = {ahead: 0, roadblocks: 0, roadblocksAhead: 0, dismounted: 0};
+ let crowdRef = null, visibleRef = () => false, onFoot = false;
+
+ /**
+  * The crew gets out: `UNITS.crew` pedestrians from out of view become officers standing at the
+  * car's doors (the same off-for-a-frame conversion the foot officers use), and the car is left
+  * parked, its lights off, an ordinary car anyone -- the player included -- can get into. Taking it
+  * is still a stolen police car (director.mjs: `policeCarTaken`).
+  */
+ function dismount(v, traffic, me) {
+  cars.delete(v);
+  Object.assign(v, {controlled: false, parked: true, service: false, siren: false, speed: 0, brake: false, pursuit: undefined, abandonedBy: 'police'});
+  stats.dismounted++;
+  const crowd = crowdRef; if (!crowd) return;
+  const dims = VEHICLES[v.type] ?? VEHICLES.police, s = Math.sin(v.heading), c = Math.cos(v.heading);
+  let placed = 0;
+  for (const p of crowd.pool) {
+   if (placed >= UNITS.crew || officers.size >= UNITS.crewMax) break;
+   if (!p.active || p.officer || p.choreographed || p.crossing || p.combatDead || p.fatal || p.archetype === 'kid' || p.struck !== undefined) continue;
+   if (visibleRef(p.x, p.z) || Math.hypot(p.x - me.x, p.z - me.z) < 30) continue;
+   const side = placed ? 1 : -1, out = dims.width / 2 + .45;
+   const x = v.x + c * side * out, z = v.z - s * side * out;
+   crowd.despawn?.(p, 'officer'); p.active = false; p.downUntil = crowd.time + 1; p.officerPending = crowd.time + .05;
+   p.x = x; p.z = z; p.renderX = x; p.renderZ = z; p.heading = Math.atan2(me.x - x, me.z - z);
+   officers.add(p); placed++;
+  }
+ }
 
  // Pursuit follows a flow field over the carriageway, not a lane route: the lane graph is built
  // for traffic that despawns at a route's end, and fewer than one lane pair in ten connects
@@ -201,6 +230,12 @@ export function createPoliceUnits({koban = {x: 48.5, z: 20.4}, buildBudget = 150
    if (d > UNITS.leaveAfter && !visible(v.x, v.z)) {traffic.despawn(v, 'police'); cars.delete(v); return;}
   }
   if (P.roadblock) {v.speed = 0; if (!P.leaving) return;}   // a roadblock stands until the level clears
+  // Owner's plan, item 2: the player on foot and near: stop, and the crew gets out once stopped.
+  if (!P.leaving && onFoot && d <= UNITS.dismountAt) {
+   v.speed = Math.max(0, v.speed - UNITS.accel * 2 * dt); v.brake = true;
+   if (v.speed < .3) dismount(v, traffic, me);
+   return;
+  }
   let aim = null;
   if (!P.leaving && d <= UNITS.straightIn) aim = me;
   else if (field?.ready) aim = field.ahead(v.x, v.z, P.leaving);
@@ -336,7 +371,7 @@ export function createPoliceUnits({koban = {x: 48.5, z: 20.4}, buildBudget = 150
    */
   update(dt, {stars = 0, traffic = null, crowd = null, me, visible = () => false, attacking = false,
                driving = false, carSpeed = 0, alive = true, hurt = null}) {
-   clock += dt; spawnClock -= dt;
+   clock += dt; spawnClock -= dt; crowdRef = crowd; visibleRef = visible; onFoot = !driving && alive;
    if (me) track(me, dt);
    if (traffic?.graph && sampledGraph !== traffic.graph) {samples = laneSamples(traffic.graph); sampledGraph = traffic.graph;}
    if (traffic?.graph?.ctx?.onRoad && fieldCtx !== traffic.graph.ctx) {fieldCtx = traffic.graph.ctx; field = createRoadField(fieldCtx);}
@@ -373,20 +408,9 @@ export function createPoliceUnits({koban = {x: 48.5, z: 20.4}, buildBudget = 150
    const yielded = traffic ? giveWay(traffic, dt) : 0;
 
    // --- the arrest -------------------------------------------------------------------------
-   let result = null;
-   if (wanted && alive) {
-    if (!driving) {
-     const hands = [...officers].some(p => p.active && !p.combatDead && Math.hypot(p.x - me.x, p.z - me.z) <= UNITS.arrestReach);
-     arrest.foot = hands && !attacking ? arrest.foot + dt : 0;
-     if (arrest.foot >= UNITS.arrestFoot) result = 'arrested';
-    } else arrest.foot = 0;
-    if (driving) {
-     const pinned = Math.abs(carSpeed) < 1 && [...cars].some(v => Math.hypot(v.x - me.x, v.z - me.z) <= UNITS.carPin + VEHICLES.police.length / 2);
-     arrest.car = pinned ? arrest.car + dt : 0;
-     if (arrest.car >= UNITS.arrestCar) result = 'arrested';
-    } else arrest.car = 0;
-   } else {arrest.foot = 0; arrest.car = 0;}
-   if (result) {arrest.foot = 0; arrest.car = 0;}
+   // Owner's plan, item 2: no arrest by hands or by a pinned car any more. The player is taken only
+   // when shot dead by the police (director.mjs turns that death into the arrest).
+   const result = null;
    return {result, cars: cars.size, officers: [...officers].filter(p => p.active).length, yielded};
   },
   /** Is this pedestrian an officer (for crimes against the police). */

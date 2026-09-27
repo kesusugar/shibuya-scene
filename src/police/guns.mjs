@@ -18,7 +18,10 @@ import {lineOfSight} from '../player/ballistics.mjs';
 import {WEAPONS} from '../player/weapons.mjs';
 
 export const GUNS = Object.freeze({
- fromStars: 3,                 // R15: revolvers are drawn at ☆3 and above
+ // Owner's plan, item 2: the police shoot a player on foot at any wanted level (after the warning
+ // shot); in a car only a threat (a ram, an attack) is fired on, and only from ☆3 as before.
+ fromStars: 1,
+ carFromStars: 3,
  drawRange: 35,                // m: officers this close draw
  range: WEAPONS.revolver.range,// m: and fire from no further than this
  holdAt: 11,                   // m: an officer facing an armed threat stops here instead of closing in
@@ -62,8 +65,8 @@ export function createPoliceGuns() {
    const events = [];
    if (threat.attacking || threat.ramming) lastThreat = time;
    const armed = !!threat.armed && !driving;
-   const isThreat = alive && (armed || time - lastThreat <= GUNS.threatSeconds);
-   if (stars < GUNS.fromStars || !alive) {
+   const isThreat = alive && (!driving || armed || time - lastThreat <= GUNS.threatSeconds);
+   if (stars < (driving ? GUNS.carFromStars : GUNS.fromStars) || !alive) {
     for (const p of officers) holster(p);
     if (stars === 0) {warned = false; warnedAt = -Infinity; lastThreat = -Infinity;}
     return events;

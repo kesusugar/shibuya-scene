@@ -6292,6 +6292,33 @@ person; one at a time; a weapon breaks the fight and the katana starts none), `t
 `tests/crowd-contact.test.mjs` (about 3% of 1,000 people bumped fight), `tests/player-health.test.mjs`
 and `tests/stage2.test.mjs` updated to the rule.
 
+## 9aw. The police: taken only when shot dead; crews get out; their cars can be taken (owner's plan, item 2)
+
+Before: an arrest on foot was an officer's hands on the player for 2 s; in a car, a patrol car
+pinning a stopped car for 3 s. Officers were pedestrians re-dressed out of view; revolvers came out
+at ☆3 and were fired only at a threat.
+
+Now:
+- **No arrest by hands or by a pinned car** (`units.mjs`). The only way to be taken is to be **shot
+  dead by the police**: a death within 1.5 s of a police round (or baton) is the arrest
+  (`director.mjs` returns `arrested`; the scene shows the arrest and charges the arrest fee, not the
+  death fee). Dying any other way is a death.
+- **In a car** the police chase, ram and block as before; revolvers only at ☆3 and only at a threat
+  (`GUNS.carFromStars`).
+- **On foot, with a patrol car within 25 m** (`UNITS.dismountAt`): the car stops and its crew
+  (`UNITS.crew` = 2, at most `crewMax` 10 officers) gets out at its doors -- pedestrians from out of
+  view converted the way foot officers are -- and they shoot: on foot, revolvers come out from ☆1
+  and fire after the warning shot whether or not the player is a threat (`GUNS.fromStars` 1).
+- **The empty car is left parked** (lights off, not controlled): an ordinary car to get into. Taking
+  it is a stolen police car as before (`policeCarTaken`), so shooting the crew and driving off in
+  their car works.
+
+Tests: `tests/police-units.test.mjs` (no arrest by hands or pinning; a car reaching a player on foot
+stops within 25 m, its crew at the doors, the car left free), `tests/police-guns.test.mjs` (in a car
+holstered at ☆1–2, on foot drawn from ☆1; on foot fired on after the warning, in a car only at a
+threat; shot dead by the police is the arrest, a fight death is not), `tests/police-ram.test.mjs`,
+`tests/integration.test.mjs` (the crew's car can be got into and taken).
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle

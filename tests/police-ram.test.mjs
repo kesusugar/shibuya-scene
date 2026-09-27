@@ -44,7 +44,7 @@ test('a chasing patrol car stops with a real gap, bumper to bumper, and never ov
  assert.ok(!overlapped,'the patrol car drove into the player\'s car');
  const gap=Math.hypot(v.x,v.z)-(VEHICLES.police.length+VEHICLES.ownCar.length)/2;
  assert.ok(gap>=UNITS.carGap-.05&&gap<UNITS.carGap+1,`bumper gap ${gap.toFixed(2)} m`);
- // Standing still next to it for 3 s is still an arrest: pinning was not given up.
+ // Owner's plan: standing still next to it is no longer an arrest (only being shot dead is).
  let result=null;for(let t=0;t<3.5&&!result;t+=1/30)result=units.update(1/30,{stars:2,traffic:sim,me,driving:true,carSpeed:0}).result;
- assert.equal(result,'arrested');
+ assert.equal(result,null);
 });
