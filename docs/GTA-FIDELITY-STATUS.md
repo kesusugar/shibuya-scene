@@ -6347,6 +6347,41 @@ Files: `src/player/input-map.mjs` (`flickOf`, the `flick` in a poll), `src/playe
 Not checked on the device yet: how the 0.6 rad cone, the flick thresholds and the camera's turn
 rate feel in the hand.
 
+## 9ay. Lock-on that finds whoever is shooting; the reticle on the target (roadmap ④)
+
+Owner's report: with ZL held the reticle sat somewhere odd, and while chased it did not go to the
+officers firing. Cause of the first: the lock was working (the round went to the person) but the
+reticle was fixed at the middle of the screen, which the shoulder camera keeps off the target.
+
+Now (pad only):
+- **The reticle is drawn on the locked person** (the lock point projected through the view camera,
+  `app/ShibuyaScene.tsx`; `play-ui.mjs` `setWeapon({at})`), and the hit marker with it. Locked on
+  someone shooting (or with a gun out), the reticle is ringed (`data-threat`).
+- **Order** (`arsenal.mjs` `threatTier`, `lockOrder`): tier 0 someone who has fired at the player in
+  the last 6 s (`shotAtPlayerLeft`, set by `director.mjs` on each warning shot or round, `SHOOTER_MEMORY`),
+  tier 1 a drawn gun, tier 2 anyone else; within a tier, distance + 8 m per radian off the view.
+  Tier 0 is taken from **any side** within 60 m (`shooterCone` π: the camera swings round), tier 1
+  within ±100°, tier 2 within the view (0.6 rad, 40 m) as before.
+- **ZL let go and pressed again within 0.4 s** (`regrab`) takes the next in that order (round to the
+  first); from a non-shooter while someone is shooting, it goes to the shooter. Let go longer, the
+  lock is dropped and the next ZL locks afresh.
+- **Automatic**: when the target drops, the next in the order is taken with ZL still held (ZR keeps
+  firing); held on a non-shooter, the lock moves to someone who starts shooting within 0.25 s
+  (`threatCheck`) -- unless the player chose that target by hand (ZL again, a flick) in the last 3 s
+  (`manualHold`).
+- The right-stick flicks (←/→ switch, ↑ head, ↓ chest) are unchanged.
+
+Tests: `tests/pad-aim.test.mjs` (the order; a shooter to the side taken over a pedestrian in front,
+then the next threat when one drops; ZL re-press cycles and a late press locks afresh; the
+automatic kills two shooters in turn; the lock moves to a new shooter, a hand-picked target is kept
+for `manualHold`; a shooter behind is taken, a drawn gun behind is not; the reticle point).
+Real scene (headless, `qa/gta-upgrade/lock-probe.mjs` → `evidence/roadmap/lock/`): ZL on foot
+locks a pedestrian with the reticle on them; a pedestrian 60° to the side marked as shooting is
+taken, the camera turned onto them and the reticle ringed. The probe waits by game time -- headless
+Chrome can stall for seconds with no frame, and a poll-count wait then lets no game time pass. The
+ZL re-press is not probed there (the harness cannot hold a release under 0.4 s of game time); the
+unit tests cover it.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
