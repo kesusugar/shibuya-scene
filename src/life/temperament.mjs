@@ -15,12 +15,28 @@ export const BLOW=Object.freeze({
  cooldownBackOff:1.6
 });
 
-/** What this person does when hit. Elderly people and kids never square up. */
+/**
+ * The owner's rule (after roadmap stage 6): about 3% of adults square up -- when punched or walked
+ * into -- and only while the player's hands are empty. A crowd this size ganged up on the player
+ * when a third of it fought back. By id, like every other trait here.
+ */
+export const FIGHT_SHARE=.03;
+const idHash=(id,salt)=>((Math.imul((id|0)+salt*7919,0x9e3779b1)>>>0)%100003)/100002;
+
+/** Is this one of the few who fight? Never a child, never an elderly person. Pure. */
+export function fighter(id,{archetype=null,gray=false}={}){
+ if(archetype==='kid'||archetype==='elderly'||gray)return false;
+ return idHash(id,61)<FIGHT_SHARE;
+}
+
+/** What this person does when hit (bare fists). Elderly people and kids never square up. */
 export function responseOf(id,{archetype=null,gray=false}={}){
  if(archetype==='kid')return RESPONSE.FLEE;
  const n=traitsOf(id).nerve;
- if(gray)return n>.6?RESPONSE.BACK_OFF:RESPONSE.FLEE;
- return n>.68?RESPONSE.FIGHT:n<.42?RESPONSE.FLEE:RESPONSE.BACK_OFF;
+ if(gray||archetype==='elderly')return n>.6?RESPONSE.BACK_OFF:RESPONSE.FLEE;
+ if(fighter(id,{archetype}))return RESPONSE.FIGHT;
+ // The steady ones (who used to fight) step back; the nervous ones run.
+ return n<.5?RESPONSE.FLEE:RESPONSE.BACK_OFF;
 }
 
 /**

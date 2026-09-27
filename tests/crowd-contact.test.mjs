@@ -1,3 +1,4 @@
+import {responseOf,RESPONSE} from '../src/life/temperament.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -36,8 +37,10 @@ function emptyCrowd(){
  return sim;
 }
 /** Someone standing at x,z, the way an idle pedestrian stands. */
-function person(sim,x,z,extra={}){
- const p=sim.pool.find(q=>!q.active);
+function person(sim,x,z,{fighter=false,slot=null,...extra}={}){
+ // `fighter`: one of the few who fight (temperament, ~3%) -- the only ones a bump provokes.
+ // `slot`: this pool slot (its id), rather than the first free one.
+ const p=slot??sim.pool.find(q=>!q.active&&(!fighter||responseOf(q.id)===RESPONSE.FIGHT));
  Object.assign(p,{active:true,choreographed:false,controlled:false,flee:null,fleeOffX:0,fleeOffZ:0,
   x,z,renderX:x,renderZ:z,previousX:x,previousZ:z,height:ctx.height(x,z),heading:0,
   mode:'idle',state:'idle',speed:0,age:0,pause:0,crossing:null,queueKey:null,
@@ -300,22 +303,24 @@ test('5. a bump is not a blow: no damage, no witness, no combat stats',()=>{
  assert.ok(Math.hypot(other.hurtX,other.hurtZ-1)<.3,'the flinch is not away from the player');
 });
 
-test('5. over 1,000 seeded bumps, 30% +- 3% start a fight, and the rest never do',()=>{
+test('5. over 1,000 people bumped, about 3% start a fight (the few who fight), and the rest never do',()=>{
  const sim=emptyCrowd();
  const {melee,make}=wired(sim);
  const player=make({start:[SPOT.x,SPOT.z],heading:0});
  Object.assign(player.state,{x:SPOT.x,z:SPOT.z,y:ctx.height(SPOT.x,SPOT.z),speed:1.4});
- const p=person(sim,SPOT.x,SPOT.z+.55);
- let fights=0,calm=0,calmHostile=0;
- for(let i=0;i<1000;i++){
-  Object.assign(p,{x:SPOT.x,z:SPOT.z+.55,flee:null,bumpUntil:undefined,combatTarget:null,combatUntil:0,state:'idle'});
+ let fights=0,calm=0,calmHostile=0,n=0;
+ for(const q of sim.pool.filter(q=>!q.active).slice(0,1000)){
+  const p=person(sim,SPOT.x,SPOT.z+.55,{slot:q});
   sim.time+=1;
   const b=bump(sim,p,player.state);
-  assert.ok(b,'the bump did not happen');
-  if(b.fight){fights++;melee.provoke(sim,p,player);assert.equal(p.combatTarget,'player');}
+  assert.ok(b,'the bump did not happen');n++;
+  if(b.fight){fights++;assert.equal(b.fight,responseOf(p.id)===RESPONSE.FIGHT);melee.provoke(sim,p,player);
+   // One at a time: end this fight before the next person is bumped.
+   p.combatTarget=null;p.combatUntil=0;}
   else{calm++;if(p.combatTarget)calmHostile++;}
+  p.active=false;
  }
- assert.ok(Math.abs(fights/1000-.3)<=.03,`${fights} of 1,000 bumps started a fight`);
+ assert.ok(fights/n>.012&&fights/n<.05,`${fights} of ${n} bumps started a fight`);
  assert.equal(calmHostile,0,`${calmHostile} of ${calm} calm bumps set combatTarget anyway`);
 });
 
@@ -324,12 +329,14 @@ test('5. a bump fight is the ordinary fight: an off-rails person stands and swin
  const {melee,make}=wired(sim);
  const player=make({start:[SPOT.x,SPOT.z],heading:0});
  Object.assign(player.state,{x:SPOT.x,z:SPOT.z,y:ctx.height(SPOT.x,SPOT.z)});
- const off=person(sim,SPOT.x,SPOT.z+.8);
+ const off=person(sim,SPOT.x,SPOT.z+.8,{fighter:true});
  assert.equal(melee.provoke(sim,off,player),true);
  assert.equal(off.state,'fighting');
  for(let i=0;i<120;i++){melee.update(1/60,sim,player);sim.time+=1/60;}
  assert.ok(player.state.health<100,'the provoked person never swung');
- const cast=person(sim,SPOT.x+1,SPOT.z+.5,{choreographed:true,state:'crossing'});
+ // The first fight over (one at a time), a cast member who fights is provoked in turn.
+ off.combatTarget=null;off.combatUntil=0;
+ const cast=person(sim,SPOT.x+1,SPOT.z+.5,{fighter:true,choreographed:true,state:'crossing'});
  let left=0;const leave=sim.leave.bind(sim);sim.leave=q=>{if(q===cast)left++;return leave(q);};
  assert.equal(melee.provoke(sim,cast,player),true);
  assert.equal(cast.combatTarget,'player');

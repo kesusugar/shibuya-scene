@@ -13,9 +13,10 @@ import {buildTrafficGraph} from '../src/traffic/graph.mjs';
 import {TrafficSimulation} from '../src/traffic/simulation.mjs';
 import {CrowdSimulation} from '../src/life/simulation.mjs';
 
-// Player crowd contact, Step E: 100 HP, four blows either way, everyone punched hits back, and
-// a car on foot is a quarter of the health rather than a death.
-const FLEER=Array.from({length:64},(_,i)=>i).find(i=>responseOf(i)===RESPONSE.FLEE);
+// Player crowd contact, Step E: 100 HP, four blows either way, and a car on foot is a quarter of
+// the health rather than a death. Since the owner's rule after stage 6, only the few who fight
+// (~3%, temperament `fighter`) hit back: these tests use one of them.
+const FIGHTER=Array.from({length:4000},(_,i)=>i).find(i=>responseOf(i)===RESPONSE.FIGHT);
 
 /** The parts of the crowd simulation combat touches (as tests/combat.test.mjs). */
 function crowd(people=[]){
@@ -42,7 +43,7 @@ function punch(melee,c,p){melee.request();run(melee,c,p,1.1);}
 test('four player punches put a pedestrian down; three do not',()=>{
  assert.equal(COMBAT.playerDamage,25);
  // Someone who cannot swing back in time: their fists would end the test early otherwise.
- const target=npc(FLEER,0,1.0,{combatNext:1e9});
+ const target=npc(FIGHTER,0,1.0,{combatNext:1e9});
  const c=crowd([target]),p=realPlayer(),melee=createMeleeCombat();
  for(let i=0;i<3;i++){punch(melee,c,p);target.combatNext=1e9;}
  assert.equal(target.combatHealth,25,'three punches did not leave a quarter');
@@ -72,8 +73,8 @@ test('four pedestrian punches end the game; three do not',()=>{
  }
 });
 
-test('a punched off-rails pedestrian fights back, even one who would have run',()=>{
- const target=npc(FLEER,0,1.0);
+test('a punched off-rails fighter fights back',()=>{
+ const target=npc(FIGHTER,0,1.0);
  const c=crowd([target]),p=realPlayer(),melee=createMeleeCombat();
  punch(melee,c,p);
  assert.equal(target.combatTarget,'player');
@@ -84,7 +85,7 @@ test('a punched off-rails pedestrian fights back, even one who would have run',(
 });
 
 test('a punched cast member keeps walking their track, and fights at the kerb',()=>{
- const target=npc(FLEER,0,1.0,{choreographed:true,mode:'scramble',state:'crossing',crossing:{id:'scramble'},
+ const target=npc(FIGHTER,0,1.0,{choreographed:true,mode:'scramble',state:'crossing',crossing:{id:'scramble'},
   track:{distance:3,length:30,forward:true,finishing:false}});
  const c=crowd([target]),p=realPlayer(),melee=createMeleeCombat();
  punch(melee,c,p);
@@ -115,7 +116,8 @@ test('in the real choreography: a hostile cast member at the kerb holds, fights,
  for(let i=0;i<30;i++){traffic.update(1/30);sim.step(1/30);}
  // A cast member waiting at a kerb (NS green: the scramble is red) with open pavement beside.
  const ctx=network.ctx;
- const p=sim.pool.find(q=>q.active&&q.choreographed&&!q.crossing&&q.state==='waiting'&&q.archetype!=='kid'&&
+ // One of the few who fight (the owner's rule: only they are provoked).
+ const p=sim.pool.find(q=>q.active&&q.choreographed&&!q.crossing&&q.state==='waiting'&&q.archetype!=='kid'&&responseOf(q.id,{archetype:q.archetype})===RESPONSE.FIGHT&&
   [0,1,2,3].some(k=>{const a=k*Math.PI/2;return ctx.safe(q.x+Math.sin(a)*2.2,q.z+Math.cos(a)*2.2,.35);}));
  assert.ok(p,'no cast member waiting at a kerb');
  const a=[0,1,2,3].map(k=>k*Math.PI/2).find(a=>ctx.safe(p.x+Math.sin(a)*2.2,p.z+Math.cos(a)*2.2,.35));

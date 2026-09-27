@@ -6271,6 +6271,27 @@ many fleeing people probe directions per frame) if the device shows the firefigh
 Also covered: riding into a wall throws the rider off; a recycled pool slot comes back with no dents
 and not `kept`; the parked bikes survive a change of tier; a chase mission can be ridden.
 
+## 9av. Fights: fewer, bare-handed only, one at a time; nobody on the street armed (owner's plan, item 1)
+
+Measured before: everyone punched hit back (the victim's response was forced to FIGHT since Step E),
+a bump started a fight 30% of the time, and 5% of adults carried a gun that they drew at a nearby
+gunshot. With a crowd round the player, a fight quickly became several.
+
+Now (`life/temperament.mjs` `FIGHT_SHARE` .03, `fighter`; `player/combat.mjs`):
+- Only about 3% of adults (by id; never a child or an elderly person) fight. They are the only
+  ones a punch or a bump turns hostile; everyone else punched runs (screaming) or steps back.
+- Only against bare fists. With any weapon drawn (katana, pistol, SMG) nobody starts a fight --
+  a katana's victim runs screaming -- and the moment a weapon comes out every fist fight breaks up:
+  they scream and run.
+- One at a time: a second would-be fighter backs off while someone is already squaring up.
+- Nobody on the street carries a gun (`REACT.armedShare` 0); only the police shoot. The
+  armed-civilian machinery stays, and its tests run at the share it was built with.
+
+Tests: `tests/combat.test.mjs` (the few fight and the rest run; ~3% and never a child or an elderly
+person; one at a time; a weapon breaks the fight and the katana starts none), `tests/temperament.test.mjs`,
+`tests/crowd-contact.test.mjs` (about 3% of 1,000 people bumped fight), `tests/player-health.test.mjs`
+and `tests/stage2.test.mjs` updated to the rule.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle

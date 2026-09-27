@@ -24,21 +24,25 @@ function crowdOf(people){
  return {time:0,pool:people.map((p,id)=>({id,active:true,archetype:'adult',x:0,z:0,heading:0,...p})),fled,
   flee(p,ax,az,opts){fled.push({id:p.id,ax,az,opts});p.fleeing=true;return true;}};
 }
-const unarmedId=()=>{for(let id=0;;id++)if(!isArmed({id,archetype:'adult'}))return id;};
-const armedId=()=>{for(let id=0;;id++)if(isArmed({id,archetype:'adult'}))return id;};
+// The owner's rule after stage 6: nobody on the street is armed (REACT.armedShare 0). The machinery
+// is still tested, at the share it was built with.
+const SHARE=.05;
+const unarmedId=()=>{for(let id=0;;id++)if(!isArmed({id,archetype:'adult'},SHARE))return id;};
+const armedId=()=>{for(let id=0;;id++)if(isArmed({id,archetype:'adult'},SHARE))return id;};
 
 test('a few adults are armed, fixed by id; never a child, never an officer',()=>{
- let n=0;for(let id=0;id<4000;id++)if(isArmed({id,archetype:'adult'}))n++;
- assert.ok(Math.abs(n/4000-REACT.armedShare)<.015,`share ${n/4000}`);
+ let n=0;for(let id=0;id<4000;id++)if(isArmed({id,archetype:'adult'},SHARE))n++;
+ assert.ok(Math.abs(n/4000-SHARE)<.015,`share ${n/4000}`);
+ assert.equal(REACT.armedShare,0,'by default nobody is armed');let d=0;for(let id=0;id<4000;id++)if(isArmed({id,archetype:'adult'}))d++;assert.equal(d,0);
  const id=armedId();
- assert.ok(isArmed({id,archetype:'adult'})&&isArmed({id,archetype:'adult'}),'the same person, every time');
- assert.ok(!isArmed({id,archetype:'kid'}));assert.ok(!isArmed({id,archetype:'adult',officer:true}));
+ assert.ok(isArmed({id,archetype:'adult'},SHARE)&&isArmed({id,archetype:'adult'},SHARE),'the same person, every time');
+ assert.ok(!isArmed({id,archetype:'kid'},SHARE));assert.ok(!isArmed({id,archetype:'adult',officer:true},SHARE));
 });
 
 test('at gunpoint: hands up facing the gun, held while aimed, then they run -- and give up holding after a while',()=>{
  const id=unarmedId(),people=[];people[id]={x:0,z:8,heading:0};
  const crowd=crowdOf(Array.from({length:id+1},(_,i)=>people[i]??{active:false}));
- const r=createStreetReactions(),me={x:0,z:0,alive:true};
+ const r=createStreetReactions({armedShare:SHARE}),me={x:0,z:0,alive:true};
  const p=crowd.pool[id];
  for(let t=0;t<1;t+=.1){crowd.time=t;r.update(.1,{crowd,me,aimedId:id});}
  assert.ok(p.handsUpUntil>crowd.time,'hands up');
@@ -48,14 +52,14 @@ test('at gunpoint: hands up facing the gun, held while aimed, then they run -- a
  assert.equal(crowd.fled.length,1,'the aim left: they run');
  assert.ok(crowd.fled[0].az>0,'away from the player');
  // Held long enough, they break and run even under the gun.
- const q=crowdOf([{x:0,z:5}]),r2=createStreetReactions(),qid=unarmedId();
+ const q=crowdOf([{x:0,z:5}]),r2=createStreetReactions({armedShare:SHARE}),qid=unarmedId();
  q.pool.length=0;for(let i=0;i<=qid;i++)q.pool.push({id:i,active:i===qid,archetype:'adult',x:0,z:5,heading:0});
  for(let t=0;t<REACT.giveUp+1;t+=.1){q.time=t;r2.update(.1,{crowd:q,me,aimedId:qid});}
  assert.equal(q.fled.length,1,'they gave up standing there');
  assert.equal(r2.stats.gaveUp,1);
  // Too far to see the muzzle: nothing.
  const far=crowdOf([{x:0,z:40}]);far.pool[0].id=qid;far.pool.length=0;for(let i=0;i<=qid;i++)far.pool.push({id:i,active:true,archetype:'adult',x:0,z:40});
- createStreetReactions().update(.1,{crowd:far,me,aimedId:qid});assert.ok(!(far.pool[qid].handsUpUntil>0));
+ createStreetReactions({armedShare:SHARE}).update(.1,{crowd:far,me,aimedId:qid});assert.ok(!(far.pool[qid].handsUpUntil>0));
 });
 
 test('a leg wound limps; a second, or a bad one, puts them on the ground crawling',()=>{
@@ -68,7 +72,7 @@ test('a leg wound limps; a second, or a bad one, puts them on the ground crawlin
 
 test('the armed draw when provoked and fire from where they stand, only with a line to the player, less surely than the police',async()=>{
  const id=armedId(),pool=[];for(let i=0;i<=id;i++)pool.push({active:i===id,x:0,z:12,heading:0});
- const crowd=crowdOf(pool),r=createStreetReactions(),me={x:0,z:0,y:0,alive:true};
+ const crowd=crowdOf(pool),r=createStreetReactions({armedShare:SHARE}),me={x:0,z:0,y:0,alive:true};
  // A shot nearby: they draw.
  r.update(.1,{crowd,me,shotAt:{x:0,z:1}});
  const p=crowd.pool[id];
@@ -79,7 +83,7 @@ test('the armed draw when provoked and fire from where they stand, only with a l
  assert.ok(shots.every(s=>s.kind==='shot'&&s.civilian&&s.officer===p));
  assert.ok(shots[0].from.z>p.z-1&&shots[0].from.z<p.z,'from their hands, toward the player');
  // A wall between: no shots.
- const r2=createStreetReactions(),c2=crowdOf(pool.map(x=>({...x})));
+ const r2=createStreetReactions({armedShare:SHARE}),c2=crowdOf(pool.map(x=>({...x})));
  r2.provoke(c2.pool[id]);let blocked=[];
  for(let t=0;t<5;t+=.1){c2.time=t;blocked.push(...r2.update(.1,{crowd:c2,me,solid:(x,z)=>z>5&&z<6}));}
  assert.equal(blocked.length,0);assert.ok(r2.stats.blocked>0);
@@ -91,7 +95,7 @@ test('the armed draw when provoked and fire from where they stand, only with a l
 
 test('the armed, aimed at, draw rather than put their hands up',()=>{
  const id=armedId(),pool=[];for(let i=0;i<=id;i++)pool.push({active:i===id,x:0,z:6});
- const crowd=crowdOf(pool),r=createStreetReactions();
+ const crowd=crowdOf(pool),r=createStreetReactions({armedShare:SHARE});
  r.update(.1,{crowd,me:{x:0,z:0,alive:true},aimedId:id});
  assert.ok(crowd.pool[id].gunDrawn);assert.ok(!(crowd.pool[id].handsUpUntil>0));
 });

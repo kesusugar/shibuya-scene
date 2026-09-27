@@ -18,7 +18,7 @@ import {legWound} from '../life/street-reactions.mjs';
 import {ATTACKS,attackOf,SWORD,swordBearing} from './attack-timing.mjs';
 import {HIT_STOP} from './hit-stop.mjs';
 import {WEAPONS} from './weapons.mjs';
-import {blowOn,RESPONSE} from '../life/temperament.mjs';
+import {blowOn,RESPONSE,responseOf} from '../life/temperament.mjs';
 
 // Player crowd contact, Step E: four blows either way. The player's punch and a pedestrian's
 // both take 25 of 100, so whoever takes the fourth first goes down (was 34, and 14-18).
@@ -193,6 +193,20 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
   * The hostility window is still opened, so a cast member who is punched and then reaches the
   * far kerb turns and fights -- see the retaliation filter below.
   */
+ /**
+  * Owner's rule (after stage 6): a fight only against bare fists, only with one of the few who
+  * fight (temperament, ~3% of adults), and one at a time -- a second would-be fighter backs off
+  * while someone else is already squaring up. Officers are the police's business (units.mjs).
+  */
+ const armed=()=>weapon()!=='fists';
+ const fighting=(crowd,except=null)=>{for(const q of crowd.pool??[])if(q!==except&&q.active&&!q.combatDead&&!q.officer&&q.combatTarget==='player'&&q.combatUntil>crowd.time)return true;return false;};
+ const willFight=(crowd,p)=>!armed()&&responseOf(p.id,{archetype:p.archetype})===RESPONSE.FIGHT&&!fighting(crowd,p);
+ /** Out of it: the fight dropped, and away from the player -- screaming if `scream`. */
+ function scare(crowd,p,state,{scream=true,urgency=.9}={}){
+  if(p.combatTarget==='player'){p.combatTarget=null;p.combatUntil=0;p.npcSwing=null;p.combatAction=0;if(p.state==='fighting')p.state='walking';if(target===p)target=null;}
+  crowd.flee?.(p,p.x-state.x,p.z-state.z,{urgency,from:state,voice:!scream});
+  if(scream)crowd.say?.(p,'scream',1);
+ }
  function engage(crowd,p,state){
   p.combatHealth??=100;
   p.combatTarget='player';
@@ -282,7 +296,8 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
    const blow=blowOn(state,p,{attack:'PunchCross',fatal});
    p.hurtUntil=crowd.time+blow.hold;p.hurtDuration=blow.hold;
    {const l=Math.hypot(blow.impulse.x,blow.impulse.z)||1;p.hurtX=blow.impulse.x/l;p.hurtZ=blow.impulse.z/l;p.hurtStrong=true;}
-   stats.hits++;stats.byResponse[RESPONSE.FIGHT]++;
+   // The player is armed: whoever the blade meets runs, screaming (owner's rule).
+   stats.hits++;stats.byResponse[RESPONSE.FLEE]++;
    // Where the blade met them, from how far through its sweep it was at their bearing (the tip
    // comes down from over the head to the knee), and the way it was going: across the body from
    // its left to its right, and away from the swordsman.
@@ -294,10 +309,10 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
    // §9ak: a cut does not throw a body like a car does. It gives way where it stands, carried a
    // little along the blade (COMBAT.cutPush m/s, no lift), and the ragdoll does the rest.
    if(fatal)kill(crowd,p,state,{x:bx*COMBAT.cutPush,z:bz*COMBAT.cutPush,y:0});
-   else{engage(crowd,p,state);if(!onRails(p)){p.staggerX=blow.impulse.x;p.staggerZ=blow.impulse.z;p.staggerLeft=blow.hold;}}
+   else{scare(crowd,p,state,{scream:true,urgency:1});if(!onRails(p)){p.staggerX=blow.impulse.x;p.staggerZ=blow.impulse.z;p.staggerLeft=blow.hold;}}
    mark(crowd,p,{dirX:bx,dirZ:bz,zone:tip>1.45?'head':tip<.8?'legs':'body',strength:1.2,fatal,kind:'katana'});
-   onBlow?.({victim:p.id,blow,response:RESPONSE.FIGHT,time:crowd.time});
-   lastBlow={victim:p.id,response:RESPONSE.FIGHT,strength:'strong',quarter:blow.quarter,fatal,time:crowd.time,weapon:'katana'};
+   onBlow?.({victim:p.id,blow,response:RESPONSE.FLEE,time:crowd.time});
+   lastBlow={victim:p.id,response:RESPONSE.FLEE,strength:'strong',quarter:blow.quarter,fatal,time:crowd.time,weapon:'katana'};
    onEvent?.('blade_hit',{x:p.x,z:p.z,intensity:1,id:p.id});
    onEvent?.(fatal?'pedestrian_scream':'pain_voice',{x:p.x,z:p.z,intensity:fatal?1:.8,id:p.id});
    witness(crowd,state,p,COMBAT.katanaWitness);
@@ -403,9 +418,9 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
       p.combatHealth=(p.combatHealth??100)-COMBAT.playerDamage;
       const fatal=p.combatHealth<=0;
       const blow=blowOn(state,p,{attack:swing.name,fatal});
-      // Whoever is punched hits back (player crowd contact, Step E). Temperament still decides
-      // what the people who SEE it do (hq-awareness); for the victim it no longer does.
-      const response=RESPONSE.FIGHT;
+      // Owner's rule: only the few who fight hit back (and one at a time); the rest run, or step
+      // back and then run, crying out.
+      const response=willFight(crowd,p)?RESPONSE.FIGHT:responseOf(p.id,{archetype:p.archetype})===RESPONSE.FLEE?RESPONSE.FLEE:RESPONSE.BACK_OFF;
       p.hurtUntil=crowd.time+blow.hold;p.hurtDuration=blow.hold;
       // Which way the blow drove them, for the near body's recoil (figure.mjs hitRecoil). Set
       // for everyone, including people on a crossing whom the simulation does not stagger.
@@ -413,7 +428,8 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
       stats.hits++;stats.byResponse[response]++;
       if(fatal)kill(crowd,p,state);
       else{
-       engage(crowd,p,state);
+       if(response===RESPONSE.FIGHT)engage(crowd,p,state);
+       else scare(crowd,p,state,{scream:response===RESPONSE.FLEE,urgency:response===RESPONSE.FLEE?1:.7});
        // A stagger the simulation owns, so every renderer shows the same step back.
        if(!onRails(p)){p.staggerX=blow.impulse.x;p.staggerZ=blow.impulse.z;p.staggerLeft=blow.hold;}
       }
@@ -430,6 +446,9 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
     }
    }
 
+   // Owner's rule: a weapon out breaks every fist fight -- they scream and run.
+   if(armed())for(const p of crowd.pool??[])
+    if(p.combatTarget==='player'&&p.combatUntil>crowd.time&&!p.officer&&!p.combatDead)scare(crowd,p,state,{scream:true,urgency:1});
    // Only pedestrians whose movement is their own may be walked toward the player and
    // stopped to fight. Someone on a track or a crossing keeps going, and picks the fight up
    // when they are off it, while the hostility window lasts.
@@ -512,6 +531,7 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
   provoke(crowd,p,player){
    if(disposed||!crowd||!p||!player?.state?.alive||!eligible(p,crowd))return false;
    if(p.combatTarget==='player'&&p.combatUntil>crowd.time)return false;
+   if(!willFight(crowd,p))return false;
    engage(crowd,p,player.state);return true;
   },
   snapshot(){return {...stats,byResponse:{...stats.byResponse},lastBlow,target:target?.id??null,
