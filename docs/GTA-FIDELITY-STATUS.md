@@ -6405,6 +6405,31 @@ after the warning; the cabin share new and battered; shot dead at the wheel = ar
 `tests/integration.test.mjs` (rider full rounds, driver through the car, a car lasts 1.1x-2.2x a
 bike). Not checked in the real scene: the hit marks on the player's own car during a chase.
 
+## 9ba. Soft smoke off a crash and a damaged car (roadmap ③)
+
+Owner's report: the smoke when a car crashed was square and did not look real. Cause: each puff was
+a faceted solid (an icosahedron at detail 0) at one flat opacity, so its facets and silhouette showed.
+(The muzzle smoke, impact-marks.mjs, was already a soft sprite and is unchanged.)
+
+Now (`src/player/effects.mjs`):
+- Each particle is a **camera-facing quad drawn by a small shader**: a soft disc whose edge has a few
+  fixed ripples (no two puffs the same shape), a little billow inside, and no hard rim anywhere. One
+  InstancedMesh, one draw call, the same fixed pool of 72.
+- A puff **fades in** over the first tenth of its life, **grows** fast then slower (0.3 m to 1.6 m),
+  **turns** slowly, drifts and slows, and **thins out** to nothing.
+- A damaged car (over 40%) smokes grey off the bonnet; over 70% dark grey, over 90% darker still,
+  each puff a slightly different shade. A crash throws sparks and a burst of six pale puffs off the
+  front. Road dust where a body met the car goes through the same shader.
+- The shader is unlit, so the scene dims it at dusk (0.6) and night (0.3) (`setLight`); sparks keep
+  their own glow.
+
+Tests: `tests/smoke-fx.test.mjs` (a quad and a soft shader, not a solid; a puff fades in, grows,
+turns and thins to nothing; a crash's sparks and puffs, dark smoke from a wrecked car, the pool
+bounded). Real scene: `qa/gta-upgrade/scene-stills.mjs` step `smoke` (ONLY=smoke) →
+`evidence/roadmap/smoke/{before,after,after-night}/` -- a moment after a crash, standing at 60% and
+at 95% damage. The first version was drawn but faint (opacity 0.1-0.3 against a bright day sky) and
+invisible in the stills; the opacities were raised after that capture.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
