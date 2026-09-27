@@ -6382,6 +6382,29 @@ Chrome can stall for seconds with no frame, and a poll-count wait then lets no g
 ZL re-press is not probed there (the harness cannot hold a release under 0.4 s of game time); the
 unit tests cover it.
 
+## 9az. Police rounds reach the player in a car (roadmap ②)
+
+Owner's report: chased in a car, no round ever reached the player (on the motorbike they did). Cause:
+in a car the revolvers stayed holstered below ☆3, fired only at a threat (a ram, an attack), and a
+hit only added 2% to the car's damage.
+
+Now (owner's call: a car should last "a little longer than the motorbike"):
+- In a car or on a motorbike the police draw from **☆2** (`GUNS.carFromStars`), and after the warning
+  shot a fleeing player is fired on -- no ram or attack needed.
+- A hit on a **car** still batters it (+2% damage) and now strikes it where the round's line meets the
+  body: a dent, a cracked or shattered pane (stage 6 `shootCar`), glass or sparks.
+- **70%** of hits on a car reach the cabin (**90%** once the car's damage is over 50%) and wound the
+  driver for **90%** of the round (`director.mjs` `CAR_ROUNDS`, deterministic `intoCabin`). That is
+  about 1.6x the hits a rider takes in a new car, 1.2x in a battered one
+  (`tests/integration.test.mjs` asserts 1.1x-2.2x).
+- Shot dead at the wheel is the arrest (as on foot, §9aw).
+- The motorbike is unchanged except that it too is fired on from ☆2 without a ram.
+
+Tests: `tests/police-guns.test.mjs` (☆1 in a car holstered, ☆2 fired on; a fleeing driver fired on
+after the warning; the cabin share new and battered; shot dead at the wheel = arrest),
+`tests/integration.test.mjs` (rider full rounds, driver through the car, a car lasts 1.1x-2.2x a
+bike). Not checked in the real scene: the hit marks on the player's own car during a chase.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
