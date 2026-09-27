@@ -6051,8 +6051,17 @@ day escapes need 70 m from the helicopter).
   fleeing, fighting, armed, at gunpoint or crawling) stop, turn to it and take out a phone for
   12–28 s: about two in three hold it up to film, the rest put it to the ear to call it in (fixed by
   the person and the body). The simulation holds them (`watching`); the drawn body raises the phone
-  (`body-states.mjs` `createPhone`: two-bone IK of the right arm to in front of the face or to the
-  right ear, and a small phone mesh in the hand, built on first use).
+  (`body-states.mjs` `createPhone`: two-bone IK of the right arm, the phone held out in front at
+  chest-to-chin height to film or at the right ear to call, and a small phone mesh in the hand,
+  built on first use).
+- **Found on review: the arm through the chest.** The owner saw the filming hand sunk into the
+  chest. A two-bone solve keeps the bend plane the animation had, and for an arm hanging at the
+  side that put the elbow in front of the chest once the hand came up; with the target too far out
+  the arm also went straight. `swivelElbow` now turns each solved arm about its shoulder-wrist line
+  so the elbow points at a pole down and out to the side (the phone arms and both hands-up arms), and
+  the filming target is nearer and lower. Test: the elbow outside the shoulder's line and the upper
+  arm's middle outside the trunk's section (an ellipse 0.17 × 0.12 m) for filming, calling and
+  hands up.
 - **The aftermath** (`life/aftermath.mjs`). A body killed in a fight or by a weapon now stays down
   until it is collected (at most 180 s), instead of vanishing after FALL_SECONDS (14 s). With no
   chase on (☆0), 18 s after the newest death, an ambulance and a patrol car are taken from the
