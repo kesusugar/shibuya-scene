@@ -5,6 +5,16 @@ import assert from 'node:assert/strict';
 import {createMegaphone} from '../src/police/siren.mjs';
 import {createCrowdVoices} from '../src/player/voices.mjs';
 import {createPoliceDirector} from '../src/police/director.mjs';
+import {createPoliceClips} from '../src/police/voice-clips.mjs';
+
+/** Roadmap ①: recorded lines stand-ins, one per situation, so the director has something to say. */
+function fakeClips() {
+ const clips = createPoliceClips(() => null);
+ for (const situation of ['stopCar', 'stopBike', 'stop', 'getOut', 'chase', 'freeze', 'dropGun', 'warn', 'arrest',
+  'fleeingCar', 'fleeingFoot', 'backup', 'armed', 'air', 'lost'])
+  clips.add({id: situation, situation, text: situation, buffer: {duration: 1.2}});
+ return clips;
+}
 
 function fakeCtx() {
  let time = 0;
@@ -97,7 +107,7 @@ test('by default the director speaks through the megaphone, never speechSynthesi
  const patrol = {id: 9, active: true, type: 'police', x: 10, z: 0, heading: 0, speed: 0};
  const traffic = {pool: [patrol]};
  const crowd = {pool: Array.from({length: 6}, (_, i) => ({id: i, active: true, x: i, z: 2}))};
- const police = createPoliceDirector({getAudioContext: () => ctx, getAudioBus: () => bus, speech, Utterance});
+ const police = createPoliceDirector({getAudioContext: () => ctx, getAudioBus: () => bus, speech, Utterance, clips: fakeClips()});
  const player = {x: 0, z: 0, alive: true};
  const frame = (melee, extra = {}) => police.frame(1 / 30, {player, melee, traffic, crowd, ...extra});
  frame({npcDeaths: 1}); frame({npcDeaths: 2});

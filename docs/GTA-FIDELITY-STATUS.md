@@ -6430,6 +6430,47 @@ bounded). Real scene: `qa/gta-upgrade/scene-stills.mjs` step `smoke` (ONLY=smoke
 at 95% damage. The first version was drawn but faint (opacity 0.1-0.3 against a bright day sky) and
 invisible in the stills; the opacities were raised after that capture.
 
+## 9bb. The police speak in recorded voices; the dispatcher on the radio (roadmap ①)
+
+Owner's report: the loudspeaker's 「止まれ」 was mechanical, with odd syllables (「れられら」). Cause:
+every police line was built by the crowd's formant synthesiser (§9v), which can shape a scream but
+not words.
+
+Now:
+- **Pre-rendered speech**, made once with engines whose licences allow shipping the output
+  (`scripts/police-voice/`: `generate.py`, `audition.py`, `ship.mjs`; the lines in
+  `assets/police-voice/lines.json`; the environment in `requirements.txt`). The owner listened to three
+  candidates (a listening page with each line as it sounds in the game) and chose: **loudspeaker and
+  radio Kokoro-82M jm_kumo** (Apache-2.0), **officers' shouts Style-Bert-VITS2 JVNV M1, Angry**
+  (CC BY-SA 4.0). 16 clips, 475 KB, in `public/audio/police/` with a manifest; credits in
+  `public/licenses/police-voice.txt`.
+- **The words police use**: to a car 「前の車、止まりなさい！」 / 「前の車、左に寄せて止まりなさい！」, to a
+  motorbike 「そこのバイク、止まりなさい！」, on foot 「止まりなさい！」 / 「待ちなさい！逃げるんじゃない！」,
+  stopped 「車から降りなさい！」; officers 「動くな！」「武器を捨てなさい！」「撃つぞ！」「被疑者確保！」.
+- **The loudspeaker** (`siren.mjs createMegaphone({clips})`) plays the recording through its existing
+  chain (band-pass, saturation, slapback, HRTF at the car, the siren ducked). 「動くな！」 and
+  「被疑者確保！」 are now an officer's own shout from the nearest officer (`createOfficerVoice({clips})`).
+  Until the clips have decoded nothing is said -- the formant voice is not a fallback in play (it
+  remains for the tests' stand-in and `?voice=tts` is unchanged).
+- **The dispatcher** (`src/police/dispatch.mjs`): not placed in the street; a transmission is the
+  opening beep (1.85 kHz) and a burst of hiss, the voice through a 300-3000 Hz driven radio band with
+  the channel's hiss under it, then hiss and a lower closing beep. Cues (`dispatchCue`, pure): the
+  incident's opening (「警視庁から各局。渋谷区道玄坂方面、逃走車両あり…」 in a car, 「…被疑者は徒歩で逃走中」
+  on foot), a backup call each time the stars rise to ☆3 or more, the helicopter, the player armed,
+  and 「被疑者を見失った」 after 2.5 s out of sight. One channel: a cue waits until the last
+  transmission and a 4 s gap have passed.
+
+Intelligibility, measured rather than assumed (`audition.py`: faster-whisper `small` transcribing the
+processed clips, compared in katakana): about 93% for the chosen loudspeaker/radio voice, 92% for the
+shout voice; the misses are mostly police vocabulary (被疑者) that the recogniser does not know.
+
+Tests: `tests/police-recorded-voice.test.mjs` (every line shipped in the chosen voices with licences;
+the wording; rotation; recordings played, silence before they load and never the formant voice; a car
+addressed as a car and a motorbike as a motorbike; the dispatcher's opening; the radio cues and the
+one-channel gap); `tests/police-loudspeaker.test.mjs` (the director given recorded stand-ins).
+Real scene (headless): the 16 clips decode with no error; wanted to ☆3 the radio opened the incident
+and called backup, the loudspeaker and an officer spoke. Not checked: how it sounds in the hand.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle

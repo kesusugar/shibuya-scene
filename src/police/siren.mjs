@@ -140,6 +140,16 @@ export function createSirens(getContext, getBus) {
  };
 }
 
+/** Roadmap ①: a recorded line as a source starting at `at`; {out, duration} like the formant voice. */
+export function playClip(ctx, clip, at, level = 1) {
+ if (!clip?.buffer) return null;
+ const src = ctx.createBufferSource(); src.buffer = clip.buffer;
+ const out = ctx.createGain(); out.gain.value = level;
+ src.connect(out); src.start(at);
+ src.onended = () => {try {src.disconnect(); out.disconnect();} catch {}};
+ return {out, duration: clip.buffer.duration, source: src};
+}
+
 /** A soft-clip curve for the megaphone's `WaveShaperNode` -- mild saturation, not distortion. */
 function saturationCurve(amount = 6) {
  const n = 256, curve = new Float32Array(n), ceiling = Math.tanh(amount);
@@ -171,7 +181,9 @@ function click(ctx, at, out) {
  * (`MEGAPHONE.gapMin`) and never the same line twice running, both waived for `force` (the
  * arrest line, which the plan puts outside the gap rule).
  */
-export function createMegaphone(getContext, getBus) {
+export function createMegaphone(getContext, getBus, {clips = null} = {}) {
+ // Roadmap ①: with `clips` (voice-clips.mjs) the line is a recording, and with none decoded yet
+ // nothing is said; without, the formant voice as before (the tests' stand-in).
  let ctx = null, lastAt = -Infinity, lastTag = null, disposed = false;
  const stats = {played: 0, skipped: 0};
  return {
@@ -185,13 +197,23 @@ export function createMegaphone(getContext, getBus) {
   speak(situations, carId, x, z, time, {force = false, duck = null} = {}) {
    if (disposed || !situations?.length) return null;
    if (!force && time - lastAt < MEGAPHONE.gapMin) return null;
-   const line = situations.map(s => policeLine(s)).find(l => l && l.tag !== lastTag);
-   if (!line) {stats.skipped++; return null;}
    const bus = getBus?.();
    if (!ctx) ctx = getContext?.();
    if (!ctx || !bus || ctx.state === 'closed') return null;
    const now = ctx.currentTime;
-   const built = synthesizePoliceLine(ctx, line, policePersona(carId), {at: now + .02, level: 1});
+   let line, built;
+   if (clips) {
+    // The first situation with a line other than the one just said (a lone line may repeat).
+    let clip = null;
+    for (const s of situations) {const c = clips.pick(s, lastTag); if (c && (c.id !== lastTag || situations.length === 1)) {clip = c; break;}}
+    if (!clip) {stats.skipped++; return null;}
+    line = {tag: clip.id, text: clip.text, situation: clip.situation};
+    built = playClip(ctx, clip, now + .06);
+   } else {
+    line = situations.map(s => policeLine(s)).find(l => l && l.tag !== lastTag);
+    if (!line) {stats.skipped++; return null;}
+    built = synthesizePoliceLine(ctx, line, policePersona(carId), {at: now + .02, level: 1});
+   }
    if (!built) return null;
 
    const band = ctx.createBiquadFilter();
@@ -227,21 +249,29 @@ export function createMegaphone(getContext, getBus) {
  * voice as the loudspeaker but dry -- no band-pass, no saturation, no slapback -- from where the
  * officer stands. A line is not repeated within `gap` seconds, and only one shout rings at once.
  */
-export function createOfficerVoice(getContext, getBus, {gap = 3} = {}) {
+export function createOfficerVoice(getContext, getBus, {gap = 3, clips = null} = {}) {
  let ctx = null, busyUntil = -Infinity, disposed = false;
  const last = new Map();
  const stats = {played: 0, skipped: 0};
  return {
   stats,
-  shout(situation, officerId, x, z, time) {
+  /** `force` (the arrest) ignores the gap and whoever is already shouting. */
+  shout(situation, officerId, x, z, time, {force = false} = {}) {
    if (disposed) return null;
-   const line = policeLine(situation);
-   if (!line) {stats.skipped++; return null;}
-   if (time < busyUntil || time - (last.get(situation) ?? -Infinity) < gap) {stats.skipped++; return null;}
+   if (!clips && !policeLine(situation)) {stats.skipped++; return null;}
+   if (!force && (time < busyUntil || time - (last.get(situation) ?? -Infinity) < gap)) {stats.skipped++; return null;}
    const bus = getBus?.();
    if (!ctx) ctx = getContext?.();
    if (!ctx || !bus || ctx.state === 'closed') return null;
-   const built = synthesizePoliceLine(ctx, line, policePersona(officerId + 5000), {at: ctx.currentTime + .02, level: .9});
+   let line, built;
+   if (clips) {
+    const clip = clips.pick(situation);
+    if (!clip) {stats.skipped++; return null;}
+    line = {tag: clip.id, text: clip.text, situation}; built = playClip(ctx, clip, ctx.currentTime + .02);
+   } else {
+    line = policeLine(situation);
+    built = synthesizePoliceLine(ctx, line, policePersona(officerId + 5000), {at: ctx.currentTime + .02, level: .9});
+   }
    if (!built) return null;
    const panner = ctx.createPanner();
    panner.panningModel = 'HRTF'; panner.distanceModel = 'inverse';
