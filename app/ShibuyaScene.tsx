@@ -64,6 +64,10 @@ import {createStreetReactions} from '../src/life/street-reactions.mjs';
 import {createOnlookers} from '../src/life/onlookers.mjs';
 import {createAftermath} from '../src/life/aftermath.mjs';
 import {populationFor} from '../src/life/population.mjs';
+import {createMissionBoard} from '../src/game/missions.mjs';
+import {createWallet} from '../src/game/economy.mjs';
+import {createSave} from '../src/game/save.mjs';
+import {SHOP,buy as shopBuy,shopDoor} from '../src/game/shop.mjs';
 import {setRagdollWorld} from '../src/player/ragdoll.mjs';
 import {createHelicopterMesh} from '../src/police/helicopter.mjs';
 import {createHitStop} from '../src/player/hit-stop.mjs';
@@ -138,7 +142,15 @@ export default function Home(){
  const KOBAN={x:48.5,z:20.4};
  const policeFrustum=new THREE.Frustum(),policeMatrix=new THREE.Matrix4(),policePoint=new THREE.Vector3();
  const inView=(x:number,z:number)=>policeFrustum.containsPoint(policePoint.set(x,1.5,z))&&Math.hypot(x-view.position.x,z-view.position.z)<260;const earFacing=new THREE.Vector3(),SCRAMBLE_EAR={x:6.54,z:1.99};
- let heliMesh:any=null;const weaponWheel=createWeaponWheel(),streetReactions=createStreetReactions(),onlookers=createOnlookers(),aftermath=createAftermath(),ragdollCars:any[]=[];let frameShotAt:any=null,lastGunshotAt=-Infinity;let seatedDrivers:any=null;let seatedHidden=false;let transitionSeated=false;let carjackSide=-1,carjackStage:string|null=null,lastCarjack:any=null;let vehicleVisual:any=null,vehicleEffects:any=null,playUI:any=null,localCrowdClock=0,frameHits=0,combatDeathReported=false;const followCamera=createFollowCamera(),feedback=createFeedbackBus(),melee=createMeleeCombat({
+ let heliMesh:any=null;const weaponWheel=createWeaponWheel(),streetReactions=createStreetReactions(),onlookers=createOnlookers(),aftermath=createAftermath(),ragdollCars:any[]=[];let frameShotAt:any=null,lastGunshotAt=-Infinity;
+ // Roadmap stage 5: the wallet, the save slot, the mission board and the shop's door.
+ const saveSlot=createSave(),loaded=saveSlot.load(),wallet=createWallet(loaded?{money:loaded.money}:undefined);
+ const progress:any={completed:{...(loaded?.completed??{})},best:{...(loaded?.best??{})}};let savedArmor=loaded?.armor??0;
+ let board:any=null,door:any=null,wasAlive=true;
+ const persist=()=>saveSlot.save({money:wallet.money,armor:player?.state?.armor??savedArmor,completed:progress.completed,best:progress.best});
+ const missionWorld=()=>({player:player?.state,driving,car:playerCar?.state,traffic:trafficEntry.hooks.current?.sim,crowd:lifeEntry.hooks.current?.sim,
+  wanted:police?.wanted?.snapshot?.()??{stars:0},hits:frameHits,
+  raiseWanted:(n:number)=>{const sim=lifeEntry.hooks.current?.sim;police?.wanted.crime(n>=2?'shooting':'weaponSeen',{x:player.state.x,z:player.state.z,t:sim?.time??0,seenByOfficer:true});}});let seatedDrivers:any=null;let seatedHidden=false;let transitionSeated=false;let carjackSide=-1,carjackStage:string|null=null,lastCarjack:any=null;let vehicleVisual:any=null,vehicleEffects:any=null,playUI:any=null,localCrowdClock=0,frameHits=0,combatDeathReported=false;const followCamera=createFollowCamera(),feedback=createFeedbackBus(),melee=createMeleeCombat({
   // PLAN-WEAPONS W1: the katana's cut goes through the same swing clock as a punch.
   weapon:()=>arsenal?.current??'fists',
   // RUN 8: a punch is an event the crowd can see. The HQ layer bounds it by its own spatial
@@ -435,7 +447,16 @@ export default function Home(){
    // pack lands, so registration waits for it.
    vehicleVisual.onReady((root:any)=>registerSceneRoot(root));}
   if(!vehicleEffects){vehicleEffects=createVehicleEffects();groups.dynamic.add(vehicleEffects.root);}
-  if(!playUI)playUI=createPlayUI(lifeEntry.hooks.current.network,groups.dynamic,{onExit:()=>exitPlayer(),onDrive:()=>toggleDrive()});
+  if(!playUI)playUI=createPlayUI(lifeEntry.hooks.current.network,groups.dynamic,{onExit:()=>exitPlayer(),onDrive:()=>toggleDrive(),
+   onMission:(id:string)=>{board??=createMissionBoard(lifeEntry.hooks.current.network);playUI?.setMission(board.start(id,missionWorld()));},
+   onCancelMission:()=>{board?.cancel(missionWorld());playUI?.setMission(board?.snapshot());},
+   onBuy:(id:string)=>{const r:any=shopBuy(wallet,id,{health:player.state.health,armor:player.state.armor,hasCar:!!playerCar?.state?.active,carDamage:playerCar?.state?.damage});
+    if(r.ok){if(r.apply.health!==undefined)player.state.health=r.apply.health;if(r.apply.armor!==undefined)player.state.armor=r.apply.armor;if(r.apply.carDamage!==undefined&&playerCar?.state)playerCar.state.damage=0;persist();}
+    playUI?.setShop(true,r.ok?`${r.item.name}を買った`:r.reason);},
+   onSave:()=>{playUI?.setShop(true,persist()?'セーブしました':'この環境ではセーブできません');}});
+  // Stage 5: the shop's door on the pavement nearest its anchor, and the saved vest back on.
+  door??=shopDoor(lifeEntry.hooks.current.network.ctx);playUI.setShopDoor?.(door);
+  if(savedArmor>0){player.state.armor=savedArmor;savedArmor=0;}
   playUI.show();followCamera.reset();setPresentation(true);
   // Entering player mode is a click, which is the gesture a browser wants before it will
   // start an AudioContext. If it refuses, audio stays off and nothing else changes.
@@ -723,6 +744,12 @@ export default function Home(){
     player:driving?null:player.state,car:driving?playerCar?.state:null,people:crowdSim?.pool,cars:trafficEntry.hooks.current?.sim?.pool,
     pedestrianGreen:crowdSim?.signals?.phase?.()[0]==='PEDESTRIAN'});}
   playUI?.update(playElapsed,player.state,playerCar?.state,driving,playerReach,frameHits);
+  // Roadmap stage 5: the mission board, the pay, the shop at its door, the bill for dying or arrest.
+  if(board){const pay=board.tick(playElapsed,missionWorld());const snap=board.snapshot();playUI?.setMission(snap);
+   if(pay>0){wallet.earn(pay,snap.id);progress.completed[snap.id]=(progress.completed[snap.id]??0)+1;progress.best[snap.id]=Math.max(progress.best[snap.id]??0,pay);persist();}}
+  if(wasAlive&&player.state.alive===false){wallet.penalty(player.state.hitBy==='arrested'?'arrest':'death');persist();}wasAlive=player.state.alive!==false;
+  playUI?.setMoney?.(wallet.money,player.state.armor??0);
+  if(door)playUI?.setShop?.(!driving&&player.state.alive!==false&&Math.hypot(player.state.x-door.x,player.state.z-door.z)<=SHOP.reach);
   if(arsenal)playUI?.setWeapon(arsenal.snapshot(),{aiming:player.state.aim>0&&!driving,locked:player.state.aimLock!=null,spread:arsenal.spread});
   // C4: losing health shakes the pad; C1: the HUD's hints follow the pad in use.
   if((player.state.health??100)<healthLast)player.rumble?.('hurt');healthLast=player.state.health??100;

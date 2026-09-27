@@ -54,7 +54,9 @@ const fallen=p=>p.struck!==undefined&&p.combatDead&&!!p.ragdoll;
 export const PRIORITY_RANGE=55,PRIORITY_HOLD=4;
 const priorityOf=(p,clock)=>(p.aimedUntil>clock)||(clock-(p.hitAt??-1e9)<PRIORITY_HOLD)
  // Roadmap stage 2: someone with their hands up, crawling, or shooting back is worth the detail.
- ||p.handsUpUntil>clock||!!p.crawling||(!p.officer&&!!p.gunDrawn);
+ ||p.handsUpUntil>clock||!!p.crawling||(!p.officer&&!!p.gunDrawn)
+ // Stage 5: a mission's client or thief.
+ ||!!p.missionRole;
 
 // RUN 6.8 moved what a citizen looks like into src/life/appearance.mjs. It used to be eight
 // wardrobes and a skin list right here, which produced eight recolours of one body -- the

@@ -6088,6 +6088,49 @@ Not yet seen in the real scene or on a device: the onlookers among the real crow
 livery in the fleet renderer, how far the lane stop is from bodies in narrow streets, the crowd
 thinning at night.
 
+## 9aq. Roadmap stage 5 — missions, money, the shop, saving (branch restarted from `master` `664a3ce`)
+
+- **The mission board** (`game/missions.mjs`, shown by play-ui's mission panel; the delivery is one
+  of the five now). Each is paid once, on success:
+  - 配達 (delivery, ¥3,000 + 5 × its score) — the existing three-stop run.
+  - 追跡 (chase, ¥8,000) — a car (a traffic slot, controlled and not takeable) appears 45–80 m
+    away, ahead if it can, and drives off over the carriageway flow field (police/units.mjs's
+    `createRoadField`, run away from the player) at 12.5 m/s, easing to 8 when more than 60 m
+    ahead. Staying within 7 m of it for 2.5 s makes it give up; it is then left parked. More than
+    220 m away, or 150 s, fails.
+  - 逃走 (escape, ¥6,000) — reported (☆2, seen by an officer) on start; completes only when the
+    level is cleared by escaping (an arrest or a death fails it).
+  - 護送 (escort, ¥7,000) — the nearest adult within 25 m follows a step behind the player
+    (walking, running when left behind) to an address 90–150 m away; left more than 35 m behind for
+    10 s, or hurt, fails.
+  - ひったくり犯を追え (snatch, ¥5,000, +¥1,500 if the thief is taken alive) — a thief by a victim
+    6–25 m away grabs a bag (the victim screams) and runs a pedestrian route 140–220 m long at
+    3.9 m/s (the player runs 4.2). A blow, a round or a tackle (1.6 m on foot) stops them; they put
+    their hands up. More than 110 m away, the route's end, or 120 s, fails.
+  The client and the thief are moved by a new `follow` hold in the simulation (walls stop them;
+  they get a detailed body); when a mission ends they are left standing where they are.
+- **Money** (`game/economy.mjs`): ¥5,000 to start; dying costs 10% and an arrest 15% of the wallet
+  (at most ¥20,000, never into debt). Shown in the dashboard.
+- **The shop** (`game/shop.mjs`): a convenience store's door on the pavement by the crossing (a
+  yellow dot on the map). Standing at it opens the counter: 救急キット ¥1,500 (full health),
+  防弾ベスト ¥4,000 (takes 70% of each blow until 50 is used up; lost on death), 車の修理 ¥2,500.
+  It refuses what would do nothing or cannot be paid for.
+- **Saving** (`game/save.mjs`): one slot in the browser (`shibuya.save`, versioned and sanitised):
+  money, the vest, missions completed and the best pay. Saved at the shop's counter, after every
+  paid mission, every purchase, and after a death or arrest bill; loaded when the page opens.
+
+Tests: `tests/stage5.test.mjs` (8 — the wallet and its capped bills; the save round trip and its
+refusal of other versions and garbage; the shop and the vest; the board; the chase on the real
+HIGH lane graph, caught and lost; the escape, escaped and arrested; the escort on the real
+pedestrian network, delivered and abandoned; the snatch, stopped by a blow with the bonus).
+Stills: `evidence/roadmap/stage5/stage5bench.png` (qa/gta-upgrade/stage5bench.html: the HUD at
+960×540 -- the board, a chase running, the shop's counter, a mission paid -- and a chase and a
+snatch top-down on the real map). The bench capture serves `.css` now and takes a page size.
+
+Not yet seen in the real scene or on a device: the chase car among real traffic (it ignores other
+cars), the thief and the client on the real crowd's pavements, the shop's place, and the balance of
+the rewards and prices.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
