@@ -53,7 +53,7 @@ export function createWeaponEffects() {
  tracers.frustumCulled = false; tracers.visible = false; tracers.name = 'weapon-tracers';
  // --- blood ------------------------------------------------------------------------------------
  const B = EFFECTS.blood, bpos = new Float32Array(B * 3), bcol = new Float32Array(B * 3), bvel = new Float32Array(B * 3);
- const blife = new Float32Array(B), bfull = new Float32Array(B), bshade = new Float32Array(B);
+ const blife = new Float32Array(B), bfull = new Float32Array(B), bshade = new Float32Array(B), bglass = new Uint8Array(B);
  const bloodGeometry = new BufferGeometry();
  bloodGeometry.setAttribute('position', new BufferAttribute(bpos, 3));
  bloodGeometry.setAttribute('color', new BufferAttribute(bcol, 3));
@@ -103,9 +103,25 @@ export function createWeaponEffects() {
     const jx = (rand() - .5) * 2 * spread, jy = (rand() - .2) * spread, jz = (rand() - .5) * 2 * spread;
     bvel[i * 3] = (dx * s + jx) * v; bvel[i * 3 + 1] = (dy * s + jy + .25) * v; bvel[i * 3 + 2] = (dz * s + jz) * v;
     bfull[i] = blife[i] = EFFECTS.bloodLife[0] + rand() * (EFFECTS.bloodLife[1] - EFFECTS.bloodLife[0]);
-    bshade[i] = .55 + rand() * .45;
+    bshade[i] = .55 + rand() * .45; bglass[i] = 0;
    }
    stats.blood += count; blood.visible = true;
+  },
+  /**
+   * Stage 6: a pane going -- glass thrown out along `dir` and falling, pale and glinting. It rides
+   * the blood pool (opaque points that fall) with its own colour.
+   */
+  glass(x, y, z, {dir = {x: 0, y: 0, z: 1}, count = 26, spread = .9} = {}) {
+   const l = Math.hypot(dir.x, dir.y ?? 0, dir.z) || 1, dx = dir.x / l, dy = (dir.y ?? 0) / l, dz = dir.z / l;
+   for (let k = 0; k < count; k++) {
+    const i = bcursor; bcursor = (bcursor + 1) % B;
+    bpos[i * 3] = x + (rand() - .5) * .5; bpos[i * 3 + 1] = y + (rand() - .5) * .25; bpos[i * 3 + 2] = z + (rand() - .5) * .5;
+    const v = .8 + rand() * 2.4;
+    bvel[i * 3] = (dx + (rand() - .5) * 2 * spread) * v; bvel[i * 3 + 1] = (dy + rand() * .6) * v; bvel[i * 3 + 2] = (dz + (rand() - .5) * 2 * spread) * v;
+    bfull[i] = blife[i] = .6 + rand() * .7;
+    bshade[i] = .6 + rand() * .4; bglass[i] = 1;
+   }
+   stats.glass = (stats.glass ?? 0) + count; blood.visible = true;
   },
   /** The muzzle flash at `x,y,z`, looking along `dir`: a bright core and two points down the line. */
   muzzle(x, y, z, dir) {
@@ -162,7 +178,8 @@ export function createWeaponEffects() {
     bpos[i * 3] += bvel[i * 3] * dt; bpos[i * 3 + 1] += bvel[i * 3 + 1] * dt; bpos[i * 3 + 2] += bvel[i * 3 + 2] * dt;
     // Dark arterial red, darker as it goes.
     const k = .5 + .5 * Math.max(0, blife[i] / bfull[i]), c = bshade[i] * k;
-    bcol[i * 3] = .42 * c; bcol[i * 3 + 1] = .02 * c; bcol[i * 3 + 2] = .03 * c;
+    if (bglass[i]) {bcol[i * 3] = .78 * c; bcol[i * 3 + 1] = .88 * c; bcol[i * 3 + 2] = .92 * c;}
+    else {bcol[i * 3] = .42 * c; bcol[i * 3 + 1] = .02 * c; bcol[i * 3 + 2] = .03 * c;}
    }
    bloodGeometry.attributes.position.needsUpdate = bloodGeometry.attributes.color.needsUpdate = true;
    blood.visible = drops > 0;

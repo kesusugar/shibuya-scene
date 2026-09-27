@@ -14,6 +14,7 @@
 // its sign changes. That is why nothing here hard-codes a distance.
 import {VEHICLES} from './config.mjs';
 import {buildVehicleShape} from './vehicle-shape.mjs';
+import {buildMotorbikeShape} from './motorbike-shape.mjs';
 
 const cache=new Map();
 
@@ -21,7 +22,11 @@ const cache=new Map();
 export function anchorsFor(type){
  if(cache.has(type))return cache.get(type);
  let found=null;
- if(VEHICLES[type]){
+ if(VEHICLES[type]?.twoWheel){
+  // Stage 6: a bike's anchors are its own (the rider stands beside it and swings a leg over).
+  const a=buildMotorbikeShape().anchors;
+  found={seat:a.driverSeat,door:a.driverDoor,entry:a.driverEntry,exit:a.driverExit};
+ }else if(VEHICLES[type]){
   const shape=buildVehicleShape(type,{detail:0});
   const a=shape.anchors;
   if(a?.driverSeat)found={seat:a.driverSeat,door:a.driverDoor,entry:a.driverEntry,exit:a.driverExit};

@@ -55,7 +55,10 @@ const shot=await call('Page.captureScreenshot',{format:'png',clip:{x:0,y:0,width
 await mkdir(dirname(out)||'.',{recursive:true});
 await writeFile(out,Buffer.from(shot.result.data,'base64'));
 const errors=log.filter(l=>l.type==='error'||l.type==='exception');
-await writeFile(out.replace(/\.png$/,'')+'.json',JSON.stringify({url:url.replace(/127\.0\.0\.1:\d+/,'<local>'),ready,bench:report&&JSON.parse(report),
+// Stage 6: a bench may hand back files (base64), written next to the screenshot and left out of the log.
+const result=report&&JSON.parse(report);
+if(result?.files){for(const [name,data] of Object.entries(result.files))await writeFile(join(dirname(out)||'.',name),Buffer.from(data,'base64'));delete result.files;}
+await writeFile(out.replace(/\.png$/,'')+'.json',JSON.stringify({url:url.replace(/127\.0\.0\.1:\d+/,'<local>'),ready,bench:result,
  console:log,errors:errors.length},null,1)+'\n');
 console.log(`${out}: ready=${ready}, ${log.length} console messages, ${errors.length} errors`);
 for(const l of errors)console.log('  ',l.type,l.text.slice(0,300));

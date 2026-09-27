@@ -14,7 +14,8 @@ import {VEHICLES} from '../src/traffic/config.mjs';
 
 const models={},dimensions={},anchors={};
 let triangles=0;
-for(const type of Object.keys(VEHICLES).filter(t=>t!=='scooter')){
+// Two-wheelers are built at runtime (traffic/motorbike-shape.mjs), not lofted here.
+for(const type of Object.keys(VEHICLES).filter(t=>t!=='scooter'&&!VEHICLES[t].twoWheel)){
  const asset=createVehicleAsset(type);
  asset.root.traverse(o=>{
   if(!o.isMesh)return;

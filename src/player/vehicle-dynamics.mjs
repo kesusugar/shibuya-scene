@@ -9,7 +9,7 @@ export function handling(s,def,input,dt){
  const health=Math.max(.45,1-.55*s.damage),limit=def.speed*health;
  const opposing=throttle*s.speed<0&&Math.abs(s.speed)>.2;
  if(opposing)s.speed-=Math.sign(s.speed)*Math.min(Math.abs(s.speed),11*Math.abs(throttle)*dt);
- else s.speed+=throttle*6.5*health*(throttle<0?.7:1)*dt;
+ else s.speed+=throttle*6.5*(throttle>0?def.power??1:1)*health*(throttle<0?.7:1)*dt;
  if(!throttle||s.handbrake)s.speed-=Math.sign(s.speed)*Math.min(Math.abs(s.speed),(s.handbrake?5:1.4)*dt);
  s.speed=clamp(s.speed,-4.5*health,limit);
  s.steering=damp(s.steering,turn,10,dt);

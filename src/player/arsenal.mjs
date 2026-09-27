@@ -172,7 +172,10 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
    effects.burst(hit.point.x, hit.point.y, hit.point.z, {count: 6, dust: true, nx: -hit.dir.x, nz: -hit.dir.z});
   } else if (hit.kind === 'car') {
    stats.cars++;
-   effects.burst(hit.point.x, hit.point.y, hit.point.z, {count: 14, nx: -hit.dir.x, nz: -hit.dir.z});
+   // Stage 6: the car takes it -- a dent below the windows, a crack or a pane gone above them.
+   const r = world.shootCar?.(hit.target, hit.point, hit.dir) ?? null;
+   if (r?.kind === 'glass' && effects.glass) effects.glass(hit.point.x, hit.point.y, hit.point.z, {dir: hit.dir, count: r.glass === 'shatter' ? 40 : 8});
+   else effects.burst(hit.point.x, hit.point.y, hit.point.z, {count: 14, nx: -hit.dir.x, nz: -hit.dir.z});
   } else stats.misses++;
   // The street hears it (R14): the nearest run, capped; the HQ crowd looks, bounded there.
   const panicked = gunfirePanic(world.crowd, s.x, s.z, {radius: w.witnessRadius, cap: w.panicCap, severity: w.witnessSeverity});

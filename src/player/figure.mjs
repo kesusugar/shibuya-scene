@@ -6,7 +6,7 @@ import {attackOf} from './attack-timing.mjs';
 import {createWeaponRig} from './weapon-mesh.mjs';
 import {createAimLayer} from './aim-layer.mjs';
 import {createHands} from './hands.mjs';
-import {createHandsUp,createLimp,createUpperPose,createPhone} from './body-states.mjs';
+import {createHandsUp,createLimp,createUpperPose,createPhone,createRideGrip} from './body-states.mjs';
 import {createHitReaction} from './hit-reaction.mjs';
 import {createRagdoll} from './ragdoll.mjs';
 import pack from './generated/character.mjs';
@@ -81,6 +81,8 @@ export const RECOIL=Object.freeze({light:[.2,.22],strong:[.38,.34]});
 export function characterAction(state){
  if(state.alive===false)return (state.runOver??0)<.6?'Fall':'Death';
  if(state.vehiclePhase>0)return state.vehicleKind==='exit'?'Exit':'Enter';
+ // Roadmap stage 6: astride a motorbike, seated with the hands forward on the bars.
+ if(state.riding)return 'Drive';
  // Roadmap stage 2: down on the ground with a leg wound, dragging themselves away.
  if(state.crawling)return 'Crawl';
  // PLAN-WEAPONS W4: a dodge roll owns the whole body, like a swing (STRIKE).
@@ -187,7 +189,7 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
  const handsUp=root.getObjectByName('upperarm_l')?createHandsUp(root):null;
  const limp=root.getObjectByName('calf_r')?createLimp(root):null;
  // Stage 4: an onlooker's phone (built on first use: most bodies never hold one).
- let phone=null;
+ let phone=null,ride=null;
  const swordWalk=weaponRig&&weapons.includes('katana')?createUpperPose(root,instance.clips,'SwordIdle'):null;
  let swordK=0;
  // §9ai: a blow you can see land (hit-reaction.mjs), and a body that falls the way it was hit
@@ -323,7 +325,9 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
     :(state.heading??state.bodyHeading??0);
    facing.update(desired,speed,dt,aiming?STRIKE.turnRate:state.rollTime>0?STRIKE.turnRate*2:turnToAim?GUN_TURN:undefined);
    root.position.set(state.x,state.y+(overlay==='Crawl'?CRAWL.lift*strike.Crawl:0),state.z);
-   root.rotation.set(0,facing.heading,overlay==='Crawl'?0:facing.lean,'YXZ');
+   // Stage 6: on a bike the body is the bike's: its heading at once, and its lean into the turn.
+   if(state.riding)root.rotation.set(0,state.heading??0,state.riderLean??0,'YXZ');
+   else root.rotation.set(0,facing.heading,overlay==='Crawl'?0:facing.lean,'YXZ');
    if(state.trafficReaction==='look'&&Number.isFinite(state.threatHeading)&&head)
     head.rotation.y=Math.max(-.8,Math.min(.8,Math.atan2(Math.sin(state.threatHeading-facing.heading),Math.cos(state.threatHeading-facing.heading))));
    // RUN 11.2: weight behind a punch: the body leans into it as the fist goes out. Additive
@@ -368,6 +372,9 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
    handsUp?.update(!!state.handsUp&&!SWINGS.has(overlay)&&!UNGROUNDED.has(overlay)&&state.alive!==false,dt);
    if(state.phone&&!phone&&handsUp)phone=createPhone(root);
    phone?.update(state.phone&&!state.handsUp&&!SWINGS.has(overlay)&&!UNGROUNDED.has(overlay)?state.phone:null,dt);
+   // Stage 6: on the bike, hands on the grips and feet on the pegs.
+   if(state.riding&&!ride&&handsUp)ride=createRideGrip(root);
+   ride?.update(!!state.riding&&overlay==='Drive');
    limp?.update(!!state.limp&&!state.crawling&&!SWINGS.has(overlay)&&!UNGROUNDED.has(overlay),gait.phase,dt,speed>LOCOMOTION.idleSpeed);
 
    // Feet last, on top of the finished pose, because it corrects what the animation produced

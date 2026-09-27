@@ -10,6 +10,7 @@
 // colour however often the simulation re-spawns it. Liveries (two-tone taxis, the city bus, the
 // patrol car) are a band in the body shader: the batch colour's RGB is the lower colour, and its
 // alpha -- which an opaque material ignores -- carries the livery id and the band height.
+import {motorbikeFleetGeometry} from './motorbike-shape.mjs';
 import {BatchedMesh,Color,Vector4,Matrix4,Object3D} from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {BoxGeometry} from 'three';
@@ -159,6 +160,8 @@ export function installLivery(material){
  * wheels (tyre and rim, fixed at their anchors) -> dark. Every part is one geometry.
  */
 export function fleetGeometry(type){
+ // Stage 6: two wheels are not a loft.
+ if(VEHICLES[type]?.twoWheel)return motorbikeFleetGeometry();
  const shape=buildVehicleShape(type,{detail:0});
  const g=shape.geometry,parts={body:[],glass:[],dark:[],front:[],rear:[],lightbar:[]};
  const add=(k,geo)=>{if(geo)parts[k].push(geo);};

@@ -11,6 +11,7 @@
 //              held while walking, instead of the walk's swinging arms with a sword in one hand.
 import {BoxGeometry,Mesh,MeshStandardMaterial,Quaternion,Vector3} from 'three';
 import {createTwoBoneSolver} from './foot-ik.mjs';
+import {BIKE} from '../traffic/motorbike-shape.mjs';
 
 export const BODY = Object.freeze({
  // Hands up: where each palm goes, in the body's frame (+X left, +Y up, +Z forward), at 1.76 m.
@@ -23,6 +24,20 @@ export const BODY = Object.freeze({
   pole: Object.freeze({left: Object.freeze([.8, 1.25, 0]), right: Object.freeze([-.8, 1.25, 0])})}),
  // Limp: how far the knee may bend (share of what the walk bends it), the hip drop and lean (rad).
  limp: Object.freeze({knee: .35, drop: .1, lean: .09, fade: .3}),
+ // Stage 6: astride the motorbike. The seated Drive clip puts the pelvis .68 m up and .19 m back
+ // of the body's root, so the root sits that far below and ahead of the seat; the hands go to the
+ // grips and the feet to the pegs (body frame, +X left), the trunk leans forward over the tank.
+ ride: Object.freeze({
+  root: Object.freeze([0, BIKE.seat[1] + .08 - .68, BIKE.seat[2] + .19]),
+  lean: .45,
+  grip: Object.freeze({left: Object.freeze([.31, BIKE.bars[1] - (BIKE.seat[1] + .08 - .68), BIKE.bars[2] - (BIKE.seat[2] + .19)]),
+   right: Object.freeze([-.31, BIKE.bars[1] - (BIKE.seat[1] + .08 - .68), BIKE.bars[2] - (BIKE.seat[2] + .19)])}),
+  peg: Object.freeze({left: Object.freeze([BIKE.pegs[0], BIKE.pegs[1] - (BIKE.seat[1] + .08 - .68) + .04, BIKE.pegs[2] - (BIKE.seat[2] + .19) - .04]),
+   right: Object.freeze([-BIKE.pegs[0], BIKE.pegs[1] - (BIKE.seat[1] + .08 - .68) + .04, BIKE.pegs[2] - (BIKE.seat[2] + .19) - .04])}),
+  // The elbows out and down; the knees forward and out, gripping the tank.
+  elbow: Object.freeze({left: Object.freeze([.7, .55, .1]), right: Object.freeze([-.7, .55, .1])}),
+  knee: Object.freeze({left: Object.freeze([.45, .5, .8]), right: Object.freeze([-.45, .5, .8])})
+ }),
  upperFade: .2,
  upper: Object.freeze(['spine_02', 'spine_03', 'neck_01', 'Head', 'clavicle_l', 'upperarm_l', 'lowerarm_l', 'hand_l',
   'clavicle_r', 'upperarm_r', 'lowerarm_r', 'hand_r'])
@@ -195,5 +210,45 @@ export function createPhone(root) {
   },
   reset() {w = 0; mode = null; if (mesh) mesh.visible = false;},
   dispose() {mesh?.removeFromParent();}
+ };
+}
+
+/**
+ * Stage 6: riding. `update(on)` after the Drive clip has posed the body: the trunk leans forward
+ * over the tank, the hands take the grips, the feet the pegs (two-bone IK, elbows and knees swivelled
+ * out). Snaps rather than fades: the body is either on the bike or it is not.
+ */
+export function createRideGrip(root) {
+ const bone = n => root.getObjectByName(n), R = BODY.ride;
+ const limbs = [[bone('upperarm_l'), bone('lowerarm_l'), bone('hand_l'), R.grip.left, R.elbow.left, palm],
+  [bone('upperarm_r'), bone('lowerarm_r'), bone('hand_r'), R.grip.right, R.elbow.right, palm],
+  [bone('thigh_l'), bone('calf_l'), bone('foot_l'), R.peg.left, R.knee.left, 0],
+  [bone('thigh_r'), bone('calf_r'), bone('foot_r'), R.peg.right, R.knee.right, 0]];
+ const spine = bone('spine_02');
+ const ready = limbs.every(a => a.slice(0, 3).every(Boolean));
+ const solve = createTwoBoneSolver(), goal = new Vector3(), hand = new Vector3(), p = new Vector3(), axis = new Vector3();
+ const q = new Quaternion(), wq = new Quaternion(), pq = new Quaternion();
+ return {
+  get ready() {return ready;},
+  update(on) {
+   if (!ready || !on) return false;
+   root.updateMatrixWorld(true);
+   if (spine) {            // forward over the tank, about the body's own left-right axis
+    axis.set(1, 0, 0).applyQuaternion(root.quaternion);
+    spine.getWorldQuaternion(wq); spine.parent.getWorldQuaternion(pq);
+    q.setFromAxisAngle(axis, R.lean);
+    spine.quaternion.copy(pq.invert().multiply(q.multiply(wq))); spine.updateMatrixWorld(true);
+   }
+   for (const [upper, lower, end, at, pole, reach] of limbs) {
+    end.updateWorldMatrix(true, false);
+    hand.setFromMatrixPosition(end.matrixWorld);
+    p.set(0, reach, 0).applyMatrix4(end.matrixWorld).sub(hand);
+    goal.set(...at).applyQuaternion(root.quaternion).add(root.position).sub(p);
+    solve(upper, lower, end, goal);
+    swivelElbow(upper, lower, end, goal.set(...pole).applyQuaternion(root.quaternion).add(root.position));
+   }
+   return true;
+  },
+  reset() {}
  };
 }

@@ -19,6 +19,7 @@
 //  L (4) / R (5)  previous / next weapon      — / handbrake (hold)
 //                 (stage 1: on release; held, the weapon wheel -- the right stick picks)
 //  d-pad up (12)  —                           siren (patrol car)
+//  d-pad ←/→      —                           radio: previous / next station (stage 6)
 //  − (8) / + (9)  map / menu (back to observe)
 //
 // The Switch Pro Controller's ZL and ZR are digital (0 or 1). A throttle that jumps from nothing
@@ -57,10 +58,10 @@ export const GLYPHS = Object.freeze({
 /** The on-foot and in-car hints for a profile ('keyboard' or a pad profile). */
 export function controlHints(profile, driving = false) {
  if (!profile || profile === 'keyboard' || profile === 'raw' || profile === 'switch-raw')
-  return driving ? 'WASD 運転 · Space サイドブレーキ · F 降りる · H ホーン/サイレン'
+  return driving ? 'WASD 運転 · Space サイドブレーキ · F 降りる · H ホーン/サイレン · R ラジオ'
    : 'E/クリック 攻撃 · 1/2/3/4 武器 · 右ボタン 構える · R 装填 · Q 回避 · C しゃがむ';
  const g = GLYPHS[profile] ?? GLYPHS.standard;
- return driving ? `${g.ZR} アクセル · ${g.ZL} ブレーキ · ${g.R} サイドブレーキ · ${g.top} 降りる · ${g.LS} ホーン · ${g.up} サイレン`
+ return driving ? `${g.ZR} アクセル · ${g.ZL} ブレーキ · ${g.R} サイドブレーキ · ${g.top} 降りる · ${g.LS} ホーン · ${g.up} サイレン · 十字←→ ラジオ`
   : `${g.ZR} 攻撃 · ${g.ZL} 構える · ${g.L}/${g.R} 武器 · ${g.right} 装填 · ${g.left} 回避 · ${g.bottom} 走る · ${g.top} 乗る · ${g.LS} しゃがむ`;
 }
 
@@ -76,7 +77,7 @@ export function radial(x, y, {deadzone = INPUT.deadzone, outer = INPUT.outer, cu
 const PRESS = Object.freeze({
  foot: Object.freeze([['ZR', 'fire'], ['right', 'reload'], ['left', 'roll'], ['top', 'enter'],
   ['LS', 'crouch'], ['minus', 'map'], ['plus', 'menu']]),
- car: Object.freeze([['top', 'exit'], ['LS', 'horn'], ['up', 'siren'], ['minus', 'map'], ['plus', 'menu']])
+ car: Object.freeze([['top', 'exit'], ['LS', 'horn'], ['up', 'siren'], ['dright', 'radioNext'], ['dleft', 'radioPrev'], ['minus', 'map'], ['plus', 'menu']])
 });
 
 /** Stage 1: L and R are a tap (previous / next weapon, on release) or, held this long, the wheel. */

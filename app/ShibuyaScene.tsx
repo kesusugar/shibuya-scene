@@ -85,6 +85,12 @@ import {createFeedbackBus} from '../src/app/feedback-bus.mjs';
 import {createVehicleTransition} from '../src/player/vehicle-transition.mjs';
 import {boxOverlap} from '../src/traffic/path.mjs';
 import {VEHICLES} from '../src/traffic/config.mjs';
+import {bikeLean} from '../src/traffic/motorbike-shape.mjs';
+import {createRadio,stationFor} from '../src/audio/radio.mjs';
+// Stage 6: where the motorbikes are parked, from where the player first appears (m).
+const BIKE_SPOTS=[[-8,6],[60,-45],[-70,-30]];
+import {BODY} from '../src/player/body-states.mjs';
+import {shot as carShot,wearOf} from '../src/player/car-damage.mjs';
 export default function Home(){
  const [presentation,setPresentation]=useState(true);
  const reactRenderCount=useRef(0);reactRenderCount.current++;
@@ -150,7 +156,7 @@ export default function Home(){
  const persist=()=>saveSlot.save({money:wallet.money,armor:player?.state?.armor??savedArmor,completed:progress.completed,best:progress.best});
  const missionWorld=()=>({player:player?.state,driving,car:playerCar?.state,traffic:trafficEntry.hooks.current?.sim,crowd:lifeEntry.hooks.current?.sim,
   wanted:police?.wanted?.snapshot?.()??{stars:0},hits:frameHits,
-  raiseWanted:(n:number)=>{const sim=lifeEntry.hooks.current?.sim;police?.wanted.crime(n>=2?'shooting':'weaponSeen',{x:player.state.x,z:player.state.z,t:sim?.time??0,seenByOfficer:true});}});let seatedDrivers:any=null;let seatedHidden=false;let transitionSeated=false;let carjackSide=-1,carjackStage:string|null=null,lastCarjack:any=null;let vehicleVisual:any=null,vehicleEffects:any=null,playUI:any=null,localCrowdClock=0,frameHits=0,combatDeathReported=false;const followCamera=createFollowCamera(),feedback=createFeedbackBus(),melee=createMeleeCombat({
+  raiseWanted:(n:number)=>{const sim=lifeEntry.hooks.current?.sim;police?.wanted.crime(n>=2?'shooting':'weaponSeen',{x:player.state.x,z:player.state.z,t:sim?.time??0,seenByOfficer:true});}});let seatedDrivers:any=null;let radio:any=null,radioSlot:any=null;let riderLean=0;const rider:any={x:0,y:0,z:0,heading:0,speed:0,alive:true,attackTime:0,riding:true,riderLean:0};let seatedHidden=false;let transitionSeated=false;let carjackSide=-1,carjackStage:string|null=null,lastCarjack:any=null;let vehicleVisual:any=null,vehicleEffects:any=null,playUI:any=null,localCrowdClock=0,frameHits=0,combatDeathReported=false;const followCamera=createFollowCamera(),feedback=createFeedbackBus(),melee=createMeleeCombat({
   // PLAN-WEAPONS W1: the katana's cut goes through the same swing clock as a punch.
   weapon:()=>arsenal?.current??'fists',
   // RUN 8: a punch is an event the crowd can see. The HQ layer bounds it by its own spatial
@@ -177,9 +183,13 @@ export default function Home(){
   if(!sim||!ctx)return null;
   playerCar=createPlayerVehicle(sim,ctx);
   if(!playerCar.spawn(player.state.x,player.state.z))console.warn('[Player] no room to park the car');
+  // Stage 6: motorbikes stand parked round the map -- one close to where the player starts.
+  for(const [x,z] of BIKE_SPOTS)playerCar.parkNear('motorbike',player.state.x+x,player.state.z+z);
   (window as any).__SHIBUYA_CAR__=playerCar;
   return playerCar;
  };
+ // Stage 6: the car radio. Each car keeps the station it was left on (`slot.radio`).
+ const tuneRadio=(d:number)=>{if(!driving||!radio)return;radio.step(d);if(playerCar?.state.slot)playerCar.state.slot.radio=radio.station;};
  const toggleDrive=()=>{
   if(!player||!player.state.alive||vehicleTransition.active)return;
   if(!ensureCar())return;
@@ -231,6 +241,9 @@ export default function Home(){
   ground:(x:number,z:number)=>lifeEntry.hooks.current?.network?.ctx?.height?.(x,z)??0,
   get cars(){return (trafficEntry.hooks.current?.sim?.pool??[]).filter((v:any)=>v.active);},
   dimsOf:(v:any)=>(VEHICLES as any)[v.type]??null,
+  // Stage 6: a round into a car dents it, or cracks or takes out the pane it came through.
+  shootCar:(car:any,pt:any,dir:any)=>{const d=(VEHICLES as any)[car.type];if(!d)return null;const r=carShot(wearOf(car),car,d,pt,dir);
+   if(r.glass)playerAudio?.glass?.(r.glass==='shatter'?1:.45);return r;},
   people:(from:any,dir:any,range:number,wide=false)=>{const sim=lifeEntry.hooks.current?.sim;if(!sim)return [];
    if(!wide)return peopleAlong(sim.grid,from,dir,range);
    const out:any[]=[];for(const p of sim.pool)if(p.active&&Math.hypot(p.x-from.x,p.z-from.z)<=range)out.push(p);return out;},
@@ -451,7 +464,7 @@ export default function Home(){
    onMission:(id:string)=>{board??=createMissionBoard(lifeEntry.hooks.current.network);playUI?.setMission(board.start(id,missionWorld()));},
    onCancelMission:()=>{board?.cancel(missionWorld());playUI?.setMission(board?.snapshot());},
    onBuy:(id:string)=>{const r:any=shopBuy(wallet,id,{health:player.state.health,armor:player.state.armor,hasCar:!!playerCar?.state?.active,carDamage:playerCar?.state?.damage});
-    if(r.ok){if(r.apply.health!==undefined)player.state.health=r.apply.health;if(r.apply.armor!==undefined)player.state.armor=r.apply.armor;if(r.apply.carDamage!==undefined&&playerCar?.state)playerCar.state.damage=0;persist();}
+    if(r.ok){if(r.apply.health!==undefined)player.state.health=r.apply.health;if(r.apply.armor!==undefined)player.state.armor=r.apply.armor;if(r.apply.carDamage!==undefined&&playerCar?.state){playerCar.state.damage=0;if(playerCar.state.slot)playerCar.state.slot.wear=null;}persist();}
     playUI?.setShop(true,r.ok?`${r.item.name}を買った`:r.reason);},
    onSave:()=>{playUI?.setShop(true,persist()?'セーブしました':'この環境ではセーブできません');}});
   // Stage 5: the shop's door on the pavement nearest its anchor, and the saved vest back on.
@@ -462,6 +475,7 @@ export default function Home(){
   // start an AudioContext. If it refuses, audio stays off and nothing else changes.
   if(!blood){blood=createBloodMarks();groups.dynamic.add(blood.mesh);(window as any).__SHIBUYA_BLOOD__=blood;}
   if(!playerAudio)playerAudio=createPlayerAudio();
+  if(!radio)radio=createRadio({context:()=>playerAudio?.context??null});
   playerAudio.resume();
   // RUN 12.1: recorded CC0 clips on the same unlocked context. Loaded now, off the startup
   // path, and never waited on: until they decode, every sound falls back to its synthesis.
@@ -492,20 +506,20 @@ export default function Home(){
   // back to. They feed the same axes the keys and the pad feed.
   if(touchEnabled&&!touchPad)touchPad=createTouchControls({
    onAxes:(axes:any)=>player?.setTouch(axes),onAttack:()=>attack(),onAttackHold:(on:boolean)=>arsenal?.hold(on&&!driving),onWeapon:()=>cycleWeapon(1),onWheel:(kind:string,x:number,y:number)=>onWheel(kind,x,y),
-   onDrive:()=>toggleDrive(),onExit:()=>exitPlayer()});
+   onDrive:()=>toggleDrive(),onExit:()=>exitPlayer(),onRadio:(d:number)=>tuneRadio(d)});
   touchPad?.setDriving(false);touchPad?.show();
   const sim=trafficEntry.hooks.current?.sim;
-  if(sim&&!playerCar){playerCar=createPlayerVehicle(sim,ctx);if(!playerCar.spawn(player.state.x,player.state.z))console.warn('[Player] no room to park the car');}
+  if(sim&&!playerCar)ensureCar();
   playerMode=true;combatDeathReported=false;controls.enabled=false;player.attach(canvas,{onExit:()=>exitPlayer(),onDrive:()=>toggleDrive(),onAttack:()=>attack(),onAttackHold:(on:boolean)=>arsenal?.hold(on&&!driving),onWeapon:(n:number)=>selectWeapon(n),onWeaponCycle:(d:number)=>cycleWeapon(d),onAim:(on:boolean)=>arsenal?.aim(on&&!driving),onWheel:(kind:string,x:number,y:number)=>onWheel(kind,x,y),onReload:()=>{if(!driving)arsenal?.reload();},onRoll:()=>{if(playerMode&&!driving&&!vehicleTransition.active&&melee.phase==='idle')player?.roll();},
    // C1-C4: the pad's own buttons for the siren (d-pad up), the horn alone (left stick in a car) and the map (−).
-   driving:()=>driving,onSiren:()=>{if(driving&&playerCar)police?.toggleSiren(playerCar);},onHornOnly:()=>{if(driving&&playerCar)soundscape?.horn(playerCar.state.x,playerCar.state.z);},onMap:()=>playUI?.toggleMap?.(),onCrouch:()=>{if(playerMode&&!driving&&!vehicleTransition.active)player?.crouch();},onHorn:()=>{if(driving&&playerCar&&!police?.toggleSiren(playerCar))soundscape?.horn(playerCar.state.x,playerCar.state.z);}});setPlayerHit(null);setMode('player');
+   driving:()=>driving,onRadio:(d:number)=>tuneRadio(d),onSiren:()=>{if(driving&&playerCar)police?.toggleSiren(playerCar);},onHornOnly:()=>{if(driving&&playerCar)soundscape?.horn(playerCar.state.x,playerCar.state.z);},onMap:()=>playUI?.toggleMap?.(),onCrouch:()=>{if(playerMode&&!driving&&!vehicleTransition.active)player?.crouch();},onHorn:()=>{if(driving&&playerCar&&!police?.toggleSiren(playerCar))soundscape?.horn(playerCar.state.x,playerCar.state.z);}});setPlayerHit(null);setMode('player');
   (window as any).__SHIBUYA_PLAYER__=player;(window as any).__SHIBUYA_CAR__=playerCar;
   // Foot IK is invisible from outside: a solver that never ran and a solver that ran and
   // declined to move anything look identical on screen. Under ?qa=1 the figure and the
   // surface it queries are reachable, so a check can tell those two apart.
   if(config.qa){(window as any).__SHIBUYA_FEEDBACK__=feedback;(window as any).__SHIBUYA_AUDIO__=playerAudio;(window as any).__SHIBUYA_SOUNDS__={bank:soundBank,scape:soundscape};(window as any).__SHIBUYA_MELEE__=melee;(window as any).__SHIBUYA_ARSENAL__=arsenal;(window as any).__SHIBUYA_CONTACT__=player.contact.stats;(window as any).__SHIBUYA_FIGURE__=playerFigure;(window as any).__SHIBUYA_CTX__=ctx;(window as any).__SHIBUYA_LIFE__=lifeEntry.hooks.current;(window as any).__SHIBUYA_TRAFFIC__=trafficEntry.hooks.current;}
   return true;};
- const exitPlayer=()=>{if(!playerMode)return;weaponWheel.cancel();streetReactions.reset(lifeEntry.hooks.current?.sim?.pool??[]);soundscape?.silence();playUI?.hide();vehicleVisual?.hide();vehicleEffects?.hide();lifeEntry.hooks.current?.setPlayerFocus(null);followCamera.reset();melee.reset();arsenal?.reset();touchPad?.setWeapon('fists');
+ const exitPlayer=()=>{if(!playerMode)return;radio?.silence();radioSlot=null;weaponWheel.cancel();streetReactions.reset(lifeEntry.hooks.current?.sim?.pool??[]);soundscape?.silence();playUI?.hide();vehicleVisual?.hide();vehicleEffects?.hide();lifeEntry.hooks.current?.setPlayerFocus(null);followCamera.reset();melee.reset();arsenal?.reset();touchPad?.setWeapon('fists');
   // An abandoned carjack must not leave a driver half out of a car, a door hanging open, or a
   // slot frozen out of traffic for the rest of the session.
   {const was=vehicleTransition.cancel();
@@ -717,7 +731,21 @@ export default function Home(){
    if(carSpeedLast>1&&Math.abs(c.speed)<carSpeedLast*.3){if(!soundscape?.crash(c.x,c.z,carSpeedLast/Math.max(1,playerCar.def.speed)*1.6))playerAudio?.impact(carSpeedLast,playerCar.def.speed);vehicleEffects?.impact(c);shake=Math.min(1,shake+.2);player?.rumble?.('crash',Math.min(1,carSpeedLast/12));}
    carSpeedLast=Math.abs(c.speed);
    playerAudio?.engine(c.speed,playerCar.def.speed,Math.max(0,drive.forward),c.damage,playerCar.def.engine);
-   if(playerCar.state.damage!==damageLast){damageLast=playerCar.state.damage;setCarDamage(damageLast);}}
+   if(playerCar.state.damage!==damageLast){damageLast=playerCar.state.damage;setCarDamage(damageLast);}
+   // Stage 6: a pane gone in the crash -- the glass, and its sound.
+   if(c.glassEvent){const g=c.glassEvent;c.glassEvent=null;playerAudio?.glass?.(g.kind==='shatter'?1:.45);
+    if(g.kind==='shatter')arsenal?.effects?.glass?.(c.x+Math.sin(c.heading)*1.2,(c.y??0)+1.1,c.z+Math.cos(c.heading)*1.2,{dir:{x:Math.sin(c.heading),y:.3,z:Math.cos(c.heading)},count:36});}
+   // Stage 6: on two wheels the rider is on show, astride the bike and leaning with it...
+   if(playerCar.def.twoWheel&&playerFigure){riderLean+=(bikeLean(c.speed,c.yawRate)-riderLean)*(1-Math.exp(-6*dt));
+    const [,ry,rz]=BODY.ride.root,lx=-ry*Math.sin(riderLean),ly=ry*Math.cos(riderLean),sh=Math.sin(c.heading),ch=Math.cos(c.heading);
+    Object.assign(rider,{x:c.x+lx*ch+rz*sh,y:(c.y??0)+ly,z:c.z-lx*sh+rz*ch,heading:c.heading,riderLean,weapon:player.state.weapon});
+    playerFigure.update(rider,dt);}
+   // ...and a hard enough hit throws them off it.
+   if(c.thrownOff){const t=c.thrownOff;c.thrownOff=null;driving=false;playerAudio?.silence();playerCar.state.speed=0;playerCar.sync();playerCar.vacateSeat();setDriving(false);touchPad?.setDriving(false);riderLean=0;
+    const fx=Math.sin(t.heading),fz=Math.cos(t.heading);player.place(c.x-fz*.9,c.z+fx*.9,t.heading);
+    player.knockDown({x:c.x,z:c.z,heading:t.heading,speed:Math.max(t.speed,8),type:'motorbike'});
+    if(!player.state.alive&&!combatDeathReported){combatDeathReported=true;setPlayerHit('motorbike');}
+    playerFigure?.update(player.state,0);groundPlayerShadow();}}
   else{player.step(dt);playerCar?.keepOwn?.(dt,player.state.x,player.state.z);{const s=lifeEntry.hooks.current?.sim;if(s)s.postUpdate=(d:number)=>player.settleCrowd(d);}if(player.state.alive)combatDeathReported=false;yieldToPlayer(lifeEntry.hooks.current?.sim,player.state,player.contact.nearby);// §9ai H1: the player's swing and body run on the hit-stopped clock; the world does not.
   const hitDt=hitStop.scale(dt);const combat=melee.update(hitDt,lifeEntry.hooks.current?.sim,player);if(combat.hits>meleeHitsLast){meleeHitsLast=combat.hits;}playerFigure?.update(player.state,hitDt);groundPlayerShadow();
    if(!player.state.alive&&!combatDeathReported){combatDeathReported=true;setPlayerHit(player.state.hitBy??'fight');}
@@ -733,6 +761,9 @@ export default function Home(){
    // Only the numbers: the entry carries the whole vehicle slot, and the panel's Copy JSON
    // would otherwise hand back a few hundred lines of lane bookkeeping.
    playerReach=entry?{distance:entry.distance,range:entry.range,inRange:entry.inRange,kind:entry.kind}:null;}
+  // Stage 6: the radio plays while the player is in a car, on that car's station.
+  if(radio){const slot=driving?playerCar?.state.slot:null;if(slot&&slot!==radioSlot){radio.tune(stationFor(slot));slot.radio=radio.station;}radioSlot=slot;
+   radio.update(dt,{on:!!slot});if(slot)playUI?.setRadio(radio.nowPlaying(),dt);else playUI?.hideRadio?.();}
   syncCrowdSlot(dt);vehicleVisual?.update(playerCar?.state,dt);vehicleEffects?.update(dt,playerCar?.state);lifeEntry.hooks.current?.setPlayerFocus(player.state);
   localCrowdClock+=dt;if(localCrowdClock>=.1){settleNearbyWaiters(lifeEntry.hooks.current?.sim,player.state,localCrowdClock);localCrowdClock=0;}
  }blood?.update(dt);perfProbe?.end('player');if(!qaBusyNow)system.update(dt);perfProbe?.begin('player-late');

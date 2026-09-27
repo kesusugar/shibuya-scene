@@ -28,7 +28,7 @@ export const wantsTouch = () =>
  * @param {{onAxes?:(axes:any)=>void, onDrive?:()=>void, onAttack?:()=>void, onAttackHold?:(on:boolean)=>void, onExit?:()=>void, onWeapon?:()=>void}} [options]
  */
 export const ATTACK_LABEL = Object.freeze({fists: '殴る', pistol: '撃つ', katana: '斬る', smg: '撃つ'});
-export function createTouchControls({onAxes, onDrive, onAttack, onAttackHold, onExit, onWeapon, onWheel} = {}) {
+export function createTouchControls({onAxes, onDrive, onAttack, onAttackHold, onExit, onWeapon, onWheel, onRadio} = {}) {
  if (typeof document === 'undefined') return {show() {}, hide() {}, setDriving() {}, setWeapon() {}, dispose() {}};
 
  const root = document.createElement('div');
@@ -41,6 +41,7 @@ export function createTouchControls({onAxes, onDrive, onAttack, onAttackHold, on
      <button type="button" class="tc-run">走る</button>
      <button type="button" class="tc-attack">殴る</button>
      <button type="button" class="tc-weapon">武器</button>
+     <button type="button" class="tc-radio" hidden>ラジオ</button>
      <button type="button" class="tc-drive">乗る</button>
      <button type="button" class="tc-exit">観察</button>
    </div>`;
@@ -106,6 +107,9 @@ export function createTouchControls({onAxes, onDrive, onAttack, onAttackHold, on
   b.addEventListener('pointerdown',()=>onAttackHold?.(true));
   for(const t of ['pointerup','pointercancel','pointerleave'])b.addEventListener(t,()=>onAttackHold?.(false));}
  root.querySelector('.tc-exit').addEventListener('click', e => {e.preventDefault(); onExit?.();});
+ // Stage 6: in a car, the next station (off after the last).
+ const radioBtn = root.querySelector('.tc-radio');
+ radioBtn.addEventListener('click', e => {e.preventDefault(); onRadio?.(1);});
  const weaponBtn = root.querySelector('.tc-weapon');
  // Stage 1: a tap steps to the next weapon; held, the weapon wheel -- drag toward one and let go.
  let wheelTimer = null, wheelOpen = false, wheelFrom = null;
@@ -133,6 +137,7 @@ export function createTouchControls({onAxes, onDrive, onAttack, onAttackHold, on
    runBtn.hidden = on;
    root.querySelector('.tc-attack').hidden=on;
    weaponBtn.hidden = on;
+   radioBtn.hidden = !on;
    if (on) holdRun(false);
   },
   /** The weapon out: the attack button's label follows it. */

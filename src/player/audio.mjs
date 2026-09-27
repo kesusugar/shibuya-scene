@@ -132,6 +132,25 @@ export function createPlayerAudio() {
   /** Cut the engine without tearing down the graph, so getting back in is instant. */
   silence() {if (ctx && engine) engine.gain.gain.setTargetAtTime(0, ctx.currentTime, .05);},
   /** A collision. Loudness follows the speed that was lost. */
+  /**
+   * Stage 6: glass. A crack is a short bright tick; a pane going is a crash of high noise and a
+   * scatter of little rings as the pieces land. `level` 0..1.
+   */
+  glass(level = 1) {
+   if (!ctx || !engine || ctx.state !== 'running') return false;
+   burst(AUDIO.impactGain * .7 * level, level > .6 ? 380 : 90, level > .6 ? 3200 : 5200, {type: 'highpass', q: .9});
+   const t0 = ctx.currentTime, rings = level > .6 ? 7 : 1;
+   for (let i = 0; i < rings && ringing < AUDIO.maxVoices + 4; i++) {
+    const osc = ctx.createOscillator(), gain = ctx.createGain(), t = t0 + .03 + i * (.035 + (i * 37 % 11) / 400);
+    osc.type = 'sine'; osc.frequency.value = 2600 + (i * 1733 % 2400);
+    gain.gain.setValueAtTime(0, t); gain.gain.linearRampToValueAtTime(.035 * level, t + .004);
+    gain.gain.exponentialRampToValueAtTime(.0003, t + .12);
+    osc.connect(gain); gain.connect(ctx.destination); ringing++;
+    osc.start(t); osc.stop(t + .14);
+    osc.onended = () => {ringing--; try {osc.disconnect(); gain.disconnect();} catch {}};
+   }
+   return true;
+  },
   impact(speed, topSpeed) {
    const t = Math.min(1, Math.abs(speed) / Math.max(1, topSpeed));
    if (t > .05) burst(AUDIO.impactGain * t, AUDIO.impactMs, 900);

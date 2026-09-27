@@ -164,6 +164,10 @@ body.tc-on .player-hint{display:none}
 .play-wanted[data-flash="true"] i[data-on="true"]{animation:play-wanted-flash .8s steps(2,jump-none) infinite}
 @keyframes play-wanted-flash{0%{opacity:1}100%{opacity:.25}}
 @media (prefers-reduced-motion:reduce){.play-wanted[data-flash="true"] i[data-on="true"]{animation:none;opacity:.6}}
+.play-radio{position:absolute;top:9%;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:2px;padding:7px 16px;background:#0b1724cc;border:1px solid #7fd1ff55;border-radius:10px;color:#dff3ff;pointer-events:none;text-align:center;white-space:nowrap;max-width:92vw}
+.play-radio[hidden]{display:none}
+.play-radio-station{font-size:16px;letter-spacing:.04em;color:#7fd1ff}
+.play-radio-song{font-size:13px;opacity:.9;overflow:hidden;text-overflow:ellipsis;max-width:88vw}
 .play-wanted-banner{position:absolute;top:18%;left:50%;transform:translateX(-50%);padding:8px 18px;background:#0b1724dd;border:1px solid #ffd23f66;border-radius:10px;color:#ffd23f;font-weight:700;font-size:20px;letter-spacing:.06em;pointer-events:none}
 
 /* PLAN-WEAPONS W2: the weapon and magazine beside the health bar, and the aim crosshair. */

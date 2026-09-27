@@ -43,7 +43,7 @@ export function createAftermath() {
  const place = (v, lane, d) => {const p = pose(lane.path, Math.max(0, Math.min(lane.path.length, d)), {}); v.x = p.x; v.z = p.z; v.heading = p.heading; v.progress = d;};
  const take = (traffic, type, lane, d) => {
   const slot = traffic.pool.find(v => !v.active); if (!slot) return null;
-  Object.assign(slot, {active: true, parked: false, controlled: true, service: true, platoon: undefined, type, speed: 0,
+  Object.assign(slot, {active: true, wear: null, kept: false, parked: false, controlled: true, service: true, platoon: undefined, type, speed: 0,
    brake: false, blinker: 0, lane: lane.id, transition: -1, next: -1, age: 0, stuck: 0, junction: null, siren: true, pursuit: undefined});
   slot.locks?.clear?.(); slot.passed?.clear?.(); slot.yellowStops?.clear?.();
   place(slot, lane, d);

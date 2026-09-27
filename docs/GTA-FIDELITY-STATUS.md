@@ -6131,6 +6131,66 @@ Not yet seen in the real scene or on a device: the chase car among real traffic 
 cars), the thief and the client on the real crowd's pavements, the shop's place, and the balance of
 the rewards and prices.
 
+## 9ar. Roadmap stage 6 — dents and glass, the motorbike, the car radio (branch restarted from `master` `4cc1a9b`)
+
+- **Dents and broken glass** (`player/car-damage.mjs`). The wear is data on the traffic slot
+  (`slot.wear`: up to 24 dents and four panes, each 0 whole / 1 cracked / 2 gone), so it stays with
+  the car -- shoot a parked car's windows, get in, and they are broken. Every spawn in the pool
+  (traffic, police units, the mission car, the ambulance, the own car) starts it clean
+  (`wear: null`); the shop's repair clears it.
+  - A crash (the same contact that already cost speed and `damage`) dents the body at the point
+    of contact, pushed in along the hit, deeper and wider with the speed it took away, merging
+    with a dent already there. 7 m/s lost cracks the pane on that side; 13 m/s takes it out.
+  - A round meeting a car above 55% of its height hits glass: the first cracks the pane it came
+    through, the next takes it out. Below that it leaves a small dent. Shards (pale points on the
+    blood pool) and a synthesised glass sound (`audio.glass`).
+  - A person thrown onto the bonnet at 9 m/s cracks the windscreen, at 15 takes it out.
+  - Drawn on the player's close-range model only (vehicle-visual.mjs): the paint shell's
+    vertices are pushed in round each dent with a crumple term, normals recomputed. The glass is
+    split by pane from each triangle's normal; a cracked pane is redrawn with a generated crazed
+    texture (`vehicle-glass-cracked`), and a pane that is gone is collapsed. Traffic cars are
+    batches and are not deformed.
+- **The motorbike** (`traffic/motorbike-shape.mjs`, type `motorbike`). No CC0 model small and clean
+  enough to ship was at hand, so it is built from primitives: tank, tail, cowl and screen, an
+  engine block, a tubular frame, forks, a swingarm, an exhaust down the right, spoked wheels.
+  - Weight 0 and `handDriven`, so it is never traffic. Three stand parked (`kept`, so a tier change
+    does not recycle them): one 10 m from where the player first appears, two further out
+    (`BIKE_SPOTS`). Traffic draws a parked one leaning on its side stand.
+  - It is faster than any car (17 m/s) and quicker off the line (`power` 1.4 in the handling),
+    narrow, and on its own model it leans into turns (tan lean = v·ω/g, at most 0.72 rad). Both
+    wheels spin and the front steers.
+  - The rider is on show, not hidden like a car's driver: the seated Drive clip, the trunk leant
+    over the tank, the hands IK'd to the grips and the feet to the pegs (`createRideGrip`), all
+    leaning with the bike.
+  - A hit that takes 6.5 m/s or more throws the rider off (the knock-down a car gives, 25 health).
+- **The car radio** (`audio/radio-music.mjs`, `audio/radio.mjs`). Original instrumental music,
+  written by rule and played on a synthesised band -- no samples, no licences. Six stations:
+  Shibuya Night FM (city pop), Concrete 93.1 (boom-bap hip-hop), Neon Pulse 101.7 (house),
+  Rewind 80s (synthwave), Loud Garage 97.8 (rock), Tokyo Drill 104.2 (trap). Each has three
+  songs with made-up titles and artists; a song is a 52-bar form (intro, verse, chorus, verse,
+  chorus, bridge, chorus, outro) over the style's stock progression and grooves, with a lead
+  motif per song, and a station jingle between songs.
+  - Stations are live: each runs on its own clock, so tuning lands mid-song, with a burst of
+    static. Notes are scheduled 0.3 s ahead on the AudioContext, through a car-speaker filter and
+    a compressor.
+  - Controls: R in a car (Shift+R back), the pad's d-pad ←/→, a ラジオ button on touch. The dial
+    runs through the six stations and then off.
+  - Each car remembers its station; a patrol car starts with it off. The station and song show at
+    the top of the screen for 4 s when they change. Getting out fades it.
+
+Tests: `tests/stage6.test.mjs` (9 — crash dents and panes; rounds on glass and body; the deform;
+the close-range model dented, cracked, broken and repaired; the motorbike type, model, fleet parts,
+anchors and lean; the rider's hands and feet on the grips and pegs; the six stations' songs (their
+grooves, determinism, ranges); a station's live programme; the dial and its controls).
+Stills: `evidence/roadmap/stage6/stage6bench.png` (qa/gta-upgrade/stage6bench.html). The radio
+is rendered offline by qa/gta-upgrade/radiobench.html (a waveform and band-energy strip per
+station, `evidence/roadmap/stage6/radiobench.png`); the bench capture now writes files a bench
+hands back (the 12-second WAVs), which are not committed.
+
+Not yet heard or seen on a device: how the radio sounds on real speakers and its level under the
+engine and the city (tuned by measured RMS only), the bike's handling and the rider seen from the
+chase camera, the dents on a real crash, and whether the ラジオ button crowds the touch layout.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle

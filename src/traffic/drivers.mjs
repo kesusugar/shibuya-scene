@@ -42,6 +42,7 @@ export const SEATED_DRIVER=Object.freeze({
 function seatAnchors(){
  const out={};
  for(const type of Object.keys(VEHICLES)){
+  if(VEHICLES[type].twoWheel)continue;   // stage 6: nobody but the player rides one
   const shape=buildVehicleShape(type,{detail:0});
   const a=shape.anchors?.driverSeat;
   // A body with no anchor is not drawn rather than drawn in the wrong place.

@@ -80,7 +80,7 @@ export function createMissionBoard(network) {
   if (!cands.length) return 'この場所では追跡できません';
   cands.sort((a, b) => b.ahead - a.ahead);
   const c = cands[runs % Math.min(cands.length, 5)];
-  Object.assign(slot, {active: true, parked: false, controlled: true, service: true, missionTarget: true, platoon: undefined,
+  Object.assign(slot, {active: true, wear: null, kept: false, parked: false, controlled: true, service: true, missionTarget: true, platoon: undefined,
    type: MISSION.chase.type, x: c.x, z: c.z, heading: c.h, speed: 0, brake: false, blinker: 0, lane: c.lane, transition: -1, next: -1,
    progress: 0, age: 0, stuck: 0, junction: null, siren: false, pursuit: undefined});
   slot.locks?.clear?.(); slot.passed?.clear?.(); slot.yellowStops?.clear?.();
