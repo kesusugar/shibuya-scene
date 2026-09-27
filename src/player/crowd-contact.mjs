@@ -19,6 +19,7 @@
 // Bounded: every query reads the simulation's own 2 m grid, 3x3 cells round the player.
 import {RADIUS} from '../life/config.mjs';
 import {onRails as railed} from './combat.mjs';
+import {fighter} from '../life/temperament.mjs';
 
 export const CONTACT=Object.freeze({
  playerRadius:.35,       // PLAYER.radius (not imported: controller.mjs imports this module)
@@ -29,9 +30,8 @@ export const CONTACT=Object.freeze({
  depenetrate:.8,         // m/s: how fast an existing overlap is opened
  cooldown:.6,            // s: per person, so one body is bumped once and not every frame
  knockDown:false,        // a sprint bump never knocks anyone down (see the plan, section 2)
- // RUN "player crowd contact": the part of a bump that turns into a fight, drawn once per bump
- // from the simulation's own seeded rng.
- fightChance:.3,
+ // RUN "player crowd contact": a bump turns into a fight only with one of the few who fight
+ // (temperament `fighter`, about 3% of adults), and combat refuses it while the player is armed.
  sprint:3.7,             // m/s: a bump at or above this is a hard one
  // What a bump looks like on the person (Step C): a short light flinch walking, a stagger at a
  // sprint. `stagger` is how far a sprint bump carries someone off rails, in metres.
@@ -262,8 +262,9 @@ const unit=(id,salt)=>((Math.imul((id|0)+salt*7919,0x9e3779b1)>>>0)%100003)/1000
  *   flee offset and brings them back to their track, and it never calls `leave()`, so no
  *   signal group is held for a bump. Off rails at a sprint, a stagger the combat system carries
  *   (`staggerX/Z`, as a punch does), about `CONTACT.stagger` metres.
- * - One draw from the simulation's own seeded rng decides whether this bump starts a fight
- *   (`CONTACT.fightChance`). Whoever listens (`onBump`) starts it, through combat's own path.
+ * - Whether this bump starts a fight: only with one of the few who fight (temperament
+ *   `fighter`, ~3% of adults), and combat refuses it while the player is armed. Whoever listens
+ *   (`onBump`) starts it, through combat's own path.
  *   Someone off rails who is going to fight stands their ground rather than stepping aside.
  * - Never a knock-down while `CONTACT.knockDown` is false.
  */
@@ -272,7 +273,7 @@ export function bump(crowd,p,state){
  p.bumpUntil=crowd.time+CONTACT.cooldown;
  const speed=Math.max(0,state.speed??0),d=Math.hypot(p.x-state.x,p.z-state.z);
  const strong=speed>=CONTACT.sprint,onRails=railed(p);
- const fight=(crowd.rng?crowd.rng():Math.random())<CONTACT.fightChance;
+ const fight=fighter(p.id,{archetype:p.archetype});
  let dx=p.x-state.x,dz=p.z-state.z;{const l=Math.hypot(dx,dz);if(l>1e-6){dx/=l;dz/=l;}else{const h=state.bodyHeading??state.heading??0;dx=Math.sin(h);dz=Math.cos(h);}}
  const hold=strong?CONTACT.hardFlinch:CONTACT.flinch;
  p.hurtUntil=crowd.time+hold;p.hurtDuration=hold;p.hurtX=dx;p.hurtZ=dz;p.hurtStrong=strong;

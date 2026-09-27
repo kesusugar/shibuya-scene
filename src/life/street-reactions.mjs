@@ -24,7 +24,9 @@ export const REACT = Object.freeze({
  limpSpeed: .45,          // share of their pace, limping
  crawlSpeed: .22,         // and crawling
  crawlBelow: 45,          // health at or under which a leg wound puts them on the ground
- armedShare: .05,         // of adults, carrying a handgun
+ // Owner's rule after stage 6: nobody on the street carries a gun -- only the police shoot back.
+ // The armed-civilian machinery stays (a share above 0 brings it back).
+ armedShare: 0,           // of adults, carrying a handgun
  provokeRange: 16,        // m: a gunshot this close makes an armed person draw
  range: 30,               // m: they fire from no further
  drawSeconds: .8,         // s from the draw to the first round
@@ -37,8 +39,9 @@ export const REACT = Object.freeze({
 const hash = (a, b = 0) => {let h = Math.imul((a | 0) ^ 0x7f4a7c15, 0x85ebca6b) ^ Math.imul((b | 0) + 0x165667b1, 0xc2b2ae35); h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d); h ^= h >>> 13; return (h >>> 0) / 4294967296;};
 
 /** Whether this pedestrian carries a gun. Fixed by id: the same person always does or does not. */
-export function isArmed(p) {
- return !!p && !p.officer && p.archetype !== 'kid' && hash(p.id, 91) < REACT.armedShare;
+/** `share` of adults (REACT.armedShare, now 0: the owner's rule; tests pass their own). */
+export function isArmed(p, share = REACT.armedShare) {
+ return !!p && !p.officer && p.archetype !== 'kid' && hash(p.id, 91) < share;
 }
 
 /** The chance an armed civilian's round hits a standing person at `d` metres. */
@@ -63,7 +66,8 @@ export function legWound(p) {
 
 const alive = p => p?.active && !p.combatDead && p.struck === undefined && !p.controlled;
 
-export function createStreetReactions() {
+export function createStreetReactions({armedShare = REACT.armedShare} = {}) {
+ const armed = p => isArmed(p, armedShare);
  const stats = {handsUp: 0, gaveUp: 0, drawn: 0, shots: 0, hits: 0, blocked: 0};
  const shooters = new Map();          // id -> {until, drawAt, next, shots}
  let heldId = null, time = 0;
@@ -80,7 +84,7 @@ export function createStreetReactions() {
   get holding() {return heldId;},
   /** Someone armed was provoked: hurt, aimed at, or a gunshot near them. */
   provoke(p, reason = 'hurt') {
-   if (!isArmed(p) || !alive(p)) return false;
+   if (!armed(p) || !alive(p)) return false;
    let s = shooters.get(p.id);
    if (!s) {s = {until: 0, drawAt: time, next: time + REACT.drawSeconds, shots: 0, reason}; shooters.set(p.id, s); stats.drawn++;}
    s.until = time + REACT.stay;
@@ -100,11 +104,11 @@ export function createStreetReactions() {
    if (!crowd || !me) return events;
    const pool = crowd.pool ?? [];
    // A gunshot: the armed people near it draw.
-   if (shotAt) for (const p of pool) if (alive(p) && isArmed(p) && Math.hypot(p.x - shotAt.x, p.z - shotAt.z) <= REACT.provokeRange) this.provoke(p, 'gunshot');
+   if (shotAt) for (const p of pool) if (alive(p) && armed(p) && Math.hypot(p.x - shotAt.x, p.z - shotAt.z) <= REACT.provokeRange) this.provoke(p, 'gunshot');
    // Hands up for the one at gunpoint -- or, if they carry a gun, they draw.
    const aimed = aimedId !== null ? pool[aimedId] : null;
    if (aimed && alive(aimed) && me.alive !== false && Math.hypot(aimed.x - me.x, aimed.z - me.z) <= REACT.handsUpRange && !aimed.crawling) {
-    if (isArmed(aimed)) this.provoke(aimed, 'aimed');
+    if (armed(aimed)) this.provoke(aimed, 'aimed');
     else if (!(aimed.handsUpSince !== undefined && time - aimed.handsUpSince > REACT.giveUp)) {
      if (aimed.handsUpSince === undefined || !(aimed.handsUpUntil > time)) {aimed.handsUpSince = time; stats.handsUp++;}
      aimed.handsUpUntil = time + REACT.handsUpHold; faceTo(aimed, me); heldId = aimed.id;

@@ -9,15 +9,16 @@ const ids=Array.from({length:1978},(_,i)=>i);
 test('the same person always answers the same way, and a crowd answers several ways',()=>{
  for(const id of [0,17,503,1977])assert.equal(responseOf(id),responseOf(id));
  const mix=responseMix(ids);
- for(const [k,n] of Object.entries(mix))assert.ok(n>ids.length*.15,`only ${n} of ${ids.length} would ${k}`);
- assert.ok(mix.fight<ids.length*.5,'most people should not square up to a stranger');
+ for(const k of ['flee','backoff'])assert.ok(mix[k]>ids.length*.2,`only ${mix[k]} of ${ids.length} would ${k}`);
+ // The owner's rule after stage 6: about 3% square up.
+ assert.ok(mix.fight>ids.length*.015&&mix.fight<ids.length*.05,`${mix.fight} of ${ids.length} fight`);
 });
 
-test('temperament follows the nerve awareness already uses',()=>{
+test('temperament follows the nerve awareness already uses (for those who do not fight)',()=>{
  for(const id of ids.slice(0,300)){
   const n=traitsOf(id).nerve,r=responseOf(id);
-  if(r===RESPONSE.FIGHT)assert.ok(n>.68);
-  if(r===RESPONSE.FLEE)assert.ok(n<.42);
+  if(r===RESPONSE.FLEE)assert.ok(n<.5);
+  if(r===RESPONSE.BACK_OFF)assert.ok(n>=.5);
  }
 });
 

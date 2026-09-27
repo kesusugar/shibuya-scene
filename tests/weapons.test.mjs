@@ -184,7 +184,9 @@ test('R6: in combat the katana lands in the window, cuts everyone in the arc, an
  assert.equal(melee.snapshot().cuts,2,'one cut, two people in its arc');
  assert.equal(a.combatHealth,100-WEAPONS.katana.damage);
  assert.ok(events.includes('blade_hit'));
- // Second cut: faster (R5), and both go down.
+ // Second cut: faster (R5), and both go down. Cut, they stagger back and would run (the owner's
+ // rule); here they are cornered where they stood.
+ Object.assign(a,{x:-.5,z:1.2});Object.assign(b,{x:.6,z:1.1});
  melee.request();
  for(let t=0;t<SWORD.duration+.1;t+=1/60){c.time+=1/60;melee.update(1/60,c,p);}
  assert.ok(p.state.attackDuration<SWORD.duration,'every other cut is quicker');

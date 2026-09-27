@@ -198,6 +198,7 @@ test('H1-H4 wiring: a cut marks where and which way it struck, catches the victi
  assert.ok(a.hitX<0&&a.hitZ>0,`blow direction ${a.hitX.toFixed(2)},${a.hitZ.toFixed(2)}`);
  assert.ok(!a.ragdoll,'a survivor has no ragdoll');
  for(let t=0;t<SWORD.duration;t+=1/60){c.time+=1/60;melee.update(1/60,c,player);}   // the first swing ends
+ Object.assign(a,{x:0,z:1.3});   // cut, they would run (the owner's rule); cornered where they stood
  melee.request();
  for(let t=0;t<2*SWORD.duration&&!a.combatDead;t+=1/60){c.time+=1/60;melee.update(1/60,c,player);}
  assert.ok(a.combatDead&&a.ragdoll,'the kill gave no ragdoll');

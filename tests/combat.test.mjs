@@ -9,9 +9,9 @@ import {createPlayer,PLAYER} from '../src/player/controller.mjs';
 // RUN 11.2: only some people fight back now -- by temperament, deterministic by id. The tests
 // of the retaliation MECHANICS use someone who would; see the temperament tests below for the
 // people who would not.
-const FIGHTER=Array.from({length:64},(_,i)=>i).find(i=>responseOf(i)===RESPONSE.FIGHT);
-const FLEER=Array.from({length:64},(_,i)=>i).find(i=>responseOf(i)===RESPONSE.FLEE);
-const BACKER=Array.from({length:64},(_,i)=>i).find(i=>responseOf(i)===RESPONSE.BACK_OFF);
+const FIGHTER=Array.from({length:4000},(_,i)=>i).find(i=>responseOf(i)===RESPONSE.FIGHT);
+const FLEER=Array.from({length:4000},(_,i)=>i).find(i=>responseOf(i)===RESPONSE.FLEE);
+const BACKER=Array.from({length:4000},(_,i)=>i).find(i=>responseOf(i)===RESPONSE.BACK_OFF);
 
 function crowd(people=[]){
  const log={left:[],struck:[],said:[]};
@@ -451,19 +451,48 @@ test('a cast member fights back once they are no longer cast',()=>{
 // Player crowd contact, Step E: whoever is punched hits back, whatever their temperament. This
 // test used to require the FLEER and BACKER temperaments to run or step away instead; the user
 // changed the rule on 2026-09-24. Temperament still decides what WITNESSES do (hq-awareness).
-test('every punched person fights back, whatever their temperament',()=>{
- for(const id of [FIGHTER,FLEER,BACKER]){
+test('owner\'s rule: only the few who fight hit back; the rest run (the fleeing ones screaming)',()=>{
+ for(const [id,fights] of [[FIGHTER,true],[FLEER,false],[BACKER,false]]){
   const target=npc(id,0,1.0);
-  const c=crowd([target]);const shoved=[];c.scatter=(q,dx,dz,u)=>{shoved.push({dx,dz,u});return true;};
+  const c=crowd([target]);const fled=[];c.flee=(q,dx,dz,o)=>{fled.push({id:q.id,dx,dz,...o});return true;};c.pool=[target];
   const p=player(),melee=createMeleeCombat();
   melee.request();run(melee,c,p,1.2);
-  const snap=melee.snapshot();
-  assert.equal(snap.byResponse.fight,1,`id ${id} (${responseOf(id)}) did not fight back`);
-  assert.equal(target.combatTarget,'player');
-  assert.equal(shoved.length,0,'a victim was sent away instead of fighting');
-  const before=p.state.health;run(melee,c,p,3);
-  assert.ok(p.state.health<before,`id ${id} never swung back`);
+  if(fights){assert.equal(target.combatTarget,'player');assert.equal(fled.length,0);
+   const before=p.state.health;run(melee,c,p,3);assert.ok(p.state.health<before,'the fighter never swung back');}
+  else{assert.notEqual(target.combatTarget,'player',`id ${id} (${responseOf(id)}) squared up`);
+   assert.equal(fled.length,1,'sent away');assert.ok(fled[0].dz>0,'away from the player');
+   if(responseOf(id)===RESPONSE.FLEE)assert.ok(c.log.said.some(e=>e.id===id&&e.kind==='scream'),'a runner screams');}
  }
+});
+
+test('owner\'s rule: about 3% of adults fight, never a child or an elderly person',()=>{
+ const ids=Array.from({length:20000},(_,i)=>i),n=ids.filter(id=>responseOf(id)===RESPONSE.FIGHT).length/ids.length;
+ assert.ok(n>.024&&n<.036,`${(n*100).toFixed(1)}% fight`);
+ assert.ok(ids.every(id=>responseOf(id,{archetype:'kid'})!==RESPONSE.FIGHT&&responseOf(id,{archetype:'elderly'})!==RESPONSE.FIGHT));
+});
+
+test('owner\'s rule: one at a time -- a second fighter backs off while the first is squaring up',()=>{
+ const other=Array.from({length:4000},(_,i)=>i).filter(i=>responseOf(i)===RESPONSE.FIGHT)[1];
+ const a=npc(FIGHTER,0,1.0),b=npc(other,.3,1.0);
+ const c=crowd([a,b]);c.pool=[a,b];c.flee=()=>true;
+ const p=player(),melee=createMeleeCombat();
+ assert.ok(melee.provoke(c,a,p),'the first fights');
+ assert.equal(melee.provoke(c,b,p),false,'the second waits');
+ assert.notEqual(b.combatTarget,'player');
+});
+
+test('owner\'s rule: a weapon out breaks every fist fight -- they scream and run; the katana starts none',()=>{
+ let held='fists';
+ const a=npc(FIGHTER,0,1.0,{combatTarget:'player',combatUntil:1e9});
+ const c=crowd([a]);c.pool=[a];const fled=[];c.flee=(q)=>{fled.push(q.id);return true;};
+ const p=player(),melee=createMeleeCombat({weapon:()=>held});
+ run(melee,c,p,.2);assert.equal(a.combatTarget,'player','still fighting bare-handed');
+ held='pistol';run(melee,c,p,.1);
+ assert.notEqual(a.combatTarget,'player');assert.deepEqual(fled,[a.id]);
+ assert.ok(c.log.said.some(e=>e.id===a.id&&e.kind==='scream'));
+ // Armed, a bump into a fighter starts nothing.
+ const b=npc(FIGHTER,0,1.0);const c2=crowd([b]);c2.pool=[b];
+ assert.equal(createMeleeCombat({weapon:()=>'katana'}).provoke(c2,b,player()),false);
 });
 
 test('a blow shows on the victim as a hit, with the hold of that blow, and never as a punch',()=>{
