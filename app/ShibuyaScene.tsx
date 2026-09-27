@@ -231,10 +231,11 @@ export default function Home(){
    entry:{x:door.x,z:door.z,heading:door.heading},
    seat:{x:a.seat.x,z:a.seat.z,heading:entry.slot.heading}},entry.slot);
  };
- const attack=()=>{if(!(playerMode&&!driving&&!vehicleTransition.active&&player?.state.alive))return;
+ const attack=(o?:any)=>{if(!(playerMode&&!driving&&!vehicleTransition.active&&player?.state.alive))return;
   // PLAN-WEAPONS W2: with the pistol out the attack button is the trigger; on a phone (no pointer
   // lock, no mouse to aim with) it locks on (R16).
-  if(arsenal?.trigger({touch:touchEnabled&&document.pointerLockElement!==canvas}))return;
+  // Item 3: the pad's ZR (`o.pad`) fires a gun only with ZL held.
+  if(arsenal?.trigger({touch:touchEnabled&&document.pointerLockElement!==canvas,pad:!!o?.pad}))return;
   melee.request();};
  // PLAN-WEAPONS W2: the collision world a bullet sees, read through the live hooks every call.
  const weaponMuzzle=new THREE.Vector3(),weaponBarrel=new THREE.Vector3(),viewDirection=new THREE.Vector3();
@@ -514,7 +515,8 @@ export default function Home(){
   touchPad?.setDriving(false);touchPad?.show();
   const sim=trafficEntry.hooks.current?.sim;
   if(sim&&!playerCar)ensureCar();
-  playerMode=true;combatDeathReported=false;controls.enabled=false;player.attach(canvas,{onExit:()=>exitPlayer(),onDrive:()=>toggleDrive(),onAttack:()=>attack(),onAttackHold:(on:boolean)=>arsenal?.hold(on&&!driving),onWeapon:(n:number)=>selectWeapon(n),onWeaponCycle:(d:number)=>cycleWeapon(d),onAim:(on:boolean)=>arsenal?.aim(on&&!driving),onWheel:(kind:string,x:number,y:number)=>onWheel(kind,x,y),onReload:()=>{if(!driving)arsenal?.reload();},onRoll:()=>{if(playerMode&&!driving&&!vehicleTransition.active&&melee.phase==='idle')player?.roll();},
+  playerMode=true;combatDeathReported=false;controls.enabled=false;player.attach(canvas,{onExit:()=>exitPlayer(),onDrive:()=>toggleDrive(),onAttack:(o:any)=>attack(o),onAttackHold:(on:boolean,o:any)=>arsenal?.hold(on&&!driving,o),
+   onLockFlick:(d:string)=>arsenal?.lockFlick(d),onLockGyro:(y:number,p:number)=>arsenal?.lockGyro(y,p),locked:()=>!!arsenal?.lock,onWeapon:(n:number)=>selectWeapon(n),onWeaponCycle:(d:number)=>cycleWeapon(d),onAim:(on:boolean,o:any)=>arsenal?.aim(on&&!driving,o),onWheel:(kind:string,x:number,y:number)=>onWheel(kind,x,y),onReload:()=>{if(!driving)arsenal?.reload();},onRoll:()=>{if(playerMode&&!driving&&!vehicleTransition.active&&melee.phase==='idle')player?.roll();},
    // C1-C4: the pad's own buttons for the siren (d-pad up), the horn alone (left stick in a car) and the map (−).
    driving:()=>driving,onRadio:(d:number)=>tuneRadio(d),onSiren:()=>{if(driving&&playerCar)police?.toggleSiren(playerCar);},onHornOnly:()=>{if(driving&&playerCar)soundscape?.horn(playerCar.state.x,playerCar.state.z);},onMap:()=>playUI?.toggleMap?.(),onCrouch:()=>{if(playerMode&&!driving&&!vehicleTransition.active)player?.crouch();},onHorn:()=>{if(driving&&playerCar&&!police?.toggleSiren(playerCar))soundscape?.horn(playerCar.state.x,playerCar.state.z);}});setPlayerHit(null);setMode('player');
   (window as any).__SHIBUYA_PLAYER__=player;(window as any).__SHIBUYA_CAR__=playerCar;
@@ -657,6 +659,8 @@ export default function Home(){
  if((perfMode||perfWanted)&&!perfProbe&&renderer)ensurePerf();
  perfProbe?.frameStart();perfProbe?.begin('player');if(playerMode&&player)player.updateInput(dt);if(playerMode&&player){view.getWorldDirection(viewDirection);timed('s1-arsenal',()=>arsenal?.frame(dt,{player,figure:playerFigure,driving:driving||!!vehicleTransition.active,world:weaponWorld,
   camera:{position:view.position,direction:viewDirection},touch:touchEnabled&&document.pointerLockElement!==canvas,pad:player.lastDevice==='pad',time:lifeEntry.hooks.current?.sim?.time??0}));
+  // Item 3: a pad's hard lock keeps the target in view -- the camera turns onto them.
+  {const l=arsenal?.lock;if(l){const s=player.state;const dh=Math.atan2(l.x-s.x,l.z-s.z)-s.heading;s.heading+=Math.atan2(Math.sin(dh),Math.cos(dh))*Math.min(1,dt*10);}}
   BLOOM_KICK.value=arsenal?.effects.kick??0;}else BLOOM_KICK.value=0;if(playerMode&&player){
   if(vehicleTransition.active){const pose=vehicleTransition.update(dt);if(pose){
     // The DOOR comes from the stage, not from the overall phase. `sin(phase * PI)` opened the

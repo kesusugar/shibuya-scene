@@ -173,8 +173,12 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
   // pad's ZR), for the submachine gun's automatic fire; 4 selects it.
   // Stage 1: `onWheel(kind, x, y)` is the weapon wheel -- 'open', 'move' (mouse px), 'point' (a
   // stick, -1..1) and 'close' -- held open by Tab or the pad's L/R (a tap is what it was before).
+  // Item 3: the pad's ZL, ZR and attack carry `{pad: true}` (onAim, onAttackHold, onAttack), so
+  // the arsenal can hard-lock and refuse a gun's shot without ZL. `locked()` says a hard lock is
+  // on: the right stick then flicks (`onLockFlick('left'|'right'|'up'|'down')`) instead of turning
+  // the camera, and the gyro's turn is reported (`onLockGyro(yaw, pitch)`) as well as applied.
   attach(element, {onExit, onDrive, onAttack, onAttackHold, onHorn, onWeapon, onWeaponCycle, onReload, onAim, onRoll, onCrouch,
-                   onSiren, onHornOnly, onMap, onWheel, onRadio, driving = () => false} = {}) {
+                   onSiren, onHornOnly, onMap, onWheel, onRadio, onLockFlick, onLockGyro, locked = () => false, driving = () => false} = {}) {
    if (detach) return;
    let tabAt = null, wheelOpen = false, padWheel = false;
    const openWheel = () => {if (!wheelOpen && !driving()) {wheelOpen = true; onWheel?.('open');}};
@@ -248,6 +252,7 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
      const t = gyro.turn(aimHeld || padAim);
      if (t.yaw || t.pitch) {
       lastDevice = 'pad';
+      if (locked()) onLockGyro?.(t.yaw, t.pitch);
       state.heading += t.yaw;
       state.pitch = Math.max(-PLAYER.pitchLimit, Math.min(PLAYER.pitchLimit, state.pitch + t.pitch));
      }
@@ -257,9 +262,9 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
     const f = inputMap.poll(pad, dt, mode);
     padFrame = pad ? f : null; padProfile = f.profile;
     if (!pad) return;
-    if (f.pressed.length || Math.hypot(f.move.x, f.move.y) > 0 || Math.hypot(f.look.x, f.look.y) > 0 || f.throttle > 0 || f.brake > 0) lastDevice = 'pad';
+    if (f.pressed.length || Math.hypot(f.move.x, f.move.y) > 0 || Math.hypot(f.look.x, f.look.y) > 0 || f.throttle > 0 || f.brake > 0 || f.aim || f.fire) lastDevice = 'pad';
     for (const action of f.pressed) {
-     if (action === 'fire') onAttack?.();
+     if (action === 'fire') onAttack?.({pad: true});
      else if (action === 'reload') onReload?.();
      else if (action === 'roll') onRoll?.();
      else if (action === 'enter' || action === 'exit') onDrive?.();
@@ -277,8 +282,11 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
     if (f.wheel && !padWheel) {padWheel = true; openWheel();}
     else if (!f.wheel && padWheel) {padWheel = false; closeWheel();}
     if (padWheel && wheelOpen) {onWheel?.('point', f.stick.x, f.stick.y); return;}
-    if (f.aim !== padAim) {padAim = f.aim; onAim?.(f.aim);}
-    if (!!f.fire !== padFire) {padFire = !!f.fire; onAttackHold?.(padFire);}
+    if (f.aim !== padAim) {padAim = f.aim; onAim?.(f.aim, {pad: true});}
+    if (!!f.fire !== padFire) {padFire = !!f.fire; onAttackHold?.(padFire, {pad: true});}
+    // Item 3: locked on, the right stick is for flicks, not the camera (the scene keeps the
+    // target in view).
+    if (padAim && locked()) {if (f.flick) onLockFlick?.(f.flick); return;}
     const k = PLAYER.padLook * settings.look * dt;
     if (f.look.x) state.heading -= f.look.x * k;
     if (f.look.y) state.pitch = Math.max(-PLAYER.pitchLimit, Math.min(PLAYER.pitchLimit, state.pitch - f.look.y * k * (settings.invertY ? -1 : 1)));

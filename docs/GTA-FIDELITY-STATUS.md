@@ -6319,6 +6319,34 @@ holstered at ☆1–2, on foot drawn from ☆1; on foot fired on after the warni
 threat; shot dead by the police is the arrest, a fight death is not), `tests/police-ram.test.mjs`,
 `tests/integration.test.mjs` (the crew's car can be got into and taken).
 
+## 9ax. Aiming on the Switch Pro Controller: ZL locks on, ZR attacks (owner's plan, item 3)
+
+Before: ZL raised the gun with only a soft lock (a 0.12 rad cone), and ZR on its own raised the gun
+and fired (a click-to-fire rule carried over from the mouse).
+
+Now, on the pad only (the keyboard, mouse and touch keep their rules):
+- **ZL held** raises the gun and **hard-locks** the person nearest the centre of the view (within
+  0.6 rad and 40 m, never a child, not through a wall), at the chest (`ARSENAL.hardLock`,
+  `hardRange`). The lock holds while they move (the camera turns onto them), is retaken on the next
+  nearest when they drop, and is lost past 50 m (`hardKeep`). **Letting go of ZL unlocks.**
+- **Right stick, while locked**: a flick ← / → takes the next person to that side of the screen;
+  a flick ↑ aims at the head (`ARSENAL.head` 1.62 m on a 1.76 m body, above ballistics' head line),
+  ↓ back to the chest. A flick is the stick out past 0.7 from rest, once until it comes back inside
+  0.35 (`flickOf`, `INPUT.flick`/`rest`). While locked the stick does not turn the camera.
+- **ZR** attacks: fires the gun **only while ZL is held** (owner's choice ②: ZR alone does not
+  fire, and the press is not turned into a punch); with the fists or the katana ZR punches or cuts
+  as before. Holding ZR and then pressing ZL starts the automatic.
+- **Gyro**: turning the controller more than 0.08 rad while locked lets go into free aim (the soft
+  lock) until ZL is pressed again, so gyro aiming still works.
+- HUD hint (Pro Con names): `ZL 構える・ロックオン · ZR 攻撃 · 構え中 右スティック弾き ←→ 標的切替 ↑ 頭 · …`.
+
+Files: `src/player/input-map.mjs` (`flickOf`, the `flick` in a poll), `src/player/arsenal.mjs`
+(`lockCandidates`, the hard lock, `aim/hold/trigger({pad})`, `lockFlick`, `lockGyro`, `lock`),
+`src/player/controller.mjs` (pad calls carry `{pad: true}`; the stick flicks while `locked()`),
+`app/ShibuyaScene.tsx` (wiring; the camera turns onto the lock). Tests: `tests/pad-aim.test.mjs`.
+Not checked on the device yet: how the 0.6 rad cone, the flick thresholds and the camera's turn
+rate feel in the hand.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle

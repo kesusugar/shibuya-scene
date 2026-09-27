@@ -25,11 +25,41 @@ export const ARSENAL = Object.freeze({
  // A click without aiming raises the gun first; the shot waits for the aim, up to this long.
  raiseWait: .5, raiseWeight: .8,
  chest: 1.3,       // m above the feet: where a lock-on aims, on a 1.76 m body
+ // Item 3, the pad's hard lock (ZL held): the nearest person this wide of the view and this near
+ // is locked on and stays locked until ZL is let go, they drop, or they are out of `hardKeep`.
+ // `head` is where a flick up aims (above ballistics' head line, below the crown). Turning the
+ // controller (gyro) more than `gyroBreak` radians while locked lets go into free aim.
+ hardLock: .6, hardRange: 40, hardKeep: 50, head: 1.62, gyroBreak: .08,
  muzzleFallback: 1.4
 });
 
 const heightOf = p => ARCHETYPES[p?.archetype]?.height ?? BALLISTICS.bodyHeight;
 const aliveTarget = p => p?.active && !p.controlled && p.struck === undefined && !p.combatDead;
+
+/**
+ * Item 3: the people a pad's hard lock can take, each with its bearing off the view (radians,
+ * + to the right of the screen), its angle off the centre and its distance. Pure over `world`.
+ */
+export function lockCandidates(s, camera, world, {range = ARSENAL.hardRange, cone = ARSENAL.hardLock} = {}) {
+ const o = camera?.position ?? {x: s.x, y: s.y + 1.5, z: s.z};
+ const d = camera?.direction ?? {x: Math.sin(s.heading), y: 0, z: Math.cos(s.heading)};
+ const dl = Math.hypot(d.x, d.y, d.z) || 1, hl = Math.hypot(d.x, d.z) || 1;
+ const out = [];
+ for (const p of world.people(o, d, range, true)) {
+  if (!aliveTarget(p) || p.archetype === 'kid') continue;
+  const body = world.bodyOf?.(p) ?? {y: 0, height: heightOf(p)};
+  const cy = body.y + ARSENAL.chest * body.height / BALLISTICS.bodyHeight;
+  const vx = p.x - o.x, vy = cy - o.y, vz = p.z - o.z, dist = Math.hypot(vx, vy, vz);
+  if (dist > range || dist < 1) continue;
+  const angle = Math.acos(Math.max(-1, Math.min(1, (vx * d.x + vy * d.y + vz * d.z) / (dist * dl))));
+  if (angle > cone) continue;
+  if (!world.clear(s, p)) continue;
+  // The screen's right, looking along (dx, dz), is (-dz, dx).
+  const bearing = Math.atan2((-d.z * vx + d.x * vz) / hl, (d.x * vx + d.z * vz) / hl);
+  out.push({p, angle, bearing, dist});
+ }
+ return out;
+}
 
 /**
  * Gunfire in the street (R14): the nearest people within `radius` who can run, run -- at most
@@ -97,10 +127,40 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
  let triggerHeld = false, spread = 0, recoil = 0, burst = 0;
  // §9aj: the person the crosshair's ray last met, if any.
  let lastRayTarget = null;
+ // Item 3: the aim came from the pad (ZL), the trigger from the pad (ZR); the hard lock ({p, part})
+ // while ZL is held, a flick waiting for the next frame, and gyro turn since the lock was taken.
+ let aimPad = false, triggerPad = false, hard = null, flickQueued = null, gyroTurn = 0, lockBroken = false;
+ const hardPoint = (world, h) => {
+  const body = world.bodyOf?.(h.p) ?? {y: 0, height: heightOf(h.p)};
+  return {x: h.p.x, y: body.y + (h.part === 'head' ? ARSENAL.head : ARSENAL.chest) * body.height / BALLISTICS.bodyHeight, z: h.p.z};
+ };
+ /** The pad's lock this frame: kept, retaken, switched by a flick, or let go. */
+ function hardLock(player, camera, world) {
+  const s = player.state;
+  if (hard && (!aliveTarget(hard.p) || Math.hypot(hard.p.x - s.x, hard.p.z - s.z) > ARSENAL.hardKeep || !world.clear(s, hard.p))) hard = null;
+  const flick = flickQueued; flickQueued = null;
+  if (!hard) {
+   // Taken (or retaken when the last one drops): the nearest to the centre of the view, then near.
+   let best = null, score = Infinity;
+   for (const c of lockCandidates(s, camera, world)) {const sc = c.angle * 20 + c.dist * .05; if (sc < score) {score = sc; best = c;}}
+   if (best) {hard = {p: best.p, part: 'chest'}; gyroTurn = 0; stats.locks++;}
+   return hard;
+  }
+  if (flick === 'up') hard.part = 'head';
+  else if (flick === 'down') hard.part = 'chest';
+  else if (flick === 'left' || flick === 'right') {
+   const all = lockCandidates(s, camera, world, {cone: ARSENAL.hardLock * 1.5});
+   const cur = all.find(c => c.p === hard.p)?.bearing ?? 0, side = flick === 'right' ? 1 : -1;
+   let next = null;
+   for (const c of all) if (c.p !== hard.p && (c.bearing - cur) * side > .005 && (!next || (c.bearing - cur) * side < (next.bearing - cur) * side)) next = c;
+   if (next) {hard = {p: next.p, part: hard.part}; stats.switchedLocks++;}
+  }
+  return hard;
+ }
  // Roadmap stage 2: whom the gun is on this frame (their pool id), for hands up and the armed.
  let aimedId = null;
  const isGun = id => GUNS.includes(id);
- const stats = {switches: 0, clanks: 0, shots: 0, hits: 0, headshots: 0, kills: 0, walls: 0, cars: 0, misses: 0, panicked: 0, maxPanic: 0};
+ const stats = {locks: 0, switchedLocks: 0, switches: 0, clanks: 0, shots: 0, hits: 0, headshots: 0, kills: 0, walls: 0, cars: 0, misses: 0, panicked: 0, maxPanic: 0};
 
  /** Where the camera's centre ray first meets something, or `range` out along it. */
  function cameraPoint(camera, world, range) {
@@ -209,10 +269,28 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
    if (ok) {stats.switches++; pendingShot = 0;}
    return ok;
   },
-  /** The right mouse button, or the pad's LB. */
-  aim(on) {aimHeld = !!on;},
-  /** §9ah: the attack button held (the mouse's left, E, the pad's ZR): an automatic keeps firing. */
-  hold(on) {triggerHeld = !!on; if (!on && WEAPONS[inventory.current]?.auto) pendingShot = 0;},
+  /**
+   * The right mouse button, or the pad's ZL (`pad`: item 3, the hard lock). Letting go unlocks.
+   */
+  aim(on, {pad = false} = {}) {
+   aimHeld = !!on; aimPad = aimHeld && !!pad;
+   if (!aimPad) {hard = null; flickQueued = null; lockBroken = false; gyroTurn = 0;}
+  },
+  /**
+   * §9ah: the attack button held (the mouse's left, E, the pad's ZR): an automatic keeps firing.
+   * From the pad (`pad`) it fires only while ZL is held too (item 3).
+   */
+  hold(on, {pad = false} = {}) {triggerHeld = !!on; triggerPad = !!on && !!pad; if (!on && WEAPONS[inventory.current]?.auto) pendingShot = 0;},
+  /** Item 3: a right-stick flick while locked ('left'/'right' switch, 'up' head, 'down' chest). */
+  lockFlick(dir) {if (hard) flickQueued = dir;},
+  /** Item 3: the controller turned (gyro) while locked: past `gyroBreak`, free aim until ZL again. */
+  lockGyro(yaw = 0, pitch = 0) {
+   if (!hard) return;
+   gyroTurn += Math.hypot(yaw, pitch);
+   if (gyroTurn > ARSENAL.gyroBreak) {hard = null; lockBroken = true; gyroTurn = 0;}
+  },
+  /** Item 3: the pad's hard lock -- {id, part, x, y, z} -- or null. */
+  get lock() {return hard ? {id: hard.p.id, part: hard.part, x: hard.p.x, y: hard.p.y ?? 0, z: hard.p.z} : null;},
   /** §9ah: the drawn automatic's muzzle climb (radians) and spread, for the figure and the camera. */
   get recoil() {return recoil;},
   get spread() {return spread;},
@@ -221,8 +299,10 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
    * it raises the gun and fires when it is up (a hip shot is not a thing this body can do). On a
    * phone (`touch`) it also locks on for the shot. Returns false if this is not a gun.
    */
-  trigger({touch = false} = {}) {
+  trigger({touch = false, pad = false} = {}) {
    if (!isGun(inventory.current)) return false;
+   // Item 3 (owner's choice): the pad's ZR does not fire a gun without ZL. Taken, so no punch either.
+   if (pad && !aimHeld) return true;
    if (inventory.state.rounds === 0) {inventory.reload(); return true;}
    pendingShot = ARSENAL.raiseWait; if (touch) touchAim = ARSENAL.raiseWait + .35;
    return true;
@@ -244,7 +324,7 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
    */
   frame(dt, {player, figure = null, driving = false, world = null, camera = null, touch = false, pad = false, time = 0} = {}) {
    inventory.update(dt);
-   if (driving && !wasDriving) {inventory.holster(); aimHeld = false; pendingShot = 0;}
+   if (driving && !wasDriving) {inventory.holster(); aimHeld = false; aimPad = false; hard = null; pendingShot = 0;}
    if (!driving && wasDriving) inventory.unholster();
    wasDriving = driving;
    effects.update(dt);
@@ -269,13 +349,16 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
    const gun = isGun(inventory.current) && !driving && s.alive !== false && !(s.vehiclePhase > 0);
    const auto = gun && !!WEAPONS[inventory.current].auto;
    // An automatic keeps the gun up while the trigger is held, as a pending shot does.
-   if (auto && triggerHeld && inventory.state.rounds > 0) pendingShot = Math.max(pendingShot, .05);
+   if (auto && triggerHeld && (!triggerPad || aimHeld) && inventory.state.rounds > 0) pendingShot = Math.max(pendingShot, .05);
    const wants = gun && (aimHeld || pendingShot > 0 || touchAim > 0);
    s.aim = wants && inventory.state.reloading <= 0 ? 1 : 0;
    if (!gun || !world) {if (!gun) s.aim = 0; return;}
    if (s.aim || s.shotLeft > 0) {
     // What the crosshair is on: the person the lock picks, or the first thing on the camera ray.
-    const lock = lockTarget(player, camera, world, touch, pad);
+    // Item 3: ZL on the pad holds a hard lock; otherwise (mouse, touch, a lock let go by the
+    // gyro) the soft lock as before.
+    const h = aimPad && !lockBroken && s.aim ? hardLock(player, camera, world) : null;
+    const lock = h ? {p: h.p, ...hardPoint(world, h)} : lockTarget(player, camera, world, touch, pad);
     let point;
     if (lock) point = {x: lock.x, y: lock.y, z: lock.z};
     else if (camera) point = cameraPoint(camera, world, WEAPONS[inventory.current].range).point;
@@ -299,7 +382,7 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
    }
   },
   /** Respawn or leaving play: fists, a full magazine, nothing in flight. */
-  reset() {inventory.reset(); wasDriving = false; aimHeld = false; pendingShot = 0; touchAim = 0; triggerHeld = false; spread = 0; recoil = 0; burst = 0;},
+  reset() {inventory.reset(); wasDriving = false; aimHeld = false; aimPad = false; triggerPad = false; hard = null; flickQueued = null; lockBroken = false; gyroTurn = 0; pendingShot = 0; touchAim = 0; triggerHeld = false; spread = 0; recoil = 0; burst = 0;},
   snapshot() {return {...inventory.snapshot(), ...stats, aiming: aimHeld, lastShot, effects: effects.stats, marks: marks.stats};},
   dispose() {marks.dispose(); effects.dispose();}
  };
