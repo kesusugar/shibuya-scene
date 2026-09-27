@@ -70,6 +70,7 @@ const files=[
  'tests/input-map.test.mjs',
  'tests/pad-aim.test.mjs',
  'tests/smoke-fx.test.mjs',
+ 'tests/police-recorded-voice.test.mjs',
  'tests/gyro.test.mjs',
  'tests/stage1.test.mjs',
  'tests/stage2.test.mjs',

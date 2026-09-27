@@ -3,6 +3,8 @@
 // already has; the rules live in wanted.mjs and siren.mjs, which are pure.
 import {createWanted,WANTED} from './wanted.mjs';
 import {createSirens,createLoudspeaker,createMegaphone,createOfficerVoice,MEGAPHONE} from './siren.mjs';
+import {createPoliceClips} from './voice-clips.mjs';
+import {createDispatch} from './dispatch.mjs';
 import {createPoliceUnits} from './units.mjs';
 import {createPoliceGuns} from './guns.mjs';
 import {createHelicopter} from './helicopter.mjs';
@@ -92,15 +94,19 @@ export function officersOnFootSee(officers, x, z, range = WANTED.sightRange, sol
 
 export function createPoliceDirector({getAudioContext = () => null, getAudioBus = () => null, koban = /** @type {{x:number,z:number}|null} */ (null),
                                       speech = globalThis.speechSynthesis,
-                                      Utterance = globalThis.SpeechSynthesisUtterance} = {}) {
+                                      Utterance = globalThis.SpeechSynthesisUtterance,
+                                      clips = /** @type {any} */ (null)} = {}) {
  const wanted = createWanted();
+ // Roadmap ①: the recorded lines (loudspeaker, shouts, the dispatcher), loaded on first use.
+ const voiceClips = clips ?? createPoliceClips(getAudioContext);
+ const dispatch = createDispatch(getAudioContext, getAudioBus, voiceClips);
  const units = createPoliceUnits(koban ? {koban} : {});
  let lastBlowAt = -1;
  const sirens = createSirens(getAudioContext, getAudioBus);
- const megaphone = createMegaphone(getAudioContext, getAudioBus);
+ const megaphone = createMegaphone(getAudioContext, getAudioBus, {clips: voiceClips});
  // PLAN-WEAPONS W3: the officers' revolvers and their own (unamplified) voices.
  const guns = createPoliceGuns();
- const voice = createOfficerVoice(getAudioContext, getAudioBus);
+ const voice = createOfficerVoice(getAudioContext, getAudioBus, {clips: voiceClips});
  // Roadmap stage 3: at ☆4 and up, a helicopter with a searchlight, and its rotor.
  const heli = createHelicopter(), rotor = createRotor(getAudioContext, getAudioBus);
  const speaker = createLoudspeaker(speech, Utterance);
@@ -111,7 +117,7 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
  const sources = [];
 
  const api = {
-  wanted, sirens, units, megaphone, guns, voice, heli,
+  wanted, sirens, units, megaphone, guns, voice, heli, dispatch, clips: voiceClips,
   /** A carjack finished; an officer nearby makes it a crime. */
   carjack(slot, traffic) {
    if (!slot) return;
@@ -265,27 +271,35 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
      speaker.say(driving ? '前の車、止まりなさい' : 'そこの人、止まりなさい', time);
    } else {
     const near = sources.filter(s => s.id !== except?.id && Math.hypot(s.x - me.x, s.z - me.z) <= MEGAPHONE.range);
+    // Roadmap ①: 「被疑者確保！」 and 「動くな！」 are an officer's own shouts (the nearest officer, or
+    // the nearest car when none is on foot); the loudspeaker addresses a car, a motorbike or a
+    // person on foot in the words used for each.
+    const nearestOfficer = [...units.officers].filter(p => p.active && !p.combatDead)
+     .reduce((a, p) => (!a || Math.hypot(p.x - me.x, p.z - me.z) < Math.hypot(a.x - me.x, a.z - me.z) ? p : a), null);
     if (arrested) {
-     // Outside the gap rule, once per arrest: whichever car is closest says it.
-     const car0 = near[0] ?? sources[0];
-     if (car0) megaphone.speak(['arrest'], car0.id, car0.x, car0.z, time, {force: true, duck: sirens.duck});
+     // Outside the gap rule, once per arrest.
+     const who = nearestOfficer ?? near[0] ?? sources[0];
+     if (who) voice.shout('arrest', who.id, who.x, who.z, time, {force: true});
     } else if (responding && near.length) {
      const car0 = near.reduce((a, b) =>
       Math.hypot(a.x - me.x, a.z - me.z) <= Math.hypot(b.x - me.x, b.z - me.z) ? a : b);
-     const officerClose = !driving && [...units.officers].some(p =>
-      p.active && !p.combatDead && Math.hypot(p.x - me.x, p.z - me.z) <= 3);
+     const officerClose = !driving && nearestOfficer && Math.hypot(nearestOfficer.x - me.x, nearestOfficer.z - me.z) <= 3;
      if (officerClose || units.arrest.foot > 0) {
-      megaphone.speak(['freeze'], car0.id, car0.x, car0.z, time, {duck: sirens.duck});
+      const who = nearestOfficer ?? car0;
+      voice.shout('freeze', who.id, who.x, who.z, time);
      } else if (driving) {
-      const stopped = Math.abs(car?.state?.speed ?? 0) < 1.5;
-      const situations = stopped && units.arrest.car > 0 ? ['getOut'] : ['stop', 'stopCar'];
+      const stopped = Math.abs(car?.state?.speed ?? 0) < 1.5, bike = !!VEHICLES[car?.state?.type]?.twoWheel;
+      const situations = stopped && units.arrest.car > 0 ? ['getOut'] : bike ? ['stopBike'] : ['stopCar'];
       megaphone.speak(situations, car0.id, car0.x, car0.z, time, {duck: sirens.duck});
      } else {
       megaphone.speak(['chase', 'stop'], car0.id, car0.x, car0.z, time, {duck: sirens.duck});
      }
     }
    }
-   return {...snap, arrested, units: {cars: u.cars, officers: u.officers, yielded: u.yielded}, gunfire, heli: h};
+   // --- the dispatcher (roadmap ①) --------------------------------------------------------------
+   const radio = dispatch.update({stars: wanted.state.stars, driving, heli: !!h?.active, armed,
+    seen: wanted.state.seen, escape: wanted.state.escape}, time);
+   return {...snap, arrested, units: {cars: u.cars, officers: u.officers, yielded: u.yielded}, gunfire, heli: h, radio};
   },
   /** H in a patrol car: siren and lamps on or off. Returns false if this car has none. */
   toggleSiren(car) {
@@ -296,7 +310,7 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
   clear(reason) {wanted.clear(reason); guns.clear();},
   /** W4: the crowd-bump fight cap, for the scene's bump callback. */
   allowBumpFight(crowd) {return allowBumpFight(wanted.state.stars, crowd?.pool, crowd?.time ?? 0);},
-  dispose(traffic, crowd) {rotor.stop();heli.reset();sirens.dispose(); megaphone.dispose(); voice.dispose(); units.dispose(traffic, crowd);}
+  dispose(traffic, crowd) {rotor.stop();heli.reset();sirens.dispose(); megaphone.dispose(); voice.dispose(); dispatch.dispose(); units.dispose(traffic, crowd);}
  };
  return api;
 }
