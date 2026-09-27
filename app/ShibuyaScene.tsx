@@ -790,7 +790,7 @@ export default function Home(){
   // Roadmap stage 5: the mission board, the pay, the shop at its door, the bill for dying or arrest.
   if(board){const pay=timed('s5-missions',()=>board.tick(playElapsed,missionWorld()));const snap=board.snapshot();playUI?.setMission(snap);
    if(pay>0){wallet.earn(pay,snap.id);progress.completed[snap.id]=(progress.completed[snap.id]??0)+1;progress.best[snap.id]=Math.max(progress.best[snap.id]??0,pay);persist();}}
-  if(wasAlive&&player.state.alive===false){wallet.penalty(player.state.hitBy==='arrested'?'arrest':'death');persist();}wasAlive=player.state.alive!==false;
+  if(wasAlive&&player.state.alive===false){wallet.penalty(player.state.hitBy==='arrested'||player.state.hitBy==='police'?'arrest':'death');persist();}wasAlive=player.state.alive!==false;
   playUI?.setMoney?.(wallet.money,player.state.armor??0);
   if(door)playUI?.setShop?.(!driving&&player.state.alive!==false&&Math.hypot(player.state.x-door.x,player.state.z-door.z)<=SHOP.reach);
   if(arsenal)playUI?.setWeapon(arsenal.snapshot(),{aiming:player.state.aim>0&&!driving,locked:player.state.aimLock!=null,spread:arsenal.spread});

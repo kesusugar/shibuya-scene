@@ -39,7 +39,7 @@ test('patrol cars never appear in view or nearer than 80 m, and follow the caps 
  for(let star=1;star<=5;star++){
   for(let i=0;i<60*30;i++){
    const before=new Set(units.cars);
-   units.update(1/30,{stars:star,traffic:sim,me,visible});
+   units.update(1/30,{stars:star,traffic:sim,me,visible,driving:true});
    for(const v of units.cars)if(!before.has(v)){
     assert.ok(!visible(v.x,v.z),`spawned in view at ${v.x.toFixed(1)},${v.z.toFixed(1)}`);
     assert.ok(Math.hypot(v.x-me.x,v.z-me.z)>=UNITS.spawnNear-1e-6,'spawned too close');
@@ -54,10 +54,11 @@ test('patrol cars never appear in view or nearer than 80 m, and follow the caps 
 test('a chasing car closes on the player and stops short; units leave only out of sight',()=>{
  const sim=traffic(),units=createPoliceUnits();
  const me={x:0,z:20};let seeAll=true;
- for(let i=0;i<5*30;i++)units.update(1/30,{stars:1,traffic:sim,me,visible:()=>false});
+ // In a car: the chase (on foot a car stops at 25 m and its crew gets out: tested below).
+ for(let i=0;i<5*30;i++)units.update(1/30,{stars:1,traffic:sim,me,visible:()=>false,driving:true});
  const car=[...units.cars][0];assert.ok(car);
  const d0=Math.hypot(car.x-me.x,car.z-me.z);
- for(let i=0;i<40*30;i++)units.update(1/30,{stars:1,traffic:sim,me,visible:()=>false});
+ for(let i=0;i<40*30;i++)units.update(1/30,{stars:1,traffic:sim,me,visible:()=>false,driving:true});
  const d1=Math.hypot(car.x-me.x,car.z-me.z);
  assert.ok(d1<d0-20,`did not close in: ${d0.toFixed(0)} -> ${d1.toFixed(0)} m`);
  assert.ok(d1>=UNITS.stopShort-.01,'drove into the player');
@@ -110,32 +111,37 @@ test('uniforms are pure by id and deduplicate never recolours them',()=>{
  assert.ok(COMBAT.officerDamage===15,'the baton does 15');
 });
 
-test('the arrest on foot: two seconds in an officer\'s hands, broken by a punch',()=>{
+test('owner\'s plan: no arrest by an officer\'s hands, nor by a patrol car pinning the player\'s car',()=>{
  const cop={...person(1,0.8,0),officer:true};
  const c=crowd([cop]),units=createPoliceUnits();units.officers.add(cop);
- let r=null,t=0;
- for(;t<1.9;t+=1/30)r=units.update(1/30,{stars:1,crowd:c,me:{x:0,z:0},attacking:false}).result;
- assert.equal(r,null,'arrested too soon');
- units.update(1/30,{stars:1,crowd:c,me:{x:0,z:0},attacking:true});   // a punch breaks the hold
- for(t=0;t<1.9;t+=1/30)r=units.update(1/30,{stars:1,crowd:c,me:{x:0,z:0},attacking:false}).result;
- assert.equal(r,null,'the punch did not break the hold');
- for(t=0;t<.3&&!r;t+=1/30)r=units.update(1/30,{stars:1,crowd:c,me:{x:0,z:0},attacking:false}).result;
- assert.equal(r,'arrested');
+ let r=null;
+ for(let t=0;t<6;t+=1/30)r=r??units.update(1/30,{stars:1,crowd:c,me:{x:0,z:0},attacking:false}).result;
+ assert.equal(r,null,'arrested by hands');
+ const u2=createPoliceUnits();
+ const pin={id:0,active:true,type:'police',x:0,z:4,heading:Math.PI,speed:0,pursuit:{route:[],step:0,progress:0,reroute:9,leaving:false}};
+ u2.cars.add(pin);
+ const sim={pool:[pin],graph:null,despawn(){}};
+ for(let t=0;t<8;t+=1/30)r=r??u2.update(1/30,{stars:2,traffic:sim,me:{x:0,z:0},driving:true,carSpeed:0}).result;
+ assert.equal(r,null,'arrested pinned in a car');
 });
 
-test('the arrest in a car: stopped and pinned by a patrol car for three seconds',()=>{
- const units=createPoliceUnits();
- const pin={id:0,active:true,type:'police',x:0,z:4,heading:Math.PI,speed:0,pursuit:{route:[],step:0,progress:0,reroute:9,leaving:false}};
- units.cars.add(pin);
- const sim={pool:[pin],graph:null,despawn(){}};
- let r=null;
- for(let t=0;t<2.5;t+=1/30)r=units.update(1/30,{stars:2,traffic:sim,me:{x:0,z:0},driving:true,carSpeed:0}).result;
- assert.equal(r,null);
- units.update(1/30,{stars:2,traffic:sim,me:{x:0,z:0},driving:true,carSpeed:6});   // drove off: reset
- for(let t=0;t<2.9;t+=1/30)r=units.update(1/30,{stars:2,traffic:sim,me:{x:0,z:0},driving:true,carSpeed:0}).result;
- assert.equal(r,null);
- for(let t=0;t<.3&&!r;t+=1/30)r=units.update(1/30,{stars:2,traffic:sim,me:{x:0,z:0},driving:true,carSpeed:0}).result;
- assert.equal(r,'arrested');
+test('owner\'s plan: a patrol car reaching a player on foot stops, its crew gets out beside it, and the car is left to be taken',()=>{
+ const sim=traffic(),units=createPoliceUnits();
+ const people=[];for(let i=0;i<40;i++)people.push(person(i,200+i,200));
+ const c=crowd(people);
+ const me={x:0,z:20};
+ for(let i=0;i<5*30;i++)units.update(1/30,{stars:1,traffic:sim,crowd:c,me,visible:()=>false,driving:true});
+ const car=[...units.cars][0];assert.ok(car,'a patrol car');
+ // The player gets out; the car comes on and stops within reach, then the crew gets out.
+ let t=0;for(;t<60&&units.cars.has(car);t+=1/30)units.update(1/30,{stars:1,traffic:sim,crowd:c,me,visible:()=>false,driving:false});
+ assert.ok(!units.cars.has(car),'the crew never got out');
+ const d=Math.hypot(car.x-me.x,car.z-me.z);
+ assert.ok(d<=UNITS.dismountAt+.5,`stopped ${d.toFixed(1)} m away`);
+ assert.ok(car.parked&&!car.controlled&&!car.service&&!car.siren,'the car is not left free');
+ for(let i=0;i<10;i++){c.time+=1/30;units.update(1/30,{stars:1,traffic:sim,crowd:c,me,visible:()=>false,driving:false});}
+ const crew=[...units.officers].filter(p=>p.active&&p.officer&&Math.hypot(p.x-car.x,p.z-car.z)<4);
+ assert.equal(crew.length,UNITS.crew,'the crew at the doors');
+ sim.dispose();
 });
 
 test('officers close to arm\'s reach, and a player who fights back is hit with the baton',()=>{

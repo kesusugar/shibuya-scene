@@ -116,3 +116,22 @@ test('a chase mission can be ridden: the board works from the bike like from a c
  assert.equal(board.snapshot().status, 'complete', board.snapshot().reason);
  sim.dispose();
 });
+
+test('owner\'s plan: the patrol car its crew left can be got into and taken (a stolen police car)', async () => {
+ const {createPoliceUnits} = await import('../src/police/units.mjs');
+ const sim = traffic(), car = createPlayerVehicle(sim, network.ctx), units = createPoliceUnits();
+ car.spawn(12, 24);
+ const people = []; for (let i = 0; i < 30; i++) people.push({id: 9000 + i, active: true, x: 300 + i, z: 300, archetype: 'office', heading: 0, speed: 1});
+ const grid = new Map(), cell = (x, z) => Math.floor(x / 2) + ',' + Math.floor(z / 2);
+ const crowd = {time: 0, pool: people, grid, cell, insert(p) {const k = cell(p.x, p.z); if (!grid.has(k)) grid.set(k, []); grid.get(k).push(p);}, despawn(p) {p.active = false;}, network: {ctx: {safe: () => true}}};
+ const me = {x: 12, z: 24};
+ for (let i = 0; i < 5 * 30; i++) units.update(1 / 30, {stars: 1, traffic: sim, crowd, me, visible: () => false, driving: true});
+ const pc = [...units.cars][0]; assert.ok(pc, 'a patrol car');
+ for (let t = 0; t < 60 && units.cars.has(pc); t += 1 / 30) units.update(1 / 30, {stars: 1, traffic: sim, crowd, me, visible: () => false, driving: false});
+ assert.ok(!units.cars.has(pc), 'the crew got out');
+ const e = car.nearestEntry(pc.x + 2.5, pc.z);
+ assert.equal(e?.slot, pc, 'offered as the car to get into');
+ assert.equal(e.kind, 'parked');
+ assert.ok(car.reserve(pc) && car.commit(), 'taken');
+ sim.dispose();
+});
