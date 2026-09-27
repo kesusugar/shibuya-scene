@@ -116,3 +116,22 @@ test('an onlooker on the body: the phone in front of the face to film, at the ea
  assert.ok(!figure.phone.mesh.visible,'put away');
  figure.dispose();
 });
+
+test('the phone arm and raised arms stay out of the chest: the elbow out beside the body, the phone well in front',async()=>{
+ for(const [key,value] of [['phone','film'],['phone','call'],['handsUp',true]]){
+  const figure=createPlayerFigure(await humanoid(),undefined,{weapons:['revolver']});
+  const s={x:0,y:0,z:0,speed:0,heading:0,alive:true,attackTime:0,[key]:value};
+  for(let i=0;i<40;i++)figure.update(s,1/30);figure.root.updateMatrixWorld(true);
+  const w=n=>figure.root.getObjectByName(n).getWorldPosition(new Vector3());
+  const chest=w('spine_03'),shoulder=w('upperarm_r'),elbow=w('lowerarm_r'),hand=w('hand_r');
+  // Outside the shoulder's line, not tucked in front of the chest (the §-stage-4 report: the
+  // forearm through the chest when the hand came up to film).
+  assert.ok(elbow.x<shoulder.x-.03,`${value}: elbow x ${elbow.x.toFixed(2)} inside the shoulder ${shoulder.x.toFixed(2)}`);
+  // The upper arm's middle is outside the trunk's section at the chest: an ellipse 0.17 m to
+  // each side and 0.12 m front to back (the body faces +z, so x is across it).
+  const mid=shoulder.clone().add(elbow).multiplyScalar(.5),e=((mid.x-chest.x)/.17)**2+((mid.z-chest.z)/.12)**2;
+  assert.ok(e>1.1,`${value}: upper arm inside the chest (${e.toFixed(2)})`);
+  if(value==='film')assert.ok(hand.z>chest.z+.3,`filming: the phone ${(hand.z-chest.z).toFixed(2)} m in front of the chest`);
+  figure.dispose();
+ }
+});
