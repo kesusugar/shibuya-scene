@@ -1,3 +1,5 @@
+# DISABLED for the public repository -- see .github/disabled-workflows/README.md.
+# GitHub only runs workflows under .github/workflows/; this file is kept here to restore later.
 name: visual-qa
 
 on:
@@ -5,6 +7,8 @@ on:
 
 jobs:
   capture-high-qa-pack:
+    # Public-release hardening: never on a self-hosted runner while the repository is public.
+    if: ${{ github.event.repository.private }}
     runs-on: self-hosted
     timeout-minutes: 40
 
