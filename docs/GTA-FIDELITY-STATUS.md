@@ -6191,6 +6191,42 @@ Not yet heard or seen on a device: how the radio sounds on real speakers and its
 engine and the city (tuned by measured RMS only), the bike's handling and the rider seen from the
 chase camera, the dents on a real crash, and whether the ラジオ button crowds the touch layout.
 
+## 9as. The katana's blade swung back when setting off (owner report after stage 6)
+
+On a phone the blade was seen pointing back behind the body. Measured (the blade's direction,
+hand to tip, in the body's frame, over a stand/walk/stop/creep/run profile): for the first fifth
+of a second of every walk the blade pointed back and down (forward component -0.9). The stage 2
+two-handed guard (`createUpperPose` on Sword_Idle) was faded in only while moving, so as a walk
+began, the walk's own swinging right arm held the sword. A touch stick starts and stops all the
+time, so it showed constantly.
+
+The guard is now held whenever the katana is in the hand and the body is not cutting, falling or
+in a car -- standing as well as walking -- so there is no fade at the start of a walk. The blade's
+forward component now stays at 0.55 or more through the whole profile and after a cut. The pistol
+and the submachine gun were measured the same way and never point back.
+
+Test: `tests/weapon-orientation.test.mjs` (fails on the old code at -0.91). Stills:
+`evidence/roadmap/katana-setoff/before.png` and `after.png` (1, 3, 5 and 7 frames after setting
+off, from the side).
+
+## 9at. The katana guard's elbows (owner report: "is the right arm right? check the joints")
+
+Measured in the guard (standing, walking, running): the Sword_Idle clip holds the right elbow
+above the shoulder (1.54 m against 1.48 m standing) and pointing up and in across the chest, and
+the left elbow pointing in and back -- a raised chicken wing, the right upper arm across the face
+seen from the front.
+
+`createKatanaGrip` (body-states.mjs) runs after the guard pose whenever it is on: each elbow is
+swung round its shoulder-wrist line toward a point below and outside the shoulder
+(`BODY.katanaGuard`, ±0.4, 0.7, 0.2 in the body frame), so the fists and the blade stay where they
+were, and each hand is put back to the world orientation it had, so the blade does not turn and
+the left hand stays on the handle. Elbows now point down (-0.91) and out; the blade's direction
+and the swing are unchanged.
+
+Test: `tests/weapon-orientation.test.mjs` (elbows below the shoulder, pointing down and out, the
+left hand on the handle, at 0, 1.4 and 3.5 m/s; fails on the old code). Stills:
+`evidence/roadmap/katana-guard/before.png` and `after.png` (standing and walking, four views each).
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle

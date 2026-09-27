@@ -6,7 +6,7 @@ import {attackOf} from './attack-timing.mjs';
 import {createWeaponRig} from './weapon-mesh.mjs';
 import {createAimLayer} from './aim-layer.mjs';
 import {createHands} from './hands.mjs';
-import {createHandsUp,createLimp,createUpperPose,createPhone,createRideGrip} from './body-states.mjs';
+import {createHandsUp,createLimp,createUpperPose,createPhone,createRideGrip,createKatanaGrip} from './body-states.mjs';
 import {createHitReaction} from './hit-reaction.mjs';
 import {createRagdoll} from './ragdoll.mjs';
 import pack from './generated/character.mjs';
@@ -189,7 +189,7 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
  const handsUp=root.getObjectByName('upperarm_l')?createHandsUp(root):null;
  const limp=root.getObjectByName('calf_r')?createLimp(root):null;
  // Stage 4: an onlooker's phone (built on first use: most bodies never hold one).
- let phone=null,ride=null;
+ let phone=null,ride=null,katanaGrip=null;
  const swordWalk=weaponRig&&weapons.includes('katana')?createUpperPose(root,instance.clips,'SwordIdle'):null;
  let swordK=0;
  // §9ai: a blow you can see land (hit-reaction.mjs), and a body that falls the way it was hit
@@ -364,8 +364,13 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
    // swing, a fall or a car. Mid-change it poses the weapon actually in the hand, lowered.
    const posed=inHand!==(state.weapon??null)?{...state,weapon:inHand,aim:0,shotLeft:0}:state;
    // Stage 2: walking with the katana out, the upper body keeps the two-handed guard.
-   if(swordWalk){const on=inHand==='katana'&&!SWINGS.has(overlay)&&!UNGROUNDED.has(overlay)&&speed>LOCOMOTION.idleSpeed;
-    swordK+=Math.max(-dt/.2,Math.min(dt/.2,(on?1:0)-swordK));if(swordK>0)swordWalk.update(swordK*swordK*(3-2*swordK),dt);}
+   // Held standing too, not only walking: fading it in as the walk starts left the walk's
+   // swinging arm in charge for a fifth of a second, and the blade swung back behind the body
+   // every time the player set off (seen on a phone, where the stick starts and stops a lot).
+   if(swordWalk){const on=inHand==='katana'&&!SWINGS.has(overlay)&&!UNGROUNDED.has(overlay);
+    swordK+=Math.max(-dt/.2,Math.min(dt/.2,(on?1:0)-swordK));if(swordK>0){const k=swordK*swordK*(3-2*swordK);swordWalk.update(k,dt);
+     // The clip's elbows are raised and turned in; point them down and out (body-states).
+     katanaGrip??=createKatanaGrip(root);katanaGrip.update(k);}}
    if(aimLayer&&!SWINGS.has(overlay)&&!UNGROUNDED.has(overlay))aimLayer.update(posed,dt);
    if(hands&&!SWINGS.has(overlay)&&!UNGROUNDED.has(overlay))hands.update(posed,dt);
    // Stage 2: hands up (over whatever the arms were doing), and the limp (before the feet are planted).
