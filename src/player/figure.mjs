@@ -364,7 +364,10 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
    // swing, a fall or a car. Mid-change it poses the weapon actually in the hand, lowered.
    const posed=inHand!==(state.weapon??null)?{...state,weapon:inHand,aim:0,shotLeft:0}:state;
    // Stage 2: walking with the katana out, the upper body keeps the two-handed guard.
-   if(swordWalk){const on=inHand==='katana'&&!SWINGS.has(overlay)&&!UNGROUNDED.has(overlay)&&speed>LOCOMOTION.idleSpeed;
+   // Held standing too, not only walking: fading it in as the walk starts left the walk's
+   // swinging arm in charge for a fifth of a second, and the blade swung back behind the body
+   // every time the player set off (seen on a phone, where the stick starts and stops a lot).
+   if(swordWalk){const on=inHand==='katana'&&!SWINGS.has(overlay)&&!UNGROUNDED.has(overlay);
     swordK+=Math.max(-dt/.2,Math.min(dt/.2,(on?1:0)-swordK));if(swordK>0)swordWalk.update(swordK*swordK*(3-2*swordK),dt);}
    if(aimLayer&&!SWINGS.has(overlay)&&!UNGROUNDED.has(overlay))aimLayer.update(posed,dt);
    if(hands&&!SWINGS.has(overlay)&&!UNGROUNDED.has(overlay))hands.update(posed,dt);
