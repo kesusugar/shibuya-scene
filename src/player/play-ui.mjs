@@ -75,8 +75,12 @@ export function createPlayUI(network,parent,{onExit,onDrive,onMission,onCancelMi
  const NAMES={fists:'素手',pistol:'ピストル',katana:'日本刀',smg:'サブマシンガン'};
  const GUN=new Set(['pistol','smg']);
  let lastAmmo='';
- function setWeapon(w,{aiming=false,locked=false,spread=0}={}){
+ function setWeapon(w,{aiming=false,locked=false,spread=0,at=null,threat=false}={}){
   if(disposed||!w)return;
+  // Roadmap ④: the reticle on the locked person (`at`, page px), or back in the middle.
+  crosshair.style.left=at?`${Math.round(at.x)}px`:'';crosshair.style.top=at?`${Math.round(at.y)}px`:'';
+  crosshair.dataset.threat=String(!!(at&&threat));
+  hitmarker.style.left=crosshair.style.left;hitmarker.style.top=crosshair.style.top;
   weaponLabel.dataset.weapon=w.current;
   weaponLabel.textContent=NAMES[w.current]??w.current;
   crosshair.hidden=!(aiming&&GUN.has(w.current));crosshair.dataset.locked=String(!!locked);

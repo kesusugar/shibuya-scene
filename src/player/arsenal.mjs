@@ -30,6 +30,18 @@ export const ARSENAL = Object.freeze({
  // `head` is where a flick up aims (above ballistics' head line, below the crown). Turning the
  // controller (gyro) more than `gyroBreak` radians while locked lets go into free aim.
  hardLock: .6, hardRange: 40, hardKeep: 50, head: 1.62, gyroBreak: .08,
+ // Roadmap ④: someone shooting at the player (or with a gun drawn) is taken first, from wider
+ // and further -- the camera turns onto them. ZL let go and pressed again within `regrab` s takes
+ // the next in that order; let go longer, it unlocks. Within a tier the order is distance plus
+ // `anglePenalty` metres per radian off the view.
+ threatCone: 1.75, threatRange: 60, regrab: .4, anglePenalty: 8,
+ // Someone actually firing is taken from any side (behind too): the camera swings round.
+ shooterCone: Math.PI,
+ // Locked on someone who is not shooting, the lock looks this often (s) for someone who is, and
+ // moves to them: chased, the gun is on whoever is firing without a press.
+ threatCheck: .25,
+ // A target picked by hand (ZL again, a flick) is kept this long (s) before that happens.
+ manualHold: 3,
  muzzleFallback: 1.4
 });
 
@@ -37,28 +49,44 @@ const heightOf = p => ARCHETYPES[p?.archetype]?.height ?? BALLISTICS.bodyHeight;
 const aliveTarget = p => p?.active && !p.controlled && p.struck === undefined && !p.combatDead;
 
 /**
- * Item 3: the people a pad's hard lock can take, each with its bearing off the view (radians,
- * + to the right of the screen), its angle off the centre and its distance. Pure over `world`.
+ * Roadmap ④: how much a person matters to the lock. 0 someone who has fired at the player lately
+ * (`shotAtPlayerLeft`, set by the police director), 1 someone with a gun out, 2 anyone else.
  */
-export function lockCandidates(s, camera, world, {range = ARSENAL.hardRange, cone = ARSENAL.hardLock} = {}) {
+export const threatTier = p => (p.shotAtPlayerLeft > 0 ? 0 : p.gunDrawn ? 1 : 2);
+
+/**
+ * Item 3: the people a pad's hard lock can take, each with its bearing off the view (radians,
+ * + to the right of the screen), its angle off the centre, its distance and its `tier`. Threats
+ * (tier 0-1) count out to `threatRange` and `threatCone`. Pure over `world`.
+ */
+export function lockCandidates(s, camera, world, {range = ARSENAL.hardRange, cone = ARSENAL.hardLock,
+                                                 threatRange = ARSENAL.threatRange, threatCone = ARSENAL.threatCone} = {}) {
  const o = camera?.position ?? {x: s.x, y: s.y + 1.5, z: s.z};
  const d = camera?.direction ?? {x: Math.sin(s.heading), y: 0, z: Math.cos(s.heading)};
  const dl = Math.hypot(d.x, d.y, d.z) || 1, hl = Math.hypot(d.x, d.z) || 1;
  const out = [];
- for (const p of world.people(o, d, range, true)) {
+ for (const p of world.people(o, d, Math.max(range, threatRange), true)) {
   if (!aliveTarget(p) || p.archetype === 'kid') continue;
+  const tier = threatTier(p), far = tier < 2 ? threatRange : range;
+  const wide = tier === 0 ? ARSENAL.shooterCone : tier === 1 ? Math.max(cone, threatCone) : cone;
   const body = world.bodyOf?.(p) ?? {y: 0, height: heightOf(p)};
   const cy = body.y + ARSENAL.chest * body.height / BALLISTICS.bodyHeight;
   const vx = p.x - o.x, vy = cy - o.y, vz = p.z - o.z, dist = Math.hypot(vx, vy, vz);
-  if (dist > range || dist < 1) continue;
+  if (dist > far || dist < 1) continue;
   const angle = Math.acos(Math.max(-1, Math.min(1, (vx * d.x + vy * d.y + vz * d.z) / (dist * dl))));
-  if (angle > cone) continue;
+  if (angle > wide) continue;
   if (!world.clear(s, p)) continue;
   // The screen's right, looking along (dx, dz), is (-dz, dx).
   const bearing = Math.atan2((-d.z * vx + d.x * vz) / hl, (d.x * vx + d.z * vz) / hl);
-  out.push({p, angle, bearing, dist});
+  out.push({p, angle, bearing, dist, tier});
  }
  return out;
+}
+
+/** Roadmap ④: candidates in lock order -- shooters, then drawn guns, then the rest, nearest first. */
+export function lockOrder(candidates) {
+ const key = c => c.dist + c.angle * ARSENAL.anglePenalty;
+ return [...candidates].sort((a, b) => a.tier - b.tier || key(a) - key(b) || a.p.id - b.p.id);
 }
 
 /**
@@ -130,6 +158,9 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
  // Item 3: the aim came from the pad (ZL), the trigger from the pad (ZR); the hard lock ({p, part})
  // while ZL is held, a flick waiting for the next frame, and gyro turn since the lock was taken.
  let aimPad = false, triggerPad = false, hard = null, flickQueued = null, gyroTurn = 0, lockBroken = false;
+ // Roadmap ④: the arsenal's own clock, when ZL was let go (the lock waits `regrab` for a re-press),
+ // a re-press waiting to take the next target, and where the lock aimed last frame.
+ let clock = 0, releasedAt = -Infinity, cycleQueued = false, hardAt = null, threatCheckAt = -Infinity, manualUntil = -Infinity;
  const hardPoint = (world, h) => {
   const body = world.bodyOf?.(h.p) ?? {y: 0, height: heightOf(h.p)};
   return {x: h.p.x, y: body.y + (h.part === 'head' ? ARSENAL.head : ARSENAL.chest) * body.height / BALLISTICS.bodyHeight, z: h.p.z};
@@ -139,12 +170,31 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
   const s = player.state;
   if (hard && (!aliveTarget(hard.p) || Math.hypot(hard.p.x - s.x, hard.p.z - s.z) > ARSENAL.hardKeep || !world.clear(s, hard.p))) hard = null;
   const flick = flickQueued; flickQueued = null;
+  const cycle = cycleQueued; cycleQueued = false;
   if (!hard) {
-   // Taken (or retaken when the last one drops): the nearest to the centre of the view, then near.
-   let best = null, score = Infinity;
-   for (const c of lockCandidates(s, camera, world)) {const sc = c.angle * 20 + c.dist * .05; if (sc < score) {score = sc; best = c;}}
+   // Taken (or retaken when the last one drops): whoever is shooting, then a drawn gun, then the
+   // nearest person in view (roadmap ④).
+   const best = lockOrder(lockCandidates(s, camera, world))[0];
    if (best) {hard = {p: best.p, part: 'chest'}; gyroTurn = 0; stats.locks++;}
    return hard;
+  }
+  if (cycle) {
+   // ZL again: the next in the order after the one held, round to the first -- but someone
+   // shooting comes before anyone who is not, whoever is held.
+   const order = lockOrder(lockCandidates(s, camera, world));
+   if (order.length) {
+    const i = order.findIndex(c => c.p === hard.p);
+    const next = i < 0 || order[0].tier < threatTier(hard.p) ? order[0] : order[(i + 1) % order.length];
+    if (next.p !== hard.p) {hard = {p: next.p, part: 'chest'}; stats.switchedLocks++;}
+   }
+   manualUntil = clock + ARSENAL.manualHold;
+   return hard;
+  }
+  // Held on someone not shooting while someone is: onto the one shooting.
+  if (threatTier(hard.p) > 0 && clock >= manualUntil && clock - threatCheckAt >= ARSENAL.threatCheck) {
+   threatCheckAt = clock;
+   const best = lockOrder(lockCandidates(s, camera, world))[0];
+   if (best && best.tier === 0 && best.p !== hard.p) {hard = {p: best.p, part: 'chest'}; stats.switchedLocks++; return hard;}
   }
   if (flick === 'up') hard.part = 'head';
   else if (flick === 'down') hard.part = 'chest';
@@ -153,7 +203,7 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
    const cur = all.find(c => c.p === hard.p)?.bearing ?? 0, side = flick === 'right' ? 1 : -1;
    let next = null;
    for (const c of all) if (c.p !== hard.p && (c.bearing - cur) * side > .005 && (!next || (c.bearing - cur) * side < (next.bearing - cur) * side)) next = c;
-   if (next) {hard = {p: next.p, part: hard.part}; stats.switchedLocks++;}
+   if (next) {hard = {p: next.p, part: hard.part}; stats.switchedLocks++; manualUntil = clock + ARSENAL.manualHold;}
   }
   return hard;
  }
@@ -273,8 +323,14 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
    * The right mouse button, or the pad's ZL (`pad`: item 3, the hard lock). Letting go unlocks.
    */
   aim(on, {pad = false} = {}) {
-   aimHeld = !!on; aimPad = aimHeld && !!pad;
-   if (!aimPad) {hard = null; flickQueued = null; lockBroken = false; gyroTurn = 0;}
+   const was = aimHeld;
+   aimHeld = !!on;
+   // Roadmap ④: ZL let go keeps the lock for `regrab` s; pressed again in time, the next target.
+   if (pad && !on && was && hard) {releasedAt = clock; flickQueued = null; return;}
+   if (pad && on && !was && hard && clock - releasedAt <= ARSENAL.regrab) {aimPad = true; cycleQueued = true; return;}
+   aimPad = aimHeld && !!pad;
+   if (!aimPad) {hard = null; hardAt = null; flickQueued = null; cycleQueued = false; lockBroken = false; gyroTurn = 0;}
+   else {hard = null; hardAt = null; lockBroken = false; gyroTurn = 0;}
   },
   /**
    * §9ah: the attack button held (the mouse's left, E, the pad's ZR): an automatic keeps firing.
@@ -290,7 +346,7 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
    if (gyroTurn > ARSENAL.gyroBreak) {hard = null; lockBroken = true; gyroTurn = 0;}
   },
   /** Item 3: the pad's hard lock -- {id, part, x, y, z} -- or null. */
-  get lock() {return hard ? {id: hard.p.id, part: hard.part, x: hard.p.x, y: hard.p.y ?? 0, z: hard.p.z} : null;},
+  get lock() {return hard && aimHeld && aimPad && hardAt ? {id: hard.p.id, part: hard.part, tier: threatTier(hard.p), x: hardAt.x, y: hardAt.y, z: hardAt.z} : null;},
   /** §9ah: the drawn automatic's muzzle climb (radians) and spread, for the figure and the camera. */
   get recoil() {return recoil;},
   get spread() {return spread;},
@@ -324,7 +380,9 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
    */
   frame(dt, {player, figure = null, driving = false, world = null, camera = null, touch = false, pad = false, time = 0} = {}) {
    inventory.update(dt);
-   if (driving && !wasDriving) {inventory.holster(); aimHeld = false; aimPad = false; hard = null; pendingShot = 0;}
+   clock += dt;
+   if (hard && !aimHeld && clock - releasedAt > ARSENAL.regrab) {hard = null; hardAt = null; aimPad = false;}
+   if (driving && !wasDriving) {inventory.holster(); aimHeld = false; aimPad = false; hard = null; hardAt = null; pendingShot = 0;}
    if (!driving && wasDriving) inventory.unholster();
    wasDriving = driving;
    effects.update(dt);
@@ -359,6 +417,7 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
     // gyro) the soft lock as before.
     const h = aimPad && !lockBroken && s.aim ? hardLock(player, camera, world) : null;
     const lock = h ? {p: h.p, ...hardPoint(world, h)} : lockTarget(player, camera, world, touch, pad);
+    hardAt = h ? {x: lock.x, y: lock.y, z: lock.z} : null;
     let point;
     if (lock) point = {x: lock.x, y: lock.y, z: lock.z};
     else if (camera) point = cameraPoint(camera, world, WEAPONS[inventory.current].range).point;
@@ -382,8 +441,10 @@ export function createArsenal({effects = createWeaponEffects(), onShot = null, o
    }
   },
   /** Respawn or leaving play: fists, a full magazine, nothing in flight. */
-  reset() {inventory.reset(); wasDriving = false; aimHeld = false; aimPad = false; triggerPad = false; hard = null; flickQueued = null; lockBroken = false; gyroTurn = 0; pendingShot = 0; touchAim = 0; triggerHeld = false; spread = 0; recoil = 0; burst = 0;},
-  snapshot() {return {...inventory.snapshot(), ...stats, aiming: aimHeld, lastShot, effects: effects.stats, marks: marks.stats};},
+  reset() {inventory.reset(); wasDriving = false; aimHeld = false; aimPad = false; triggerPad = false; hard = null; hardAt = null; cycleQueued = false; releasedAt = -Infinity; flickQueued = null; lockBroken = false; gyroTurn = 0; pendingShot = 0; touchAim = 0; triggerHeld = false; spread = 0; recoil = 0; burst = 0;},
+  snapshot() {return {...inventory.snapshot(), ...stats, aiming: aimHeld, lastShot,
+   // Roadmap ④: the pad lock's state, for QA.
+   padLock: {pad: aimPad, id: hard?.p?.id ?? null, broken: lockBroken, manualFor: +Math.max(0, manualUntil - clock).toFixed(2), sinceRelease: +(clock - releasedAt).toFixed(2)}, effects: effects.stats, marks: marks.stats};},
   dispose() {marks.dispose(); effects.dispose();}
  };
  return api;

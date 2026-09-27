@@ -66,8 +66,10 @@ test('item 3: ZR without ZL fires no gun (pistol or automatic) and throws no pun
  assert.equal(b.snapshot().shots,1);
 });
 
-test('item 3: ZL locks the person nearest the centre of the view, at the chest; the round finds them',()=>{
- const sc=scene([[3,12],[-.5,15],[8,6]]),a=createArsenal();a.select(2);
+test('item 3 / ④: ZL locks the nearest person in view, at the chest; the round finds them',()=>{
+ // ④: nearest first (12 m, a little off centre) over one further on the centre line (15 m);
+ // the one at 8,6 is out of the view.
+ const sc=scene([[-.5,15],[3,12],[8,6]]),a=createArsenal();a.select(2);
  a.aim(true,{pad:true});step(a,sc);
  assert.deepEqual([a.lock?.id,a.lock?.part],[2,'chest']);
  assert.ok(Math.abs(sc.state.aimTarget.y-ARSENAL.chest)<1e-9);
@@ -115,4 +117,86 @@ test('item 3: the gyro turned past the break lets go into free aim until ZL agai
  a.aim(false,{pad:true});a.aim(true,{pad:true});step(a,sc);assert.equal(a.lock.id,1,'ZL again did not lock');
  const m=scene([[0,10]]),b=createArsenal();b.select(2);b.aim(true);
  b.frame(1/60,{player:m.player,world:m.w,camera:m.camera});assert.equal(b.lock,null,'the mouse hard-locked');
+});
+
+// Roadmap ④: shooters first, ZL re-pressed to cycle, the next shooter taken when one drops.
+import {lockOrder,threatTier} from '../src/player/arsenal.mjs';
+import {SHOOTER_MEMORY} from '../src/police/director.mjs';
+
+test('④: the order is shooters, then drawn guns, then the rest -- each nearest first',()=>{
+ const P=(id,tier,dist,angle=0)=>({p:{id},tier,dist,angle});
+ const order=lockOrder([P(1,2,5),P(2,0,30),P(3,1,10),P(4,0,12),P(5,2,4,.5)]).map(c=>c.p.id);
+ assert.deepEqual(order,[4,2,3,1,5],'8 m per radian off the view: 4 m at 0.5 rad counts as 8 m');
+ assert.equal(threatTier({shotAtPlayerLeft:1}),0);assert.equal(threatTier({gunDrawn:true}),1);assert.equal(threatTier({}),2);
+ assert.ok(SHOOTER_MEMORY>=3,'a shooter is forgotten too soon to be picked');
+});
+
+test('④: chased, ZL takes the officer shooting -- even off to the side and further than a pedestrian',()=>{
+ const sc=scene([[0,6],[-20,15],[25,25]]),a=createArsenal();a.select(2);
+ Object.assign(sc.people[1],{officer:true,shotAtPlayerLeft:4});   // 55° to the right, 25 m
+ Object.assign(sc.people[2],{officer:true,gunDrawn:true});        // 45° left, 35 m
+ a.aim(true,{pad:true});step(a,sc);
+ assert.equal(a.lock.id,2,'the pedestrian in front was taken over the officer firing');
+ assert.equal(a.lock.tier,0);
+ // The shooter drops: the lock goes to the next threat, ZL still held -- ZR keeps firing.
+ sc.people[1].combatDead=true;step(a,sc);assert.equal(a.lock.id,3);
+ sc.people[2].combatDead=true;step(a,sc);assert.equal(a.lock.id,1,'with no threats left, the nearest person');
+});
+
+test('④: ZL let go and pressed again within 0.4 s takes the next target; let go longer, it unlocks',()=>{
+ const sc=scene([[0,6],[2,10],[-3,14]]),a=createArsenal();a.select(2);
+ a.aim(true,{pad:true});step(a,sc);assert.equal(a.lock.id,1);
+ const regrab=()=>{a.aim(false,{pad:true});step(a,sc,.1);assert.equal(a.lock,null,'shown locked with ZL up');a.aim(true,{pad:true});step(a,sc);};
+ regrab();assert.equal(a.lock.id,2);
+ regrab();assert.equal(a.lock.id,3);
+ regrab();assert.equal(a.lock.id,1,'past the last it goes round to the first');
+ a.aim(false,{pad:true});step(a,sc,ARSENAL.regrab+.05);a.aim(true,{pad:true});step(a,sc);
+ assert.equal(a.lock.id,1,'a late press should lock afresh (the first), not cycle');
+ a.aim(false,{pad:true});step(a,sc,.1);a.aim(true,{pad:true});step(a,sc);assert.equal(a.lock.id,2);
+});
+
+test('④: held with ZR, the automatic keeps firing from one shooter to the next',()=>{
+ const sc=scene([[-3,12],[3,12]]),a=createArsenal();a.select(4);
+ for(const p of sc.people)Object.assign(p,{officer:true,shotAtPlayerLeft:5});
+ sc.w.wound=(p,hit)=>{sc.hits.push({id:p.id});p.combatDead=true;return 'killed';};
+ a.aim(true,{pad:true});a.hold(true,{pad:true});a.trigger({pad:true});
+ for(let i=0;i<120;i++)step(a,sc);
+ assert.deepEqual([...new Set(sc.hits.map(h=>h.id))].sort(),[1,2],'both shooters were not taken down in turn');
+});
+
+test('④: the reticle point is where the lock aims (the scene projects it onto the screen)',()=>{
+ const sc=scene([[0,10]]),a=createArsenal();a.select(2);a.aim(true,{pad:true});step(a,sc);
+ assert.deepEqual([a.lock.x,a.lock.y,a.lock.z],[0,ARSENAL.chest,10]);
+ a.lockFlick('up');step(a,sc);assert.ok(Math.abs(a.lock.y-ARSENAL.head)<1e-9);
+});
+
+test('④: held on a pedestrian, the lock moves by itself to someone who starts shooting; ZL again prefers a shooter',()=>{
+ const sc=scene([[0,6],[-12,14],[10,12]]),a=createArsenal();a.select(2);
+ a.aim(true,{pad:true});step(a,sc);assert.equal(a.lock.id,1);
+ sc.people[1].shotAtPlayerLeft=5;step(a,sc,ARSENAL.threatCheck);step(a,sc);
+ assert.equal(a.lock.id,2,'the lock stayed on the pedestrian while an officer fired');
+ // The shooter stops being one; a re-press from a pedestrian goes to a new shooter first.
+ sc.people[1].shotAtPlayerLeft=0;a.aim(false,{pad:true});step(a,sc,.1);a.aim(true,{pad:true});step(a,sc);
+ const held=a.lock.id;sc.people[2].shotAtPlayerLeft=5;
+ a.aim(false,{pad:true});step(a,sc,.1);a.aim(true,{pad:true});step(a,sc);
+ assert.equal(a.lock.id,3,`from ${held}, ZL again did not go to the one shooting`);
+});
+
+test('④: ZL again away from the one shooting is kept (for manualHold), then the lock goes back to them',()=>{
+ const sc=scene([[0,8],[3,12]]),a=createArsenal();a.select(2);
+ sc.people[0].shotAtPlayerLeft=30;
+ a.aim(true,{pad:true});step(a,sc);assert.equal(a.lock.id,1);
+ a.aim(false,{pad:true});step(a,sc,.1);a.aim(true,{pad:true});step(a,sc);assert.equal(a.lock.id,2);
+ for(let t=0;t<ARSENAL.manualHold-.5;t+=.25)step(a,sc,.25);
+ assert.equal(a.lock.id,2,'the chosen target was taken back before manualHold');
+ for(let t=0;t<1.5;t+=.25)step(a,sc,.25);
+ assert.equal(a.lock.id,1,'after manualHold the lock did not return to the one shooting');
+});
+
+test('④: someone firing from behind is taken; a drawn gun behind is not',()=>{
+ const sc=scene([[0,8],[1,-15],[-1,-12]]),a=createArsenal();a.select(2);
+ sc.people[2].gunDrawn=true;
+ a.aim(true,{pad:true});step(a,sc);assert.equal(a.lock.id,1,'a drawn gun behind was taken');
+ sc.people[1].shotAtPlayerLeft=5;step(a,sc,ARSENAL.threatCheck);step(a,sc);
+ assert.equal(a.lock.id,2,'the one firing from behind was not taken');
 });
