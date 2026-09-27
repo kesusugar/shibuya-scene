@@ -11,6 +11,9 @@ import {lineOfSight} from '../player/ballistics.mjs';
 
 /** What counts as a weapon out, or a weapon kill: the guns (the submachine gun since §9ah) and the katana. */
 export const WEAPON_IDS = new Set(['pistol', 'smg', 'katana']);
+// Roadmap ④: an officer who fired at the player is marked (`shotAtPlayerLeft`, s) so the pad's
+// lock-on takes them first (arsenal.mjs `threatTier`).
+export const SHOOTER_MEMORY = 6;
 import {VEHICLES} from '../traffic/config.mjs';
 
 /**
@@ -210,14 +213,17 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
    for (const e of gunfire) {
     const p = e.officer;
     if (e.kind === 'shout') voice.shout(e.line, p.id, p.x, p.z, time);
-    if (e.kind === 'warn' || e.kind === 'shot') p.gunShotLeft = .633;
+    if (e.kind === 'warn' || e.kind === 'shot') {p.gunShotLeft = .633; p.shotAtPlayerLeft = SHOOTER_MEMORY;}
     if (e.kind === 'shot' && e.hit) {
      // A car takes the round; a motorbike's rider does not have one round them (stage 6).
      if (driving && car?.state && !VEHICLES[car.state.type]?.twoWheel) car.state.damage = Math.min(1, (car.state.damage ?? 0) + .02);
      else {lastPoliceHit = time; hurt?.(e.damage, 'police');}
     }
    }
-   for (const p of units.officers) if (p.gunShotLeft > 0) p.gunShotLeft = Math.max(0, p.gunShotLeft - dt);
+   for (const p of units.officers) {
+    if (p.gunShotLeft > 0) p.gunShotLeft = Math.max(0, p.gunShotLeft - dt);
+    if (p.shotAtPlayerLeft > 0) p.shotAtPlayerLeft = Math.max(0, p.shotAtPlayerLeft - dt);
+   }
    if (!wanted.state.stars) guns.clear();
 
    // --- sirens and lamps --------------------------------------------------------------------

@@ -19,6 +19,7 @@
 //  ZR (7)         fire (only with ZL held)    throttle
 //                 / punch / cut
 //  right stick    while locked: flick ←/→ to the next target, ↑ to the head, ↓ back to the chest
+//  ZL again       let go and pressed within 0.4 s: the next target (shooters first; roadmap ④)
 //  bottom (0)     run (hold)                  —
 //  right (1)      reload                      —
 //  left (2)       roll                        —
@@ -71,7 +72,7 @@ export function controlHints(profile, driving = false) {
    : 'E/クリック 攻撃 · 1/2/3/4 武器 · 右ボタン 構える · R 装填 · Q 回避 · C しゃがむ';
  const g = GLYPHS[profile] ?? GLYPHS.standard;
  return driving ? `${g.ZR} アクセル · ${g.ZL} ブレーキ · ${g.R} サイドブレーキ · ${g.top} 降りる · ${g.LS} ホーン · ${g.up} サイレン · 十字←→ ラジオ`
-  : `${g.ZL} 構える・ロックオン · ${g.ZR} 攻撃 · 構え中 右スティック弾き ←→ 標的切替 ↑ 頭 · ${g.L}/${g.R} 武器 · ${g.right} 装填 · ${g.left} 回避 · ${g.bottom} 走る · ${g.top} 乗る · ${g.LS} しゃがむ`;
+  : `${g.ZL} 構える・ロックオン（押し直しで次の標的） · ${g.ZR} 攻撃 · 構え中 右スティック弾き ←→ 切替 ↑ 頭 · ${g.L}/${g.R} 武器 · ${g.right} 装填 · ${g.left} 回避 · ${g.bottom} 走る · ${g.top} 乗る · ${g.LS} しゃがむ`;
 }
 
 /** A radial deadzone, rescaled so the edge of the zone is 0 and `outer` is 1. Pure. */

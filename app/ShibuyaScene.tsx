@@ -238,7 +238,7 @@ export default function Home(){
   if(arsenal?.trigger({touch:touchEnabled&&document.pointerLockElement!==canvas,pad:!!o?.pad}))return;
   melee.request();};
  // PLAN-WEAPONS W2: the collision world a bullet sees, read through the live hooks every call.
- const weaponMuzzle=new THREE.Vector3(),weaponBarrel=new THREE.Vector3(),viewDirection=new THREE.Vector3();
+ const lockReticle=new THREE.Vector3(),weaponMuzzle=new THREE.Vector3(),weaponBarrel=new THREE.Vector3(),viewDirection=new THREE.Vector3();
  const weaponWorld:any={
   solid:(x:number,z:number)=>!!lifeEntry.hooks.current?.network?.ctx?.solid?.(x,z,.05),
   ground:(x:number,z:number)=>lifeEntry.hooks.current?.network?.ctx?.height?.(x,z)??0,
@@ -797,7 +797,11 @@ export default function Home(){
   if(wasAlive&&player.state.alive===false){wallet.penalty(player.state.hitBy==='arrested'||player.state.hitBy==='police'?'arrest':'death');persist();}wasAlive=player.state.alive!==false;
   playUI?.setMoney?.(wallet.money,player.state.armor??0);
   if(door)playUI?.setShop?.(!driving&&player.state.alive!==false&&Math.hypot(player.state.x-door.x,player.state.z-door.z)<=SHOP.reach);
-  if(arsenal)playUI?.setWeapon(arsenal.snapshot(),{aiming:player.state.aim>0&&!driving,locked:player.state.aimLock!=null,spread:arsenal.spread});
+  // Roadmap ④: a pad's hard lock puts the reticle on the person, where the round goes -- not at the
+  // middle of the screen, which the shoulder camera keeps off them.
+  let reticleAt:any=null;{const l=arsenal?.lock;if(l&&!driving){const v=lockReticle.set(l.x,l.y,l.z).project(view);
+   if(v.z<1&&Math.abs(v.x)<=1&&Math.abs(v.y)<=1){const r=canvas.getBoundingClientRect();reticleAt={x:r.left+(v.x+1)/2*r.width,y:r.top+(1-v.y)/2*r.height};}}}
+  if(arsenal)playUI?.setWeapon(arsenal.snapshot(),{aiming:player.state.aim>0&&!driving,locked:player.state.aimLock!=null,spread:arsenal.spread,at:reticleAt,threat:(arsenal?.lock?.tier??2)<2});
   // C4: losing health shakes the pad; C1: the HUD's hints follow the pad in use.
   if((player.state.health??100)<healthLast)player.rumble?.('hurt');healthLast=player.state.health??100;
   {const profile=player.lastDevice==='pad'?player.padProfile:'keyboard',key=profile+(driving?':car':':foot');if(key!==hintKey){hintKey=key;playUI?.setControls?.(controlHints(profile,driving));}}

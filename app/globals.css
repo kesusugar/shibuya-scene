@@ -182,6 +182,8 @@ body.tc-on .player-hint{display:none}
 .play-crosshair::after{left:0;top:12px;width:26px;height:2px}
 .play-crosshair i{position:absolute;left:10px;top:10px;width:6px;height:6px;border-radius:50%;background:#0000}
 .play-crosshair[data-locked="true"]::before,.play-crosshair[data-locked="true"]::after{background:#ff5a4a}
+/* Roadmap ④: locked on someone shooting at the player (or with a gun out): a ring round the cross. */
+.play-crosshair[data-threat="true"] i{left:1px;top:1px;width:20px;height:20px;border:2px solid #ff5a4a;box-shadow:0 0 3px #000}
 
 /* PLAN-PERFORMANCE P0: the ?perf= panel. */
 .perf-overlay{position:fixed;right:8px;top:64px;z-index:60;width:330px;max-height:80vh;overflow:auto;padding:8px 10px;background:#07111aee;border:1px solid #f2a25c88;border-radius:10px;color:#e8eef5;font:11px/1.45 ui-monospace,monospace}
