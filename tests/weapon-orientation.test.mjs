@@ -41,3 +41,23 @@ test('the pistol and the submachine gun never point back at the player through t
   assert.ok(worst > 0, `${w}: the muzzle pointed back (${worst.toFixed(2)})`);
  }
 });
+
+test('the katana guard holds both elbows down and out, both hands on the handle (owner report: the right elbow was up and turned in)', async () => {
+ const asset = await load();
+ for (const speed of [0, 1.4, 3.5]) {
+  const f = createPlayerFigure(asset, {}, {weapons: ['pistol', 'katana', 'smg']});
+  const s = {x: 0, y: 0, z: 0, heading: 0, speed, alive: true, attackTime: 0, weapon: 'katana'};
+  for (let i = 0; i < 60; i++) {s.z += speed / 30; f.update(s, 1 / 30);}
+  f.root.updateMatrixWorld(true);
+  const at = n => f.root.getObjectByName(n).getWorldPosition(new Vector3());
+  for (const [side, out] of [['r', -1], ['l', 1]]) {
+   const sh = at('upperarm_' + side), el = at('lowerarm_' + side), wr = at('hand_' + side);
+   const axis = wr.clone().sub(sh).normalize(), off = el.clone().sub(sh); off.addScaledVector(axis, -off.dot(axis)); off.normalize();
+   assert.ok(el.y < sh.y, `${side} elbow below the shoulder at ${speed} m/s`);
+   assert.ok(off.y < -.5, `${side} elbow points down at ${speed} m/s: ${off.y.toFixed(2)}`);
+   assert.ok(off.x * out > 0, `${side} elbow out, not across the body, at ${speed} m/s`);
+  }
+  const grip = new Vector3(); f.weapons.grip(grip);
+  assert.ok(at('hand_l').distanceTo(grip) < .22, 'the left hand on the handle');
+ }
+});

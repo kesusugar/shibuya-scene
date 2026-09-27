@@ -38,6 +38,9 @@ export const BODY = Object.freeze({
   elbow: Object.freeze({left: Object.freeze([.7, .55, .1]), right: Object.freeze([-.7, .55, .1])}),
   knee: Object.freeze({left: Object.freeze([.45, .5, .8]), right: Object.freeze([-.45, .5, .8])})
  }),
+ // The katana guard's elbows: where each should point (body frame, +X left), below and outside
+ // the shoulder -- a two-handed grip with the elbows down, not raised and turned in.
+ katanaGuard: Object.freeze({right: Object.freeze([-.4, .7, .2]), left: Object.freeze([.4, .7, .2])}),
  upperFade: .2,
  upper: Object.freeze(['spine_02', 'spine_03', 'neck_01', 'Head', 'clavicle_l', 'upperarm_l', 'lowerarm_l', 'hand_l',
   'clavicle_r', 'upperarm_r', 'lowerarm_r', 'hand_r'])
@@ -246,6 +249,39 @@ export function createRideGrip(root) {
     goal.set(...at).applyQuaternion(root.quaternion).add(root.position).sub(p);
     solve(upper, lower, end, goal);
     swivelElbow(upper, lower, end, goal.set(...pole).applyQuaternion(root.quaternion).add(root.position));
+   }
+   return true;
+  },
+  reset() {}
+ };
+}
+
+/**
+ * The katana's two-handed guard, corrected (owner report after stage 6). The Sword_Idle clip
+ * holds the right elbow up above the shoulder and turned in across the chest, and the left elbow
+ * turned in and back. `update(weight)` after the guard is posed: each elbow is swung round the
+ * shoulder-wrist line (so the fists and the blade stay where they are) to point down and out,
+ * the right hand keeping its world orientation so the blade does not turn with the forearm.
+ */
+export function createKatanaGrip(root) {
+ const bone = n => root.getObjectByName(n);
+ // Both hands keep their orientation: the right carries the blade, and the left, let roll with its
+ // forearm, came off the handle.
+ const arms = [[bone('upperarm_r'), bone('lowerarm_r'), bone('hand_r'), BODY.katanaGuard.right],
+  [bone('upperarm_l'), bone('lowerarm_l'), bone('hand_l'), BODY.katanaGuard.left]];
+ const ready = arms.every(a => a.slice(0, 3).every(Boolean));
+ const pole = new Vector3(), keep = new Quaternion(), before = new Quaternion(), pq = new Quaternion();
+ return {
+  get ready() {return ready;},
+  update(weight) {
+   if (!ready || weight <= 1e-3) return false;
+   root.updateMatrixWorld(true);
+   for (const [upper, lower, hand, at] of arms) {
+    hand.getWorldQuaternion(keep); before.copy(upper.quaternion);
+    swivelElbow(upper, lower, hand, pole.set(...at).applyQuaternion(root.quaternion).add(root.position));
+    if (weight < 1) {upper.quaternion.slerpQuaternions(before, upper.quaternion.clone(), weight); upper.updateMatrixWorld(true);}
+    // The hand as it was in the world: the grip and the blade do not roll with the forearm.
+    hand.parent.getWorldQuaternion(pq); hand.quaternion.copy(pq.invert().multiply(keep)); hand.updateMatrixWorld(true);
    }
    return true;
   },
