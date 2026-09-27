@@ -6191,6 +6191,24 @@ Not yet heard or seen on a device: how the radio sounds on real speakers and its
 engine and the city (tuned by measured RMS only), the bike's handling and the rider seen from the
 chase camera, the dents on a real crash, and whether the ラジオ button crowds the touch layout.
 
+## 9as. The katana's blade swung back when setting off (owner report after stage 6)
+
+On a phone the blade was seen pointing back behind the body. Measured (the blade's direction,
+hand to tip, in the body's frame, over a stand/walk/stop/creep/run profile): for the first fifth
+of a second of every walk the blade pointed back and down (forward component -0.9). The stage 2
+two-handed guard (`createUpperPose` on Sword_Idle) was faded in only while moving, so as a walk
+began, the walk's own swinging right arm held the sword. A touch stick starts and stops all the
+time, so it showed constantly.
+
+The guard is now held whenever the katana is in the hand and the body is not cutting, falling or
+in a car -- standing as well as walking -- so there is no fade at the start of a walk. The blade's
+forward component now stays at 0.55 or more through the whole profile and after a cut. The pistol
+and the submachine gun were measured the same way and never point back.
+
+Test: `tests/weapon-orientation.test.mjs` (fails on the old code at -0.91). Stills:
+`evidence/roadmap/katana-setoff/before.png` and `after.png` (1, 3, 5 and 7 frames after setting
+off, from the side).
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
