@@ -316,6 +316,8 @@ export class CrowdSimulation{
    this.splashes.push({x:p.x,y:p.flyGround,z:p.z,dx:p.flyX,dz:p.flyZ,scale:.9,life:Math.max(.2,FALL_SECONDS-p.struck)});}
   if(!airborne&&Math.hypot(p.flyX,p.flyZ)<.15){p.flyX=0;p.flyZ=0;p.spinRate*=.6;}
  }
+ /** Roadmap stage 4: the share of the tier's crowd that is out (time of day). */
+ setPopulation(k){this.population=Math.max(.1,Math.min(1,Number(k)||1));return this.population;}
  despawn(p,reason){if(!p.active)return;this.leave(p);p.active=false;this.stats.despawned++;this.stats.reasons[reason]=(this.stats.reasons[reason]??0)+1;if(reason==='stuck'){this.stats.stuck++;this.stats.recoveries++;}}
  setTier(tier){if(!QUALITY[tier])throw Error('Unknown crowd tier');if(tier===this.tier)return;this.tier=tier;this.choreography?.occupied.clear();for(const p of this.pool){if(p.controlled)continue;if(p.active&&!p.crossing)this.despawn(p,'profile');else if(p.active){p.group=-1;p.leader=-1;p.mode='ambient';}}this.groups.length=0;this.refill(true);}
  setCamera(x,z){this.camera.x=x;this.camera.z=z;}
@@ -327,7 +329,7 @@ export class CrowdSimulation{
   if(leader)nodes=this.candidates.filter(n=>n.component===this.network.nodes[leader.node].component&&Math.hypot(n.x-leader.x,n.z-leader.z)<4);
   for(let attempt=0;attempt<100;attempt++){const n=nodes[Math.floor(this.rng()*nodes.length)];if(!n||this.network.landingNodes.has(n.id)||this.blocked(n.x,n.z,null,.9)||this.vehicleOverlap(n.x,n.z,.6)||this.time>0&&Math.hypot(n.x-this.camera.x,n.z-this.camera.z)<12)continue;
    const jitter=this.rng()*.5-.25,jitterZ=this.rng()*.5-.25,sx=n.x+jitter,sz=n.z+jitterZ,valid=this.network.ctx.safe(sx,sz)&&!this.blocked(sx,sz,null,.65)&&!this.vehicleOverlap(sx,sz,.6),px=valid?sx:n.x,pz=valid?sz:n.z;
-   Object.assign(p,{patrol:null,active:true,choreographed:false,kerbQueue:false,flee:null,fleeOffX:0,fleeOffZ:0,x:px,z:pz,renderX:px,renderZ:pz,previousX:px,previousZ:pz,heading:this.rng()*Math.PI*2,height:this.network.ctx.height(n.x,n.z),archetype:type,mode,state:mode==='idle'?'idle':'walking',group:leader?.group??-1,leader:leader?.id??-1,route:[],routeIndex:0,edge:-1,progress:0,destination:n.id,node:n.id,speed:0,baseSpeed:leader?.baseSpeed??def.speed[0]+this.rng()*(def.speed[1]-def.speed[0]),age:0,stuck:0,pause:mode==='idle'?8+this.rng()*30:0,crossing:null,queueKey:null,lod:'near',elapsed:0,phase:this.rng()*Math.PI*2,color:Math.floor(this.rng()*def.colors.length),travelled:0,voiceUntil:0,voiceSaid:-99,voiceUrgency:0,combatHealth:100,combatTarget:null,limp:false,crawling:false,legWounds:0,handsUpUntil:0,handsUpSince:undefined,shooterUntil:0,gunDrawn:false,gunAim:0,combatUntil:0,combatNext:0,combatAction:0,combatDead:false,fatal:false,appearanceId:undefined,cameFromVehicle:undefined,reactionOwned:false,region:n.district});
+   Object.assign(p,{patrol:null,active:true,choreographed:false,kerbQueue:false,flee:null,fleeOffX:0,fleeOffZ:0,x:px,z:pz,renderX:px,renderZ:pz,previousX:px,previousZ:pz,heading:this.rng()*Math.PI*2,height:this.network.ctx.height(n.x,n.z),archetype:type,mode,state:mode==='idle'?'idle':'walking',group:leader?.group??-1,leader:leader?.id??-1,route:[],routeIndex:0,edge:-1,progress:0,destination:n.id,node:n.id,speed:0,baseSpeed:leader?.baseSpeed??def.speed[0]+this.rng()*(def.speed[1]-def.speed[0]),age:0,stuck:0,pause:mode==='idle'?8+this.rng()*30:0,crossing:null,queueKey:null,lod:'near',elapsed:0,phase:this.rng()*Math.PI*2,color:Math.floor(this.rng()*def.colors.length),travelled:0,voiceUntil:0,voiceSaid:-99,voiceUrgency:0,combatHealth:100,combatTarget:null,collected:false,watchUntil:0,phone:null,limp:false,crawling:false,legWounds:0,handsUpUntil:0,handsUpSince:undefined,shooterUntil:0,gunDrawn:false,gunAim:0,combatUntil:0,combatNext:0,combatAction:0,combatDead:false,fatal:false,appearanceId:undefined,cameFromVehicle:undefined,reactionOwned:false,region:n.district});
    if(mode!=='idle'){
     if(cross){const approach=route(this.network,n.id,cross.from);if(n.id!==cross.from&&!approach.length){p.active=false;continue;}p.route=[...approach,cross.id];p.edge=p.route[0];p.destination=cross.to;}
     else if(!this.chooseDestination(p,n,mode==='milling')){p.active=false;continue;}
@@ -335,20 +337,23 @@ export class CrowdSimulation{
    this.insert(p);this.stats.spawned++;return p;
   }this.stats.spawnDeferred++;return false;
  }
- refill(initial=false){if(this.choreography)return this.choreography.refill(initial);const q=QUALITY[this.tier];let count=this.pool.filter(p=>p.active).length;if(initial&&count===0){for(let i=0;i<q.idle;i++)if(this.spawn('idle',i%5===0?'station':i%3?'hachiko':'center-gai'))count++;for(let i=0;i<q.milling;i++)if(this.spawn('milling','hachiko'))count++;
+ refill(initial=false){if(this.choreography)return this.choreography.refill(initial);const q=QUALITY[this.tier];
+  // Roadmap stage 4: how many are out depends on the time of day (setPopulation); fewer are sent
+  // out, and the rest thin away as their walks end.
+  const total=Math.round(q.total*(this.population??1));let count=this.pool.filter(p=>p.active).length;if(initial&&count===0){for(let i=0;i<q.idle;i++)if(this.spawn('idle',i%5===0?'station':i%3?'hachiko':'center-gai'))count++;for(let i=0;i<q.milling;i++)if(this.spawn('milling','hachiko'))count++;
    for(let i=0;i<q.groups;i++){const leader=this.spawn('group',i%2?'center-gai':'hachiko');if(!leader)continue;leader.group=this.groups.length;const group={id:leader.group,leader:leader.id,members:[leader.id]};this.groups.push(group);count++;for(let j=0;j<1+i%3;j++){const p=this.spawn('group',null,leader);if(p){group.members.push(p.id);count++;}}}
    const crossingCount=Math.round(q.total*.32);for(let i=0;i<crossingCount;i++)if(this.spawn('ambient',null,null,i))count++;
   }
   // Restore family/group membership after pooled actors expire, without growing the group pool.
-  for(let gi=0;gi<q.groups&&count<q.total-1;gi++){
+  for(let gi=0;gi<q.groups&&count<total-1;gi++){
    let g=this.groups[gi];if(!g){g={id:gi,leader:-1,members:[]};this.groups[gi]=g;}
    g.members=g.members.filter(id=>this.pool[id].active&&this.pool[id].group===gi);
    if(!g.members.length){const leader=this.spawn('group',gi%2?'center-gai':'hachiko');if(!leader)continue;leader.group=gi;g.leader=leader.id;g.members=[leader.id];count++;}
    if(!g.members.includes(g.leader)){g.leader=g.members[0];const leader=this.pool[g.leader];leader.leader=-1;if(leader.archetype==='kid')leader.archetype='casual';}
    const leader=this.pool[g.leader];for(const id of g.members)this.pool[id].leader=id===g.leader?-1:g.leader;
-   if(g.members.length<2&&count<q.total){const follower=this.spawn('group',null,leader);if(follower){g.members.push(follower.id);count++;}}
+   if(g.members.length<2&&count<total){const follower=this.spawn('group',null,leader);if(follower){g.members.push(follower.id);count++;}}
   }
-  const budget=initial?q.total:12;for(let i=0;i<budget&&count<q.total;i++){const region=i%6===0?'center-gai':i%6===1?'hachiko':i%6===2?'station':null;const idle=this.pool.filter(p=>p.active&&p.mode==='idle').length,milling=this.pool.filter(p=>p.active&&p.mode==='milling').length;const mode=idle<q.idle?'idle':milling<q.milling?'milling':'ambient';const allocated=this.pool.filter(p=>p.active&&p.route.some((id,i)=>i>=p.routeIndex&&this.network.edges[id]?.kind!=='normal'&&this.network.edges[id]?.crossingId)).length;const cross=mode==='ambient'&&allocated<Math.round(q.total*.32)?this.crossCursor++:-1;if(this.spawn(mode,mode==='ambient'?region:'hachiko',null,cross))count++;}
+  const budget=initial?q.total:12;for(let i=0;i<budget&&count<total;i++){const region=i%6===0?'center-gai':i%6===1?'hachiko':i%6===2?'station':null;const idle=this.pool.filter(p=>p.active&&p.mode==='idle').length,milling=this.pool.filter(p=>p.active&&p.mode==='milling').length;const mode=idle<q.idle?'idle':milling<q.milling?'milling':'ambient';const allocated=this.pool.filter(p=>p.active&&p.route.some((id,i)=>i>=p.routeIndex&&this.network.edges[id]?.kind!=='normal'&&this.network.edges[id]?.crossingId)).length;const cross=mode==='ambient'&&allocated<Math.round(q.total*.32)?this.crossCursor++:-1;if(this.spawn(mode,mode==='ambient'?region:'hachiko',null,cross))count++;}
  }
  beginCrossing(p,e){if(!this.signals)return false;const s=this.signals.getCrossingTrafficState(e.crossingId);if(!s.known||!s.vehicleClear||s.pedestrian!=='WALK'||this.signals.phase()[2]<5)return false;if((p.id%9)*.14>20-this.signals.phase()[2])return false;
   // Exit capacity is reserved by occupancy checks; no admission into a packed curb.
@@ -370,6 +375,8 @@ export class CrowdSimulation{
   if(p.combatTarget&&p.combatUntil>this.time&&!p.crossing){p.state='fighting';p.speed=0;return;}
   // Roadmap stage 2 (street-reactions.mjs): hands up at gunpoint, or standing to shoot back.
   if((p.handsUpUntil>this.time||p.shooterUntil>this.time)&&!p.crossing){p.state=p.shooterUntil>this.time?'shooting':'surrender';p.speed=0;p.flee=null;return;}
+  // Roadmap stage 4 (onlookers.mjs): stopped to watch a body, phone out.
+  if(p.watchUntil>this.time&&!p.crossing){p.state='watching';p.speed=0;if(Number.isFinite(p.watchX))p.heading=Math.atan2(p.watchX-p.x,p.watchZ-p.z);return;}
   if(p.combatTarget){p.combatTarget=null;p.combatAction=0;}
   // Curb waiters and idle actors yield locally to occupied crossing exits.
   // They remain on walkable ground; no recycling or position snap clears a crossing.
@@ -451,7 +458,9 @@ export class CrowdSimulation{
      }
      continue;
     }
-    if(p.struck>=FALL_SECONDS){p.struck=undefined;this.despawn(p,'struck');p.downUntil=this.time+RESPAWN_SECONDS;}continue;}
+    // Roadmap stage 4: someone killed in a fight or by a weapon stays down until the ambulance
+    // collects them (aftermath.mjs), not FALL_SECONDS; a car's victim goes as before.
+    if(p.struck>=FALL_SECONDS&&(!p.combatDead||p.collected)){p.struck=undefined;this.despawn(p,p.collected?'collected':'struck');p.downUntil=this.time+RESPAWN_SECONDS;}continue;}
    if(p.flee){p.elapsed=0;continue;}   // moved in the flight pass above
    p.elapsed+=dt;const interval=p.crossing||p.choreographed?1/30:p.mode==='idle'?.5:p.lod==='near'?1/30:p.lod==='mid'?1/15:.2;if(p.elapsed+1e-8<interval){this.stats.throttled++;continue;}const elapsed=p.elapsed;p.elapsed=0;this.move(p,elapsed);}
   if(this.refillClock>=2){this.refillClock=0;this.refill();}

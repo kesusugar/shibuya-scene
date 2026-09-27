@@ -51,7 +51,9 @@ test('the spawn mix is the plan\'s Scramble mix',()=>{
 
 test('every type can drive the baked lane graph, and the new bodies park',()=>{
  const allowed=new Set();for(const l of pack.traffic.high.lanes)for(const t of l.allowed)allowed.add(t);
- for(const type of Object.keys(VEHICLES))assert.ok(allowed.has(type),`${type} is allowed on no lane: rebake the static pack`);
+ // Roadmap stage 4: a hand-driven service vehicle (the ambulance) is moved along a police lane by
+ // life/aftermath.mjs, never by the traffic simulation, so it needs no lanes of its own.
+ for(const type of Object.keys(VEHICLES))if(!VEHICLES[type].handDriven)assert.ok(allowed.has(type),`${type} is allowed on no lane: rebake the static pack`);
  for(const type of ['tallKei','minivan','longVan','truck2t'])assert.ok(PARKED_MIX.includes(type));
 });
 

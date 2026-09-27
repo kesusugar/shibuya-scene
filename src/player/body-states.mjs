@@ -9,12 +9,18 @@
 //              simulation's).
 //  UPPER POSE  any clip's upper body over the legs -- the katana's two-handed guard (Sword_Idle)
 //              held while walking, instead of the walk's swinging arms with a sword in one hand.
-import {Quaternion,Vector3} from 'three';
+import {BoxGeometry,Mesh,MeshStandardMaterial,Quaternion,Vector3} from 'three';
 import {createTwoBoneSolver} from './foot-ik.mjs';
 
 export const BODY = Object.freeze({
  // Hands up: where each palm goes, in the body's frame (+X left, +Y up, +Z forward), at 1.76 m.
- handsUp: Object.freeze({left: Object.freeze([.3, 1.58, .14]), right: Object.freeze([-.3, 1.58, .14]), fade: .2}),
+ // Stage 4: a phone in the right hand -- held up in front of the face to film, or at the right ear.
+ phone: Object.freeze({film: Object.freeze([-.07, 1.36, .31]), call: Object.freeze([-.17, 1.5, .04]), fade: .35,
+  // Where each elbow points (body frame): down and out to the right, clear of the chest.
+  pole: Object.freeze({film: Object.freeze([-.95, .85, .05]), call: Object.freeze([-.9, 1.25, .15])})}),
+ handsUp: Object.freeze({left: Object.freeze([.3, 1.58, .14]), right: Object.freeze([-.3, 1.58, .14]), fade: .2,
+  // The elbows out to the sides and a little down, as people hold their hands up.
+  pole: Object.freeze({left: Object.freeze([.8, 1.25, 0]), right: Object.freeze([-.8, 1.25, 0])})}),
  // Limp: how far the knee may bend (share of what the walk bends it), the hip drop and lean (rad).
  limp: Object.freeze({knee: .35, drop: .1, lean: .09, fade: .3}),
  upperFade: .2,
@@ -24,11 +30,36 @@ export const BODY = Object.freeze({
 
 const palm = .08;
 
+/**
+ * Turn an arm about the line from its shoulder to its wrist so the elbow points toward `pole`
+ * (world). The wrist is on that line, so it stays where the IK put it; only the elbow swings.
+ * A two-bone solve keeps the bend plane the animation had, which for an arm hanging at the side
+ * put the elbow in front of the chest once the hand came up to the face -- through the body.
+ */
+const _s = new Vector3(), _e = new Vector3(), _w = new Vector3(), _axis = new Vector3(), _a = new Vector3(), _b = new Vector3();
+const _q = new Quaternion(), _wq = new Quaternion(), _pq = new Quaternion();
+export function swivelElbow(upper, lower, wrist, pole) {
+ upper.updateWorldMatrix(true, true);
+ _s.setFromMatrixPosition(upper.matrixWorld); _e.setFromMatrixPosition(lower.matrixWorld); _w.setFromMatrixPosition(wrist.matrixWorld);
+ _axis.subVectors(_w, _s); const len = _axis.length(); if (len < 1e-4) return 0; _axis.divideScalar(len);
+ // The elbow's and the pole's directions off the shoulder-wrist line.
+ _a.subVectors(_e, _s); _a.addScaledVector(_axis, -_a.dot(_axis));
+ _b.subVectors(pole, _s); _b.addScaledVector(_axis, -_b.dot(_axis));
+ if (_a.lengthSq() < 1e-8 || _b.lengthSq() < 1e-8) return 0;
+ _a.normalize(); _b.normalize();
+ const angle = Math.atan2(_axis.dot(_a.clone().cross(_b)), _a.dot(_b));
+ _q.setFromAxisAngle(_axis, angle);
+ upper.getWorldQuaternion(_wq); upper.parent.getWorldQuaternion(_pq);
+ upper.quaternion.copy(_pq.invert().multiply(_q.multiply(_wq)));
+ upper.updateMatrixWorld(true);
+ return angle;
+}
+
 /** Both arms up. `update(on, dt)` after everything else has posed the body. */
 export function createHandsUp(root) {
  const bone = n => root.getObjectByName(n);
- const arms = [[bone('upperarm_l'), bone('lowerarm_l'), bone('hand_l'), BODY.handsUp.left],
-  [bone('upperarm_r'), bone('lowerarm_r'), bone('hand_r'), BODY.handsUp.right]];
+ const arms = [[bone('upperarm_l'), bone('lowerarm_l'), bone('hand_l'), BODY.handsUp.left, BODY.handsUp.pole.left],
+  [bone('upperarm_r'), bone('lowerarm_r'), bone('hand_r'), BODY.handsUp.right, BODY.handsUp.pole.right]];
  const ready = arms.every(a => a.slice(0, 3).every(Boolean));
  const solve = createTwoBoneSolver(), goal = new Vector3(), hand = new Vector3(), p = new Vector3();
  let w = 0;
@@ -40,7 +71,7 @@ export function createHandsUp(root) {
    if (!ready || w <= 1e-3) return false;
    root.updateMatrixWorld(true);
    const k = w * w * (3 - 2 * w);
-   for (const [upper, lower, wrist, at] of arms) {
+   for (const [upper, lower, wrist, at, pole] of arms) {
     wrist.updateWorldMatrix(true, false);
     hand.setFromMatrixPosition(wrist.matrixWorld);
     p.set(0, palm, 0).applyMatrix4(wrist.matrixWorld).sub(hand);          // wrist -> palm
@@ -49,6 +80,7 @@ export function createHandsUp(root) {
     goal.applyQuaternion(root.quaternion).add(root.position).sub(p);
     goal.sub(hand).multiplyScalar(k).add(hand);
     solve(upper, lower, wrist, goal);
+    if (k > .05) swivelElbow(upper, lower, wrist, goal.set(...pole).applyQuaternion(root.quaternion).add(root.position));
    }
    return true;
   },
@@ -119,5 +151,49 @@ export function createUpperPose(root, clips, name) {
    root.updateMatrixWorld(true);
    return true;
   }
+ };
+}
+
+let phoneGeometry = null, phoneMaterial = null;
+/**
+ * Stage 4: a phone in the right hand. `update(mode, dt)` with 'film', 'call' or null: the hand goes
+ * up in front of the face (filming) or to the right ear (calling), and the phone shows in it.
+ */
+export function createPhone(root) {
+ const bone = n => root.getObjectByName(n);
+ const arm = [bone('upperarm_r'), bone('lowerarm_r'), bone('hand_r')];
+ const ready = arm.every(Boolean);
+ const solve = createTwoBoneSolver(), goal = new Vector3(), hand = new Vector3(), p = new Vector3();
+ phoneGeometry ??= new BoxGeometry(.072, .15, .009);
+ phoneMaterial ??= new MeshStandardMaterial({name: 'phone', color: 0x15171b, metalness: .4, roughness: .3, emissive: 0x2b3a4a, emissiveIntensity: .35});
+ const mesh = ready ? new Mesh(phoneGeometry, phoneMaterial) : null;
+ if (mesh) {
+  const s = new Vector3(); arm[2].getWorldScale(s);
+  mesh.scale.setScalar(1 / (s.x || 1)); mesh.position.set(-.03 / (s.x || 1), .1 / (s.x || 1), 0); mesh.visible = false; mesh.name = 'phone';
+  arm[2].add(mesh);
+ }
+ let w = 0, mode = null;
+ return {
+  get ready() {return ready;},
+  get weight() {return w;},
+  get mesh() {return mesh;},
+  update(want, dt) {
+   if (want) mode = want;
+   w += Math.max(-dt / BODY.phone.fade, Math.min(dt / BODY.phone.fade, (want ? 1 : 0) - w));
+   if (mesh) mesh.visible = w > .4;
+   if (!ready || w <= 1e-3 || !mode) return false;
+   root.updateMatrixWorld(true);
+   const [upper, lower, wrist] = arm, k = w * w * (3 - 2 * w);
+   wrist.updateWorldMatrix(true, false);
+   hand.setFromMatrixPosition(wrist.matrixWorld);
+   p.set(0, palm, 0).applyMatrix4(wrist.matrixWorld).sub(hand);
+   goal.set(...BODY.phone[mode]).applyQuaternion(root.quaternion).add(root.position).sub(p);
+   goal.sub(hand).multiplyScalar(k).add(hand);
+   solve(upper, lower, wrist, goal);
+   if (k > .05) swivelElbow(upper, lower, wrist, goal.set(...BODY.phone.pole[mode]).applyQuaternion(root.quaternion).add(root.position));
+   return true;
+  },
+  reset() {w = 0; mode = null; if (mesh) mesh.visible = false;},
+  dispose() {mesh?.removeFromParent();}
  };
 }

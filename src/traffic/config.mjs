@@ -28,6 +28,9 @@ export const VEHICLES={
   kit:{bonnet:false,wing:'big'},steer:.74,grip:8,slide:1.6,engine:{idleHz:64,revHz:220,wave:'sawtooth'}},
  heroDark:{width:1.84,length:4.2,height:1.27,speed:14.5,accel:2.7,brake:5,weight:0,color:0x3b3f45,name:'Yoru Z',fixedPaint:true,hero:true,rim:0x151618,
   kit:{bonnet:false,wing:'small'},steer:.72,grip:8.5,slide:1.7,engine:{idleHz:58,revHz:205,wave:'sawtooth'}},
+ // Roadmap stage 4: an ambulance, sent only to collect the dead (life/aftermath.mjs). Weight 0:
+ // never ordinary traffic. White with a red lower band and a red lightbar; generic, unlettered.
+ ambulance:{width:1.88,length:5.3,height:2.4,speed:12,accel:1.8,brake:4.2,weight:0,color:0xf3f3ef,name:'Ambulance',livery:'ambulance',lightbar:true,steer:.52,grip:11,handDriven:true},
  riotBus:{width:2.3,length:7.6,height:2.9,speed:10,accel:1.3,brake:3.2,weight:0,color:0x1f3f7a,name:'Riot Transport',livery:'riot',steer:.45,grip:10,police:true},
  coupe:{width:1.78,length:4.4,height:1.3,speed:13,accel:2.4,brake:4.5,weight:2,color:0x9c1d22,name:'Street GT',steer:.68,grip:14},
  // PLAN-POLICE-AND-OWN-CAR Step H: the player's own drift fastback. Weight 0 and `owned`: traffic

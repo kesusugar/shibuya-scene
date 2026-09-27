@@ -61,6 +61,9 @@ import {createMeleeCombat} from '../src/player/combat.mjs';
 import {createArsenal} from '../src/player/arsenal.mjs';
 import {createWeaponWheel,WHEEL} from '../src/player/weapon-wheel.mjs';
 import {createStreetReactions} from '../src/life/street-reactions.mjs';
+import {createOnlookers} from '../src/life/onlookers.mjs';
+import {createAftermath} from '../src/life/aftermath.mjs';
+import {populationFor} from '../src/life/population.mjs';
 import {setRagdollWorld} from '../src/player/ragdoll.mjs';
 import {createHelicopterMesh} from '../src/police/helicopter.mjs';
 import {createHitStop} from '../src/player/hit-stop.mjs';
@@ -135,7 +138,7 @@ export default function Home(){
  const KOBAN={x:48.5,z:20.4};
  const policeFrustum=new THREE.Frustum(),policeMatrix=new THREE.Matrix4(),policePoint=new THREE.Vector3();
  const inView=(x:number,z:number)=>policeFrustum.containsPoint(policePoint.set(x,1.5,z))&&Math.hypot(x-view.position.x,z-view.position.z)<260;const earFacing=new THREE.Vector3(),SCRAMBLE_EAR={x:6.54,z:1.99};
- let heliMesh:any=null;const weaponWheel=createWeaponWheel(),streetReactions=createStreetReactions(),ragdollCars:any[]=[];let frameShotAt:any=null;let seatedDrivers:any=null;let seatedHidden=false;let transitionSeated=false;let carjackSide=-1,carjackStage:string|null=null,lastCarjack:any=null;let vehicleVisual:any=null,vehicleEffects:any=null,playUI:any=null,localCrowdClock=0,frameHits=0,combatDeathReported=false;const followCamera=createFollowCamera(),feedback=createFeedbackBus(),melee=createMeleeCombat({
+ let heliMesh:any=null;const weaponWheel=createWeaponWheel(),streetReactions=createStreetReactions(),onlookers=createOnlookers(),aftermath=createAftermath(),ragdollCars:any[]=[];let frameShotAt:any=null,lastGunshotAt=-Infinity;let seatedDrivers:any=null;let seatedHidden=false;let transitionSeated=false;let carjackSide=-1,carjackStage:string|null=null,lastCarjack:any=null;let vehicleVisual:any=null,vehicleEffects:any=null,playUI:any=null,localCrowdClock=0,frameHits=0,combatDeathReported=false;const followCamera=createFollowCamera(),feedback=createFeedbackBus(),melee=createMeleeCombat({
   // PLAN-WEAPONS W1: the katana's cut goes through the same swing clock as a punch.
   weapon:()=>arsenal?.current??'fists',
   // RUN 8: a punch is an event the crowd can see. The HQ layer bounds it by its own spatial
@@ -452,7 +455,7 @@ export default function Home(){
     soundBank?.duck?.(.5,1.4);shake=Math.min(SHAKE_PUNCH_MAX,shake+SHAKE_SHOT);player?.rumble?.('shot');
     // Stage 1: a round that found a person marks the crosshair (a kill marks it red).
     if(shot.kind==='person')playUI?.hitMarker?.(shot.outcome==='killed');
-    frameShotAt={x:shot.from.x,z:shot.from.z};},
+    frameShotAt={x:shot.from.x,z:shot.from.z};lastGunshotAt=lifeEntry.hooks.current?.sim?.time??0;},
    onLand:(x:number,y:number,z:number,kind:string)=>gunfire?.tink(x,y,z,kind),
    onWitness:(event:any)=>lifeEntry.hooks.current?.witness?.(event)??0});
    groups.dynamic.add(arsenal.effects.root);}
@@ -603,7 +606,9 @@ export default function Home(){
  });
  let lastPlayTick=performance.now();let wheelTime=1;let qaReadyRef=false;const frame=(now:number)=>{if(disposed)return;const gateDt=frameGate.step(now);if(gateDt===null){raf=requestAnimationFrame(frame);return;}
  // Stage 1: the world slows while the weapon wheel is open.
- wheelTime+=((weaponWheel.open?WHEEL.slow:1)-wheelTime)*Math.min(1,gateDt*12);const dt=gateDt*wheelTime;const frameStart=performance.now(),updateStart=frameStart;const playElapsed=document.hidden?0:Math.max(0,(now-lastPlayTick)/1000);lastPlayTick=now;frameHits=0;{const s=lifeEntry.hooks.current?.sim;if(s)s.postUpdate=null;}
+ wheelTime+=((weaponWheel.open?WHEEL.slow:1)-wheelTime)*Math.min(1,gateDt*12);const dt=gateDt*wheelTime;
+ // Roadmap stage 4: how many people are out follows the time of day.
+ lifeEntry.hooks.current?.sim?.setPopulation?.(populationFor(clock.value));const frameStart=performance.now(),updateStart=frameStart;const playElapsed=document.hidden?0:Math.max(0,(now-lastPlayTick)/1000);lastPlayTick=now;frameHits=0;{const s=lifeEntry.hooks.current?.sim;if(s)s.postUpdate=null;}
  if((perfMode||perfWanted)&&!perfProbe&&renderer)ensurePerf();
  perfProbe?.frameStart();perfProbe?.begin('player');if(playerMode&&player)player.updateInput(dt);if(playerMode&&player){view.getWorldDirection(viewDirection);arsenal?.frame(dt,{player,figure:playerFigure,driving:driving||!!vehicleTransition.active,world:weaponWorld,
   camera:{position:view.position,direction:viewDirection},touch:touchEnabled&&document.pointerLockElement!==canvas,pad:player.lastDevice==='pad',time:lifeEntry.hooks.current?.sim?.time??0});
@@ -724,7 +729,7 @@ export default function Home(){
   {const profile=player.lastDevice==='pad'?player.padProfile:'keyboard',key=profile+(driving?':car':':foot');if(key!==hintKey){hintKey=key;playUI?.setControls?.(controlHints(profile,driving));}}
   // A round fired at the player -- an officer's revolver, or (stage 2) an armed civilian's handgun: the
   // flash, the streak and where it went, the shot with the street's echo; a hit bleeds and knocks the view.
-  const enemyShot=(e:any)=>{if(e.kind!=='warn'&&e.kind!=='shot')return;
+  const enemyShot=(e:any)=>{if(e.kind!=='warn'&&e.kind!=='shot')return;lastGunshotAt=lifeEntry.hooks.current?.sim?.time??0;
     // The flash from the drawn revolver's own muzzle when a near body draws the officer; the
     // director's estimate (in front of the chest) otherwise.
     if(lifeEntry.hooks.current?.muzzleOf?.(e.officer.id,weaponMuzzle,weaponBarrel)){const lift=e.to.y-e.from.y;e.from={x:weaponMuzzle.x,y:weaponMuzzle.y,z:weaponMuzzle.z};if(e.kind==='warn')e.to={x:e.from.x,y:e.from.y+lift,z:e.from.z};}
@@ -743,7 +748,11 @@ export default function Home(){
    frameShotAt=null;
    // What a falling body can strike besides the ground: the walls, and the cars near the player.
    ragdollCars.length=0;for(const v of (trafficEntry.hooks.current?.sim?.pool??[])){if(!v.active||Math.abs(v.x-player.state.x)>40||Math.abs(v.z-player.state.z)>40)continue;const d=(VEHICLES as any)[v.type];if(d)ragdollCars.push({x:v.x,z:v.z,y:v.y??0,heading:v.heading,width:d.width,length:d.length,height:d.height});}
-   setRagdollWorld({solid:weaponWorld.solid,cars:ragdollCars});}
+   setRagdollWorld({solid:weaponWorld.solid,cars:ragdollCars});
+   // Roadmap stage 4: once it is quiet, people stop to film or call it in; with no chase on, an
+   // ambulance and a patrol car come for the dead and the blood is washed away.
+   onlookers.update(crowdNow,{lastGunshotAt});
+   aftermath.update(dt,{traffic:trafficEntry.hooks.current?.sim,crowd:crowdNow,stars:police?.wanted?.state?.stars??0,marks:arsenal?.marks});}
   if(police){policeFrustum.setFromProjectionMatrix(policeMatrix.multiplyMatrices(view.projectionMatrix,view.matrixWorldInverse));
    const w=police.frame(dt,{player:player.state,car:playerCar,driving,melee:melee.snapshot(),weapons:arsenal?.snapshot()??null,solid:weaponWorld.solid,traffic:trafficEntry.hooks.current?.sim,crowd:crowdSim,listener:{x:view.position.x,z:view.position.z,vx:0,vz:0},visible:inView,hurt:(n:number,src:string)=>{if(!driving)player.hurt?.(n,src);},
     night:clock.value==='night'||clock.value==='dusk',ground:weaponWorld.ground});
