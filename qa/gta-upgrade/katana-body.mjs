@@ -43,7 +43,7 @@ export async function bodyMechanics(file='assets/character/cmu-weapons/katana-cu
  // A planted foot: the ball below 4 cm off its lowest; its slide is how far it moves while so.
  // A planted foot: the ball below 4 cm off its lowest; its slide is how far it moves while so,
  // outside the moves the bake plans for it (clip.body: the step in, the draw-up, the way back).
- const B=clip.body,planned=(k,t)=>!!B&&([B.step,B.draw].some(m=>m?.foot===k&&t>=m.at[0]-.02&&t<=m.at[1]+.02)||t>=B.back[0]-.02);
+ const B=clip.body?.step?clip.body:null,planned=(k,t)=>!!B&&([B.step,B.draw].some(m=>m?.foot===k&&t>=m.at[0]-.02&&t<=m.at[1]+.02)||t>=B.back[0]-.02);
  const slide=k=>{const key=k==='l'?'ballL':'ballR',low=Math.min(...rows.map(r=>r[key].y));let max=0,ref=null;
   for(const r of rows){if(r[key].y<low+.04&&!planned(k,r.t)){ref??=r[key].clone();max=Math.max(max,Math.hypot(r[key].x-ref.x,r[key].z-ref.z));}else ref=null;}return max;};
  // The hold: the longest run with the tip slower than 0.6 m/s after the cut.

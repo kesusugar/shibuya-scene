@@ -355,6 +355,8 @@ if(hybridRun){
 // Each is only used if its file is present; absent, the Quaternius clip stays.
 const CMU_WEAPONS=[
  {name:'SwordAttack',file:'katana-cut'},{name:'SwordIdle',file:'katana-guard'},
+ // Katana D: the combo's second and third cuts (逆袈裟, 横一文字).
+ {name:'SwordGyaku',file:'katana-gyaku'},{name:'SwordYoko',file:'katana-yoko'},
  {name:'SmgLow',file:'rifle-raise',firstKey:true},{name:'SmgAim',file:'rifle-shouldered'}
 ];
 const cmuWeapons=[];

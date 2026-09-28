@@ -207,6 +207,18 @@
    "tracks": 50
   },
   {
+   "name": "SwordGyaku",
+   "upstream": "CMU 02_07 (scripts/cmu/weapon-clip.mjs)",
+   "seconds": 0.638,
+   "tracks": 23
+  },
+  {
+   "name": "SwordYoko",
+   "upstream": "CMU 02_07 (scripts/cmu/weapon-clip.mjs)",
+   "seconds": 1.028,
+   "tracks": 23
+  },
+  {
    "name": "SmgLow",
    "upstream": "CMU 80_03 (scripts/cmu/weapon-clip.mjs)",
    "seconds": 0.033,
@@ -259,6 +271,26 @@
     "tracks": 23
    },
    {
+    "name": "SwordGyaku",
+    "file": "katana-gyaku",
+    "trial": "02_07",
+    "from": 9.55,
+    "to": 10.55,
+    "amcSha256": "6171216b0bd691843096798431a5f201b9d1340503cf89ce20180b6143597cd8",
+    "seconds": 0.638,
+    "tracks": 23
+   },
+   {
+    "name": "SwordYoko",
+    "file": "katana-yoko",
+    "trial": "02_07",
+    "from": 12.85,
+    "to": 13.8,
+    "amcSha256": "6171216b0bd691843096798431a5f201b9d1340503cf89ce20180b6143597cd8",
+    "seconds": 1.028,
+    "tracks": 23
+   },
+   {
     "name": "SmgLow",
     "file": "rifle-raise",
     "trial": "80_03",
@@ -283,8 +315,8 @@
  },
  "output": {
   "file": "public/data/character/citizen.glb",
-  "bytes": 2816488,
-  "sha256": "733361ee1cde4b773c447639654e90cad0715e5ac5bd973e6023dc27b64307bd"
+  "bytes": 2864832,
+  "sha256": "ec69f4a25db9373ef153e16c21d8cccf6c2122de7cd7ec6bae980820c982ae06"
  },
  "gaitDetail": {
   "samples": 120,

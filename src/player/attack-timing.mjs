@@ -55,17 +55,47 @@ export const SWORD=Object.freeze({name:'SwordAttack',hand:'right',duration:1.898
  sweepFrom:1.509,sweepTo:-0.584,tipReach:1.56,
  sweep:Object.freeze([[0.664,1.509],[0.68,1.204],[0.696,1.003],[0.712,0.803],[0.727,0.658],[0.743,0.524],[0.759,0.4],[0.775,0.283],[0.791,0.168],[0.807,0.053],[0.822,-0.067],[0.838,-0.182],[0.854,-0.286],[0.87,-0.39],[0.886,-0.49],[0.901,-0.584]]),
  tipHeight:Object.freeze([0.58,2.25]),
+ heights:Object.freeze([2.25,2.22,2.16,2.06,1.92,1.76,1.57,1.37,1.16,1,0.89,0.8,0.74,0.68,0.63,0.58]),
+ // Katana D: pressed again before this, the next cut of the combo starts here (the blade low on the
+ // right, where the rising cut begins), before the zanshin.
+ chainAt:1.0,
  // Katana C: zanshin -- the blade held low and still after the cut (the bake's 0.22x warp, source
  // 7.73-7.81 s), then the way back to guard. From `cancelAt` (the hold's end) the return may be cut
  // short: by the next cut, or by walking off (combat.mjs).
  zanshin:Object.freeze([1.033,1.402]),cancelAt:1.402});
 
-/** The katana tip's bearing (body frame) `t` seconds into a cut at normal speed, clamped to the window. */
-export function swordBearing(t){
- const s=SWORD.sweep;
- if(t<=s[0][0])return s[0][1];
- for(let i=1;i<s.length;i++)if(t<=s[i][0]){const [t0,a0]=s[i-1],[t1,a1]=s[i];return a0+(a1-a0)*(t-t0)/(t1-t0);}
- return s[s.length-1][1];
+/**
+ * Katana D: the combo's second and third cuts, measured the same way (sword-timing.mjs SwordGyaku /
+ * SwordYoko; the clips from scripts/cmu/weapon-clip.mjs 'katana-gyaku' / 'katana-yoko').
+ * SWORD_GYAKU (逆袈裟) rises from low on the right, where the kesa leaves the blade, up across the
+ * front to high on the left; SWORD_YOKO (横一文字) is level at chest height, from the left across to
+ * the right, then held (zanshin, the bake's slow knots) -- the last of the three.
+ * `heights` is the tip's height (m) at each `sweep` sample, for where a cut meets a body.
+ */
+export const SWORD_GYAKU=Object.freeze({name:'SwordGyaku',hand:'right',duration:0.638,windup:0.303,activeEnd:0.474,peak:0.314,
+ sweepFrom:-0.546,sweepTo:0.346,tipReach:1.324,
+ sweep:Object.freeze([[0.303,-0.546],[0.309,-0.542],[0.314,-0.538],[0.319,-0.534],[0.325,-0.528],[0.33,-0.521],[0.335,-0.513],[0.341,-0.504],[0.346,-0.495],[0.351,-0.484],[0.356,-0.471],[0.362,-0.457],[0.367,-0.441],[0.372,-0.423],[0.378,-0.402],[0.383,-0.379],[0.388,-0.353],[0.394,-0.324],[0.399,-0.293],[0.404,-0.258],[0.41,-0.22],[0.415,-0.178],[0.42,-0.134],[0.426,-0.087],[0.431,-0.037],[0.436,0.015],[0.442,0.062],[0.447,0.109],[0.452,0.158],[0.458,0.207],[0.463,0.256],[0.468,0.306],[0.474,0.346]]),
+ tipHeight:Object.freeze([1.09,2.16]),
+ heights:Object.freeze([1.09,1.15,1.21,1.27,1.33,1.39,1.45,1.5,1.56,1.61,1.66,1.72,1.76,1.81,1.86,1.9,1.94,1.98,2.01,2.05,2.07,2.09,2.11,2.12,2.14,2.15,2.15,2.16,2.16,2.15,2.15,2.15,2.14]),
+ // Pressed again before this, the level cut starts here (the blade high on the left).
+ chainAt:0.56,});
+export const SWORD_YOKO=Object.freeze({name:'SwordYoko',hand:'right',duration:1.028,windup:0.24,activeEnd:0.368,peak:0.24,
+ sweepFrom:1.029,sweepTo:-0.563,tipReach:1.271,
+ sweep:Object.freeze([[0.24,1.029],[0.248,0.95],[0.257,0.87],[0.266,0.79],[0.274,0.705],[0.283,0.62],[0.291,0.535],[0.3,0.442],[0.308,0.314],[0.317,0.184],[0.325,0.053],[0.334,-0.077],[0.343,-0.206],[0.351,-0.335],[0.36,-0.465],[0.368,-0.563]]),
+ tipHeight:Object.freeze([1.37,1.63]),
+ heights:Object.freeze([1.37,1.38,1.39,1.4,1.41,1.42,1.43,1.44,1.48,1.5,1.53,1.55,1.57,1.59,1.61,1.63]),
+ zanshin:Object.freeze([0.49,0.888]),cancelAt:0.888,});
+/** The combo, in order. A press during a cut, before its `chainAt`, carries on to the next. */
+export const KATANA_COMBO=Object.freeze([SWORD,SWORD_GYAKU,SWORD_YOKO]);
+
+/** A cut's tip bearing (body frame) `t` seconds in, clamped to its window (`timing` defaults to the kesa). */
+export function swordBearing(t,timing=SWORD){return sampled(timing.sweep,t,i=>timing.sweep[i][1]);}
+/** A cut's tip height (m) `t` seconds in, clamped to its window. */
+export function swordHeight(t,timing=SWORD){return sampled(timing.sweep,t,i=>timing.heights?.[i]??(timing.tipHeight[0]+timing.tipHeight[1])/2);}
+function sampled(s,t,value){
+ if(t<=s[0][0])return value(0);
+ for(let i=1;i<s.length;i++)if(t<=s[i][0]){const [t0]=s[i-1],[t1]=s[i],a=value(i-1),b=value(i);return a+(b-a)*(t-t0)/(t1-t0);}
+ return value(s.length-1);
 }
 
 /**

@@ -1,8 +1,10 @@
-import {AnimationMixer,LoopOnce,LoopRepeat} from 'three';
+import {AnimationMixer,LoopOnce,LoopRepeat,Vector3} from 'three';
 import {bakedCitizen} from './character-asset.mjs';
 import {buildGaitSpace,createGaitBlend,createBodyFacing,LOCOMOTION} from './locomotion.mjs';
 import {createFootIK} from './foot-ik.mjs';
-import {attackOf} from './attack-timing.mjs';
+import {attackOf,KATANA_COMBO} from './attack-timing.mjs';
+import {createBladeTrail,TRAIL} from './blade-trail.mjs';
+import {GRIP,SHAPE} from './weapons.mjs';
 import {createWeaponRig} from './weapon-mesh.mjs';
 import {createAimLayer} from './aim-layer.mjs';
 import {createHands} from './hands.mjs';
@@ -20,7 +22,10 @@ const GAIT=new Set(['Idle','Walk','Run','Sprint']);
 const PUNCHES=new Set(['Punch','PunchCross']);
 /** Every swing that takes the body over, the katana's cut included (PLAN-WEAPONS W1). */
 // Roadmap stage 2: crawling owns the whole body the same way (it is Swim_Fwd_Loop laid on the ground).
-const SWINGS=new Set([...PUNCHES,'SwordAttack','Roll','Crawl']);
+// Katana D: the three cuts of the combo (袈裟, 逆袈裟, 横一文字), each its own clip.
+export const SWORD_CLIPS=Object.freeze(['SwordAttack','SwordGyaku','SwordYoko']);
+const SWORDS=new Set(SWORD_CLIPS);
+const SWINGS=new Set([...PUNCHES,...SWORD_CLIPS,'Roll','Crawl']);
 /**
  * PLAN-WEAPONS W1: holding a weapon changes how the body stands. The weapon's idle takes the
  * Idle share of the gait blend, faded over `STANCE_FADE` s, so standing still with a katana out
@@ -97,7 +102,7 @@ export function characterAction(state){
  if(state.hurtTime>0)return 'Hit';
  if(state.trafficReaction==='guard')return 'Guard';
  if(state.trafficReaction==='startle')return 'Startle';
- if(state.attackTime>0)return state.attackName==='PunchCross'?'PunchCross':state.attackName==='SwordAttack'?'SwordAttack':'Punch';
+ if(state.attackTime>0)return state.attackName==='PunchCross'?'PunchCross':SWORDS.has(state.attackName)?state.attackName:'Punch';
  return null;
 }
 
@@ -160,7 +165,7 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
  // has eleven bones and none of these names, so it simply goes without.
  const footIK=asset.legBones?createFootIK(root,{bones:asset.legBones,ctx}):null;
  let overlay=null,previousAttack=0,disposed=false,seeded=false,dominant='Idle';
- const strike={Punch:0,PunchCross:0,SwordAttack:0,Roll:0,Crawl:0};
+ const strike={Punch:0,PunchCross:0,SwordAttack:0,SwordGyaku:0,SwordYoko:0,Roll:0,Crawl:0};
  // PLAN-WEAPONS: how far each weapon stance has faded in.
  const stance={SwordIdle:0,PistolIdle:0};
  // W4: the crouch, its own two actions so it never fights the Guard reaction for one: a copy of
@@ -205,6 +210,11 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
  let phone=null,ride=null,katanaGrip=null;
  const swordWalk=weaponRig&&weapons.includes('katana')?createUpperPose(root,instance.clips,'SwordIdle'):null;
  let swordK=0;
+ // Katana D: the blade's trail while a cut is live (the player's figure: the one that carries it).
+ const trail=swordWalk?createBladeTrail():null,trailHand=trail?root.getObjectByName('hand_r'):null;
+ const bladeAt=f=>new Vector3(...GRIP.katana.at).addScaledVector(new Vector3(...GRIP.katana.forward).normalize(),SHAPE.katana.tip*f);
+ const trailInner=trail?bladeAt(TRAIL.from):null,trailTip=trail?bladeAt(TRAIL.to):null,ta=new Vector3(),tb=new Vector3();
+ let clock=0;
  // §9ai: a blow you can see land (hit-reaction.mjs), and a body that falls the way it was hit
  // (ragdoll.mjs). Only on a rig that has the bones; the eleven-bone baked figure goes without.
  const hitReaction=root.getObjectByName('spine_02')?createHitReaction(root):null;
@@ -310,7 +320,7 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
      const total=state.attackDuration>0?state.attackDuration:.42;
      time=state.attackDuration>0?duration*(1-state.attackTime/total):duration-state.attackTime*(duration/.42);
      // A katana cut that met a wall holds the frame it met it on (combat.mjs cut()).
-     if(overlay==='SwordAttack'&&Number.isFinite(state.attackHold))time=state.attackHold*duration;
+     if(SWORDS.has(overlay)&&Number.isFinite(state.attackHold))time=state.attackHold*duration;
      // W4: the roll is scrubbed by its own clock, not the attack's.
      if(overlay==='Roll')time=duration*(1-(state.rollTime??0)/(state.rollDuration||duration));
      // Stage 2: the crawl loops at the pace the body is dragging itself.
@@ -332,7 +342,7 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
    // A swing faces what it is thrown at: combat picks the target when the swing starts and
    // tracks it through the wind-up (`attackHeading`), and the body turns onto it fast enough
    // to be square before the fist is out.
-   const aiming=(state.attackTime>0||Number.isFinite(state.attackHold)&&strike.SwordAttack>0)&&Number.isFinite(state.attackHeading);
+   const aiming=(state.attackTime>0||Number.isFinite(state.attackHold)&&SWORD_CLIPS.some(n=>strike[n]>0))&&Number.isFinite(state.attackHeading);
    // PLAN-WEAPONS R2: a gun is aimed left and right by turning. Standing, the body turns onto the
    // aim; walking, the legs keep facing the way they walk (there are no strafe clips) and the aim
    // layer turns the upper body, unless the aim is behind the walk, when the body turns round.
@@ -343,7 +353,7 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
    const desired=aiming?state.attackHeading:turnToAim?state.aimHeading:speed>LOCOMOTION.idleSpeed
     ?walkHeading
     :(state.heading??state.bodyHeading??0);
-   facing.update(desired,speed,dt,aiming?(state.attackName==='SwordAttack'?STRIKE.cutTurn:STRIKE.turnRate):state.rollTime>0?STRIKE.turnRate*2:turnToAim?GUN_TURN:undefined);
+   facing.update(desired,speed,dt,aiming?(SWORDS.has(state.attackName)?STRIKE.cutTurn:STRIKE.turnRate):state.rollTime>0?STRIKE.turnRate*2:turnToAim?GUN_TURN:undefined);
    root.position.set(state.x,state.y+(overlay==='Crawl'?CRAWL.lift*strike.Crawl:0),state.z);
    // Stage 6: on a bike the body is the bike's: its heading at once, and its lean into the turn.
    if(state.riding)root.rotation.set(0,state.heading??0,state.riderLean??0,'YXZ');
@@ -424,15 +434,28 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
     }
     hitReaction.update(dt,facing.heading);
    }
+   // Katana D: the trail, sampled from the finished pose while the cut's blade is live.
+   clock+=dt;
+   if(trail){
+    if(root.parent&&trail.mesh.parent!==root.parent)root.parent.add(trail.mesh);
+    const T=SWORDS.has(overlay)?KATANA_COMBO.find(c=>c.name===overlay):null,into=(state.attackDuration??0)-(state.attackTime??0);
+    if(T&&inHand==='katana'&&into>=T.windup-.03&&into<=T.activeEnd+.05&&!Number.isFinite(state.attackHold)){
+     trailHand.updateWorldMatrix(true,false);
+     trail.push(ta.copy(trailInner).applyMatrix4(trailHand.matrixWorld),tb.copy(trailTip).applyMatrix4(trailHand.matrixWorld),clock);
+    }
+    trail.update(clock);
+   }
   },
+  /** Katana D: the blade trail (null on a figure without a katana), for QA. */
+  get trail(){return trail;},
   get footIK(){return footIK;},
   reset(){
    footIK?.reset();
    mixer.stopAllAction();
    for(const action of Object.values(actions))action.reset();
-   overlay=null;previousAttack=0;seeded=false;dominant='Idle';strike.Punch=strike.PunchCross=strike.SwordAttack=0;
+   overlay=null;previousAttack=0;seeded=false;dominant='Idle';for(const k of Object.keys(strike))strike[k]=0;
    stance.SwordIdle=stance.PistolIdle=0;aimLayer?.reset();hands?.reset();handsUp?.reset();phone?.reset();limp?.reset();swordK=0;strike.Crawl=0;strike.Roll=0;crouchK=0;crouchIdle?.stop();
-   hitReaction?.reset();ragdoll?.reset();hitSeq=null;ragdollSeq=null;
+   hitReaction?.reset();ragdoll?.reset();hitSeq=null;ragdollSeq=null;trail?.clear();
    gait.reset();facing.reset(0);
    for(const name of GAIT)actions[name]?.play().setEffectiveWeight(0);
    for(const name of GAIT)if(actions[name])actions[name].paused=true;
@@ -461,7 +484,7 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
   dispose(){
    if(disposed)return;disposed=true;
    mixer.stopAllAction();mixer.uncacheRoot(root);
-   weaponRig?.dispose();phone?.dispose();
+   weaponRig?.dispose();phone?.dispose();trail?.dispose();
    instance.dispose();
   }
  };

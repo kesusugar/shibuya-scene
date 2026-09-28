@@ -66,6 +66,7 @@ const files=[
  'tests/katana-iai.test.mjs',
  'tests/katana-warp.test.mjs',
  'tests/katana-kesa.test.mjs',
+ 'tests/katana-combo.test.mjs',
  'tests/pistol.test.mjs',
  'tests/police-guns.test.mjs',
  'tests/roll-crouch.test.mjs',

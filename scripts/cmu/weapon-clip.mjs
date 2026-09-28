@@ -79,6 +79,21 @@ export const PRESETS=Object.freeze({
   body:{head:.75,
    step:{foot:'r',length:.24,lift:.05,at:[.56,.80]},draw:{foot:'l',length:.1,at:[.84,1.02]},
    hips:{forward:.14,drop:.06,at:[.56,.84]},back:[1.46,1.86]}},
+ // Katana D: the combo's second and third cuts, from the same take (§9bf), found by scanning 02_07
+ // for fast passes of the tip (the blade beyond the capture's LEFT hand, its lead):
+ // - 'katana-gyaku' (逆袈裟, mirrored): at rest low on the right (where the kesa leaves the blade),
+ //   then up through the front to high on the left, 9.87-10.27 s at 5-7 m/s, replayed at 2x.
+ // - 'katana-yoko' (横一文字, mirrored): a level cut at chest height (1.2-1.5 m) at up to 11.6 m/s,
+ //   13.07-13.5 s, from the left (where the rising cut leaves the blade) across to the right, then
+ //   held still with the arms out (13.55-13.73 s, lengthened: zanshin).
+ //   Its right wrist is kept to 55° by turning the blade toward the forearm's line (`wristCap`, at
+ //   most 21°), and the forearm takes 80% of the hand's twist (`twistShare`; 70% elsewhere).
+ //   Played un-mirrored (`lead:'left'`: the right hand moved forward to the lead place) it would run
+ //   right to left, but the right wrist then bends 59° at median, 75° at most -- so it is not.
+ 'katana-gyaku':{trial:'02_07',subject:'02',fps:120,from:9.55,to:10.55,weapon:'katana',left:-.15,mirror:true,
+  warp:[[9.55,1.3],[9.8,1.3],[9.87,2.0],[10.27,2.0],[10.35,1.3],[10.55,1.3]],trunk:{limit:28,keep:.33},body:{head:.75}},
+ 'katana-yoko':{trial:'02_07',subject:'02',fps:120,from:12.85,to:13.8,weapon:'katana',left:-.15,mirror:true,wristCap:55,twistShare:.8,
+  warp:[[12.85,1.3],[13.02,1.3],[13.07,1.6],[13.5,1.6],[13.56,.3],[13.66,.3],[13.72,1],[13.8,1]],trunk:{limit:28,keep:.33},body:{head:.75}},
  // The two-handed guard the katana stands in: 02_07's one quiet stretch with the hands together
  // at the chest (18.0-18.6 s, the hands 0.18 m apart, 0.23 m above the hips), looped.
  'katana-guard':{trial:'02_07',subject:'02',fps:120,from:17.95,to:18.7,weapon:'katana',left:-.15,mirror:true,loop:.3,
@@ -323,12 +338,14 @@ export async function weaponClip({dir,preset,glbPath='public/data/character/citi
   }
 
   // Katana C: the step in and the lower stance (P.body), before the weapon, so the hands follow.
-  if(P.body)stepIn(P.body,t);
+  if(P.body?.step)stepIn(P.body,t);
 
   // 2. The weapon.
   const L=src.get('lhand').end.clone().applyQuaternion(yaw),R=src.get('rhand').end.clone().applyQuaternion(yaw);
   stats.handsSource.push(L.distanceTo(R));
-  const axis=(P.weapon==='katana'?R.clone().sub(L):L.clone().sub(R)).normalize().applyQuaternion(fix);
+  // The blade points from the rear hand to the lead one. Mirrored, the game's right hand is the
+  // capture's left (its lead); un-mirrored (`lead:'left'`, Katana D) the lead is the game's left.
+  const axis=(P.weapon==='katana'?(P.lead==='left'?L.clone().sub(R):R.clone().sub(L)):L.clone().sub(R)).normalize().applyQuaternion(fix);
   const chest=fix.clone().multiply(yaw).multiply(src.get('thorax').rotation);   // turned further below if bladed
   let up,weapon,raised=1;
   if(P.weapon==='katana'){
@@ -348,7 +365,7 @@ export async function weaponClip({dir,preset,glbPath='public/data/character/citi
    raised=P.shoulder==='raise'?smooth(-.05,.25,hands):1;
    weapon=low.clone().slerp(aim,raised);
   }
-  const forward=new Vector3(0,0,1).applyQuaternion(weapon);
+  let forward=new Vector3(0,0,1).applyQuaternion(weapon);
   const handR=bones.get('hand_r'),handL=bones.get('hand_l');
   const wantR=weapon.clone().multiply(gripR.clone().invert());
   const scaleR=new Vector3();handR.getWorldScale(scaleR);
@@ -384,6 +401,14 @@ export async function weaponClip({dir,preset,glbPath='public/data/character/citi
    if(short>0)gripAt.addScaledVector(shoulderL.clone().sub(fore).normalize(),short);
    reach(bones.get('upperarm_r'),bones.get('lowerarm_r'),handR,gripAt.sub(gripOffset));
   }
+  if(P.weapon==='katana'&&P.lead==='left'){
+   // Katana D: an un-mirrored take leads with its LEFT hand, and the game's katana is held right
+   // hand first. The right hand (retargeted onto the capture's rear hand) reaches forward along the
+   // blade by the hands' spacing to the lead place; the left then goes behind it as always.
+   const origin=handR.localToWorld(new Vector3(...grip.at)),shift=axis.clone().multiplyScalar(-P.left);
+   reach(bones.get('upperarm_r'),bones.get('lowerarm_r'),handR,pos(handR).add(shift));
+   stats.leadShift=Math.max(stats.leadShift??0,handR.localToWorld(new Vector3(...grip.at)).distanceTo(origin.add(shift)));
+  }
   if(P.weapon==='katana'){
    // The right hand may turn the blade up to 15° off the plane of the cut (at a cost of 0.6° of
    // wrist bend per degree, so the edge still leads): the roll that bends the wrist least wins.
@@ -395,6 +420,18 @@ export async function weaponClip({dir,preset,glbPath='public/data/character/citi
    for(let roll=-15;roll<=15;roll+=5){const b=tryRoll(roll);if(b<best){best=b;bestRoll=roll;}}
    tryRoll(bestRoll);
    weapon.premultiply(new Quaternion().setFromAxisAngle(forward,bestRoll*Math.PI/180));
+   // Katana D (`wristCap`): where the right wrist would still bend past the cap, the blade is turned
+   // toward where the hand would hold it unbent (the forearm's own line), just far enough.
+   if(P.wristCap){
+    const bent=()=>bendOf(handR.quaternion,bind.get('hand_r'));
+    if(bent()>P.wristCap){
+     const natural=worldQuat(bones.get('lowerarm_r')).multiply(bind.get('hand_r')).multiply(gripR);
+     const at=k=>{const w=weapon.clone().slerp(natural,k);setWorldQuat(handR,w.clone().multiply(gripR.clone().invert()));return w;};
+     let lo=0,hi=1;for(let i=0;i<12;i++){const mid=(lo+hi)/2;at(mid);if(bent()>P.wristCap)lo=mid;else hi=mid;}
+     const was=forward.clone();weapon.copy(at(hi));forward=new Vector3(0,0,1).applyQuaternion(weapon);
+     stats.bladeTurnDeg=Math.max(stats.bladeTurnDeg??0,was.angleTo(forward)*180/Math.PI);
+    }
+   }
   }else{
    setWorldQuat(handR,wantR);
    // The right elbow swings about the shoulder-to-wrist line to where the wrist bends least.
@@ -431,7 +468,7 @@ export async function weaponClip({dir,preset,glbPath='public/data/character/citi
   stats.leftMiss=Math.max(stats.leftMiss,handL.localToWorld(atL.clone()).distanceTo(target));
   stats.handsTarget.push(handL.localToWorld(atL.clone()).distanceTo(origin));
   // The wrists: 70% of each hand's twist into its forearm (what is left is measured).
-  stats.wrist.r.push(shareTwist(bones.get('lowerarm_r'),handR,bind.get('hand_r'),.7));
+  stats.wrist.r.push(shareTwist(bones.get('lowerarm_r'),handR,bind.get('hand_r'),P.twistShare??.7));
   stats.held.push(speedAt(sourceAt(t))<.5);
   stats.wrist.l.push(shareTwist(bones.get('lowerarm_l'),handL,bind.get('hand_l'),.7));
   stats.elevation.push(Math.asin(forward.y)*180/Math.PI);
@@ -505,6 +542,8 @@ export async function weaponClip({dir,preset,glbPath='public/data/character/citi
   source:{dataset:'CMU Graphics Lab Motion Capture Database (mocap.cs.cmu.edu)',trial:P.trial,
    asf:`${P.subject}.asf`,asfSha256:sha(asfText),amc:`${P.trial}.amc`,amcSha256:sha(amcText),from:P.from,to:P.to,fps:P.fps},
   preset,weapon:P.weapon,duration,fps,times,scale:k,groundOffset:-lowest,spacing,warp:P.warp??null,loop:P.loop??null,body:P.body??null,
+  // The hold (zanshin), in playback seconds: where the warp runs below half speed.
+  hold:(()=>{const slow=table.filter(([,u])=>speedAt(u)<.5);return slow.length?[+slow[0][0].toFixed(3),+slow.at(-1)[0].toFixed(3)]:null;})(),
   measured:{leftMissCm:+(stats.leftMiss*100).toFixed(1),
    handsApartSourceM:+med(stats.handsSource).toFixed(3),handsApartTargetM:+med(stats.handsTarget).toFixed(3),
    // The wrist after the forearm takes its share of the twist: bend (flexion and deviation
@@ -516,6 +555,7 @@ export async function weaponClip({dir,preset,glbPath='public/data/character/citi
     twistMax:+Math.max(...stats.wrist[h].map(w=>w.twist)).toFixed(0),...(held.length?{bendHeld:+Math.max(...held.map(w=>w.bend)).toFixed(0)}:{})}];})),
    // The weapon grip's peak speed (the fist on the handle), and the katana's tip.
    gripPeakMs:+Math.max(...grips.slice(1).map((g,i)=>g.distanceTo(grips[i])*fps)).toFixed(1),
+   ...(stats.bladeTurnDeg?{bladeTurnDeg:+stats.bladeTurnDeg.toFixed(0)}:{}),
    ...(stats.headYaw.length?{headYawDeg:{captured:+Math.max(...stats.headYaw.map(Math.abs)).toFixed(0),kept:+Math.max(...stats.headYawKept.map(Math.abs)).toFixed(0)},
     legMissCm:+(stats.legMiss*100).toFixed(1)}:{}),
    ...(P.trunk?{trunkMaxDeg:{captured:+trunkMax.before.toFixed(0),kept:+trunkMax.after.toFixed(0)}}:{}),

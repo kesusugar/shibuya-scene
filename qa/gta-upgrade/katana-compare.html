@@ -7,18 +7,23 @@
 // Katana C evidence: before / after, side by side, from the weapon bench's shots in
 // evidence/katana/c/ (the player's right, and the front). Each row is one moment of the cut.
 //   node qa/gta-upgrade/weaponbench-capture.mjs evidence/katana/c/compare.png "" katana-compare.html
-const PHASES=[['katana-c-coil','coil (0.5 s)'],['katana-c-land','the cut (0.8 s)'],['katana-c-zanshin','zanshin (1.2 s)'],['katana-c-return','return (1.6 s)']];
+// ?set=d: Katana D's combo instead -- one column, one row per cut (evidence/katana/d/).
+const SET=new URLSearchParams(location.search).get('set');
+const PHASES=SET==='d'?[['katana-d-kesa','1 袈裟 kesa'],['katana-d-gyaku','2 逆袈裟 rising'],['katana-d-yoko','3 横一文字 level'],['katana-d-zanshin','3 残心 zanshin']]
+ :[['katana-c-coil','coil (0.5 s)'],['katana-c-land','the cut (0.8 s)'],['katana-c-zanshin','zanshin (1.2 s)'],['katana-c-return','return (1.6 s)']];
 const COLS=[[1,'player\'s right'],[0,'front']],CW=320,CH=420,TOP=48,HEAD=40,LEFT=150,GAP=24;
 const load=src=>new Promise((r,j)=>{const i=new Image();i.onload=()=>r(i);i.onerror=j;i.src=src;});
-const c=document.getElementById('c'),W=LEFT+2*(COLS.length*CW)+GAP,H=HEAD+PHASES.length*(CH-TOP);
+const SIDES=SET==='d'?[[0,'d']]:[[0,'before'],[1,'after']];
+const c=document.getElementById('c'),W=LEFT+SIDES.length*(COLS.length*CW)+(SIDES.length-1)*GAP,H=HEAD+PHASES.length*(CH-TOP);
 c.width=W;c.height=H;const g=c.getContext('2d');
 g.fillStyle='#15181d';g.fillRect(0,0,W,H);g.font='bold 22px sans-serif';g.fillStyle='#e8e8e8';
-g.fillText('before (§9ah cut)',LEFT+10,28);g.fillText('after (Katana C)',LEFT+COLS.length*CW+GAP+10,28);
+if(SET==='d')g.fillText('Katana D: the combo (player\'s right | front)',LEFT+10,28);
+else{g.fillText('before (§9ah cut)',LEFT+10,28);g.fillText('after (Katana C)',LEFT+COLS.length*CW+GAP+10,28);}
 for(const [row,[id,label]] of PHASES.entries()){
  const y=HEAD+row*(CH-TOP);
  g.font='18px sans-serif';g.fillStyle='#e8e8e8';g.fillText(label,10,y+(CH-TOP)/2);
- for(const [side,which] of [[0,'before'],[1,'after']].map(([k,w])=>[k,w])){
-  const img=await load(`/evidence/katana/c/${which}-${id}.png`);
+ for(const [side,which] of SIDES){
+  const img=await load(SET==='d'?`/evidence/katana/d/${id}.png`:`/evidence/katana/c/${which}-${id}.png`);
   for(const [k,[col]] of COLS.entries()){
    const x=LEFT+side*(COLS.length*CW+GAP)+k*CW;
    // The bench's cell is 320 x 420; its top TOP px carry the bench's own text, left out here.
@@ -26,6 +31,6 @@ for(const [row,[id,label]] of PHASES.entries()){
   }
  }
 }
-g.strokeStyle='#e8e8e8';g.beginPath();g.moveTo(LEFT+COLS.length*CW+GAP/2,0);g.lineTo(LEFT+COLS.length*CW+GAP/2,H);g.stroke();
+if(SIDES.length>1){g.strokeStyle='#e8e8e8';g.beginPath();g.moveTo(LEFT+COLS.length*CW+GAP/2,0);g.lineTo(LEFT+COLS.length*CW+GAP/2,H);g.stroke();}
 window.__BENCH__={size:[W,H],lines:PHASES.map(p=>p[1])};document.title='ready';
 </script>
