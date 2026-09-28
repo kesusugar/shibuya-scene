@@ -1,0 +1,353 @@
+{
+ "query": "qa=1&tier=low&time=day&camera=scramble",
+ "checks": {
+  "atTop": {
+   "layer": "surface",
+   "s": null,
+   "y": 0.15,
+   "stars": 3,
+   "seen": true,
+   "escape": 0,
+   "officers": 2,
+   "below": 0,
+   "nearestCarToStairs": 46.8,
+   "nearestOfficerBelow": null,
+   "toStairs": [
+    {
+     "d": 42.4,
+     "hold": false,
+     "speed": 3.4,
+     "state": "fighting"
+    },
+    {
+     "d": 93.9,
+     "hold": false,
+     "speed": 3.4,
+     "state": "fighting"
+    }
+   ],
+   "descended": 0,
+   "trail": false
+  },
+  "downStairs": {
+   "layer": "tunnel",
+   "s": 8,
+   "y": -4.2,
+   "stars": 3,
+   "seen": false,
+   "escape": 4.6,
+   "officers": 6,
+   "below": 0,
+   "nearestCarToStairs": 137,
+   "nearestOfficerBelow": null,
+   "toStairs": [
+    {
+     "d": 22.3,
+     "hold": false,
+     "speed": 3.4,
+     "state": "fighting"
+    },
+    {
+     "d": 22.4,
+     "hold": false,
+     "speed": 3.4,
+     "state": "fighting"
+    },
+    {
+     "d": 42.4,
+     "hold": false,
+     "speed": 3.4,
+     "state": "fighting"
+    },
+    {
+     "d": 55.7,
+     "hold": false,
+     "speed": 3.4,
+     "state": "fighting"
+    }
+   ],
+   "descended": 0,
+   "trail": false
+  },
+  "midway": {
+   "layer": "tunnel",
+   "s": 60.3,
+   "y": -4.2,
+   "stars": 3,
+   "seen": false,
+   "escape": 11.7,
+   "officers": 8,
+   "below": 2,
+   "nearestCarToStairs": 24.9,
+   "nearestOfficerBelow": 40.4,
+   "toStairs": [
+    {
+     "d": 21,
+     "hold": false,
+     "speed": 3.4,
+     "state": "fighting"
+    },
+    {
+     "d": 21,
+     "hold": false,
+     "speed": 3.4,
+     "state": "fighting"
+    },
+    {
+     "d": 42.5,
+     "hold": false,
+     "speed": 3.4,
+     "state": "fighting"
+    },
+    {
+     "d": 55.8,
+     "hold": false,
+     "speed": 3.4,
+     "state": "fighting"
+    }
+   ],
+   "descended": 2,
+   "trail": false
+  },
+  "chased": {
+   "layer": "tunnel",
+   "s": 62.6,
+   "y": -4.2,
+   "stars": 3,
+   "seen": false,
+   "escape": 13.1,
+   "officers": 8,
+   "below": 2,
+   "nearestCarToStairs": 24.9,
+   "nearestOfficerBelow": 40.9,
+   "toStairs": [
+    {
+     "d": 19.1,
+     "hold": false,
+     "speed": 3.4,
+     "state": "fighting"
+    },
+    {
+     "d": 19.1,
+     "hold": false,
+     "speed": 3.4,
+     "state": "fighting"
+    },
+    {
+     "d": 42.5,
+     "hold": false,
+     "speed": 3.4,
+     "state": "fighting"
+    },
+    {
+     "d": 55.8,
+     "hold": false,
+     "speed": 3.4,
+     "state": "fighting"
+    }
+   ],
+   "descended": 2,
+   "trail": false
+  },
+  "outAtA0": {
+   "layer": "surface",
+   "s": null,
+   "y": 0,
+   "stars": 0,
+   "seen": false,
+   "escape": 0,
+   "officers": 5,
+   "below": 5,
+   "nearestCarToStairs": null,
+   "nearestOfficerBelow": null,
+   "toStairs": [],
+   "descended": 5,
+   "trail": false
+  },
+  "cleared": {
+   "cleared": true,
+   "after": 1.1,
+   "reason": "escaped",
+   "final": {
+    "layer": "surface",
+    "s": null,
+    "y": 0,
+    "stars": 0,
+    "seen": false,
+    "escape": 0,
+    "officers": 4,
+    "below": 4,
+    "nearestCarToStairs": null,
+    "nearestOfficerBelow": null,
+    "toStairs": [],
+    "descended": 5,
+    "trail": false
+   }
+  }
+ },
+ "steps": [
+  {
+   "name": "01-a3-entrance",
+   "note": "by the A3 entrance on Dogenzaka",
+   "state": {
+    "player": {
+     "x": -74.3,
+     "z": -17,
+     "weapon": "fists",
+     "health": 100
+    },
+    "car": {
+     "active": true,
+     "type": "ownCar",
+     "speed": 0,
+     "damage": 0,
+     "wear": null
+    },
+    "radio": null,
+    "fps": 0.2,
+    "drawCalls": 353,
+    "triangles": 10115433
+   }
+  },
+  {
+   "name": "02-police-coming",
+   "note": "☆3: the police close in on the player at the stairs",
+   "state": {
+    "player": {
+     "x": -74.3,
+     "z": -17,
+     "weapon": "fists",
+     "health": 100
+    },
+    "car": {
+     "active": true,
+     "type": "ownCar",
+     "speed": 0,
+     "damage": 0,
+     "wear": null
+    },
+    "radio": null,
+    "fps": 0.2,
+    "drawCalls": 410,
+    "triangles": 10610503
+   }
+  },
+  {
+   "name": "03-down-the-stairs",
+   "note": "down the A3 stairs",
+   "state": {
+    "player": {
+     "x": -89.2,
+     "z": -16.7,
+     "weapon": "fists",
+     "health": 100
+    },
+    "car": {
+     "active": true,
+     "type": "ownCar",
+     "speed": 0,
+     "damage": 0,
+     "wear": null
+    },
+    "radio": null,
+    "fps": 0.2,
+    "drawCalls": 359,
+    "triangles": 10167175
+   }
+  },
+  {
+   "name": "04-passage",
+   "note": "running the passage, 60 m along",
+   "state": {
+    "player": {
+     "x": -118.5,
+     "z": 13.8,
+     "weapon": "fists",
+     "health": 100
+    },
+    "car": {
+     "active": true,
+     "type": "ownCar",
+     "speed": 0,
+     "damage": 0,
+     "wear": null
+    },
+    "radio": null,
+    "fps": 0.2,
+    "drawCalls": 319,
+    "triangles": 10092703
+   }
+  },
+  {
+   "name": "05-followed-below",
+   "note": "officers following below",
+   "state": {
+    "player": {
+     "x": -120.8,
+     "z": 14.6,
+     "weapon": "fists",
+     "health": 100
+    },
+    "car": {
+     "active": true,
+     "type": "ownCar",
+     "speed": 0,
+     "damage": 0,
+     "wear": null
+    },
+    "radio": null,
+    "fps": 0.2,
+    "drawCalls": 404,
+    "triangles": 10643663
+   }
+  },
+  {
+   "name": "06-a0-exit",
+   "note": "up and out at A0",
+   "state": {
+    "player": {
+     "x": -176.8,
+     "z": 37.3,
+     "weapon": "fists",
+     "health": 87
+    },
+    "car": {
+     "active": true,
+     "type": "ownCar",
+     "speed": 0,
+     "damage": 0,
+     "wear": null
+    },
+    "radio": null,
+    "fps": 0.2,
+    "drawCalls": 281,
+    "triangles": 9857781
+   }
+  },
+  {
+   "name": "07-got-away",
+   "note": "the level cleared, away from A0",
+   "state": {
+    "player": {
+     "x": -176.8,
+     "z": 37.3,
+     "weapon": "fists",
+     "health": 87
+    },
+    "car": {
+     "active": true,
+     "type": "ownCar",
+     "speed": 0,
+     "damage": 0,
+     "wear": null
+    },
+    "radio": null,
+    "fps": 0.2,
+    "drawCalls": 412,
+    "triangles": 10632573
+   }
+  }
+ ],
+ "console": [],
+ "errors": 0
+}
