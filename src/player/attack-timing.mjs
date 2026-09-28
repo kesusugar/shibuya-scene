@@ -59,3 +59,26 @@ export function swordBearing(t){
  for(let i=1;i<s.length;i++)if(t<=s[i][0]){const [t0,a0]=s[i-1],[t1,a1]=s[i];return a0+(a1-a0)*(t-t0)/(t1-t0);}
  return s[s.length-1][1];
 }
+
+/**
+ * Katana B: the cut closes the distance (a motion warp). A person picked by the cut further off
+ * than a sword's length is stepped to through the wind-up -- the body turns onto them first, then
+ * travels -- so the blade arrives where they stand. The controller moves the body (it alone owns
+ * position, walls and bodies included); this only says where to and when. `from`/`to` are clip
+ * seconds at normal speed, inside the wind-up (the blade goes live at SWORD.windup 0.674 s); the
+ * travel follows a smootherstep, so it starts and stops without a jolt. `standoff` is the
+ * centre-to-centre distance it stops at: the tip (SWORD.tipReach 1.42 m) passes through the body.
+ * Nobody nearer than that is stepped to, and nobody is stepped away from.
+ */
+export const WARP=Object.freeze({range:3.6,standoff:1.15,from:.08,to:.62});
+/** Smootherstep of `u` clamped to [0, 1]. */
+export const smootherstep=u=>{const x=Math.max(0,Math.min(1,u));return x*x*x*(x*(x*6-15)+10);};
+/**
+ * How far along its path the warp moves the body over one frame, as a fraction of what is left:
+ * from clip time `t0` to `t1` of a swing played at `rate`. Pure. Taken of what is LEFT, so a
+ * person who moves during the wind-up is still arrived at, and a still one exactly on the curve.
+ */
+export function warpFraction(t0,t1,rate=1,{from=WARP.from,to=WARP.to}={}){
+ const span=(to-from)/rate,s0=smootherstep((t0-from/rate)/span),s1=smootherstep((t1-from/rate)/span);
+ return s0>=1?0:Math.max(0,(s1-s0)/(1-s0));
+}

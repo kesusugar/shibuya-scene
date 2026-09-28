@@ -43,7 +43,10 @@ const GUN_TURN=10,GUN_TWIST=1.75;
  * swing now takes weight from the gait instead of being added to it, so the sum stays 1 and
  * the fist goes where the clip puts it.
  */
-export const STRIKE=Object.freeze({fadeIn:.08, fadeOut:.3, turnRate:14});
+export const STRIKE=Object.freeze({fadeIn:.08, fadeOut:.3, turnRate:14,
+ // Katana B: a cut turns onto its person eased (locomotion.mjs createBodyFacing): 1.2 rad in
+ // about 0.2 s, half a turn in about 0.35 s, square before the step of the warp is under way.
+ cutTurn:Object.freeze({max:16,accel:110})});
 
 /**
  * What the body is doing, other than walking.
@@ -326,7 +329,7 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
    const desired=aiming?state.attackHeading:turnToAim?state.aimHeading:speed>LOCOMOTION.idleSpeed
     ?walkHeading
     :(state.heading??state.bodyHeading??0);
-   facing.update(desired,speed,dt,aiming?STRIKE.turnRate:state.rollTime>0?STRIKE.turnRate*2:turnToAim?GUN_TURN:undefined);
+   facing.update(desired,speed,dt,aiming?(state.attackName==='SwordAttack'?STRIKE.cutTurn:STRIKE.turnRate):state.rollTime>0?STRIKE.turnRate*2:turnToAim?GUN_TURN:undefined);
    root.position.set(state.x,state.y+(overlay==='Crawl'?CRAWL.lift*strike.Crawl:0),state.z);
    // Stage 6: on a bike the body is the bike's: its heading at once, and its lean into the turn.
    if(state.riding)root.rotation.set(0,state.heading??0,state.riderLean??0,'YXZ');

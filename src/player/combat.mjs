@@ -15,7 +15,7 @@
 // crowd, and the HQ crowd never decides combat -- it reads `struck` and `combatDead` off the
 // pedestrian, exactly as it already reads them for a car.
 import {legWound} from '../life/street-reactions.mjs';
-import {ATTACKS,attackOf,SWORD,swordBearing} from './attack-timing.mjs';
+import {ATTACKS,attackOf,SWORD,swordBearing,WARP} from './attack-timing.mjs';
 import {HIT_STOP} from './hit-stop.mjs';
 import {WEAPONS} from './weapons.mjs';
 import {blowOn,RESPONSE,responseOf} from '../life/temperament.mjs';
@@ -47,6 +47,8 @@ export const COMBAT=Object.freeze({range:1.75,notice:4.5,playerDamage:25,npcDama
  shotPush:.7,
  // §9ak: the push a killing cut gives the body (m/s, horizontal): a stumble, not a throw.
  cutPush:.9});
+
+export {WARP};
 
 export const PHASE=Object.freeze({IDLE:'idle',WINDUP:'windup',ACTIVE:'active',RECOVERY:'recovery'});
 
@@ -264,13 +266,16 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
   */
  const forwardOf=state=>(state.speed??0)>.16?(state.bodyHeading??state.heading??0):(state.heading??state.bodyHeading??0);
 
- /** The person a swing is thrown at, or null. Nearest and most in front, as `choose`. */
- function lockOn(crowd,state){
+ /**
+  * The person a swing is thrown at, or null. Nearest and most in front, as `choose`. A cut looks
+  * as far as it can step (Katana B, WARP.range); a punch only as far as an arm.
+  */
+ function lockOn(crowd,state,range=COMBAT.lockRange){
   const forward=forwardOf(state);let best=null,score=Infinity;
-  for(const p of nearby(crowd,state.x,state.z,COMBAT.lockRange)){
+  for(const p of nearby(crowd,state.x,state.z,range)){
    if(!eligible(p,crowd))continue;
    const d=Math.hypot(p.x-state.x,p.z-state.z);
-   if(d>COMBAT.lockRange)continue;
+   if(d>range)continue;
    const a=Math.abs(turn(forward,angleTo(state,p)));
    if(a>COMBAT.lockArc)continue;
    const s=d+a*.65;
@@ -331,6 +336,19 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
   }
  }
 
+ /**
+  * Katana B: tell the controller where the cut's step goes this frame (`state.attackWarp`), or
+  * clear it. The point `WARP.standoff` short of the person, on the line to them; `elapsed` is the
+  * swing's clock, so the controller can take the right slice of the curve over its own frame.
+  */
+ function warpTo(state){
+  const p=swing?.katana&&swing.phase===PHASE.WINDUP?swing.aim:null;
+  const d=p?Math.hypot(p.x-state.x,p.z-state.z):0;
+  if(!p||d<=WARP.standoff){state.attackWarp=null;return;}
+  const k=(d-WARP.standoff)/d;
+  state.attackWarp={x:state.x+(p.x-state.x)*k,z:state.z+(p.z-state.z)*k,elapsed:swing.elapsed,rate:swing.rate};
+ }
+
  /** One swing's worth of state. The clip decides its own timing; see attack-timing.mjs. */
  function start(player,crowd){
   const katana=weapon()==='katana';
@@ -341,16 +359,18 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
   const rate=katana&&swingIndex%2===0?COMBAT.katanaFast:1;
   const base=katana?SWORD:attackOf(name);
   const timing=rate===1?base:{...base,duration:base.duration/rate,windup:base.windup/rate,activeEnd:base.activeEnd/rate,peak:base.peak/rate};
-  const state=player.state,aim=crowd?lockOn(crowd,state):null;
+  const state=player.state,aim=crowd?lockOn(crowd,state,katana?WARP.range:COMBAT.lockRange):null;
   // Katana A: from the scabbard, this cut is a draw-cut (iai): the hand draws the blade on the way
   // into the cut's own wind-up; the timing and the blow are the same.
   const iai=katana&&!!state.katanaSheathed;
   if(katana){state.katanaSheathed=false;katanaIdle=0;state.drawCut=iai;if(iai)stats.iai=(stats.iai??0)+1;}
   swing={id:swingIndex,name,timing,elapsed:0,phase:PHASE.WINDUP,hitConsumed:false,aim,katana,rate,cut:new Set(),stopped:null,iai};
+  if(katana&&aim&&Math.hypot(aim.x-state.x,aim.z-state.z)>WARP.standoff)stats.warps=(stats.warps??0)+1;
   // §9aj G1: the one the swing is thrown at gets a detailed body before it lands.
   if(aim)aim.aimedUntil=(crowd?.time??0)+timing.duration+.3;
   stats.swings++;
   aimAt(state,aim?angleTo(state,aim):forwardOf(state));
+  warpTo(state);
   // The renderer plays the clip for as long as the clip lasts, not for a fixed 0.42 s.
   state.attackHold=null;
   player.startAttack?.(timing.duration,name);
@@ -398,7 +418,7 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
     // the fist goes at. Once the fist is travelling, the line is fixed.
     if(swing.aim&&swing.elapsed<swing.timing.windup){
      const p=swing.aim;
-     if(eligible(p,crowd)&&Math.hypot(p.x-state.x,p.z-state.z)<=COMBAT.lockRange+.5)aimAt(state,angleTo(state,p));
+     if(eligible(p,crowd)&&Math.hypot(p.x-state.x,p.z-state.z)<=(swing.katana?WARP.range:COMBAT.lockRange)+.5)aimAt(state,angleTo(state,p));
      else swing.aim=null;
     }
     const before=swing.elapsed;
@@ -419,6 +439,7 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
     // rate dips is worse than one that lands a frame late.
     const crossed=swing.elapsed>=windup&&before<activeEnd;
     if(swing.phase!==PHASE.WINDUP)state.drawCut=false;
+    warpTo(state);
     if(swing.katana){
      if(crossed&&!swing.stopped&&state.alive)cut(crowd,player,before,swing.elapsed);
     }else if(crossed&&!swing.hitConsumed&&state.alive){
@@ -458,7 +479,7 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
      if(!swing.hitConsumed){stats.misses++;witness(crowd,state,null,COMBAT.witnessSeverity*(swing.katana?.8:.55));}
      swing=null;
     }
-   }
+   }else state.attackWarp=null;
 
    // Owner's rule: a weapon out breaks every fist fight -- they scream and run.
    if(armed())for(const p of crowd.pool??[])

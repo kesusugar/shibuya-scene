@@ -250,16 +250,33 @@ export function createGaitBlend(ladder,{idleName='Idle'}={}){
  * stands still while the view orbits it and one that twitches at every mouse movement.
  */
 export function createBodyFacing(initial=0){
- let heading=initial,lean=0,pivoting=false;
+ let heading=initial,lean=0,pivoting=false,spin=0;
  return {
   get heading(){return heading;},
   get lean(){return lean;},
   get pivoting(){return pivoting;},
-  reset(to=0){heading=to;lean=0;pivoting=false;},
-  /** `turnRate` overrides the gait's own rates and the standing dead band (a swing's aim). */
+  reset(to=0){heading=to;lean=0;pivoting=false;spin=0;},
+  /**
+   * `turnRate` overrides the gait's own rates and the standing dead band (a swing's aim). As
+   * {max, accel} (Katana B) the turn is eased instead: the body's turning speed builds at `accel`
+   * rad/s² up to `max` rad/s and falls away as it arrives, so it winds round onto its person
+   * rather than snapping at a constant rate and stopping dead.
+   */
   update(desired,speed,dt,turnRate=undefined){
    const step=Math.max(0,Math.min(.1,dt));
    const error=turnTo(heading,desired);
+   if(turnRate&&typeof turnRate==='object'){
+    pivoting=false;
+    const {max,accel}=turnRate,want=Math.sign(error)*Math.min(max,Math.sqrt(2*accel*Math.abs(error)));
+    spin+=clamp(want-spin,-accel*step,accel*step);
+    let applied=spin*step;
+    // Arriving this frame: land on it rather than sail past.
+    if(Math.sign(applied)===Math.sign(error)&&Math.abs(applied)>=Math.abs(error)){applied=error;spin=0;}
+    heading+=applied;
+    lean+=(0-lean)*(1-Math.exp(-9*step));
+    return heading;
+   }
+   spin=0;
    const moving=speed>LOCOMOTION.idleSpeed;
    if(moving||turnRate!==undefined)pivoting=false;
    else if(Math.abs(error)>LOCOMOTION.pivotStart)pivoting=true;
