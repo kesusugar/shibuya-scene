@@ -37,51 +37,27 @@ async function readCssTree(directory) {
   return contents.join("\n");
 }
 
-test("emits the catalog's animation and scrolling utilities", async () => {
+test("emits the game's stylesheet with the animation layer and reduced-motion rules", async () => {
   const css = await readCssTree(path.join(root, "dist"));
 
+  // The game's own overlay styles (app/globals.css).
+  assert.match(css, /\.presentation/);
+  assert.match(css, /\.play-hud|\.play-/);
+  // tw-animate-css and the vendored shadcn layer, which app/globals.css still imports. The
+  // scrolling and mask utilities the removed catalog components used are no longer emitted:
+  // Tailwind only emits what the source uses (§9bg).
   assert.match(css, /--tw-enter-opacity/);
-  assert.match(css, /scrollbar-width:\s*thin/);
-  assert.match(css, /scrollbar-width:\s*none/);
-  assert.match(css, /scrollbar-gutter:\s*stable/);
-  assert.match(css, /scroll-fade-reveal-b/);
-  assert.match(css, /mask-image:/);
   assert.match(css, /tw-shimmer/);
   assert.match(css, /prefers-reduced-motion:\s*reduce/);
 });
 
-test("forwards progress semantics to the primitive", async () => {
-  const { Progress } = await vite.ssrLoadModule("/components/ui/progress.tsx");
-  const html = renderToStaticMarkup(React.createElement(Progress, { value: 37 }));
+// The starter's component catalog went in the starter clean-up (§9bg); the game's settings use one
+// of its components, the switch, which stays.
+test("renders the settings switch with its state and size", async () => {
+  const { Switch } = await vite.ssrLoadModule("/components/ui/switch.tsx");
+  const html = renderToStaticMarkup(React.createElement(Switch, { checked: true, size: "sm", "aria-label": "gyro" }));
 
-  assert.match(html, /aria-valuenow="37"/);
-  assert.match(html, /aria-valuetext="37%"/);
-  assert.match(html, /data-state="loading"/);
-});
-
-test("emits chart themes for the starter's media dark mode", async () => {
-  const { ChartStyle } = await vite.ssrLoadModule("/components/ui/chart.tsx");
-  const html = renderToStaticMarkup(
-    React.createElement(ChartStyle, {
-      id: "contract",
-      config: {
-        latency: { theme: { light: "#ffffff", dark: "#000000" } },
-      },
-    }),
-  );
-
-  assert.match(html, /\[data-chart=contract\]/);
-  assert.match(html, /@media \(prefers-color-scheme: dark\)/);
-  assert.doesNotMatch(html, /\.dark/);
-});
-
-test("renders sidebar skeletons deterministically", async () => {
-  const { SidebarMenuSkeleton } = await vite.ssrLoadModule(
-    "/components/ui/sidebar.tsx",
-  );
-  const first = renderToStaticMarkup(React.createElement(SidebarMenuSkeleton));
-  const second = renderToStaticMarkup(React.createElement(SidebarMenuSkeleton));
-
-  assert.equal(first, second);
-  assert.match(first, /--skeleton-width:70%/);
+  assert.match(html, /role="switch"/);
+  assert.match(html, /aria-checked="true"/);
+  assert.match(html, /data-size="sm"/);
 });
