@@ -6543,6 +6543,50 @@ never overshoots). Evidence: `evidence/katana/b/warp.{json,svg}` from `qa/gta-up
 Known limit: the legs play the standing cut while the body travels (a glide). Katana C's whole-body
 cut steps into it.
 
+## 9be. Katana C: the whole body in the cut (step in, hips down, eyes on the person) and zanshin
+
+Measured on the §9ah cut first (`qa/gta-upgrade/katana-body.mjs`, the clip posed on the game's rig):
+the capture's hips already led its chest into the cut (fastest turn 0.10 s earlier) and the tip
+peaked at 17 m/s inside the cut window -- kept. What it lacked: the feet never moved (the hips
+dropped 2 cm), the head turned away with the chest (±25°), and the blade went straight from the
+follow-through back up to guard (held still for 0.03 s).
+
+Now, in the bake (`scripts/cmu/weapon-clip.mjs`, preset `katana-cut`: `hold` knots and `body`;
+the order of the Animateur slash read for principle only -- the legs load, the hips turn, the
+torso follows, the body travels through contact; nothing taken):
+- **The step in (fumikomi).** The front (right) foot steps 24 cm forward with a 5 cm lift from
+  0.56 s and lands with the blade (0.80 s; the tip peaks at 0.77-0.82 s); the hips go 14 cm forward
+  and 6 cm down onto it; the back foot is drawn up 10 cm after the cut (hikitsuke). Legs by
+  two-bone IK, each foot keeping its own turn (the IK misses by 0 cm). Planted feet slide no more
+  than the capture's own 4 cm.
+- **The eyes on the person**: 75% of the head's turn is taken back at the neck: ±6° (was ±25°)
+  while the chest still winds +42°/−54°.
+- **Zanshin**: the warp slows to 0.22x just past the follow-through, so the blade is held low and
+  nearly still for ~0.4 s (1.03-1.40 s, the tip under 1.2 m/s, below the hips), then the return to
+  guard (to 1.90 s; was 1.53). **From the end of the hold (`SWORD.cancelAt` 1.40 s) the return
+  can be cut short** -- the next cut starts at once, or walking off ends it -- so the next cut comes
+  sooner than before (1.40 s vs 1.53). A press during the hold is dropped as before.
+- **A cut over a return blends** (`figure.mjs` SwordAttackEcho, 0.16 s): the old frame fades out
+  instead of the body jumping to the first key (the hand jumped 63 cm in a frame without it).
+- **Re-measured** (`sword-timing.mjs`, now from the rig's root, which is where the hit test
+  stands -- the old clip measures the same either way): blade live 0.664-0.901 s (was 0.674-0.89),
+  the tip reaching 1.56 m (was 1.42), `WEAPONS.katana.reach` 1.85 m (was 1.7). WARP (Katana B)
+  still ends before the blade is live.
+- The wrist median in the bake's report is over the keys that move (the hold repeats one pose a
+  dozen times); the held right wrist is 60°, the capture's own follow-through, within the 65° bound.
+
+Tests: `tests/katana-kesa.test.mjs` (the hips lead by ≥60 ms and the tip peaks in the window; the
+front foot steps ≥20 cm and is down when the blade cuts, the hips drop ≥5 cm, no planted foot
+slides >5 cm, all back at guard by the end; the head within ±8°; the hold ≥0.3 s, still and low;
+a press in the hold dropped, after it the next cut at once or walking off; no jump over a
+restarted cut); `tests/cmu-weapon-clip.test.mjs` (the cut without its hold under 1.7 s; the held
+wrist). Evidence: `evidence/katana/c/compare.png` (before/after at 0.5, 0.8, 1.2, 1.6 s; the player's
+right and the front), the bench shots `before-*` / `after-*` (weapon bench poses `katana-c-*`,
+full body).
+
+Known limits: during a warp (Katana B) the legs still play the standing cut while the body
+travels (the step in happens after it); a device look is still owed.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
