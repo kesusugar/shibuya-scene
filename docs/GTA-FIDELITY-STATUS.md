@@ -6697,6 +6697,72 @@ no buttons yet).
 Not done: flying the free camera by touch (a phone can enter, take the still from where the game
 camera was, and leave); a device look is owed.
 
+## 9bi. The underground passage (backlog ③): down the stairs, along under Dogenzaka, up and away
+
+GTA V's tunnels, in Shibuya's own passage: `src/world/tunnel.mjs` (shape and rules, pure),
+`src/world/tunnel-mesh.mjs` (meshes), wired in `app/ShibuyaScene.tsx`, `src/police/{director,units,wanted}.mjs`.
+
+**Where.** The map data has Shibuya's real underground (108 footway segments below street level).
+One passage is used: OSM `way/664498381`, the level -1 footway running west under Dogenzaka from
+near exit A3. Its own ends lie inside building footprints (basements), so each end comes up instead
+in the nearest open lot, by an 8 m staircase entered from the pavement: **A3** in the lot south of
+the Dogenzaka pavement (entered from the east), **A0** in the lot north of the passage's west bend
+(entered from the west). Between them the passage's own line is kept (two of its vertices, two joins
+on it); 130 m in all, with four corners. A test checks the stair wells lie on no road, pavement or
+building, and that each entrance has a pavement within 6 m.
+
+**What it is.** A 3.6 m wide, 2.8 m high passage, its floor 4.2 m down; the stairs a 28° ramp with
+steps. Where each stair's ceiling is above the pavement it is the entrance: glass sides and a sloping
+glass roof on a steel portal, and a sign on a post (the exit's letter and 渋谷駅 -- no operator's mark).
+Below, the passage is lit by its own strip lights every 5 m (unlit materials with the light in vertex
+colours, the same by day and night -- the sun must not reach down a stair well); direction boards
+at the corners. The land is cut away only over each glass roof (`landPlane(holes)`, 5.3 × 3.6 m):
+beyond it the stair's ceiling is below the ground. 18 meshes (draw calls, when in view), about 1,400 triangles.
+
+**Moving between the layers.** A body is on the street or in the passage (`state.layer`).
+`tunnel.context(ctx, layer)` gives the player's controller, figure (foot IK), camera and weapons the
+ground of whichever it is in: underground the walls are everything outside the passage (so the
+buildings above do not block it) except the pavement beyond an open end, and the floor is the
+passage's (each ramp starts at the street's own height at its top). On the street the stair wells are
+walls except at their open ends. Stepping 0.5 m into an open end goes down; walking 0.3 m out beyond
+one comes up (the gap keeps a body standing at a top from flickering between the layers, which had
+officers going down and up hundreds of times). Underground the camera stays under the ceiling.
+
+**The police.** Underground:
+- only officers down there see the player, within 28 m over a straight line inside the passage (the
+  corners hide); the street's units and the helicopter do not;
+- the units above make for the open end the player went down: patrol cars drive there and their crews
+  get out (the existing dismount within 25 m of a player on foot), officers run there;
+- an officer who reaches it goes down after the player and runs the passage (3.4 m/s, slower than a
+  run); when the player comes up elsewhere, officers below run to that end and come up there;
+- officers above run straight at the stairs and, blocked by a wall or a fixture, slide along it (the
+  nearest free heading up to a right angle off) rather than stand at it -- before this they stalled
+  5 m from the A3 entrance and none went down;
+- unseen, the escape clock runs 2.5× and the search circle does not reach below the street (☆3: 10 s
+  unseen underground instead of 25 s outside a 120 m circle) -- but only once the player has lost
+  the trail: while an officer below is within 40 m along the passage, or one above within 15 m of the
+  stairs the player took, the clock holds (neither runs nor resets);
+- rounds fired underground meet the passage's walls; officers below shoot only at a player below.
+
+Tests: `tests/tunnel.test.mjs` (the route is the real passage's; the wells on open land; the floor and
+the roof; the layers end to end; the player's controller down the stairs and held by the walls; an
+officer going down, following and coming up where the player came out; sight along and not round a
+corner, and not from the street; the faster escape; the street units letting go of their cover and
+making for the stairs; the trail holding the clock). Evidence: `evidence/tunnel/` -- the bench
+(`qa/gta-upgrade/tunnelbench.html`: the A3 entrance, down its stairs, the passage, the A0 exit) and the
+real scene (`qa/gta-upgrade/tunnel-scene.mjs`, stills 01-07 and `scene/tunnel-scene.json`).
+
+The real scene, headless (`tier=low&time=day`): the player at the A3 entrance at ☆3 is seen; down
+the stairs the clock starts (4.6 s at the bottom); 60 m along, two officers have gone down after the
+player, 38 m behind (the clock at 11.7); by A0 five have, and the level clears as `escaped` as the
+player comes up. In an earlier run with officers close behind, the clock held at 7.4 below, and the
+player who stood still at A0 was caught by the officers coming up after them -- the tunnel is a way
+out, not a free one. No console errors.
+
+Not done: patrol cars do not drive round
+to the far exit ahead of the player; only this one passage is walkable (the map's other underground
+footways are not built).
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
