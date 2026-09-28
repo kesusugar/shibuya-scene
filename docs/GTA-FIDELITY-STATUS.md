@@ -6587,6 +6587,52 @@ full body).
 Known limits: during a warp (Katana B) the legs still play the standing cut while the body
 travels (the step in happens after it); a device look is still owed.
 
+## 9bf. Katana D: three cuts in a row (袈裟 → 逆袈裟 → 横一文字), each knocking its person its own way, and the blade's trail
+
+**Where the cuts come from.** 02_07 was scanned for fast passes of the blade tip (the tip beyond the
+capture's LEFT hand, its lead; a first scan had the blade reversed and chose wrong windows, caught on
+the bench). Every cut in front in the take runs the same way once mirrored (left to right), so the
+order follows where each cut leaves the blade rather than the planned 袈裟 → 逆袈裟 → 横:
+1. **袈裟 kesa** (SwordAttack, §9be): down from high left to low right.
+2. **逆袈裟 rising cut** (SwordGyaku, 9.55-10.55 s, mirrored): from low on the right -- where the
+   kesa leaves the blade -- up across the front to high on the left (tip 1.1 → 2.2 m, 11.5 m/s).
+3. **横一文字 level cut** (SwordYoko, 12.85-13.8 s, mirrored): at chest height (1.37-1.63 m) from the
+   left -- where the rising cut leaves the blade -- across to the right at 17 m/s, then held still
+   with the arms out (zanshin, 0.49-0.89 s) before the guard.
+Un-mirroring the level cut (so it would run right to left; `lead:'left'` moves the right hand to the
+lead place) bent the right wrist to 75°, so it is not used. The level cut's right wrist is held to
+55° by turning the blade up to 21° toward the forearm's line (`wristCap`), and its forearm takes 80%
+of the hand's twist (`twistShare`). Measured like the kesa: `sword-timing.mjs SwordGyaku|SwordYoko`,
+now with the tip's height per sweep sample (`heights`).
+
+**The combo** (`combat.mjs`): a press during a cut, before its `chainAt` (kesa 1.0 s, the rising
+cut 0.56 s), starts the next cut there -- after the blade has passed, before any zanshin. A press
+after it is dropped as before; the combo starts over from the kesa when a cut plays out. Each
+chained cut locks and steps in (Katana B) afresh. The every-other-cut 12% speed-up (R5) is retired:
+three cuts vary the rhythm. The switch between clips is the ordinary swing blend (0.08 s in, 0.3 s
+out).
+
+**The blow, by the cut** (`cut()`): the sweep, reach and hit window are the cut's own
+(`katanaSweep({timing})`); where it meets a body is the tip's height as its bearing crossed theirs
+(head / body / legs for the flinch and the ragdoll); the flinch, the stagger and a killing push go
+the way the blade travels -- a kesa and a level cut across to the right, a rising cut to the left --
+and a rising cut that kills lifts the body a little (`COMBAT.cutLift` 0.5 m/s).
+
+**The trail** (`blade-trail.mjs`, player figure only): a thin white crescent over the outer 20% of
+the blade while a cut is live (from 0.03 s before its window to 0.05 s after), each sample fading in
+0.14 s; additive, one draw call, 18 samples rewritten in place, added to the figure's parent.
+
+Tests: `tests/katana-combo.test.mjs` (the three cuts measured in order, each its own way, each
+starting where the last leaves the blade, the person in front in every path; the chain points and
+the restart; the blow's direction by cut and the rising cut's lift; the three clips in the character
+and a trail only while each blade is live); `tests/cmu-weapon-clip.test.mjs` (the new presets'
+wrists); `tests/weapons.test.mjs` (a second press after the kesa ended starts a kesa again).
+Evidence: `evidence/katana/d/combo.png` (each cut as its blade passes, with its trail, and the level
+cut's zanshin; the player's right and the front) and the bench shots `katana-d-*`.
+
+Known limits: the rising and level cuts are the capture's own footwork (no step in like the kesa's);
+between cuts the feet blend over 0.3 s; a device look is still owed.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
