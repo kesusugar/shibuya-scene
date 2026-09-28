@@ -10,10 +10,10 @@ import {WHEEL} from './weapon-wheel.mjs';
 /** Stage 6: seconds the radio's station and song stay on screen after they change. */
 export const RADIO_BANNER=4;
 
-export function createPlayUI(network,parent,{onExit,onDrive,onMission,onCancelMission,onBuy,onSave}={}){
+export function createPlayUI(network,parent,{onExit,onDrive,onMission,onCancelMission,onBuy,onSave,onPhoto}={}){
  const marker=createPlayerMarker(0x68e7b4);parent.add(marker.mesh);let snap={status:'idle'};
  const root=document.createElement('section');root.className='play-hud';root.setAttribute('aria-label','プレイ情報');
- root.innerHTML=`<div class="play-top"><div class="play-brand">SHIBUYA <span>FREE ROAM · Tab メニュー</span></div><button class="play-exit" type="button">観察に戻る</button></div>
+ root.innerHTML=`<div class="play-top"><div class="play-brand">SHIBUYA <span>FREE ROAM · Tab メニュー</span></div><button class="play-photo" type="button" title="撮影モード（P）">撮影</button><button class="play-exit" type="button">観察に戻る</button></div>
  <div class="play-mission"><strong class="play-mission-name">ミッション</strong><p class="play-task">受けるミッションを選んでください。</p><div class="play-mission-list">${MISSIONS.map(m=>`<button type="button" data-mission="${m.id}" title="${m.name}：${m.brief}">${m.short}<small>${yen(m.reward)}</small></button>`).join('')}</div><div class="play-task-row"><span class="play-timer"></span><button class="play-cancel" type="button" hidden>中止</button></div><progress class="play-progress" max="1" value="0" aria-label="進行" hidden></progress></div>
  <div class="play-shop" role="dialog" aria-label="コンビニ" hidden><strong>コンビニ</strong><div class="play-shop-items">${SHOP.items.map(i=>`<button type="button" data-item="${i.id}"><b>${i.name}</b><small>${i.note}</small><span>${yen(i.price)}</span></button>`).join('')}</div><p class="play-shop-msg"></p><button class="play-save" type="button">セーブする</button></div>
  <div class="play-map"><canvas width="320" height="320" aria-label="周辺地図・北が上"></canvas><span>N · 北 / 緑：目的地 / 青：車</span></div>
@@ -32,7 +32,7 @@ export function createPlayUI(network,parent,{onExit,onDrive,onMission,onCancelMi
  let bannerFor=0,bannerSeq=0,lastWanted=null,shopAt=null,radioFor=0,radioKey='';
  const radioBox=root.querySelector('.play-radio'),radioStation=root.querySelector('.play-radio-station'),radioSong=root.querySelector('.play-radio-song');
  let current=null,visible=false,clock=0,disposed=false;
- query('.play-exit').onclick=()=>onExit?.();drive.onclick=()=>onDrive?.();
+ query('.play-exit').onclick=()=>onExit?.();query('.play-photo').onclick=()=>onPhoto?.();drive.onclick=()=>onDrive?.();
  for(const b of missionList.querySelectorAll('button'))b.onclick=()=>{if(current&&current.alive!==false){onMission?.(b.dataset.mission);document.exitPointerLock?.();clock=1;}};
  cancel.onclick=()=>{onCancelMission?.();clock=1;};
  for(const b of shop.querySelectorAll('[data-item]'))b.onclick=()=>{onBuy?.(b.dataset.item);};

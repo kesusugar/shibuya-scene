@@ -39,6 +39,7 @@ import {createFrameSamples,waitForRenderedFrames} from '../src/qa/frame-samples.
 import {createDeferredVehicleVisual as createVehicleVisual} from '../src/player/deferred-vehicle-visual.mjs';
 import {createVehicleEffects} from '../src/player/effects.mjs';
 import {createPlayUI} from '../src/player/play-ui.mjs';
+import {createPhotoMode,attachPhotoControls,captureName,PHOTO} from '../src/player/photo-mode.mjs';
 import {yieldToPlayer,settleNearbyWaiters} from '../src/player/crowd-interaction.mjs';
 import {PLAYER,createPlayer,playerCamera} from '../src/player/controller.mjs';
 import {createPlayerMarker,MARKER} from '../src/player/marker.mjs';
@@ -280,6 +281,29 @@ export default function Home(){
   a.lod='near';a.animationTime=(a.animationTime??0)+dt;a.height=player.state.y;};
  const releaseCrowdSlot=()=>{const a=crowdSlot();if(!a)return;a.controlled=false;a.active=false;a.mode='ambient';};
  let aimCamera=0,healthLast=100,hintKey='';
+ // Backlog ②: photo mode -- a free camera over a stopped (or slowed) world, the HUD gone, and the
+ // frame saved as a PNG. The world's dt is scaled by `photo.timeScale`; the game camera is left
+ // where it was and takes the view back on the way out.
+ const photo=createPhotoMode({ground:(x:number,z:number)=>lifeEntry.hooks.current?.network?.ctx?.height?.(x,z)??0});let photoControls:any=null,photoCapture=false,photoFov=50;
+ const photoStatus=()=>photoControls?.setStatus(`時間：${['停止','1/4','通常'][photo.timeIndex]} · 画角 ${Math.round(photo.pose.fov)}° · ${({dawn:'明け方',day:'昼',dusk:'夕方',night:'夜'} as any)[solar.phase]??''}${photo.captures?` · 撮影 ${photo.captures}枚`:''}`);
+ const enterPhoto=()=>{if(!playerMode||photo.active)return;const d=view.getWorldDirection(new THREE.Vector3());
+  photo.enter({x:view.position.x,y:view.position.y,z:view.position.z,yaw:Math.atan2(d.x,d.z),pitch:Math.asin(Math.max(-1,Math.min(1,d.y))),fov:view.fov});photoFov=view.fov;
+  // The world is stopped: the frame can take as long as it needs, so the picture is drawn at full resolution.
+  renderer?.setPixelRatio(renderRatio(currentTier,devicePixelRatio));
+  player?.suspend(true);arsenal?.hold(false);playUI?.hide();touchPad?.hide();document.body.classList.add('photo-mode');photoControls?.setHelp(true);photoStatus();};
+ const leavePhoto=()=>{if(!photo.exit())return;renderer?.setPixelRatio(renderRatio(currentTier,devicePixelRatio)*dynRes.scale);player?.suspend(false);document.body.classList.remove('photo-mode');photoControls?.setHelp(false);
+  view.up.set(0,1,0);view.fov=photoFov;view.updateProjectionMatrix();if(playerMode){playUI?.show();touchPad?.show();}};
+ const photoTimeOfDay=()=>{const i=PHOTO.phases.indexOf(solar.phase),next=PHOTO.phases[(i+1)%PHOTO.phases.length];solar.select(next);setTime(next);photoStatus();};
+ let photoTicks=0,photoReal=0;
+ const applyPhotoCamera=(realDt:number)=>{photoTicks++;photoReal+=realDt;const p=photo.update(realDt,photoControls?.input()??{}),t=photo.target();
+  view.position.set(p.x,p.y,p.z);view.up.set(0,1,0);view.lookAt(t.x,t.y,t.z);if(p.roll)view.rotateZ(p.roll);
+  // Nothing of the game's over the picture: the markers over the player and the car are left out of the frame.
+  if(playerMarker?.mesh)playerMarker.mesh.visible=false;if(carMarker?.mesh)carMarker.mesh.visible=false;
+  if(Math.abs(view.fov-p.fov)>.01){view.fov=p.fov;view.updateProjectionMatrix();}photoStatus();};
+ // The still: taken right after the frame is drawn, before the browser can clear the canvas.
+ const takePhoto=()=>{if(!photoCapture||!renderer)return;photoCapture=false;const name=captureName();
+  renderer.domElement.toBlob(blob=>{if(!blob)return;const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000);},'image/png');
+  photo.countCapture();photoStatus();};
  const applyPlayerCamera=(dt:number)=>{const ctx=lifeEntry.hooks.current?.network?.ctx??null;// RUN 9: once the body is IN the car, frame the car, not the body. Following the player
   // through the doorway put the eye a few metres behind a point that is inside the vehicle,
   // so the camera sat on the roof and the whole entry was shot from inside the bodywork.
@@ -465,7 +489,7 @@ export default function Home(){
    // pack lands, so registration waits for it.
    vehicleVisual.onReady((root:any)=>registerSceneRoot(root));}
   if(!vehicleEffects){vehicleEffects=createVehicleEffects();groups.dynamic.add(vehicleEffects.root);}
-  if(!playUI)playUI=createPlayUI(lifeEntry.hooks.current.network,groups.dynamic,{onExit:()=>exitPlayer(),onDrive:()=>toggleDrive(),
+  if(!playUI)playUI=createPlayUI(lifeEntry.hooks.current.network,groups.dynamic,{onPhoto:()=>enterPhoto(),onExit:()=>exitPlayer(),onDrive:()=>toggleDrive(),
    onMission:(id:string)=>{board??=createMissionBoard(lifeEntry.hooks.current.network);playUI?.setMission(board.start(id,missionWorld()));},
    onCancelMission:()=>{board?.cancel(missionWorld());playUI?.setMission(board?.snapshot());},
    onBuy:(id:string)=>{const r:any=shopBuy(wallet,id,{health:player.state.health,armor:player.state.armor,hasCar:!!playerCar?.state?.active,carDamage:playerCar?.state?.damage});
@@ -515,17 +539,21 @@ export default function Home(){
   touchPad?.setDriving(false);touchPad?.show();
   const sim=trafficEntry.hooks.current?.sim;
   if(sim&&!playerCar)ensureCar();
-  playerMode=true;combatDeathReported=false;controls.enabled=false;player.attach(canvas,{onExit:()=>exitPlayer(),onDrive:()=>toggleDrive(),onAttack:(o:any)=>attack(o),onAttackHold:(on:boolean,o:any)=>arsenal?.hold(on&&!driving,o),
+  playerMode=true;combatDeathReported=false;controls.enabled=false;photoControls??=attachPhotoControls(canvas,photo,{onToggle:()=>{if(photo.active)leavePhoto();else enterPhoto();},onCapture:()=>{photoCapture=true;},onTimeOfDay:photoTimeOfDay,onTime:()=>photoStatus()});player.attach(canvas,{onExit:()=>exitPlayer(),onDrive:()=>toggleDrive(),onAttack:(o:any)=>attack(o),onAttackHold:(on:boolean,o:any)=>arsenal?.hold(on&&!driving,o),
    onLockFlick:(d:string)=>arsenal?.lockFlick(d),onLockGyro:(y:number,p:number)=>arsenal?.lockGyro(y,p),locked:()=>!!arsenal?.lock,onWeapon:(n:number)=>selectWeapon(n),onWeaponCycle:(d:number)=>cycleWeapon(d),onAim:(on:boolean,o:any)=>arsenal?.aim(on&&!driving,o),onWheel:(kind:string,x:number,y:number)=>onWheel(kind,x,y),onReload:()=>{if(!driving)arsenal?.reload();},onRoll:()=>{if(playerMode&&!driving&&!vehicleTransition.active&&melee.phase==='idle')player?.roll();},
    // C1-C4: the pad's own buttons for the siren (d-pad up), the horn alone (left stick in a car) and the map (−).
    driving:()=>driving,onRadio:(d:number)=>tuneRadio(d),onSiren:()=>{if(driving&&playerCar)police?.toggleSiren(playerCar);},onHornOnly:()=>{if(driving&&playerCar)soundscape?.horn(playerCar.state.x,playerCar.state.z);},onMap:()=>playUI?.toggleMap?.(),onCrouch:()=>{if(playerMode&&!driving&&!vehicleTransition.active)player?.crouch();},onHorn:()=>{if(driving&&playerCar&&!police?.toggleSiren(playerCar))soundscape?.horn(playerCar.state.x,playerCar.state.z);}});setPlayerHit(null);setMode('player');
   (window as any).__SHIBUYA_PLAYER__=player;(window as any).__SHIBUYA_CAR__=playerCar;
+  // Backlog ②: photo mode for scripted stills (qa/gta-upgrade/photo-mode-stills.mjs): enter, fly, cycle, leave.
+  (window as any).__SHIBUYA_PHOTO__={enter:enterPhoto,leave:leavePhoto,get active(){return photo.active;},get timeScale(){return photo.timeScale;},
+   pose:photo.pose,cycleTime:()=>{const v=photo.cycleTime();photoStatus();return v;},timeOfDay:photoTimeOfDay,zoom:(n:number)=>photo.zoom(n),look:(dx:number,dy:number)=>photo.look(dx,dy),
+   fly:(input:any,seconds=1)=>{for(let t=0;t<seconds;t+=1/30)photo.update(1/30,input);},get captures(){return photo.captures;},get ticks(){return photoTicks;},get real(){return photoReal;},capture:()=>{photoCapture=true;}};
   // Foot IK is invisible from outside: a solver that never ran and a solver that ran and
   // declined to move anything look identical on screen. Under ?qa=1 the figure and the
   // surface it queries are reachable, so a check can tell those two apart.
   if(config.qa){(window as any).__SHIBUYA_FEEDBACK__=feedback;(window as any).__SHIBUYA_AUDIO__=playerAudio;(window as any).__SHIBUYA_SOUNDS__={bank:soundBank,scape:soundscape};(window as any).__SHIBUYA_MELEE__=melee;(window as any).__SHIBUYA_ARSENAL__=arsenal;(window as any).__SHIBUYA_CONTACT__=player.contact.stats;(window as any).__SHIBUYA_FIGURE__=playerFigure;(window as any).__SHIBUYA_CTX__=ctx;(window as any).__SHIBUYA_LIFE__=lifeEntry.hooks.current;(window as any).__SHIBUYA_TRAFFIC__=trafficEntry.hooks.current;}
   return true;};
- const exitPlayer=()=>{if(!playerMode)return;radio?.silence();radioSlot=null;weaponWheel.cancel();streetReactions.reset(lifeEntry.hooks.current?.sim?.pool??[]);soundscape?.silence();playUI?.hide();vehicleVisual?.hide();vehicleEffects?.hide();lifeEntry.hooks.current?.setPlayerFocus(null);followCamera.reset();melee.reset();arsenal?.reset();touchPad?.setWeapon('fists');
+ const exitPlayer=()=>{if(!playerMode)return;leavePhoto();photoControls?.detach();photoControls=null;delete (window as any).__SHIBUYA_PHOTO__;radio?.silence();radioSlot=null;weaponWheel.cancel();streetReactions.reset(lifeEntry.hooks.current?.sim?.pool??[]);soundscape?.silence();playUI?.hide();vehicleVisual?.hide();vehicleEffects?.hide();lifeEntry.hooks.current?.setPlayerFocus(null);followCamera.reset();melee.reset();arsenal?.reset();touchPad?.setWeapon('fists');
   // An abandoned carjack must not leave a driver half out of a car, a door hanging open, or a
   // slot frozen out of traffic for the rest of the session.
   {const was=vehicleTransition.cancel();
@@ -653,7 +681,7 @@ export default function Home(){
  });
  let lastPlayTick=performance.now();let wheelTime=1;let qaReadyRef=false;const frame=(now:number)=>{if(disposed)return;const gateDt=frameGate.step(now);if(gateDt===null){raf=requestAnimationFrame(frame);return;}
  // Stage 1: the world slows while the weapon wheel is open.
- wheelTime+=((weaponWheel.open?WHEEL.slow:1)-wheelTime)*Math.min(1,gateDt*12);const dt=gateDt*wheelTime;
+ wheelTime+=((weaponWheel.open?WHEEL.slow:1)-wheelTime)*Math.min(1,gateDt*12);const dt=gateDt*wheelTime*photo.timeScale;
  // Roadmap stage 4: how many people are out follows the time of day.
  lifeEntry.hooks.current?.sim?.setPopulation?.(populationFor(clock.value));const frameStart=performance.now(),updateStart=frameStart;const playElapsed=document.hidden?0:Math.max(0,(now-lastPlayTick)/1000);lastPlayTick=now;frameHits=0;{const s=lifeEntry.hooks.current?.sim;if(s)s.postUpdate=null;}
  if((perfMode||perfWanted)&&!perfProbe&&renderer)ensurePerf();
@@ -861,9 +889,9 @@ export default function Home(){
   seatedDrivers.update(trafficNowForDrivers.sim,
    playerMode&&player?player.state:controls.target);
  }else seatedDrivers?.hide();
- perfProbe?.end('drivers');perfProbe?.begin('camera');solar.update(dt);if(playerMode&&player){shake=Math.max(0,shake-SHAKE_FALL*dt*Math.max(.35,shake));applyPlayerCamera(dt);if(!driving&&!vehicleTransition.active)checkRunOver();}else clampView();perfProbe?.end('camera');const updateEnd=performance.now();perfProbe?.begin('render');perfProbe?.gpuBegin();renderScene();perfProbe?.gpuEnd();perfProbe?.end('render');const renderEnd=performance.now();
+ perfProbe?.end('drivers');perfProbe?.begin('camera');solar.update(photo.active?gateDt:dt);if(playerMode&&player){shake=Math.max(0,shake-SHAKE_FALL*dt*Math.max(.35,shake));applyPlayerCamera(dt);if(photo.active)applyPhotoCamera(gateDt);if(!driving&&!vehicleTransition.active)checkRunOver();}else clampView();perfProbe?.end('camera');const updateEnd=performance.now();perfProbe?.begin('render');perfProbe?.gpuBegin();renderScene();takePhoto();perfProbe?.gpuEnd();perfProbe?.end('render');const renderEnd=performance.now();
   // §9aj G3: feed the frame to the dynamic resolution; never during a measurement sweep.
-  {const interval=dynLast===null?0:now-dynLast;dynLast=now;if(!perfSweep?.running&&dynRes.sample(interval,renderEnd-frameStart,dt)&&renderer)renderer.setPixelRatio(renderRatio(currentTier,devicePixelRatio)*dynRes.scale);}
+  {const interval=dynLast===null?0:now-dynLast;dynLast=now;if(!perfSweep?.running&&!photo.active&&dynRes.sample(interval,renderEnd-frameStart,dt)&&renderer)renderer.setPixelRatio(renderRatio(currentTier,devicePixelRatio)*dynRes.scale);}
  if(perfProbe){perfProbe.frameEnd({drawCalls:renderer?.info.render.calls??null,triangles:renderer?.info.render.triangles??null});
   const wall=perfLast===null?0:(now-perfLast)/1000;perfLast=now;
   if(perfMode==='sweep'&&!perfSweep){perfReadyFrames=prerequisitesReady()||!!lifeEntry.hooks.current?perfReadyFrames+1:0;if(perfReadyFrames>=30)startPerfSweep();}
@@ -880,7 +908,7 @@ export default function Home(){
  const decorationTier=deferredLatest((v:string)=>{if(streetTier!==v){streetTier=v;if(streetEntry.enabled){system.setEnabled('streetscape',false);system.setEnabled('streetscape',true);}}if(signTier!==v){signTier=v;if(signsEntry.enabled){system.setEnabled('signs',false);system.setEnabled('signs',true);}}if(detailTier!==v){detailTier=v;if(detailEntry.enabled){system.setEnabled('stationDetail',false);system.setEnabled('stationDetail',true);}}});
  engine.current={perf:()=>{perfWanted=true;setPresentation(true);// measure the full view the game is played in, not the inspection layout
  if(ensurePerf())startPerfSweep();else setTimeout(()=>{if(ensurePerf())startPerfSweep();},500);},preset,drive:()=>toggleDrive(),player:()=>{if(playerMode)exitPlayer();else enterPlayer();},respawn:()=>{melee.reset();arsenal?.reset();touchPad?.setWeapon('fists');const arrested=arrestedPending;arrestedPending=false;player?.revive();if(arrested&&player)player.place(KOBAN.x+1.5,KOBAN.z+1.5,0);police?.clear('respawn');combatDeathReported=false;setPlayerHit(null);},tier:(v:string)=>{const previousTier=currentTier;startup?.tierChange(previousTier,v,'tier-control');for(const id of ['fidelity','streetscape','signs','stationDetail'])startup?.setReason(id,'tier-change');currentTier=v;currentTrafficTier=v;buildingsTier=v;timingTier=v;frameGate.setTier(v);dynRes.setBudget(1000/(PROFILES[v]?.fps??60));fidelity.setTier(v);buildQueue.enqueue(()=>measureStage('fidelity','Render Fidelity Prepare',()=>fidelity.prepare()),{key:'fidelity',name:'Render Fidelity Prepare'}).catch(e=>{console.error('[S16.3 Fidelity]',e);setError('HIGH描画の準備に失敗しました。MEDIUMを選択してください。');});buildingsEntry.hooks.current?.setTier(v);setBuildingsReport(buildingsEntry.hooks.current?{...buildingsEntry.hooks.current.stats}:null);trafficEntry.hooks.current?.setTier(v);lifeEntry.hooks.current?.setTier(v);trainsEntry.hooks.current?.setTier(v);nightglowEntry.hooks.current?.setTier(v);constructionEntry.hooks.current?.setTier(v);setConstructionReport(constructionEntry.hooks.current?{...constructionEntry.hooks.current.stats}:null);resize();setTier(v);decorationTier.set(v);},time:(v:string)=>{solar.select(v);setTime(v);},toggle:(id:string,v:boolean)=>{if(playerMode&&['traffic','life','ground'].includes(id))exitPlayer();startup?.setReason(id,'manual-rebuild');const rebuildLife=id==='traffic'&&lifeEntry.enabled;if(rebuildLife){startup?.setReason('life','dependency-rebuild');system.setEnabled('life',false);}system.setEnabled(id,v);if(id==='environment'){nightglowEntry.hooks.current?.refresh();fidelity.refresh();}if(rebuildLife)system.setEnabled('life',true);setModules(system.snapshot());},capture};
- cleanup=()=>{heliMesh?.dispose();heliMesh=null;perfSweep?.cancel();perfOverlay?.dispose();if((window as any).__SHIBUYA_PERF__===perfProbe)delete (window as any).__SHIBUYA_PERF__;arsenal?.dispose();arsenal=null;police?.dispose(trafficEntry.hooks.current?.sim,lifeEntry.hooks.current?.sim);police=null;if((window as any).__SHIBUYA_POLICE__)delete (window as any).__SHIBUYA_POLICE__;roadReflection?.dispose();document.removeEventListener('visibilitychange',visibility);seatedDrivers?.dispose();seatedDrivers=null;playUI?.dispose();vehicleVisual?.dispose();vehicleEffects?.dispose();player?.detach();carMarker?.dispose();playerAudio?.dispose();crowdVoices?.dispose();if((window as any).__SHIBUYA_VOICES__===crowdVoices)delete (window as any).__SHIBUYA_VOICES__;touchPad?.dispose();blood?.dispose();if((window as any).__SHIBUYA_BLOOD__===blood)delete (window as any).__SHIBUYA_BLOOD__;diag?.dispose();if((window as any).__SHIBUYA_DIAG__===diag)delete (window as any).__SHIBUYA_DIAG__;playerMarker?.dispose();playerFigure?.dispose();playerShadow?.dispose();deferredCharacter?.dispose();if((window as any).__SHIBUYA_CHARACTER__===deferredCharacter)delete (window as any).__SHIBUYA_CHARACTER__;cancelAnimationFrame(raf);shaderWarmup?.dispose();stopShaderErrors();timingObserver?.disconnect();startupTrace?._removeLifecycle?.();if(qaButtonTimer)window.clearInterval(qaButtonTimer);decorationTier.dispose();buildQueue.dispose();observer.disconnect();unsub();dataAbort.abort();solar.dispose();fidelity.dispose();dayNight.dispose();system.dispose();controls.dispose();canvas.removeEventListener('webglcontextlost',lost);renderer?.dispose();canvas.remove();qaButton?.remove();startupPanel?.remove();if((window as any).__SHIBUYA_QA__===qaApi)delete (window as any).__SHIBUYA_QA__;if((window as any).__SHIBUYA_STARTUP_TIMING__===startupTrace)delete (window as any).__SHIBUYA_STARTUP_TIMING__;engine.current=null;};
+ cleanup=()=>{photoControls?.detach();photoControls=null;document.body.classList.remove('photo-mode');heliMesh?.dispose();heliMesh=null;perfSweep?.cancel();perfOverlay?.dispose();if((window as any).__SHIBUYA_PERF__===perfProbe)delete (window as any).__SHIBUYA_PERF__;arsenal?.dispose();arsenal=null;police?.dispose(trafficEntry.hooks.current?.sim,lifeEntry.hooks.current?.sim);police=null;if((window as any).__SHIBUYA_POLICE__)delete (window as any).__SHIBUYA_POLICE__;roadReflection?.dispose();document.removeEventListener('visibilitychange',visibility);seatedDrivers?.dispose();seatedDrivers=null;playUI?.dispose();vehicleVisual?.dispose();vehicleEffects?.dispose();player?.detach();carMarker?.dispose();playerAudio?.dispose();crowdVoices?.dispose();if((window as any).__SHIBUYA_VOICES__===crowdVoices)delete (window as any).__SHIBUYA_VOICES__;touchPad?.dispose();blood?.dispose();if((window as any).__SHIBUYA_BLOOD__===blood)delete (window as any).__SHIBUYA_BLOOD__;diag?.dispose();if((window as any).__SHIBUYA_DIAG__===diag)delete (window as any).__SHIBUYA_DIAG__;playerMarker?.dispose();playerFigure?.dispose();playerShadow?.dispose();deferredCharacter?.dispose();if((window as any).__SHIBUYA_CHARACTER__===deferredCharacter)delete (window as any).__SHIBUYA_CHARACTER__;cancelAnimationFrame(raf);shaderWarmup?.dispose();stopShaderErrors();timingObserver?.disconnect();startupTrace?._removeLifecycle?.();if(qaButtonTimer)window.clearInterval(qaButtonTimer);decorationTier.dispose();buildQueue.dispose();observer.disconnect();unsub();dataAbort.abort();solar.dispose();fidelity.dispose();dayNight.dispose();system.dispose();controls.dispose();canvas.removeEventListener('webglcontextlost',lost);renderer?.dispose();canvas.remove();qaButton?.remove();startupPanel?.remove();if((window as any).__SHIBUYA_QA__===qaApi)delete (window as any).__SHIBUYA_QA__;if((window as any).__SHIBUYA_STARTUP_TIMING__===startupTrace)delete (window as any).__SHIBUYA_STARTUP_TIMING__;engine.current=null;};
  })().catch(e=>{if(!disposed)setError(String(e));});return()=>{disposed=true;cleanup();};},[]);
  const timingMs=(value:number)=>`${(value/1000).toFixed(3)} s`;
  const copyS5Timing=async()=>{if(!s5TimingResult)return;await navigator.clipboard.writeText(JSON.stringify(s5TimingResult,null,2));setS5TimingCopied(true);window.setTimeout(()=>setS5TimingCopied(false),1500);};

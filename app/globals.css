@@ -248,3 +248,19 @@ body.tc-on .player-hint{display:none}
  .play-shop{left:auto;right:16px;top:48px;bottom:auto;transform:none;width:min(300px,calc(100vw - 32px));padding:8px 10px}
  .play-shop-items{gap:4px;margin:6px 0}.play-shop-items button{padding:5px 8px}.play-shop-items button small{display:none}
 }
+
+/* Backlog ②: photo mode -- nothing over the picture but the (hideable) help. */
+body.photo-mode main > :not(.workspace), body.photo-mode .workspace > :not(.viewport), body.photo-mode .viewport > :not(.canvas),
+body.photo-mode .play-hud, body.photo-mode .tc, body.photo-mode .dg { display:none !important; }
+.photo-help { position:fixed; left:16px; bottom:16px; z-index:40; max-width:min(340px,calc(100vw - 32px)); padding:12px 14px; border-radius:12px;
+ background:#070b12cc; border:1px solid #ffffff22; color:#eef1f5; font:12px/1.5 system-ui,sans-serif; backdrop-filter:blur(8px); pointer-events:none; }
+.photo-help b { display:block; font-size:13px; letter-spacing:1px; margin-bottom:2px; }
+.photo-help .photo-status { display:block; color:#b9c6d4; margin-bottom:8px; }
+.photo-help dl { display:grid; grid-template-columns:auto 1fr; gap:2px 12px; margin:0; }
+.photo-help dt { color:#ffd479; font-weight:600; }
+.photo-help dd { margin:0; }
+.photo-help.photo-help-off { display:none; }
+.photo-help .photo-buttons { display:flex; gap:8px; margin-top:10px; }
+.photo-help .photo-buttons button { pointer-events:auto; flex:1; padding:7px 10px; border-radius:8px; border:1px solid #ffffff33; background:#ffffff14; color:#fff; font:600 12px system-ui,sans-serif; }
+.photo-help .photo-buttons button:first-child { background:#ffd47933; border-color:#ffd47988; }
+.play-top .play-photo { margin-left:auto; margin-right:8px; }
