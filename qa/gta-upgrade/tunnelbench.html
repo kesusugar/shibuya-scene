@@ -1,0 +1,56 @@
+<!doctype html><meta charset="utf-8"><title>tunnel bench</title>
+<style>html,body{margin:0;background:#20242b;overflow:hidden}canvas{display:block}
+#l{position:fixed;left:8px;top:8px;color:#dfe6ef;font:11px/1.45 monospace;white-space:pre;z-index:9;text-shadow:0 1px 2px #000}</style>
+<div id="l">loading…</div>
+<!--
+  Backlog ③: the underground passage (src/world/tunnel.mjs, tunnel-mesh.mjs) with the land it goes
+  under (src/ground/land.mjs landPlane, the stair wells cut out), a flat pavement slab round each
+  entrance, and the player's figure standing where the game would put it. Four views: the A3
+  entrance from the pavement, down its stairs, the passage at its first corner, the A0 exit.
+  ?time=night lights it for night (the passage's own light is the same).
+  node qa/gta-upgrade/weaponbench-capture.mjs out.png "" tunnelbench.html
+-->
+<script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js","three/addons/":"/node_modules/three/examples/jsm/"}}</script>
+<script type="module">
+import * as T from 'three';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {humanoidCitizen} from '/src/player/character-asset.mjs';
+import {createPlayerFigure} from '/src/player/figure.mjs';
+import {createTunnel} from '/src/world/tunnel.mjs';
+import {buildTunnelMesh} from '/src/world/tunnel-mesh.mjs';
+import {landPlane} from '/src/ground/land.mjs';
+
+const night=new URLSearchParams(location.search).get('time')==='night';
+const report=await (await fetch('/public/data/character/citizen.json')).json();
+const bytes=await (await fetch('/public/data/character/citizen.glb')).arrayBuffer();
+const asset=humanoidCitizen(await new Promise((res,rej)=>new GLTFLoader().parse(bytes,'',res,rej)),report);
+const tunnel=createTunnel();
+const scene=new T.Scene();scene.background=new T.Color(night?0x05070c:0x9fb6c8);scene.fog=new T.Fog(scene.background,60,260);
+scene.add(new T.HemisphereLight(night?0x334466:0xcfe0ff,0x3a3a42,night?.35:1.5));
+const sun=new T.DirectionalLight(night?0x8899bb:0xfff3e0,night?.25:2.2);sun.position.set(-40,90,30);scene.add(sun);
+const land=new T.Mesh(landPlane(tunnel.holes),new T.MeshStandardMaterial({color:0x8a8e94,roughness:.95}));scene.add(land);
+const {root}=buildTunnelMesh(tunnel);scene.add(root);
+// A body on each: at the A3 top, half way down its stairs, in the passage, and coming up at A0.
+const bodies=[];
+for(const [at,lat] of [[-1.5,0],[5,.4],[26,-.6],[tunnel.length-4,.3]]){
+ const f=createPlayerFigure(asset,{top:0x1d6fd3},{weapons:['pistol','katana']});scene.add(f.root);
+ const p=at<0?{x:tunnel.ends[0].entry.x+tunnel.ends[0].out.x*.3,z:tunnel.ends[0].entry.z+tunnel.ends[0].out.z*.3,y:0,heading:tunnel.ends[0].heading}:tunnel.pointAt(at,lat);
+ const state={x:p.x,y:p.y,z:p.z,heading:p.heading,bodyHeading:p.heading,speed:0,alive:true,attackTime:0,weapon:'fists'};
+ for(let i=0;i<40;i++)f.update(state,1/30);bodies.push(f);
+}
+const W=1280,H=800,renderer=new T.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});renderer.setSize(W,H);renderer.setScissorTest(true);
+renderer.outputColorSpace=T.SRGBColorSpace;document.body.appendChild(renderer.domElement);
+const cam=(pos,look,fov=55)=>{const c=new T.PerspectiveCamera(fov,(W/2)/(H/2),.05,400);c.position.set(...pos);c.lookAt(...look);return c;};
+const e0=tunnel.ends[0],e1=tunnel.ends[1],mid=tunnel.pointAt(24),corner=tunnel.pointAt(29);
+const views=[
+ ['A3 entrance from the pavement',cam([e0.top.x+e0.out.x*7-e0.out.z*3,1.7,e0.top.z+e0.out.z*7+e0.out.x*3],[e0.top.x,.8,e0.top.z])],
+ ['down the A3 stairs',cam([e0.top.x+e0.out.x*1.2,1.6,e0.top.z+e0.out.z*1.2],[tunnel.pointAt(8).x,tunnel.pointAt(8).y+.6,tunnel.pointAt(8).z])],
+ ['the passage, first corner',cam([tunnel.pointAt(19).x,-2.6,tunnel.pointAt(19).z],[corner.x,-3,corner.z],70)],
+ ['A0 exit from the pavement',cam([e1.top.x+e1.out.x*7+e1.out.z*3,1.7,e1.top.z+e1.out.z*7-e1.out.x*3],[e1.top.x,.8,e1.top.z])]
+];
+views.forEach(([,c],i)=>{const x=(i%2)*W/2,y=H-(Math.floor(i/2)+1)*H/2;renderer.setViewport(x,y,W/2,H/2);renderer.setScissor(x,y,W/2,H/2);renderer.render(scene,c);});
+const lines=views.map(([n],i)=>`${['top left','top right','bottom left','bottom right'][i]}: ${n}`);
+lines.unshift(`tunnel ${tunnel.length.toFixed(1)} m, roof ${tunnel.roof.toFixed(1)} m, ${night?'night':'day'}; calls ${renderer.info.render.calls}`);
+document.getElementById('l').textContent=lines.join('\n');
+window.__BENCH__={lines,calls:renderer.info.render.calls,size:[W,H]};document.title='ready';
+</script>

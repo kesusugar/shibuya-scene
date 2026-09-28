@@ -8,6 +8,7 @@ import {pose,boxOverlap} from '../traffic/path.mjs';
 import {VEHICLES} from '../traffic/config.mjs';
 import {OFFICER_BASE} from '../life/appearance.mjs';
 import {COMBAT} from '../player/combat.mjs';
+import {TUNNEL} from '../world/tunnel.mjs';
 
 /** Per star (index 0 unused). */
 export const UNITS = Object.freeze({
@@ -72,6 +73,8 @@ export function routeLanes(graph, from, to, limit = 400) {
 }
 
 const INNER = [[0, 0], [.35, .35], [-.35, .35], [.35, -.35], [-.35, -.35]];
+// An officer blocked by a wall tries these turns off the straight line, nearest first (radians).
+const SLIDE = [.5, -.5, 1, -1, Math.PI / 2, -Math.PI / 2];
 /** The carriageway as a 4 m grid, and distances over it from a target. */
 export function createRoadField(ctx, {cell = 4, origin = -250, size = 500} = {}) {
  const N = Math.ceil(size / cell), road = new Uint8Array(N * N), dist = new Int32Array(N * N).fill(-1);
@@ -347,14 +350,54 @@ export function createPoliceUnits({koban = {x: 48.5, z: 20.4}, buildBudget = 150
   if (attacking && d <= UNITS.batonReach && crowd.time >= p.batonNext) {p.batonNext = crowd.time + UNITS.batonEvery; hurt?.(COMBAT.officerDamage);}
   if (d > UNITS.closeTo) {
    const run = d > 4 ? UNITS.officerRun : 1.6;
-   const step = Math.min(run * dt, d - UNITS.closeTo), nx = p.x + (me.x - p.x) / d * step, nz = p.z + (me.z - p.z) / d * step;
+   const step = Math.min(run * dt, d - UNITS.closeTo), ux = (me.x - p.x) / d, uz = (me.z - p.z) / d;
    p.speed = run;
-   // An officer chasing crosses the road; only a wall stops them.
+   // An officer chasing crosses the road; only a wall stops them, and they slide along it (the
+   // nearest free heading to the player's, up to a right angle off) rather than stand at it.
    const ctx = crowd.network?.ctx;
-   if (!ctx?.solid?.(nx, nz, .28)) {
+   let nx = p.x + ux * step, nz = p.z + uz * step, free = !ctx?.solid?.(nx, nz, .28);
+   for (const a of SLIDE) {
+    if (free) break;
+    const c = Math.cos(a), s = Math.sin(a);
+    nx = p.x + (ux * c - uz * s) * step; nz = p.z + (ux * s + uz * c) * step; free = !ctx.solid(nx, nz, .28);
+   }
+   if (free) {
     const old = crowd.cell(p.x, p.z); p.x = nx; p.z = nz; p.renderX = nx; p.renderZ = nz;
     if (crowd.cell(nx, nz) !== old) {const b = crowd.grid.get(old), i = b?.indexOf(p); if (i >= 0) b.splice(i, 1); crowd.insert(p);}
    }
+  }
+ }
+
+ /**
+  * Backlog ③: an officer in the underground passage, moved along it (`p.tunnelS`, metres from the
+  * A3 top) at a running pace: after the player if they are below (`below` {s, x, z}), else to the
+  * open end they came out of (`exited`, 0 or 1), where the officer comes back up onto the street.
+  * The level cleared, they walk out of the nearest end.
+  */
+ function driveBelow(p, crowd, dt, wanted, tunnel, below, exited, attacking, hurt) {
+  const endS = i => tunnel.ends[i].s;
+  const goal = wanted && below ? below.s : wanted && exited != null ? endS(exited) : (p.tunnelS < tunnel.length / 2 ? 0 : tunnel.length);
+  const gap = wanted && below ? UNITS.closeTo : 0, delta = goal - p.tunnelS, far = Math.abs(delta);
+  p.combatTarget = wanted ? 'player' : null; p.combatUntil = wanted ? crowd.time + 5 : 0; p.combatHealth ??= 100;
+  if (far > gap) {
+   const step = Math.min(TUNNEL.officerSpeed * dt, far - gap);
+   p.tunnelS += Math.sign(delta) * step; p.speed = TUNNEL.officerSpeed; p.state = 'fighting';
+  } else p.speed = 0;
+  // Out at an end the player took (or, cleared, any end): back onto the street at its entry.
+  if ((!below || !wanted) && Math.abs(goal - p.tunnelS) < .3 && (goal === 0 || goal === tunnel.length)) {
+   const e = tunnel.ends[goal === 0 ? 0 : 1], old = crowd.cell(p.x, p.z);
+   p.tunnelS = null; p.x = p.renderX = e.entry.x; p.z = p.renderZ = e.entry.z; p.height = 0;
+   if (crowd.cell(p.x, p.z) !== old) {const b = crowd.grid.get(old), i = b?.indexOf(p); if (i >= 0) b.splice(i, 1); crowd.insert(p);}
+   return;
+  }
+  const at = tunnel.pointAt(p.tunnelS, ((p.id % 3) - 1) * .55), old = crowd.cell(p.x, p.z);
+  p.x = p.renderX = at.x; p.z = p.renderZ = at.z; p.height = at.y;
+  p.heading = below && wanted ? Math.atan2(below.x - p.x, below.z - p.z) : at.heading + (delta < 0 ? Math.PI : 0);
+  if (crowd.cell(p.x, p.z) !== old) {const b = crowd.grid.get(old), i = b?.indexOf(p); if (i >= 0) b.splice(i, 1); crowd.insert(p);}
+  // The baton, for a player below who is fighting back.
+  p.batonNext ??= 0;
+  if (wanted && below && attacking && Math.hypot(below.x - p.x, below.z - p.z) <= UNITS.batonReach && crowd.time >= p.batonNext) {
+   p.batonNext = crowd.time + UNITS.batonEvery; hurt?.(COMBAT.officerDamage);
   }
  }
 
@@ -370,7 +413,7 @@ export function createPoliceUnits({koban = {x: 48.5, z: 20.4}, buildBudget = 150
    * `carSpeed` for the in-car arrest. Returns 'arrested' on the frame the arrest completes.
    */
   update(dt, {stars = 0, traffic = null, crowd = null, me, visible = () => false, attacking = false,
-               driving = false, carSpeed = 0, alive = true, hurt = null}) {
+               driving = false, carSpeed = 0, alive = true, hurt = null, tunnel = null, below = null, exited = null}) {
    clock += dt; spawnClock -= dt; crowdRef = crowd; visibleRef = visible; onFoot = !driving && alive;
    if (me) track(me, dt);
    if (traffic?.graph && sampledGraph !== traffic.graph) {samples = laneSamples(traffic.graph); sampledGraph = traffic.graph;}
@@ -382,7 +425,18 @@ export function createPoliceUnits({koban = {x: 48.5, z: 20.4}, buildBudget = 150
    if (!wanted) blocked = false;
    // Units first leave when the level clears.
    if (traffic) for (const v of [...cars]) {if (!v.active || !VEHICLES[v.type]?.police) {cars.delete(v); continue;} driveCar(v, traffic, me, dt, wanted, visible);}
-   if (crowd) for (const p of [...officers]) {if (!p.active && !p.officerPending) {officers.delete(p); continue;} if (p.active) driveOfficer(p, crowd, me, dt, wanted && !driving, visible, attacking, hurt);}
+   if (crowd) for (const p of [...officers]) {
+    if (!p.active && !p.officerPending) {officers.delete(p); continue;}
+    if (!p.active) continue;
+    // Backlog ③: an officer at the open end the player went down goes down after them; one below
+    // follows along the passage, and comes back up where the player came out.
+    if (tunnel && p.tunnelS == null && below && Math.hypot(p.x - me.x, p.z - me.z) <= TUNNEL.descendAt) {
+     const end = tunnel.ends.reduce((a, e) => Math.hypot(e.entry.x - p.x, e.entry.z - p.z) < Math.hypot(a.entry.x - p.x, a.entry.z - p.z) ? e : a);
+     p.tunnelS = end.s; stats.descended = (stats.descended ?? 0) + 1;
+    }
+    if (tunnel && p.tunnelS != null) driveBelow(p, crowd, dt, wanted && !driving, tunnel, below, exited, attacking, hurt);
+    else driveOfficer(p, crowd, me, dt, wanted && !driving, visible, attacking, hurt);
+   }
    // Pending conversions: off for a frame so the HQ layer drops the old body, then back in uniform.
    if (crowd) for (const p of officers) if (p.officerPending && !p.active && crowd.time >= p.officerPending) {
     p.officerPending = 0; p.active = true; p.downUntil = 0;

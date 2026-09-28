@@ -107,8 +107,11 @@ export function createWanted() {
   /**
    * Advance. `seen`: can any unit see the player now. `witnessStill(id)`: is this witness still
    * alive and near enough to report (only asked for crimes given a list of witness ids).
+   * `hidden` (backlog ③, underground): unseen, the escape clock runs at this rate wherever the
+   * player is -- the search circle does not reach below the street. Negative: the police are on the
+   * trail, and the clock holds where it is. 0 is the ordinary rule.
    */
-  update(dt, {x = 0, z = 0, t = 0, seen = false, witnessStill = null} = {}) {
+  update(dt, {x = 0, z = 0, t = 0, seen = false, witnessStill = null, hidden = 0} = {}) {
    // Reports that have come due.
    for (let i = state.pending.length - 1; i >= 0; i--) {
     const c = state.pending[i];
@@ -122,7 +125,7 @@ export function createWanted() {
    if (seen) {state.lastSeen = {x, z, t}; state.escape = 0;}
    else if (state.lastSeen) {
     const out = Math.hypot(x - state.lastSeen.x, z - state.lastSeen.z) > WANTED.searchRadius[state.stars];
-    state.escape = out ? state.escape + dt : 0;
+    state.escape = hidden > 0 ? state.escape + dt * hidden : hidden < 0 ? state.escape : out ? state.escape + dt : 0;
     if (state.escape >= WANTED.escapeSeconds[state.stars]) {api.clear('escaped'); return api.snapshot();}
    }
    if (state.stars === 3) {
