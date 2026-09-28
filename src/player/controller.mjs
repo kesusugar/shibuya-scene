@@ -135,6 +135,8 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
   return null;
  };
  let detach = null;
+ // Backlog ②: while photo mode has the view, the body takes no input at all (keys, mouse, pad).
+ let suspended = false;
  // The people, as bodies. Resolved before `advance()`, which keeps the walls; the two are
  // separate and run in the same order every frame.
  const contact = createCrowdContact({onBump: (p, b) => onBump?.(p, b)});
@@ -340,8 +342,12 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    * wins per axis: resting a thumb on a drifting stick cannot then cancel a held key. The
    * deadzone is what keeps a worn stick from walking the player across the street on its own.
    */
-  updateInput(dt) {padPoll?.(Math.max(0, Math.min(.1, dt)));},
+  updateInput(dt) {if (!suspended) padPoll?.(Math.max(0, Math.min(.1, dt)));},
+  /** Backlog ②: stop (or give back) the body's input; what was held is let go. */
+  suspend(on = true) {suspended = !!on; keys.clear(); touch.forward = 0; touch.strafe = 0; touch.running = false; padFrame = null;},
+  get suspended() {return suspended;},
   input() {
+   if (suspended) return {forward: 0, strafe: 0, running: false, handbrake: false};
    // Polled here rather than in step(): driving calls input() and never calls step(), so the
    // pad would go dead the moment the player got into a car.
    // Input snapshots are pure; updateInput(dt) advances look/buttons exactly once per frame.
