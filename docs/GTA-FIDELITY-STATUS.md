@@ -6513,6 +6513,36 @@ gun not drawn but still fetched); `tests/weapons.test.mjs` (the carry: pistol ri
 hip). Evidence: `evidence/katana/a/` (weapon bench: fists, sheathed standing and walking, the
 draw-cut, katana idle).
 
+## 9bd. Katana B: the cut closes the distance (motion warp), and the body winds round onto its person
+
+Before, a cut locked the nearest person within 2.4 m and 1.2 rad of where the player looked, the body
+turned onto them at a constant 14 rad/s (a snap that stopped dead), and the feet stayed where they
+were -- someone 2 m off was simply out of reach (the blade's `reach` is 1.7 m).
+
+Now (the architecture of the Samurai template's attack -- lock at the press, turn first, then step,
+inside the wind-up, the reach re-checked at the hit frame -- rewritten for this code; nothing copied):
+- **The cut looks as far as it can step**: `WARP.range` 3.6 m (a punch still 2.4 m).
+- **The step** (`attack-timing.mjs WARP`, `warpFraction`): through clip time 0.08-0.62 s of the
+  wind-up (the blade goes live at 0.674 s) the body travels to `WARP.standoff` 1.15 m from the person
+  on a smootherstep (from rest, to rest; from 3 m off it peaks at 6.4 m/s, from the full 3.6 m at about 8.5). Combat only says where to
+  (`state.attackWarp`, re-aimed each frame, so someone stepping aside is still arrived at); the
+  **controller moves the body**, through the same crowd contact and walls as a step, so a wall stops
+  it. Taken as a fraction of what is left, the same at 30, 60 or 144 fps. Nobody within the standoff
+  is stepped to or away from; fists never step; nothing moves after the wind-up.
+- **The eased turn** (`createBodyFacing` with `STRIKE.cutTurn` {max 16 rad/s, accel 110 rad/s²}):
+  the turn builds speed and settles onto the person without overshoot -- 40° square in 0.13 s, 1.2 rad
+  in ~0.17 s, half a turn in ~0.28 s, square before the step is half done. Punches keep their own rate.
+- Unchanged: the blade's timing, sweep, reach, damage, the draw-cut (Katana A), hit-stop.
+
+Tests: `tests/katana-warp.test.mjs` (the curve inside the wind-up at any frame rate; a person 3 m off
+is arrived at 1.15 m and cut, nothing moving after; nobody close, out of range or punched is stepped
+to; a wall stops it; a person stepping aside is still arrived at; the eased turn builds, settles and
+never overshoots). Evidence: `evidence/katana/b/warp.{json,svg}` from `qa/gta-upgrade/katana-warp-probe.mjs`
+(a person 3 m off at 40°: distance and heading against time).
+
+Known limit: the legs play the standing cut while the body travels (a glide). Katana C's whole-body
+cut steps into it.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle

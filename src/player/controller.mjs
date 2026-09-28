@@ -15,6 +15,7 @@ import {createInputMap,createRumble} from './input-map.mjs';
 import {sharedGyro} from './gyro.mjs';
 import {WHEEL} from './weapon-wheel.mjs';
 import {absorb} from '../game/shop.mjs';
+import {warpFraction} from './attack-timing.mjs';
 
 // The camera arm. Solids are tested at the camera's own height rather than on the ground,
 // so it is a facade that pulls the camera in and not a bollard it is sailing well above.
@@ -477,6 +478,13 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
     // pointing rather than sliding sideways while it turns.
     const along=state.bodyHeading??course;
     mx=Math.sin(along)*step;mz=Math.cos(along)*step;
+   }
+   // Katana B: a cut steps to its person through the wind-up (combat.mjs WARP): this frame's slice
+   // of the curve, taken of what is left, through the same bodies and walls as a step.
+   const warp=attacking?state.attackWarp:null;
+   if(warp){
+    const f=warpFraction(warp.elapsed,warp.elapsed+Math.max(0,dt),warp.rate);
+    mx+=(warp.x-state.x)*f;mz+=(warp.z-state.z)*f;
    }
    // People first, then walls. With no crowd this is skipped and the step is untouched.
    const crowd=typeof bodies==='function'?bodies():bodies;
