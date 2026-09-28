@@ -44,6 +44,12 @@ const POSES=[
  {id:'katana-cut',label:`katana cut at its peak (${SWORD.peak}s of ${SWORD.duration}s)`,state:{weapon:'katana'},
   run(f,s){s.attackName='SwordAttack';s.attackDuration=s.attackTime=SWORD.duration;
    while(SWORD.duration-s.attackTime<SWORD.peak){f.update(s,dt);s.attackTime=Math.max(0,s.attackTime-dt);}}},
+ // Katana C: the cut's phases at fixed clip times, so an older clip can be shot at the same moments
+ // (the coil at the top of the raise, the front foot landing with the blade, zanshin, the return).
+ ...[['katana-c-coil',.5,'coil: raised, hips and chest wound'],['katana-c-land',.8,'the cut: the front foot lands with the blade'],
+  ['katana-c-zanshin',1.2,'zanshin: the blade held low, eyes on the person'],['katana-c-return',1.6,'the way back to guard']].map(([id,at,label])=>({id,
+  label:`${label} (${at}s)`,wide:true,state:{weapon:'katana'},run(f,s){s.attackName='SwordAttack';s.attackDuration=s.attackTime=SWORD.duration;
+   for(let t=0;t<at;t+=dt){f.update(s,dt);s.attackTime=Math.max(1e-3,s.attackTime-dt);}}})),
  // W2: the pistol. The target (the yellow ball) is 6 m ahead at chest height; the red line is the
  // muzzle ray, drawn to the target's distance.
  {id:'pistol-aim',label:'pistol aimed, standing',state:{weapon:'pistol',aim:1,aimHeading:0},run(f,s){for(let i=0;i<30;i++)f.update(s,dt);}},
@@ -115,10 +121,13 @@ function stage(pose){
 // Front, the player's right, behind, the player's left. The player faces +Z.
 const views=[[0,1.45,3.1],[-3.1,1.45,.35],[.25,1.6,-3.1],[3.1,1.45,.35]].map(p=>{
  const c=new T.PerspectiveCamera(30,CELL.w/CELL.h,.05,60);c.position.set(...p);c.lookAt(0,1.05,.35);return c;});
+// Katana C: the whole body, feet included, for the poses that step (`wide`).
+const wideViews=[[0,1.3,4.6],[-4.6,1.3,.4],[.3,1.4,-4.4],[4.6,1.3,.4]].map(p=>{
+ const c=new T.PerspectiveCamera(30,CELL.w/CELL.h,.05,60);c.position.set(...p);c.lookAt(0,.9,.4);return c;});
 const lines=['front | player\'s right | behind | player\'s left'];
 POSES.forEach((pose,row)=>{
  const {scene,line}=stage(pose);
- views.forEach((camera,col)=>{
+ (pose.wide?wideViews:views).forEach((camera,col)=>{
   const x=col*CELL.w,y=H-(row+1)*CELL.h;
   renderer.setViewport(x,y,CELL.w,CELL.h);renderer.setScissor(x,y,CELL.w,CELL.h);renderer.render(scene,camera);
  });

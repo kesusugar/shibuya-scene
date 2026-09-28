@@ -62,8 +62,23 @@ export const PRESETS=Object.freeze({
  // knots (linear between): the raise a little brisker, the cut itself at 2x, the recovery 1.3x.
  // The subject also folds deep at the hips in the follow-through (the trunk 60° off vertical);
  // `trunk` softens anything past 28° to a third of the excess.
+ //
+ // Katana C (§9be): the whole body in the cut, and zanshin. The capture's hips already lead its
+ // chest (by 0.1 s), but its feet never move, its hips hardly drop, its head turns away with the
+ // chest, and it goes straight from the follow-through back to guard. So, in playback seconds:
+ // - `hold`: the warp slows to 0.22x just past the follow-through -- the blade held low and still
+ //   for about 0.37 s (zanshin), still alive -- before the return;
+ // - `body.step`: the front (right) foot steps in as the cut comes down and lands with it
+ //   (fumikomi), the hips going forward and down onto it; the back foot is drawn up after the
+ //   cut (hikitsuke); all of it goes back as the guard returns. The legs are put on the moved
+ //   feet by two-bone IK, each foot keeping its own turn.
+ // - `body.head`: that share of the head's turn is taken back at the neck, so the eyes stay on
+ //   the person being cut through the coil, the cut and the hold.
  'katana-cut':{trial:'02_07',subject:'02',fps:120,from:6.2,to:8.4,weapon:'katana',left:-.15,mirror:true,
-  warp:[[6.2,1.25],[6.85,1.25],[7.0,2.0],[7.5,2.0],[7.7,1.3],[8.4,1.3]],trunk:{limit:28,keep:.33}},
+  warp:[[6.2,1.25],[6.85,1.25],[7.0,2.0],[7.5,2.0],[7.7,1.3],[7.73,.22],[7.81,.22],[7.86,1.3],[8.4,1.3]],trunk:{limit:28,keep:.33},
+  body:{head:.75,
+   step:{foot:'r',length:.24,lift:.05,at:[.56,.80]},draw:{foot:'l',length:.1,at:[.84,1.02]},
+   hips:{forward:.14,drop:.06,at:[.56,.84]},back:[1.46,1.86]}},
  // The two-handed guard the katana stands in: 02_07's one quiet stretch with the hands together
  // at the chest (18.0-18.6 s, the hands 0.18 m apart, 0.23 m above the hips), looped.
  'katana-guard':{trial:'02_07',subject:'02',fps:120,from:17.95,to:18.7,weapon:'katana',left:-.15,mirror:true,loop:.3,
@@ -245,7 +260,30 @@ export async function weaponClip({dir,preset,glbPath='public/data/character/citi
  // The eye, in the head's frame: 7 cm above and 9 cm in front of the head bone at bind.
  const headBone=bones.get('Head'),eyeLocal=headBone.worldToLocal(pos(headBone).add(new Vector3(0,.07,.09)));
  const grips=[],eyeGap=[],trunkMax={before:0,after:0};
- const stats={leftMiss:0,handsSource:[],handsTarget:[],wrist:{r:[],l:[]},elevation:[],butt:[]};
+ const stats={leftMiss:0,handsSource:[],handsTarget:[],wrist:{r:[],l:[]},elevation:[],butt:[],headYaw:[],headYawKept:[],legMiss:0,held:[]};
+ // The head's turn about the vertical from its bind pose, in degrees (+ is the body's left).
+ const headRest=worldQuat(headBone);
+ const headYaw=()=>{const f=new Vector3(0,0,1).applyQuaternion(worldQuat(headBone).multiply(headRest.clone().invert()));return Math.atan2(f.x,f.z)*180/Math.PI;};
+ /**
+  * Katana C: the step in. The feet as the capture put them are recorded; the hips go forward and
+  * down; each foot is then put back where it was, or where its step takes it, by two-bone IK on
+  * the leg, keeping the foot's own world turn. All of it eases back over `body.back`.
+  */
+ function stepIn(B,t){
+  const back=1-smooth(B.back[0],B.back[1],t);
+  const feet={l:{thigh:'thigh_l',calf:'calf_l',foot:'foot_l'},r:{thigh:'thigh_r',calf:'calf_r',foot:'foot_r'}};
+  const was={};for(const [k,f] of Object.entries(feet))was[k]={at:pos(bones.get(f.foot)),turn:worldQuat(bones.get(f.foot))};
+  const h=smooth(B.hips.at[0],B.hips.at[1],t)*back,pelvis=bones.get('pelvis');
+  const hipAt=pos(pelvis).add(new Vector3(0,-B.hips.drop*h,B.hips.forward*h));
+  pelvis.position.copy(pelvis.parent.worldToLocal(hipAt));root.updateMatrixWorld(true);
+  for(const [k,f] of Object.entries(feet)){
+   const target=was[k].at.clone();
+   for(const m of [B.step,B.draw])if(m.foot===k){const u=smooth(m.at[0],m.at[1],t);
+    target.z+=m.length*u*back;if(m.lift&&u>0&&u<1)target.y+=m.lift*Math.sin(Math.PI*u);}
+   stats.legMiss=Math.max(stats.legMiss,reach(bones.get(f.thigh),bones.get(f.calf),bones.get(f.foot),target));
+   setWorldQuat(bones.get(f.foot),was[k].turn);
+  }
+ }
  // The gun's butt, in the weapon frame (SHAPE.smg; the mesh is built from the same numbers).
  const BUTT=new Vector3(...SHAPE.smg.butt);
  for(let s=0;s<steps;s++){
@@ -283,6 +321,9 @@ export async function weaponClip({dir,preset,glbPath='public/data/character/citi
    }
    trunkMax.after=Math.max(trunkMax.after,Math.acos(Math.min(1,pos(bones.get('neck_01')).sub(pos(bones.get('pelvis'))).normalize().y))*180/Math.PI);
   }
+
+  // Katana C: the step in and the lower stance (P.body), before the weapon, so the hands follow.
+  if(P.body)stepIn(P.body,t);
 
   // 2. The weapon.
   const L=src.get('lhand').end.clone().applyQuaternion(yaw),R=src.get('rhand').end.clone().applyQuaternion(yaw);
@@ -391,6 +432,7 @@ export async function weaponClip({dir,preset,glbPath='public/data/character/citi
   stats.handsTarget.push(handL.localToWorld(atL.clone()).distanceTo(origin));
   // The wrists: 70% of each hand's twist into its forearm (what is left is measured).
   stats.wrist.r.push(shareTwist(bones.get('lowerarm_r'),handR,bind.get('hand_r'),.7));
+  stats.held.push(speedAt(sourceAt(t))<.5);
   stats.wrist.l.push(shareTwist(bones.get('lowerarm_l'),handL,bind.get('hand_l'),.7));
   stats.elevation.push(Math.asin(forward.y)*180/Math.PI);
   if(P.weapon==='rifle'){
@@ -424,6 +466,13 @@ export async function weaponClip({dir,preset,glbPath='public/data/character/citi
    if(raised>.99)eyeGap.push(lineGap(headBone.localToWorld(eyeLocal.clone())));
   }
 
+  // Katana C: the eyes on the person being cut -- `head` of the head's turn taken back at the neck.
+  if(P.body?.head){
+   const yawNow=headYaw();stats.headYaw.push(yawNow);
+   const back=new Quaternion().setFromAxisAngle(new Vector3(0,1,0),-yawNow*P.body.head*Math.PI/180);
+   turnWorld(bones.get('neck_01'),new Quaternion().slerp(back,.5));turnWorld(headBone,new Quaternion().slerp(back,.5));
+   stats.headYawKept.push(headYaw());
+  }
   for(const [ue,v] of tracks){const q=bones.get(ue).quaternion;v.push(q.x,q.y,q.z,q.w);}
   rootPos.push(pelvis.position.x,pelvis.position.y,pelvis.position.z);
  }
@@ -455,15 +504,20 @@ export async function weaponClip({dir,preset,glbPath='public/data/character/citi
  return {
   source:{dataset:'CMU Graphics Lab Motion Capture Database (mocap.cs.cmu.edu)',trial:P.trial,
    asf:`${P.subject}.asf`,asfSha256:sha(asfText),amc:`${P.trial}.amc`,amcSha256:sha(amcText),from:P.from,to:P.to,fps:P.fps},
-  preset,weapon:P.weapon,duration,fps,times,scale:k,groundOffset:-lowest,spacing,warp:P.warp??null,loop:P.loop??null,
+  preset,weapon:P.weapon,duration,fps,times,scale:k,groundOffset:-lowest,spacing,warp:P.warp??null,loop:P.loop??null,body:P.body??null,
   measured:{leftMissCm:+(stats.leftMiss*100).toFixed(1),
    handsApartSourceM:+med(stats.handsSource).toFixed(3),handsApartTargetM:+med(stats.handsTarget).toFixed(3),
    // The wrist after the forearm takes its share of the twist: bend (flexion and deviation
    // together) and the twist left in it. A human wrist bends to about 70° and does not twist.
-   wristDeg:Object.fromEntries(['r','l'].map(h=>[h==='r'?'right':'left',{bendMedian:+med(stats.wrist[h].map(w=>w.bend)).toFixed(0),bendMax:+Math.max(...stats.wrist[h].map(w=>w.bend)).toFixed(0),
-    twistMax:+Math.max(...stats.wrist[h].map(w=>w.twist)).toFixed(0)}])),
+   // Katana C: the median is over the keys that move -- a hold (zanshin) repeats one pose a dozen
+   // times, which would weigh it a dozen times; the held pose's own bend is `bendHeld`.
+   wristDeg:Object.fromEntries(['r','l'].map(h=>{const moving=stats.wrist[h].filter((w,i)=>!stats.held[i]),held=stats.wrist[h].filter((w,i)=>stats.held[i]);
+    return [h==='r'?'right':'left',{bendMedian:+med(moving.map(w=>w.bend)).toFixed(0),bendMax:+Math.max(...stats.wrist[h].map(w=>w.bend)).toFixed(0),
+    twistMax:+Math.max(...stats.wrist[h].map(w=>w.twist)).toFixed(0),...(held.length?{bendHeld:+Math.max(...held.map(w=>w.bend)).toFixed(0)}:{})}];})),
    // The weapon grip's peak speed (the fist on the handle), and the katana's tip.
    gripPeakMs:+Math.max(...grips.slice(1).map((g,i)=>g.distanceTo(grips[i])*fps)).toFixed(1),
+   ...(stats.headYaw.length?{headYawDeg:{captured:+Math.max(...stats.headYaw.map(Math.abs)).toFixed(0),kept:+Math.max(...stats.headYawKept.map(Math.abs)).toFixed(0)},
+    legMissCm:+(stats.legMiss*100).toFixed(1)}:{}),
    ...(P.trunk?{trunkMaxDeg:{captured:+trunkMax.before.toFixed(0),kept:+trunkMax.after.toFixed(0)}}:{}),
    ...(eyeGap.length?{eyeToSightLineCm:{median:+(med(eyeGap)*100).toFixed(1),max:+(Math.max(...eyeGap)*100).toFixed(1)}}:{})},
   perKey:{elevationDeg:stats.elevation.map(x=>+x.toFixed(1)),...(stats.butt.length?{buttToShoulderM:stats.butt.map(x=>+x.toFixed(3))}:{})},

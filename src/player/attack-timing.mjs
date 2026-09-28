@@ -44,13 +44,21 @@ export const activeWindow=a=>({from:a.windup/a.duration,to:a.activeEnd/a.duratio
  * high on the left (the tip 2.25 m up) across to the right at knee height (0.69 m), the tip at
  * 17 m/s. The one-handed Quaternius cut it replaced ran the other way, right to left.
  *
+ * Since §9be (Katana C) the bake puts the whole body in it: the front foot steps in and lands with
+ * the cut, the hips go forward and 6 cm down onto it, the head stays on the person, and the blade
+ * is held low after it (zanshin) before the guard comes back. Measured from the rig's root, as the
+ * hit test is: the tip now reaches 1.56 m.
+ *
  * Kept apart from ATTACKS: those alternate as the fists' one-two.
  */
-export const SWORD=Object.freeze({name:'SwordAttack',hand:'right',duration:1.526,windup:0.674,activeEnd:0.89,peak:0.814,
- sweepFrom:1.362,sweepTo:-0.592,tipReach:1.424,
- sweep:Object.freeze([[0.674,1.362],[0.686,1.17],[0.699,1.013],[0.712,0.844],[0.725,0.723],[0.737,0.607],[0.75,0.495],[0.763,0.395],
-  [0.775,0.29],[0.788,0.189],[0.801,0.087],[0.814,-0.02],[0.826,-0.132],[0.839,-0.231],[0.852,-0.328],[0.864,-0.425],[0.877,-0.511],[0.89,-0.592]]),
- tipHeight:Object.freeze([0.69,2.25])});
+export const SWORD=Object.freeze({name:'SwordAttack',hand:'right',duration:1.898,windup:0.664,activeEnd:0.901,peak:0.822,
+ sweepFrom:1.509,sweepTo:-0.584,tipReach:1.56,
+ sweep:Object.freeze([[0.664,1.509],[0.68,1.204],[0.696,1.003],[0.712,0.803],[0.727,0.658],[0.743,0.524],[0.759,0.4],[0.775,0.283],[0.791,0.168],[0.807,0.053],[0.822,-0.067],[0.838,-0.182],[0.854,-0.286],[0.87,-0.39],[0.886,-0.49],[0.901,-0.584]]),
+ tipHeight:Object.freeze([0.58,2.25]),
+ // Katana C: zanshin -- the blade held low and still after the cut (the bake's 0.22x warp, source
+ // 7.73-7.81 s), then the way back to guard. From `cancelAt` (the hold's end) the return may be cut
+ // short: by the next cut, or by walking off (combat.mjs).
+ zanshin:Object.freeze([1.033,1.402]),cancelAt:1.402});
 
 /** The katana tip's bearing (body frame) `t` seconds into a cut at normal speed, clamped to the window. */
 export function swordBearing(t){

@@ -27,7 +27,7 @@ export const WEAPONS = Object.freeze({
   witnessRadius: 40, witnessSeverity: 1, panicCap: 60}),
  katana: Object.freeze({id: 'katana', label: '日本刀', kind: 'melee',
   damage: 50,             // two cuts put a person down
-  reach: 1.7,             // m, centre to centre: the blade tip at its furthest (SWORD.tipReach 1.42) plus a body radius
+  reach: 1.85,            // m, centre to centre: the blade tip at its furthest (SWORD.tipReach 1.56, the step in) plus a body radius
   // R4 option (b) since §9ah: the cut is CMU 02_07's two-handed cut, the left hand on the handle
   // 0.15 m behind the right fist (scripts/cmu/weapon-clip.mjs).
   hands: 2}),

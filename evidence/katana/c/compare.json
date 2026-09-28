@@ -1,0 +1,18 @@
+{
+ "url": "http://<local>/qa/gta-upgrade/katana-compare.html",
+ "ready": true,
+ "bench": {
+  "size": [
+   1454,
+   1528
+  ],
+  "lines": [
+   "coil (0.5 s)",
+   "the cut (0.8 s)",
+   "zanshin (1.2 s)",
+   "return (1.6 s)"
+  ]
+ },
+ "console": [],
+ "errors": 0
+}

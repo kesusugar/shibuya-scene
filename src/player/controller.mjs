@@ -446,6 +446,8 @@ export function createPlayer(ctx, {start = PLAYER.start, heading = PLAYER.startH
    // A swing plants the feet: the clip is a standing punch, and a body carried along under it
    // skates. The body stops (at the ordinary braking rate) and faces the swing's aim, which
    // combat owns, until the fist is back.
+   // Katana C: after a cut's zanshin, walking off ends its way back to guard (combat.mjs).
+   if((state.attackTime??0)>0&&state.attackCancel&&len>0)state.attackTime=0;
    const attacking=(state.attackTime??0)>0;
    if(state.crouching)state.running=false;
    const pace=state.crouching?PLAYER.crouchSpeed:state.running?PLAYER.run:PLAYER.walk;
