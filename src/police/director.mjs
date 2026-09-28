@@ -10,6 +10,7 @@ import {createPoliceGuns} from './guns.mjs';
 import {createHelicopter} from './helicopter.mjs';
 import {createRotor} from '../audio/rotor.mjs';
 import {lineOfSight} from '../player/ballistics.mjs';
+import {TUNNEL} from '../world/tunnel.mjs';
 
 /** What counts as a weapon out, or a weapon kill: the guns (the submachine gun since §9ah) and the katana. */
 export const WEAPON_IDS = new Set(['pistol', 'smg', 'katana']);
@@ -97,6 +98,7 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
                                       Utterance = globalThis.SpeechSynthesisUtterance,
                                       clips = /** @type {any} */ (null)} = {}) {
  const wanted = createWanted();
+ let onTrail = false;   // backlog ③: the police on the trail of a player underground, this frame
  // Roadmap ①: the recorded lines (loudspeaker, shouts, the dispatcher), loaded on first use.
  const voiceClips = clips ?? createPoliceClips(getAudioContext);
  const dispatch = createDispatch(getAudioContext, getAudioBus, voiceClips);
@@ -129,9 +131,17 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
    */
   frame(dt, {player, car = null, driving = false, melee = null, traffic = null, crowd = null, listener = null,
               visible = () => false, hurt = null, weapons = null, solid = null, attackingNow = null,
-              night = false, ground = null, covered = null}) {
+              night = false, ground = null, covered = null, tunnel = null}) {
    time += dt; worldSolid = solid;
    const me = driving && car ? car.state : player;
+   // Backlog ③: underground (tunnel.mjs), only officers down there with a clear line see the player,
+   // the helicopter does not, the escape clock runs faster, and the units above make for the stairs
+   // the player took. Officers are either above (tunnelS null) or below.
+   const under = !!tunnel && !driving && player?.layer === 'tunnel';
+   const above = [...units.officers].filter(p => p.tunnelS == null), below = [...units.officers].filter(p => p.tunnelS != null);
+   /** Does any unit see (x,z), for a crime: above, the street's rule; below, the passage's. */
+   const witnessed = (x, z) => under ? below.some(p => p.active && !p.combatDead && tunnel.sees(p, x, z, player.tunnelS))
+    : officersSee(pool, x, z, except, undefined, solid) || officersOnFootSee(above, x, z, undefined, solid);
    const pool = traffic?.pool ?? [];
    const except = car?.state?.slot ?? null;
 
@@ -148,7 +158,7 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
     // PLAN-WEAPONS §2: a kill with a gun or the katana is a weapon kill (at least ☆2).
     const armed = WEAPON_IDS.has(melee?.lastBlow?.weapon);
     wanted.crime(armed ? 'weaponKill' : 'meleeKill', {x: player.x, z: player.z, t: time, witnesses,
-     seenByOfficer: officersSee(pool, player.x, player.z, except, undefined, solid) || officersOnFootSee(units.officers, player.x, player.z, undefined, solid)});
+     seenByOfficer: witnessed(player.x, player.z)});
    }
    // Gunfire (PLAN-WEAPONS §2): heard by everyone near, reported like any other crime, or known at
    // once if an officer is in sight. One report per burst.
@@ -164,12 +174,12 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
       if (Math.hypot(p.x - player.x, p.z - player.z) <= POLICE.gunfireRange && ++witnesses >= 3) break;
      }
      wanted.crime('shooting', {x: player.x, z: player.z, t: time, witnesses,
-      seenByOfficer: officersSee(pool, player.x, player.z, except, undefined, solid) || officersOnFootSee(units.officers, player.x, player.z, undefined, solid)});
+      seenByOfficer: witnessed(player.x, player.z)});
     }
    }
    // A drawn weapon in an officer's sight: ☆1, once.
    const drawn = !driving && WEAPON_IDS.has(weapons?.current);
-   if (drawn && wanted.state.stars < 1 && (officersSee(pool, player.x, player.z, except, undefined, solid) || officersOnFootSee(units.officers, player.x, player.z, undefined, solid)))
+   if (drawn && wanted.state.stars < 1 && (witnessed(player.x, player.z)))
     wanted.crime('weaponSeen', {x: player.x, z: player.z, t: time, seenByOfficer: true});
    for (const e of car?.impacts ?? []) {
     if (e.kind !== 'runover' || runovers.has(e.id)) continue;
@@ -199,20 +209,29 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
    // --- what the police know --------------------------------------------------------------
    // W4: sneaking -- crouched on foot, the police see the player from a little over half as far.
    const sight = sightRange(player, driving);
-   const ground0 = officersSee(pool, me.x, me.z, except, sight, solid) || officersOnFootSee(units.officers, me.x, me.z, sight, solid);
+   const ground0 = under ? below.some(p => p.active && !p.combatDead && tunnel.sees(p, me.x, me.z, player.tunnelS, Math.min(sight, TUNNEL.sight)))
+    : officersSee(pool, me.x, me.z, except, sight, solid) || officersOnFootSee(above, me.x, me.z, sight, solid);
    // Stage 3: the helicopter's crew see from above -- in the searchlight at night, near by day.
    const h = heli.update(dt, {stars: wanted.state.stars, me, seen: ground0, lastSeen: wanted.state.lastSeen, night,
     ground: ground ?? (() => 0), covered: covered ?? (() => false)});
-   const seen = ground0 || h.sees;
+   const seen = ground0 || (!under && h.sees);
    rotor.update(h, listener ?? {x: me.x, z: me.z});
-   let snap = wanted.update(dt, {x: me.x, z: me.z, t: time, seen});
+   // Underground and unseen, the clock runs fast -- unless the police are on the trail: an officer
+   // below within `lose` of the player along the passage, or one above at the stairs they took.
+   const chase = under ? tunnel.ends[player.tunnelEnd ?? 0].entry : me;
+   const trail = under && (below.some(p => p.active && !p.combatDead && Math.abs(p.tunnelS - player.tunnelS) <= TUNNEL.lose) ||
+    above.some(p => p.active && !p.combatDead && Math.hypot(p.x - chase.x, p.z - chase.z) <= TUNNEL.trailAt));
+   let snap = wanted.update(dt, {x: me.x, z: me.z, t: time, seen, hidden: under ? (trail ? -1 : TUNNEL.escapeRate) : 0});
+   onTrail = trail;
    // Owner's plan, item 2: shot dead by the police is the arrest (the only way to be taken).
    let shotDead = false;
    if (player && player.alive === false && snap.stars) {shotDead = time - lastPoliceHit <= 1.5; wanted.clear(shotDead ? 'arrested' : 'death');}
 
    // --- units (W2) ----------------------------------------------------------------------------
    const attacking = !!melee && melee.phase !== undefined && melee.phase !== 'idle';
-   const u = units.update(dt, {stars: wanted.state.stars, traffic, crowd, me, visible, attacking, driving,
+   // Underground, the units above make for the open end the player went down (`chase`).
+   const u = units.update(dt, {stars: wanted.state.stars, traffic, crowd, me: chase, visible, attacking, driving, tunnel,
+    below: under ? {s: player.tunnelS, x: me.x, z: me.z} : null, exited: !under && tunnel ? player?.tunnelEnd ?? null : null,
     carSpeed: car?.state?.speed ?? 0, alive: player?.alive !== false, hurt: amount => {lastPoliceHit = time; hurt?.(amount, 'police');}});
    let arrested = shotDead;
    if (u.result === 'arrested') {arrested = true; wanted.clear('arrested');}
@@ -225,8 +244,11 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
    const shotNow = (weapons?.shots ?? 0) > gunShotsSeen; gunShotsSeen = weapons?.shots ?? 0;
    const threat = {armed, ramming: time - lastRam < .5,
     attacking: (attackingNow ?? attacking) || shotNow};
-   const gunfire = guns.update(dt, {officers: units.officers, me: {x: me.x, z: me.z, y: me.y ?? 0, dodging: !driving && !!player?.dodging}, stars: wanted.state.stars,
-    solid: solid ?? (() => false), threat, driving, alive: player?.alive !== false && !arrested});
+   // Officers on the other layer from the player cannot cover them: whatever hold they had is let
+   // go, so they keep moving (to the stairs, or along the passage) instead of standing guard.
+   if (tunnel) for (const p of under ? above : below) {p.gunHold = false; p.gunAim = 0;}
+   const gunfire = guns.update(dt, {officers: under ? below : above, me: {x: me.x, z: me.z, y: me.y ?? 0, dodging: !driving && !!player?.dodging}, stars: wanted.state.stars,
+    solid: under ? (x, z) => tunnel.solidBelow(x, z, .05) : solid ?? (() => false), threat, driving, alive: player?.alive !== false && !arrested});
    for (const e of gunfire) {
     const p = e.officer;
     if (e.kind === 'shout') voice.shout(e.line, p.id, p.x, p.z, time);
@@ -299,9 +321,11 @@ export function createPoliceDirector({getAudioContext = () => null, getAudioBus 
    // --- the dispatcher (roadmap ①) --------------------------------------------------------------
    const radio = dispatch.update({stars: wanted.state.stars, driving, heli: !!h?.active, armed,
     seen: wanted.state.seen, escape: wanted.state.escape}, time);
-   return {...snap, arrested, units: {cars: u.cars, officers: u.officers, yielded: u.yielded}, gunfire, heli: h, radio};
+   return {...snap, trail, arrested, units: {cars: u.cars, officers: u.officers, yielded: u.yielded}, gunfire, heli: h, radio};
   },
   /** H in a patrol car: siren and lamps on or off. Returns false if this car has none. */
+  /** Backlog ③: are the police on the trail of the player underground (this frame)? */
+  get trail() {return onTrail;},
   toggleSiren(car) {
    if (!car?.state || !isPolice(car.state)) return false;
    car.state.siren = !car.state.siren;

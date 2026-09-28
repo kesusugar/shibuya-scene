@@ -40,6 +40,8 @@ import {createDeferredVehicleVisual as createVehicleVisual} from '../src/player/
 import {createVehicleEffects} from '../src/player/effects.mjs';
 import {createPlayUI} from '../src/player/play-ui.mjs';
 import {createPhotoMode,attachPhotoControls,captureName,PHOTO} from '../src/player/photo-mode.mjs';
+import {createTunnel} from '../src/world/tunnel.mjs';
+import {buildTunnelMesh} from '../src/world/tunnel-mesh.mjs';
 import {yieldToPlayer,settleNearbyWaiters} from '../src/player/crowd-interaction.mjs';
 import {PLAYER,createPlayer,playerCamera} from '../src/player/controller.mjs';
 import {createPlayerMarker,MARKER} from '../src/player/marker.mjs';
@@ -114,6 +116,9 @@ export default function Home(){
  let timingTier=config.tier,startup:any=null,startupTrace:any=null;
  setTier(config.tier);setTime(config.time);setCamera(config.camera);
  const groups:any={};for(const name of ['world','dynamic','overlay']){groups[name]=new THREE.Group();groups[name].name=name;scene.add(groups[name]);}
+ // Backlog ③: the underground passage from Dogenzaka (A3) to the lot north of its west bend (A0).
+ // Its stair wells are cut out of the land (buildGround's `holes`); its meshes are the world's.
+ const tunnel=createTunnel(),tunnelMesh=buildTunnelMesh(tunnel);groups.world.add(tunnelMesh.root);let playerCtx:any=null;
  const canvas=document.createElement('canvas');const context=canvas.getContext('webgl2',{antialias:false,powerPreference:'high-performance'});const renderer=context?new THREE.WebGLRenderer({canvas,context,antialias:false,powerPreference:'high-performance'}):null;if(renderer){renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;}else{setError('この検証環境ではWebGL 2を利用できません。描画・FPSは未検証です。');}mount.current.appendChild(canvas);
  const stopShaderErrors=watchShaderErrors(renderer,setError);
  const stageMetrics=(result:any)=>{const info=renderer?.info,stageStats=result?.stats??result??{};return {triangles:info?.render.triangles??null,drawCalls:info?.render.calls??null,objectCount:null,instancedMeshCount:stageStats.instancedBatches??null,totalInstances:stageStats.instances??null,crowdCount:stageStats.total??null,movingVehicleCount:stageStats.moving??null,parkedVehicleCount:stageStats.parked??null,trainCount:stageStats.sets??null};};
@@ -241,8 +246,9 @@ export default function Home(){
  // PLAN-WEAPONS W2: the collision world a bullet sees, read through the live hooks every call.
  const lockReticle=new THREE.Vector3(),weaponMuzzle=new THREE.Vector3(),weaponBarrel=new THREE.Vector3(),viewDirection=new THREE.Vector3();
  const weaponWorld:any={
-  solid:(x:number,z:number)=>!!lifeEntry.hooks.current?.network?.ctx?.solid?.(x,z,.05),
-  ground:(x:number,z:number)=>lifeEntry.hooks.current?.network?.ctx?.height?.(x,z)??0,
+  // Backlog ③: rounds fired underground meet the passage's walls and floor, not the street's.
+  solid:(x:number,z:number)=>playerCtx&&player?.state.layer==='tunnel'?!!playerCtx.solid(x,z,.05):!!lifeEntry.hooks.current?.network?.ctx?.solid?.(x,z,.05),
+  ground:(x:number,z:number)=>playerCtx&&player?.state.layer==='tunnel'?playerCtx.height(x,z):lifeEntry.hooks.current?.network?.ctx?.height?.(x,z)??0,
   get cars(){return (trafficEntry.hooks.current?.sim?.pool??[]).filter((v:any)=>v.active);},
   dimsOf:(v:any)=>(VEHICLES as any)[v.type]??null,
   // Stage 6: a round into a car dents it, or cracks or takes out the pane it came through.
@@ -304,13 +310,13 @@ export default function Home(){
  const takePhoto=()=>{if(!photoCapture||!renderer)return;photoCapture=false;const name=captureName();
   renderer.domElement.toBlob(blob=>{if(!blob)return;const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000);},'image/png');
   photo.countCapture();photoStatus();};
- const applyPlayerCamera=(dt:number)=>{const ctx=lifeEntry.hooks.current?.network?.ctx??null;// RUN 9: once the body is IN the car, frame the car, not the body. Following the player
+ const applyPlayerCamera=(dt:number)=>{const streetCtx=lifeEntry.hooks.current?.network?.ctx??null;// RUN 9: once the body is IN the car, frame the car, not the body. Following the player
   // through the doorway put the eye a few metres behind a point that is inside the vehicle,
   // so the camera sat on the roof and the whole entry was shot from inside the bodywork.
   // `seated` arrives before `driving` does -- control transfers at the end of the sequence,
   // and the camera has to move at the start of the seat, not after the door shuts.
   const inCar=(driving||transitionSeated)&&playerCar;
-  const state=inCar?playerCar.state:player.state;aimCamera+=(((!inCar&&player.state.aim>0)?1:0)-aimCamera)*(1-Math.exp(-10*dt));// §9ah: an automatic's recoil lifts the view with the muzzle (its `recoil.camera` share of the climb); it settles with the recoil.
+  const ctx=!inCar&&playerCtx?playerCtx:streetCtx;const state=inCar?playerCar.state:player.state;aimCamera+=(((!inCar&&player.state.aim>0)?1:0)-aimCamera)*(1-Math.exp(-10*dt));// §9ah: an automatic's recoil lifts the view with the muzzle (its `recoil.camera` share of the climb); it settles with the recoil.
   const kick=!inCar&&arsenal?arsenal.recoil*(arsenal.weapon?.recoil?.camera??0):0;
   const desired=inCar?vehicleCamera(state,followPose,ctx):playerCamera(kick?{...state,pitch:state.pitch+kick}:state,followPose,ctx,aimCamera);const c:any={...followCamera.update(desired,{x:state.x,y:state.y+(driving?CAR.eye:PLAYER.eye),z:state.z},ctx,dt,driving?'drive':'walk')};
   // QA stills: a camera placed round the player (or the car) by the capture script, in place of the follow camera.
@@ -320,6 +326,8 @@ export default function Home(){
    // a hum, and it only moves the eye -- the look-at point stays put or the view swims.
    c.x+=Math.sin(t*37)*shake*SHAKE_SCALE*SHAKE_THROW;c.y+=Math.sin(t*53)*shake*SHAKE_SCALE*SHAKE_THROW*.6;c.z+=Math.cos(t*43)*shake*SHAKE_SCALE*SHAKE_THROW;}
   const targetFov=driving?61+Math.min(10,Math.abs(state.speed)*.7):50-(50-(arsenal?.weapon?.aimFov??PLAYER.aimFov))*aimCamera;const nextFov=view.fov+(targetFov-view.fov)*(1-Math.exp(-3*dt));if(Math.abs(nextFov-view.fov)>.01){view.fov=nextFov;view.updateProjectionMatrix();}
+  // Backlog ③: underground the eye stays under the passage's ceiling.
+  if(!inCar&&player.state.layer==='tunnel'&&playerCtx){c.y=Math.min(c.y,playerCtx.ceiling(c.x,c.z)-.25);c.ty=Math.min(c.ty,c.y+.4);}
   view.position.set(c.x,c.y,c.z);view.lookAt(c.tx,c.ty,c.tz);
   controls.target.set(c.tx,c.ty,c.tz);};
  // A vehicle box over the player is a knock-down. The traffic simulation's own overlap test
@@ -366,7 +374,7 @@ export default function Home(){
    .then((r:any)=>{if(r.applied.length)console.info('[S12.3 Ground PBR]',r.applied);}).catch((e:any)=>console.warn('[S12.3 Ground PBR] unavailable, keeping procedural ground',String(e)));};
   const idle=(window as any).requestIdleCallback;if(idle)idle(run,{timeout:4000});else setTimeout(run,1500);};
  const groundEntry=system.entries.get('ground');groundEntry.enabled=false;
- groundEntry.hooks={build(){const generation=++groundGeneration;setGroundReport({status:'building'});if(dataDebug)dataDebug.root.visible=false;loadSceneData(undefined,{signal:dataAbort.signal}).then(data=>buildQueue.enqueue(async()=>{if(disposed||generation!==groundGeneration||!groundEntry.enabled)return;const timing:any={computeMs:0,cooperativeWaitMs:0},record=beginStage('ground','S2 Ground',{timing}),started=performance.now();try{const pack=await loadStaticModels();if(disposed||generation!==groundGeneration)return;ground=buildGround(data,{model:pack?.ground});timing.computeMs+=performance.now()-started;groups.world.add(ground.root);registerSceneRoot(ground.root);startup?.appearance('firstGroundVisible','ground');setGroundReport(ground.stats);console.info('[S2 Ground]',ground.stats);groundEntry.status='ready';requestGroundPbr(ground,generation);setModules(system.snapshot());endStage(record,ground);renderStartupPanel();}catch(e){timing.computeMs+=performance.now()-started;endStage(record,null,e);throw e;}},{key:'ground',name:'S2 Ground'})).catch(e=>{if(disposed||generation!==groundGeneration||dataAbort.signal.aborted)return;groundEntry.status='failed';groundEntry.error=String(e);setGroundReport({error:String(e)});console.error('[S2 Ground]',e);setModules(system.snapshot());});},dispose(){groundGeneration++;ground?.dispose();ground=null;setGroundReport(null);if(dataDebug)dataDebug.root.visible=true;}};
+ groundEntry.hooks={build(){const generation=++groundGeneration;setGroundReport({status:'building'});if(dataDebug)dataDebug.root.visible=false;loadSceneData(undefined,{signal:dataAbort.signal}).then(data=>buildQueue.enqueue(async()=>{if(disposed||generation!==groundGeneration||!groundEntry.enabled)return;const timing:any={computeMs:0,cooperativeWaitMs:0},record=beginStage('ground','S2 Ground',{timing}),started=performance.now();try{const pack=await loadStaticModels();if(disposed||generation!==groundGeneration)return;ground=buildGround(data,{model:pack?.ground,holes:tunnel.holes});timing.computeMs+=performance.now()-started;groups.world.add(ground.root);registerSceneRoot(ground.root);startup?.appearance('firstGroundVisible','ground');setGroundReport(ground.stats);console.info('[S2 Ground]',ground.stats);groundEntry.status='ready';requestGroundPbr(ground,generation);setModules(system.snapshot());endStage(record,ground);renderStartupPanel();}catch(e){timing.computeMs+=performance.now()-started;endStage(record,null,e);throw e;}},{key:'ground',name:'S2 Ground'})).catch(e=>{if(disposed||generation!==groundGeneration||dataAbort.signal.aborted)return;groundEntry.status='failed';groundEntry.error=String(e);setGroundReport({error:String(e)});console.error('[S2 Ground]',e);setModules(system.snapshot());});},dispose(){groundGeneration++;ground?.dispose();ground=null;setGroundReport(null);if(dataDebug)dataDebug.root.visible=true;}};
  system.setEnabled('ground',(config.only===null||config.only.includes('ground'))&&!config.skip.includes('ground'));
  let buildingsTier=config.tier;const buildingsEntry=system.entries.get('buildings');buildingsEntry.enabled=false;
  buildingsEntry.hooks=buildingLifecycle({timingKey:'buildings',timingName:'S3 Generic Buildings',appearance:'firstBuildingVisible',parent:groups.world,build:async(data:any,record:any)=>buildBuildingsAsync(data,{model:(await loadStaticModels())?.generic,tier:buildingsTier,stageTiming:record?.timing}),onReport:setBuildingsReport,onReady(result:any){registerSceneRoot(result.root);buildingsEntry.status='ready';console.info('[S3 Generic Buildings]',result.stats);setModules(system.snapshot());},onError(e:any){buildingsEntry.status='failed';buildingsEntry.error=String(e);console.error('[S3 Generic Buildings]',e);setModules(system.snapshot());}});
@@ -453,7 +461,9 @@ export default function Home(){
   // A bump (Step C) is a flinch on the HQ body and a look round at the player, a small knock and
   // (at a run) a thud through the feedback bus, and -- for the 30% who take it badly -- the same
   // fight a punch starts. Never damage.
-  player??=createPlayer(ctx,{bodies:()=>lifeEntry.hooks.current?.sim??null,onBump:(p:any,b:any)=>{
+  // Backlog ③: the player walks on the street or in the passage (tunnel.mjs), whichever they are in.
+  playerCtx??=tunnel.context(ctx,()=>player?.state.layer??'surface');
+  player??=createPlayer(playerCtx,{bodies:()=>lifeEntry.hooks.current?.sim??null,onBump:(p:any,b:any)=>{
    const sim=lifeEntry.hooks.current?.sim;if(!sim)return;
    lifeEntry.hooks.current?.blow?.({victim:p.id,blow:{hold:b.hold,fatal:false},response:b.strong?'backoff':'look',from:player?.state});
    feedback.emit('player_bump',sim.time,{x:p.x,z:p.z,intensity:b.strong?1:.35,id:p.id});
@@ -461,7 +471,7 @@ export default function Home(){
   if(!player.place()){console.warn('[Player] no standable ground at the start point');return false;}
   if(!playerMarker){playerMarker=createPlayerMarker();groups.dynamic.add(playerMarker.mesh);}
   if(!carMarker){carMarker=createPlayerMarker(MARKER.car);groups.dynamic.add(carMarker.mesh);}
-  if(!playerFigure){playerFigure=createPlayerFigure(undefined,undefined,{ctx,weapons:PLAYER_WEAPONS});groups.dynamic.add(playerFigure.root);}
+  if(!playerFigure){playerFigure=createPlayerFigure(undefined,undefined,{ctx:playerCtx,weapons:PLAYER_WEAPONS});groups.dynamic.add(playerFigure.root);}
   // The crowd's own contact shadows skip the controlled slot, so the player was the one person
   // in the city standing on nothing. Same module, same single draw call, one instance.
   if(!playerShadow){playerShadow=createContactShadows(1);groups.dynamic.add(playerShadow.mesh);}
@@ -475,7 +485,7 @@ export default function Home(){
    // The same asset the player just took also upgrades the nearest NPCs, so the crowd beside
    // the player stops being a different order of fidelity from the player.
    lifeEntry.hooks.current?.setNearCharacterAsset?.(asset);
-   const next=createPlayerFigure(asset,undefined,{ctx:lifeEntry.hooks.current?.network?.ctx??null,weapons:PLAYER_WEAPONS});
+   const next=createPlayerFigure(asset,undefined,{ctx:playerCtx??lifeEntry.hooks.current?.network?.ctx??null,weapons:PLAYER_WEAPONS});
    groups.dynamic.add(next.root);
    next.update(player.state,0);
    playerFigure.dispose();playerFigure=next;
@@ -543,7 +553,7 @@ export default function Home(){
    onLockFlick:(d:string)=>arsenal?.lockFlick(d),onLockGyro:(y:number,p:number)=>arsenal?.lockGyro(y,p),locked:()=>!!arsenal?.lock,onWeapon:(n:number)=>selectWeapon(n),onWeaponCycle:(d:number)=>cycleWeapon(d),onAim:(on:boolean,o:any)=>arsenal?.aim(on&&!driving,o),onWheel:(kind:string,x:number,y:number)=>onWheel(kind,x,y),onReload:()=>{if(!driving)arsenal?.reload();},onRoll:()=>{if(playerMode&&!driving&&!vehicleTransition.active&&melee.phase==='idle')player?.roll();},
    // C1-C4: the pad's own buttons for the siren (d-pad up), the horn alone (left stick in a car) and the map (−).
    driving:()=>driving,onRadio:(d:number)=>tuneRadio(d),onSiren:()=>{if(driving&&playerCar)police?.toggleSiren(playerCar);},onHornOnly:()=>{if(driving&&playerCar)soundscape?.horn(playerCar.state.x,playerCar.state.z);},onMap:()=>playUI?.toggleMap?.(),onCrouch:()=>{if(playerMode&&!driving&&!vehicleTransition.active)player?.crouch();},onHorn:()=>{if(driving&&playerCar&&!police?.toggleSiren(playerCar))soundscape?.horn(playerCar.state.x,playerCar.state.z);}});setPlayerHit(null);setMode('player');
-  (window as any).__SHIBUYA_PLAYER__=player;(window as any).__SHIBUYA_CAR__=playerCar;
+  (window as any).__SHIBUYA_PLAYER__=player;(window as any).__SHIBUYA_CAR__=playerCar;(window as any).__SHIBUYA_TUNNEL__=tunnel;
   // Backlog ②: photo mode for scripted stills (qa/gta-upgrade/photo-mode-stills.mjs): enter, fly, cycle, leave.
   (window as any).__SHIBUYA_PHOTO__={enter:enterPhoto,leave:leavePhoto,get active(){return photo.active;},get timeScale(){return photo.timeScale;},
    pose:photo.pose,cycleTime:()=>{const v=photo.cycleTime();photoStatus();return v;},timeOfDay:photoTimeOfDay,zoom:(n:number)=>photo.zoom(n),look:(dx:number,dy:number)=>photo.look(dx,dy),
@@ -790,7 +800,7 @@ export default function Home(){
     if(player.state.alive!==false)player.knockDown({x:c.x,z:c.z,heading:t.heading,speed:Math.max(t.speed,8),type:'motorbike'});
     if(!player.state.alive&&!combatDeathReported){combatDeathReported=true;setPlayerHit(player.state.hitBy??'motorbike');}
     playerFigure?.update(player.state,0);groundPlayerShadow();}}
-  else{player.step(dt);playerCar?.keepOwn?.(dt,player.state.x,player.state.z);{const s=lifeEntry.hooks.current?.sim;if(s)s.postUpdate=(d:number)=>player.settleCrowd(d);}if(player.state.alive)combatDeathReported=false;yieldToPlayer(lifeEntry.hooks.current?.sim,player.state,player.contact.nearby);// §9ai H1: the player's swing and body run on the hit-stopped clock; the world does not.
+  else{player.step(dt);tunnel.track(player.state);playerCar?.keepOwn?.(dt,player.state.x,player.state.z);{const s=lifeEntry.hooks.current?.sim;if(s)s.postUpdate=(d:number)=>player.settleCrowd(d);}if(player.state.alive)combatDeathReported=false;yieldToPlayer(lifeEntry.hooks.current?.sim,player.state,player.contact.nearby);// §9ai H1: the player's swing and body run on the hit-stopped clock; the world does not.
   const hitDt=hitStop.scale(dt);const combat=timed('melee',()=>melee.update(hitDt,lifeEntry.hooks.current?.sim,player));if(combat.hits>meleeHitsLast){meleeHitsLast=combat.hits;}timed('figure',()=>playerFigure?.update(player.state,hitDt));groundPlayerShadow();
    if(!player.state.alive&&!combatDeathReported){combatDeathReported=true;setPlayerHit(player.state.hitBy??'fight');}
    playerMarker?.update(player.state,dt,PLAYER_HEIGHT);
@@ -865,7 +875,7 @@ export default function Home(){
    timed('s4-onlookers',()=>onlookers.update(crowdNow,{lastGunshotAt}));
    timed('s4-aftermath',()=>aftermath.update(dt,{traffic:trafficEntry.hooks.current?.sim,crowd:crowdNow,stars:police?.wanted?.state?.stars??0,marks:arsenal?.marks}));}
   if(police){policeFrustum.setFromProjectionMatrix(policeMatrix.multiplyMatrices(view.projectionMatrix,view.matrixWorldInverse));
-   const w=timed('s3-police',()=>police.frame(dt,{player:player.state,car:playerCar,driving,melee:melee.snapshot(),weapons:arsenal?.snapshot()??null,solid:weaponWorld.solid,traffic:trafficEntry.hooks.current?.sim,crowd:crowdSim,listener:{x:view.position.x,z:view.position.z,vx:0,vz:0},visible:inView,hurt:(n:number,src:string,o:any)=>{if(!driving||playerCar?.def?.twoWheel||o?.cabin)player.hurt?.(n,src);},
+   const w=timed('s3-police',()=>police.frame(dt,{tunnel,player:player.state,car:playerCar,driving,melee:melee.snapshot(),weapons:arsenal?.snapshot()??null,solid:weaponWorld.solid,traffic:trafficEntry.hooks.current?.sim,crowd:crowdSim,listener:{x:view.position.x,z:view.position.z,vx:0,vz:0},visible:inView,hurt:(n:number,src:string,o:any)=>{if(!driving||playerCar?.def?.twoWheel||o?.cabin)player.hurt?.(n,src);},
     night:clock.value==='night'||clock.value==='dusk',ground:weaponWorld.ground}));
    timed('s3-heli',()=>heliMesh?.update(w.heli??{active:false},{night:clock.value==='night'||clock.value==='dusk'}));
    playUI?.setWanted(w,dt);(window as any).__SHIBUYA_POLICE__=police;
@@ -908,7 +918,7 @@ export default function Home(){
  const decorationTier=deferredLatest((v:string)=>{if(streetTier!==v){streetTier=v;if(streetEntry.enabled){system.setEnabled('streetscape',false);system.setEnabled('streetscape',true);}}if(signTier!==v){signTier=v;if(signsEntry.enabled){system.setEnabled('signs',false);system.setEnabled('signs',true);}}if(detailTier!==v){detailTier=v;if(detailEntry.enabled){system.setEnabled('stationDetail',false);system.setEnabled('stationDetail',true);}}});
  engine.current={perf:()=>{perfWanted=true;setPresentation(true);// measure the full view the game is played in, not the inspection layout
  if(ensurePerf())startPerfSweep();else setTimeout(()=>{if(ensurePerf())startPerfSweep();},500);},preset,drive:()=>toggleDrive(),player:()=>{if(playerMode)exitPlayer();else enterPlayer();},respawn:()=>{melee.reset();arsenal?.reset();touchPad?.setWeapon('fists');const arrested=arrestedPending;arrestedPending=false;player?.revive();if(arrested&&player)player.place(KOBAN.x+1.5,KOBAN.z+1.5,0);police?.clear('respawn');combatDeathReported=false;setPlayerHit(null);},tier:(v:string)=>{const previousTier=currentTier;startup?.tierChange(previousTier,v,'tier-control');for(const id of ['fidelity','streetscape','signs','stationDetail'])startup?.setReason(id,'tier-change');currentTier=v;currentTrafficTier=v;buildingsTier=v;timingTier=v;frameGate.setTier(v);dynRes.setBudget(1000/(PROFILES[v]?.fps??60));fidelity.setTier(v);buildQueue.enqueue(()=>measureStage('fidelity','Render Fidelity Prepare',()=>fidelity.prepare()),{key:'fidelity',name:'Render Fidelity Prepare'}).catch(e=>{console.error('[S16.3 Fidelity]',e);setError('HIGH描画の準備に失敗しました。MEDIUMを選択してください。');});buildingsEntry.hooks.current?.setTier(v);setBuildingsReport(buildingsEntry.hooks.current?{...buildingsEntry.hooks.current.stats}:null);trafficEntry.hooks.current?.setTier(v);lifeEntry.hooks.current?.setTier(v);trainsEntry.hooks.current?.setTier(v);nightglowEntry.hooks.current?.setTier(v);constructionEntry.hooks.current?.setTier(v);setConstructionReport(constructionEntry.hooks.current?{...constructionEntry.hooks.current.stats}:null);resize();setTier(v);decorationTier.set(v);},time:(v:string)=>{solar.select(v);setTime(v);},toggle:(id:string,v:boolean)=>{if(playerMode&&['traffic','life','ground'].includes(id))exitPlayer();startup?.setReason(id,'manual-rebuild');const rebuildLife=id==='traffic'&&lifeEntry.enabled;if(rebuildLife){startup?.setReason('life','dependency-rebuild');system.setEnabled('life',false);}system.setEnabled(id,v);if(id==='environment'){nightglowEntry.hooks.current?.refresh();fidelity.refresh();}if(rebuildLife)system.setEnabled('life',true);setModules(system.snapshot());},capture};
- cleanup=()=>{photoControls?.detach();photoControls=null;document.body.classList.remove('photo-mode');heliMesh?.dispose();heliMesh=null;perfSweep?.cancel();perfOverlay?.dispose();if((window as any).__SHIBUYA_PERF__===perfProbe)delete (window as any).__SHIBUYA_PERF__;arsenal?.dispose();arsenal=null;police?.dispose(trafficEntry.hooks.current?.sim,lifeEntry.hooks.current?.sim);police=null;if((window as any).__SHIBUYA_POLICE__)delete (window as any).__SHIBUYA_POLICE__;roadReflection?.dispose();document.removeEventListener('visibilitychange',visibility);seatedDrivers?.dispose();seatedDrivers=null;playUI?.dispose();vehicleVisual?.dispose();vehicleEffects?.dispose();player?.detach();carMarker?.dispose();playerAudio?.dispose();crowdVoices?.dispose();if((window as any).__SHIBUYA_VOICES__===crowdVoices)delete (window as any).__SHIBUYA_VOICES__;touchPad?.dispose();blood?.dispose();if((window as any).__SHIBUYA_BLOOD__===blood)delete (window as any).__SHIBUYA_BLOOD__;diag?.dispose();if((window as any).__SHIBUYA_DIAG__===diag)delete (window as any).__SHIBUYA_DIAG__;playerMarker?.dispose();playerFigure?.dispose();playerShadow?.dispose();deferredCharacter?.dispose();if((window as any).__SHIBUYA_CHARACTER__===deferredCharacter)delete (window as any).__SHIBUYA_CHARACTER__;cancelAnimationFrame(raf);shaderWarmup?.dispose();stopShaderErrors();timingObserver?.disconnect();startupTrace?._removeLifecycle?.();if(qaButtonTimer)window.clearInterval(qaButtonTimer);decorationTier.dispose();buildQueue.dispose();observer.disconnect();unsub();dataAbort.abort();solar.dispose();fidelity.dispose();dayNight.dispose();system.dispose();controls.dispose();canvas.removeEventListener('webglcontextlost',lost);renderer?.dispose();canvas.remove();qaButton?.remove();startupPanel?.remove();if((window as any).__SHIBUYA_QA__===qaApi)delete (window as any).__SHIBUYA_QA__;if((window as any).__SHIBUYA_STARTUP_TIMING__===startupTrace)delete (window as any).__SHIBUYA_STARTUP_TIMING__;engine.current=null;};
+ cleanup=()=>{tunnelMesh.dispose();photoControls?.detach();photoControls=null;document.body.classList.remove('photo-mode');heliMesh?.dispose();heliMesh=null;perfSweep?.cancel();perfOverlay?.dispose();if((window as any).__SHIBUYA_PERF__===perfProbe)delete (window as any).__SHIBUYA_PERF__;arsenal?.dispose();arsenal=null;police?.dispose(trafficEntry.hooks.current?.sim,lifeEntry.hooks.current?.sim);police=null;if((window as any).__SHIBUYA_POLICE__)delete (window as any).__SHIBUYA_POLICE__;roadReflection?.dispose();document.removeEventListener('visibilitychange',visibility);seatedDrivers?.dispose();seatedDrivers=null;playUI?.dispose();vehicleVisual?.dispose();vehicleEffects?.dispose();player?.detach();carMarker?.dispose();playerAudio?.dispose();crowdVoices?.dispose();if((window as any).__SHIBUYA_VOICES__===crowdVoices)delete (window as any).__SHIBUYA_VOICES__;touchPad?.dispose();blood?.dispose();if((window as any).__SHIBUYA_BLOOD__===blood)delete (window as any).__SHIBUYA_BLOOD__;diag?.dispose();if((window as any).__SHIBUYA_DIAG__===diag)delete (window as any).__SHIBUYA_DIAG__;playerMarker?.dispose();playerFigure?.dispose();playerShadow?.dispose();deferredCharacter?.dispose();if((window as any).__SHIBUYA_CHARACTER__===deferredCharacter)delete (window as any).__SHIBUYA_CHARACTER__;cancelAnimationFrame(raf);shaderWarmup?.dispose();stopShaderErrors();timingObserver?.disconnect();startupTrace?._removeLifecycle?.();if(qaButtonTimer)window.clearInterval(qaButtonTimer);decorationTier.dispose();buildQueue.dispose();observer.disconnect();unsub();dataAbort.abort();solar.dispose();fidelity.dispose();dayNight.dispose();system.dispose();controls.dispose();canvas.removeEventListener('webglcontextlost',lost);renderer?.dispose();canvas.remove();qaButton?.remove();startupPanel?.remove();if((window as any).__SHIBUYA_QA__===qaApi)delete (window as any).__SHIBUYA_QA__;if((window as any).__SHIBUYA_STARTUP_TIMING__===startupTrace)delete (window as any).__SHIBUYA_STARTUP_TIMING__;engine.current=null;};
  })().catch(e=>{if(!disposed)setError(String(e));});return()=>{disposed=true;cleanup();};},[]);
  const timingMs=(value:number)=>`${(value/1000).toFixed(3)} s`;
  const copyS5Timing=async()=>{if(!s5TimingResult)return;await navigator.clipboard.writeText(JSON.stringify(s5TimingResult,null,2));setS5TimingCopied(true);window.setTimeout(()=>setS5TimingCopied(false),1500);};

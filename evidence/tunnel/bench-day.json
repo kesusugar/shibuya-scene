@@ -1,0 +1,20 @@
+{
+ "url": "http://<local>/qa/gta-upgrade/tunnelbench.html",
+ "ready": true,
+ "bench": {
+  "lines": [
+   "tunnel 129.8 m, roof 5.3 m, day; calls 45",
+   "top left: A3 entrance from the pavement",
+   "top right: down the A3 stairs",
+   "bottom left: the passage, first corner",
+   "bottom right: A0 exit from the pavement"
+  ],
+  "calls": 45,
+  "size": [
+   1280,
+   800
+  ]
+ },
+ "console": [],
+ "errors": 0
+}
