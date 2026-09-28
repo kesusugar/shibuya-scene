@@ -1,0 +1,16 @@
+{
+ "url": "http://<local>/qa/gta-upgrade/weaponbench.html?pose=katana-d-kesa",
+ "ready": true,
+ "bench": {
+  "poses": [
+   "katana-d-kesa"
+  ],
+  "lines": [
+   "front | player's right | behind | player's left",
+   "katana-d-kesa: 1 kesa (袈裟): down from high left to low right (0.84s)  | grip-to-palm 0.7 cm"
+  ],
+  "calls": 9
+ },
+ "console": [],
+ "errors": 0
+}

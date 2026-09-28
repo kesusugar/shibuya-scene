@@ -1,0 +1,16 @@
+{
+ "url": "http://<local>/qa/gta-upgrade/weaponbench.html?pose=katana-d-yoko",
+ "ready": true,
+ "bench": {
+  "poses": [
+   "katana-d-yoko"
+  ],
+  "lines": [
+   "front | player's right | behind | player's left",
+   "katana-d-yoko: 3 level cut (横一文字): chest height, left to right (0.33s)  | grip-to-palm 0.7 cm"
+  ],
+  "calls": 9
+ },
+ "console": [],
+ "errors": 0
+}
