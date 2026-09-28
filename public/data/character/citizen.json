@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-26",
+ "generated": "2026-09-28",
  "source": "Quaternius Universal Base Characters [Standard] + Universal Animation Library [Standard], CC0-1.0",
  "body": {
   "meshes": 3,
@@ -185,7 +185,7 @@
   {
    "name": "SwordAttack",
    "upstream": "CMU 02_07 (scripts/cmu/weapon-clip.mjs)",
-   "seconds": 1.526,
+   "seconds": 1.898,
    "tracks": 23
   },
   {
@@ -245,7 +245,7 @@
     "from": 6.2,
     "to": 8.4,
     "amcSha256": "6171216b0bd691843096798431a5f201b9d1340503cf89ce20180b6143597cd8",
-    "seconds": 1.526,
+    "seconds": 1.898,
     "tracks": 23
    },
    {
@@ -283,12 +283,12 @@
  },
  "output": {
   "file": "public/data/character/citizen.glb",
-  "bytes": 2811684,
-  "sha256": "b2a467120dc049e2bad5761409f8f317d902ebd592e3741ffecfb77ba1d00265"
+  "bytes": 2816488,
+  "sha256": "733361ee1cde4b773c447639654e90cad0715e5ac5bd973e6023dc27b64307bd"
  },
  "gaitDetail": {
   "samples": 120,
-  "measured": "2026-09-26",
+  "measured": "2026-09-28",
   "ankleHeight": 0.1119,
   "clips": {
    "Walk": {

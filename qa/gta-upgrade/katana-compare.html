@@ -1,0 +1,31 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>katana compare</title>
+<style>body{margin:0;background:#15181d;overflow:hidden}canvas{display:block}</style>
+<canvas id="c"></canvas>
+<script type="module">
+// Katana C evidence: before / after, side by side, from the weapon bench's shots in
+// evidence/katana/c/ (the player's right, and the front). Each row is one moment of the cut.
+//   node qa/gta-upgrade/weaponbench-capture.mjs evidence/katana/c/compare.png "" katana-compare.html
+const PHASES=[['katana-c-coil','coil (0.5 s)'],['katana-c-land','the cut (0.8 s)'],['katana-c-zanshin','zanshin (1.2 s)'],['katana-c-return','return (1.6 s)']];
+const COLS=[[1,'player\'s right'],[0,'front']],CW=320,CH=420,TOP=48,HEAD=40,LEFT=150,GAP=24;
+const load=src=>new Promise((r,j)=>{const i=new Image();i.onload=()=>r(i);i.onerror=j;i.src=src;});
+const c=document.getElementById('c'),W=LEFT+2*(COLS.length*CW)+GAP,H=HEAD+PHASES.length*(CH-TOP);
+c.width=W;c.height=H;const g=c.getContext('2d');
+g.fillStyle='#15181d';g.fillRect(0,0,W,H);g.font='bold 22px sans-serif';g.fillStyle='#e8e8e8';
+g.fillText('before (§9ah cut)',LEFT+10,28);g.fillText('after (Katana C)',LEFT+COLS.length*CW+GAP+10,28);
+for(const [row,[id,label]] of PHASES.entries()){
+ const y=HEAD+row*(CH-TOP);
+ g.font='18px sans-serif';g.fillStyle='#e8e8e8';g.fillText(label,10,y+(CH-TOP)/2);
+ for(const [side,which] of [[0,'before'],[1,'after']].map(([k,w])=>[k,w])){
+  const img=await load(`/evidence/katana/c/${which}-${id}.png`);
+  for(const [k,[col]] of COLS.entries()){
+   const x=LEFT+side*(COLS.length*CW+GAP)+k*CW;
+   // The bench's cell is 320 x 420; its top TOP px carry the bench's own text, left out here.
+   g.drawImage(img,col*CW,TOP,CW,CH-TOP,x,y,CW,CH-TOP);
+  }
+ }
+}
+g.strokeStyle='#e8e8e8';g.beginPath();g.moveTo(LEFT+COLS.length*CW+GAP/2,0);g.lineTo(LEFT+COLS.length*CW+GAP/2,H);g.stroke();
+window.__BENCH__={size:[W,H],lines:PHASES.map(p=>p[1])};document.title='ready';
+</script>

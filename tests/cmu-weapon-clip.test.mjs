@@ -68,7 +68,11 @@ test('katana: both hands on the handle, mirrored to a right-hand lead, a fast cu
  assert.ok(m.wristDeg.right.bendMedian<=20,`the right wrist bends ${m.wristDeg.right.bendMedian}° at median`);
  // Captured, the hands peak near 3 m/s; the cut is replayed at 2x.
  assert.ok(m.gripPeakMs>=5.5,`the fist peaks at ${m.gripPeakMs} m/s`);
- assert.ok(clip.duration<1.7,`the whole cut takes ${clip.duration} s`);
+ // Katana C adds the zanshin hold (the warp's 0.22x knots); the cut and the return around it are as brisk.
+ const slow=clip.warp.filter(([,v])=>v<.5),held=slow.length?(slow.at(-1)[0]-slow[0][0])/slow[0][1]:0;
+ assert.ok(clip.duration-held<1.7,`the cut without its hold takes ${(clip.duration-held).toFixed(2)} s`);
+ assert.ok(held>=.3&&held<=.45,`the hold is ${held.toFixed(2)} s`);
+ assert.ok(m.wristDeg.right.bendHeld<=62,`the held right wrist bends ${m.wristDeg.right.bendHeld}°`);
  // Captured, the follow-through folds the trunk 52° off vertical.
  assert.ok(m.trunkMaxDeg.captured>45&&m.trunkMaxDeg.kept<=38,`trunk ${JSON.stringify(m.trunkMaxDeg)}`);
 });

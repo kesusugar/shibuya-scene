@@ -336,6 +336,13 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
   }
  }
 
+ /** The swing is over (played out, or its return cut short): a miss is counted and witnessed. */
+ function finish(crowd,state){
+  if(!swing)return;
+  if(!swing.hitConsumed){stats.misses++;witness(crowd,state,null,COMBAT.witnessSeverity*(swing.katana?.8:.55));}
+  swing=null;state.attackWarp=null;state.attackCancel=false;
+ }
+
  /**
   * Katana B: tell the controller where the cut's step goes this frame (`state.attackWarp`), or
   * clear it. The point `WARP.standoff` short of the person, on the line to them; `elapsed` is the
@@ -358,7 +365,8 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
   // elapsed * rate, which is what the sweep table is indexed by.
   const rate=katana&&swingIndex%2===0?COMBAT.katanaFast:1;
   const base=katana?SWORD:attackOf(name);
-  const timing=rate===1?base:{...base,duration:base.duration/rate,windup:base.windup/rate,activeEnd:base.activeEnd/rate,peak:base.peak/rate};
+  const timing=rate===1?base:{...base,duration:base.duration/rate,windup:base.windup/rate,activeEnd:base.activeEnd/rate,peak:base.peak/rate,
+   ...(base.cancelAt?{cancelAt:base.cancelAt/rate}:{})};
   const state=player.state,aim=crowd?lockOn(crowd,state,katana?WARP.range:COMBAT.lockRange):null;
   // Katana A: from the scabbard, this cut is a draw-cut (iai): the hand draws the blade on the way
   // into the cut's own wind-up; the timing and the blow are the same.
@@ -394,8 +402,15 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
     if(!swing&&!state.katanaSheathed){katanaIdle+=Math.max(0,dt);if(katanaIdle>=COMBAT.notoAfter){state.katanaSheathed=true;stats.noto=(stats.noto??0)+1;}}
    }else{katanaIdle=0;state.katanaSheathed=false;state.drawCut=false;}
 
+   // Katana C: past the end of its zanshin a cut's way back to guard may be cut short -- by the
+   // next cut, or by walking off (the controller drops `attackTime` when `attackCancel` is set).
+   if(swing?.timing.cancelAt&&swing.phase===PHASE.RECOVERY){
+    const open=swing.elapsed>=swing.timing.cancelAt;state.attackCancel=open;
+    if(open&&(pending||!((state.attackTime??0)>0))){finish(crowd,state);state.attackTime=0;state.attackHold=null;}
+   }else state.attackCancel=false;
    // A new swing only starts when the last one has finished. Holding the button does not
-   // stack punches, and a press during recovery is dropped rather than queued.
+   // stack punches, and a press during recovery is dropped rather than queued (a cut's return
+   // after its zanshin is the exception, above).
    if(pending){
     pending=false;
     if(state.alive&&!swing){start(player,crowd);onEvent?.('punch_swing',{x:state.x,z:state.z,intensity:.6});}
@@ -475,10 +490,7 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
       witness(crowd,state,p,COMBAT.witnessSeverity);
      }
     }
-    if(was!==PHASE.IDLE&&swing.phase===PHASE.IDLE){
-     if(!swing.hitConsumed){stats.misses++;witness(crowd,state,null,COMBAT.witnessSeverity*(swing.katana?.8:.55));}
-     swing=null;
-    }
+    if(was!==PHASE.IDLE&&swing.phase===PHASE.IDLE)finish(crowd,state);
    }else state.attackWarp=null;
 
    // Owner's rule: a weapon out breaks every fist fight -- they scream and run.

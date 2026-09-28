@@ -44,6 +44,8 @@ const GUN_TURN=10,GUN_TWIST=1.75;
  * the fist goes where the clip puts it.
  */
 export const STRIKE=Object.freeze({fadeIn:.08, fadeOut:.3, turnRate:14,
+ // Katana C: a cut restarted over the last one's return blends out of the old frame this long.
+ echo:.16,
  // Katana B: a cut turns onto its person eased (locomotion.mjs createBodyFacing): 1.2 rad in
  // about 0.2 s, half a turn in about 0.35 s, square before the step of the warp is under way.
  cutTurn:Object.freeze({max:16,accel:110})});
@@ -167,6 +169,12 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
  const crouchIdle=guardClip?mixer.clipAction(Object.assign(guardClip.clone(),{name:'CrouchIdle'})):null;
  crouchIdle?.setLoop(LoopRepeat,Infinity);
  let crouchK=0;
+ // Katana C: a cut started over the last one's return (after its zanshin) restarts the clip; its
+ // copy carries on from the old frame and fades out, so the body does not jump to the first key.
+ const swordClip=instance.clips.find(c=>c.name==='SwordAttack');
+ const swordEcho=swordClip?mixer.clipAction(Object.assign(swordClip.clone(),{name:'SwordAttackEcho'})):null;
+ swordEcho?.setLoop(LoopOnce,1);if(swordEcho)swordEcho.clampWhenFinished=true;
+ let echo=0;
  // A jump in world position is a teleport, not a stride. Locked feet have to be forgotten or
  // one gets dragged across the city on the next frame.
  let lastX=null,lastZ=null;
@@ -211,6 +219,10 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
   if(overlay&&actions[overlay]&&!SWINGS.has(overlay))actions[overlay].fadeOut(next==='Fall'?.06:.14);
   if(next&&actions[next]){
    const action=actions[next];
+   if(next==='SwordAttack'&&restart&&swordEcho&&strike.SwordAttack>.05&&action.isRunning()){
+    swordEcho.reset().play();swordEcho.time=action.time;echo=strike.SwordAttack;
+    swordEcho.setEffectiveWeight(echo);action.setEffectiveWeight(strike.SwordAttack*(1-echo));
+   }
    if(SWINGS.has(next))action.reset().play();
    else action.reset().setEffectiveWeight(1).fadeIn(overlay?.14:.1).play();
   }
@@ -246,6 +258,8 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
     strike[name]+=Math.max(-rate,Math.min(rate,on-strike[name]));
     actions[name]?.setEffectiveWeight(strike[name]);swung+=strike[name];
    }
+   if(swordEcho){echo=Math.max(0,echo-dt/STRIKE.echo);swordEcho.setEffectiveWeight(echo);
+    actions.SwordAttack?.setEffectiveWeight(strike.SwordAttack*(1-echo));if(!echo&&swordEcho.isRunning())swordEcho.stop();}
    const share=Math.max(0,1-swung);
    // The weapon's stance takes the Idle share (STANCE); with nothing out it fades back to Idle.
    // Katana A: a katana back in its scabbard is carried, not held: the plain stance.

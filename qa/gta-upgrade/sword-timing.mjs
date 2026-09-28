@@ -35,7 +35,10 @@ for(let i=0;i<=STEPS;i++){
  inv.copy(rig.matrixWorld).invert();
  p.copy(tipLocal).applyMatrix4(hand.matrixWorld).applyMatrix4(inv);
  pelvis.getWorldPosition(hip).applyMatrix4(inv);
- rows.push({t:i/STEPS*clip.duration,x:p.x-hip.x,y:p.y,z:p.z-hip.z});
+ // From the rig's root: where the game stands the player, and where the hit test measures from.
+ // Katana C steps the hips in with the cut, so the tip reaches further than the hips' own frame
+ // would say (measured from the pelvis before §9be).
+ rows.push({t:i/STEPS*clip.duration,x:p.x,y:p.y,z:p.z,hipZ:hip.z});
 }
 for(let i=1;i<rows.length;i++){const a=rows[i-1],c=rows[i];c.speed=Math.hypot(c.x-a.x,c.y-a.y,c.z-a.z)/(c.t-a.t);}
 rows[0].speed=0;
