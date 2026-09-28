@@ -6471,6 +6471,48 @@ one-channel gap); `tests/police-loudspeaker.test.mjs` (the director given record
 Real scene (headless): the 16 clips decode with no error; wanted to ☆3 the radio opened the incident
 and called backup, the loudspeaker and an officer spoke. Not checked: how it sounds in the hand.
 
+## 9bc. Katana A: worn at the left hip, drawn as it cuts (iai), put back (noto); nothing on the back
+
+Owner's note: a long black object hung behind the player's back had always looked wrong. It was two
+things: the katana's scabbard across the back (a dead-black straight box), and -- the one in the
+owner's screenshot -- the slung submachine gun, whose top faced straight back so from the side it
+stood off the shoulder like a plank.
+
+Now (the first of four katana steps; references studied, nothing copied -- see below):
+- **The katana is worn at the left hip**, thrust through the sash, edge up, the handle forward and a
+  little up across the belly, the scabbard running back past the thigh and angled out and down so
+  the leg swings clear (`weapon-mesh.mjs` `CARRY.obi`; a test walks and runs the body and keeps the
+  scabbard > 7 cm from the thigh's bone). The scabbard is **curved** with the blade's sori, a deep
+  warm lacquer that catches light, horn mouth ring and end cap, a cord knob with an indigo sageo; the
+  handle shows same-skin between flat cross-wraps. Drawing is now the right hand reaching across the
+  body to the left hip (the existing draw, `hands.mjs`, from the new carry).
+- **Noto / iai.** After `COMBAT.notoAfter` (5 s) with the katana out and no cut, it goes back into
+  the scabbard (the hand takes it to the hip and eases back; the body takes the plain stance --
+  `figure.mjs carriedWeapon`). **The next cut is a draw-cut**: the hand is on the handle in 0.10 s
+  and draws the blade out through the first 0.26 s of the cut's own wind-up, the left hand holding
+  the scabbard's mouth (`DRAW.iaiReach/iaiDraw/iaiMouth`, `state.drawCut`). The cut's timing, reach
+  and damage are unchanged (the blade goes live at the clip's own 0.674 s).
+- **The slung submachine gun is not drawn** (`SHOW_SLUNG_SMG` false): laid flat it still stood above
+  the shoulder and cut into the back. The draw still fetches it from over the right shoulder, as
+  before; a weapon not in the hand is not shown, the way GTA does it.
+
+References for the katana work (Katana A-D), studied rather than copied:
+- achrefelouafi/SamuraiThirdPersonTemplateThreeJS (MIT code; its animations are Mixamo and are not
+  used): the attack's architecture -- target lock at the press, motion warp (turn first, then step,
+  within the wind-up), the controller as the one authority over position, the reach re-checked at
+  the hit frame, hit-stop. For Katana B.
+- ilatroce/Animateur (no licence file: UNKNOWN -- nothing taken): its slash and spinning-slash
+  keyframes were read for their order only -- the legs load, the hips turn, the torso follows a key
+  later, then shoulder, elbow, wrist, blade; the head holds the target; the body travels through
+  contact. For Katana C.
+
+Tests: `tests/katana-iai.test.mjs` (noto after 5 s; the draw-cut marks, clears after the wind-up
+and keeps the cut's timing; sheathed at the hip, in the hand within 0.10 s of a draw-cut with the
+left hand at the scabbard's mouth; the scabbard clear of the thigh walking and running; the slung
+gun not drawn but still fetched); `tests/weapons.test.mjs` (the carry: pistol right hip, katana left
+hip). Evidence: `evidence/katana/a/` (weapon bench: fists, sheathed standing and walking, the
+draw-cut, katana idle).
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
