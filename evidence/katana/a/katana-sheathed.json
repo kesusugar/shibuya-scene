@@ -1,0 +1,16 @@
+{
+ "url": "http://<local>/qa/gta-upgrade/weaponbench.html?pose=katana-sheathed",
+ "ready": true,
+ "bench": {
+  "poses": [
+   "katana-sheathed"
+  ],
+  "lines": [
+   "front | player's right | behind | player's left",
+   "katana-sheathed: katana sheathed at the left hip (noto)"
+  ],
+  "calls": 7
+ },
+ "console": [],
+ "errors": 0
+}

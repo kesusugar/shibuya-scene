@@ -28,6 +28,8 @@ const SWINGS=new Set([...PUNCHES,'SwordAttack','Roll','Crawl']);
  */
 const STANCE={katana:'SwordIdle',pistol:'PistolIdle',revolver:'PistolIdle'};
 const STANCE_FADE=.25;
+/** Katana A: the weapon in play for the body -- a sheathed katana (`state.katanaSheathed`) is carried at the hip, the hands empty. */
+export const carriedWeapon=state=>state.weapon==='katana'&&state.katanaSheathed?'fists':state.weapon??null;
 /** Aiming: the turn rate onto the aim, and how far the upper body twists before the legs follow. */
 const GUN_TURN=10,GUN_TWIST=1.75;
 
@@ -243,7 +245,8 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
    }
    const share=Math.max(0,1-swung);
    // The weapon's stance takes the Idle share (STANCE); with nothing out it fades back to Idle.
-   const held=STANCE[state.weapon]??null;let stood=0;
+   // Katana A: a katana back in its scabbard is carried, not held: the plain stance.
+   const held=STANCE[carriedWeapon(state)]??null;let stood=0;
    for(const name of Object.keys(stance)){
     const on=held===name&&actions[name]?1:0,rate=dt/STANCE_FADE;
     stance[name]+=Math.max(-rate,Math.min(rate,on-stance[name]));stood+=stance[name];
@@ -358,11 +361,14 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
    root.updateMatrixWorld(true);
    // The weapon in the hand, and the rest where they are carried (PLAN-WEAPONS R3). Stage 1: while
    // the hand is changing weapons it holds the old one until it has put it away.
-   const inHand=hands?hands.begin(state,dt):state.weapon??null;
+   const carried=carriedWeapon(state);
+   const inHand=hands?hands.begin(carried===(state.weapon??null)?state:{...state,weapon:carried},dt):carried??null;
    weaponRig?.show(inHand);
    // The gun arm over whatever the legs are doing, pointed at the target (R1). Not during a
    // swing, a fall or a car. Mid-change it poses the weapon actually in the hand, lowered.
    const posed=inHand!==(state.weapon??null)?{...state,weapon:inHand,aim:0,shotLeft:0}:state;
+   // Katana A: a draw out of the scabbard (iai) runs over the cut's own wind-up.
+   const drawCut=!!hands?.drawing&&!UNGROUNDED.has(overlay);
    // Stage 2: walking with the katana out, the upper body keeps the two-handed guard.
    // Held standing too, not only walking: fading it in as the walk starts left the walk's
    // swinging arm in charge for a fifth of a second, and the blade swung back behind the body
@@ -372,7 +378,7 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
      // The clip's elbows are raised and turned in; point them down and out (body-states).
      katanaGrip??=createKatanaGrip(root);katanaGrip.update(k);}}
    if(aimLayer&&!SWINGS.has(overlay)&&!UNGROUNDED.has(overlay))aimLayer.update(posed,dt);
-   if(hands&&!SWINGS.has(overlay)&&!UNGROUNDED.has(overlay))hands.update(posed,dt);
+   if(hands&&(drawCut||!SWINGS.has(overlay)&&!UNGROUNDED.has(overlay)))hands.update(posed,dt);
    // Stage 2: hands up (over whatever the arms were doing), and the limp (before the feet are planted).
    handsUp?.update(!!state.handsUp&&!SWINGS.has(overlay)&&!UNGROUNDED.has(overlay)&&state.alive!==false,dt);
    if(state.phone&&!phone&&handsUp)phone=createPhone(root);

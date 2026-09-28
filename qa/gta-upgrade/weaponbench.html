@@ -32,7 +32,14 @@ const dt=1/60;
  * `run(figure, state)` steps the game's update; the target, when there is one, is 6 m ahead.
  */
 const POSES=[
- {id:'holstered',label:'fists: pistol at the hip, katana on the back',state:{weapon:'fists'},run(){}},
+ {id:'holstered',label:'fists: pistol at the right hip, katana at the left hip (Katana A)',state:{weapon:'fists'},run(){}},
+ // Katana A: sheathed at the hip (noto), standing and walking; and the draw-cut (iai) as the hand
+ // brings the blade out, the left hand on the scabbard's mouth.
+ {id:'katana-sheathed',label:'katana sheathed at the left hip (noto)',state:{weapon:'katana',katanaSheathed:true},run(f,s){for(let i=0;i<40;i++)f.update(s,dt);}},
+ {id:'katana-sheathed-walk',label:'katana sheathed, walking',state:{weapon:'katana',katanaSheathed:true,speed:1.4},run(f,s){for(let i=0;i<50;i++)f.update(s,dt);}},
+ {id:'katana-iai',label:'draw-cut (iai): the blade leaving the scabbard',state:{weapon:'katana',katanaSheathed:true},
+  run(f,s){for(let i=0;i<40;i++)f.update(s,dt);s.katanaSheathed=false;s.drawCut=true;s.attackName='SwordAttack';s.attackDuration=s.attackTime=SWORD.duration;
+   for(let t=0;t<.16;t+=dt){f.update(s,dt);s.attackTime=Math.max(0,s.attackTime-dt);}}},
  {id:'katana-idle',label:'katana drawn, standing (Sword_Idle)',state:{weapon:'katana'},run(){}},
  {id:'katana-cut',label:`katana cut at its peak (${SWORD.peak}s of ${SWORD.duration}s)`,state:{weapon:'katana'},
   run(f,s){s.attackName='SwordAttack';s.attackDuration=s.attackTime=SWORD.duration;

@@ -59,7 +59,11 @@ export const WEAPONS = Object.freeze({
  * is carried (`holster` s), puts it away, goes to where the next one is carried and brings it up
  * (`draw` s). A shot waits for it.
  */
-export const DRAW = Object.freeze({holster: .22, draw: .3});
+export const DRAW = Object.freeze({holster: .22, draw: .3,
+ // Katana A: a cut from the scabbard (iai): the hand is on the handle in `iaiReach` s and draws
+ // it out through the first `iaiDraw` s of the cut's own wind-up; the left hand holds the
+ // scabbard's mouth (`iaiMouth` m along it) meanwhile. Re-sheathing (noto) eases the hand back.
+ iaiReach: .1, iaiDraw: .26, iaiMouth: .1, noto: .35});
 
 /**
  * How each weapon sits in the right hand, in hand_r's own frame.

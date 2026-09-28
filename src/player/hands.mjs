@@ -97,6 +97,8 @@ export function createHands(root, rig, {onDrop = null} = {}) {
   get ready() {return ready;},
   /** A weapon change is under way: the shot waits. */
   get busy() {return !!swap;},
+  /** Katana A: a draw out of the scabbard into a cut is under way (it runs over the cut's pose). */
+  get drawing() {return !!swap?.iai;},
   /** The weapon to draw in the hand this frame (the old one until the hand has put it away). */
   get shown() {return shown;},
   get stats() {return {...stats};},
@@ -108,8 +110,13 @@ export function createHands(root, rig, {onDrop = null} = {}) {
     const from = swap ? drawPhase(swap).shown : current;
     const has = k => !!k && k !== 'fists' && rig?.stowPoint(k, a);
     const fromSpot = has(from) ? from : has(want) ? want : null, toSpot = has(want) ? want : fromSpot;
-    swap = ready && fromSpot ? {from, to: want, fromSpot, toSpot, t: 0,
-     holster: DRAW.holster, draw: has(want) ? DRAW.draw : 0} : null;
+    // Katana A: drawn out of the scabbard into a cut (iai) -- quick, and the left hand holds the
+    // scabbard; put back into it (noto) -- the hand eases back rather than snapping.
+    const iai = !!state.drawCut && want === 'katana';
+    const noto = from === 'katana' && want === 'fists';
+    swap = ready && fromSpot ? {from, to: want, fromSpot, toSpot, t: 0, iai,
+     holster: iai ? DRAW.iaiReach : DRAW.holster, draw: iai ? DRAW.iaiDraw : has(want) ? DRAW.draw : noto ? DRAW.noto : 0} : null;
+    if (swap?.iai) stats.iai = (stats.iai ?? 0) + 1;
     if (swap) stats.draws++;
     current = want;
    }
@@ -125,6 +132,8 @@ export function createHands(root, rig, {onDrop = null} = {}) {
    if (swap) {
     const p = drawPhase(swap);
     if (spotAt(p.spot, b)) {reach(right, b, p.weight); moved = true;}
+    // Katana A: the left hand on the scabbard's mouth while the right draws (koiguchi).
+    if (swap.iai && rig.sayaPoint?.(DRAW.iaiMouth, a)) reach(left, a, p.weight);
    }
    // The submachine gun's magazine.
    const total = WEAPONS.smg.reloadSeconds, left_ = state.reloadLeft ?? 0;

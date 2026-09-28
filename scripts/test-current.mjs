@@ -63,6 +63,7 @@ const files=[
  'tests/fleet-types.test.mjs',
  'tests/name-guard.test.mjs',
  'tests/weapons.test.mjs',
+ 'tests/katana-iai.test.mjs',
  'tests/pistol.test.mjs',
  'tests/police-guns.test.mjs',
  'tests/roll-crouch.test.mjs',

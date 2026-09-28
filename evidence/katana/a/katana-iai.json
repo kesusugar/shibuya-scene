@@ -1,0 +1,16 @@
+{
+ "url": "http://<local>/qa/gta-upgrade/weaponbench.html?pose=katana-iai",
+ "ready": true,
+ "bench": {
+  "poses": [
+   "katana-iai"
+  ],
+  "lines": [
+   "front | player's right | behind | player's left",
+   "katana-iai: draw-cut (iai): the blade leaving the scabbard  | grip-to-palm 0.7 cm"
+  ],
+  "calls": 8
+ },
+ "console": [],
+ "errors": 0
+}

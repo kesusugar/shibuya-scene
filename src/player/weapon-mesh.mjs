@@ -12,7 +12,11 @@ import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {GRIP,SHAPE} from './weapons.mjs';
 
 const COLOUR=Object.freeze({gunmetal:0x2b2d31,black:0x151517,steel:0x3c4047,wood:0x5b3a22,
- blade:0xc9ced6,hamon:0xe8ebef,tsuba:0x3f3526,wrap:0x1d1b26,saya:0x0f0d0e,holster:0x1a1614});
+ blade:0xc9ced6,hamon:0xe8ebef,tsuba:0x3f3526,wrap:0x1d1b26,saya:0x0f0d0e,holster:0x1a1614,
+ // Katana A: the scabbard's lacquer (a deep warm black, not the flat dead black it was, so its
+ // curve catches the light), its horn fittings, the silk cord (sageo) and the handle's same-skin
+ // showing between the wraps.
+ lacquer:0x24161a,horn:0x3a2a22,sageo:0x2c3564,samegawa:0xc9c2b0});
 
 /** A box in the weapon's frame (+Z forward, +Y up, metres), painted one colour. */
 function part(geometry,colour,{at=[0,0,0],rx=0,ry=0,rz=0}={}){
@@ -53,6 +57,51 @@ function blade(start,length,colour,edge){
  return g;
 }
 
+/**
+ * Katana A: the scabbard (saya), curved like the blade it holds (the same sori, away from the edge,
+ * which faces +Y), an oval section a little over the blade's width, from the mouth at `start` to
+ * `start + length`, narrowing toward the end. A strip like the blade, so the curve reads.
+ */
+function sayaBody(start,length,colour){
+ const N=12,S=10,{sori}=SHAPE.katana,pos=[],col=[],c=new Color(colour),ring=[];
+ for(let i=0;i<=N;i++){
+  const s=i/N,z=start+s*length,bend=-sori*s*s*4,w=.0125*(1-.18*s),h=.019*(1-.12*s);
+  const r=[];for(let k=0;k<S;k++){const a=k/S*Math.PI*2;r.push([Math.cos(a)*w,bend+Math.sin(a)*h,z]);}
+  ring.push(r);
+ }
+ const tri=(p,q,r)=>{for(const v of [p,q,r]){pos.push(...v);col.push(c.r,c.g,c.b);}};
+ for(let i=0;i<N;i++)for(let k=0;k<S;k++){const k2=(k+1)%S;tri(ring[i][k],ring[i+1][k],ring[i+1][k2]);tri(ring[i][k],ring[i+1][k2],ring[i][k2]);}
+ // Closed at the end (the kojiri cap covers it) and open at the mouth (the guard sits on it).
+ const e=[0,-sori*4,start+length];for(let k=0;k<S;k++)tri(ring[N][k],e,ring[N][(k+1)%S]);
+ const g=new BufferGeometry();
+ g.setAttribute('position',new BufferAttribute(new Float32Array(pos),3));
+ g.setAttribute('color',new BufferAttribute(new Float32Array(col),3));
+ g.computeVertexNormals();
+ return g;
+}
+/** The scabbard's fittings: the mouth ring (koiguchi), the cord knob (kurikata) with its cord, the end cap. */
+function sayaFittings(start,length){
+ const {sori}=SHAPE.katana,end=start+length;
+ return [
+  tube(.02,.022,COLOUR.horn,{at:[0,0,start+.011],sides:12}),                       // koiguchi
+  box(.01,.016,.03,COLOUR.horn,{at:[0,-.024,start+.12]}),                           // kurikata, on the back
+  tube(.0145,.05,COLOUR.sageo,{at:[0,-.001,start+.13],sides:10}),                  // sageo wound round it
+  box(.006,.05,.012,COLOUR.sageo,{at:[.004,-.05,start+.15],rx:.5}),                 // and its hanging loop
+  tube(.0115,.035,COLOUR.horn,{at:[0,-sori*4*.97,end-.012],sides:10,r2:.0135})    // kojiri
+ ];
+}
+/** The handle (tsuka): same-skin under a diamond-crossed wrap, and the pommel cap. */
+function tsuka(handle){
+ const parts=[box(.028,.032,handle,COLOUR.samegawa,{at:[0,0,.05-handle/2]})],n=7,len=handle-.03;
+ // The wrap crosses over the same-skin in pairs, leaving the diamonds (hishigami) showing.
+ for(let i=0;i<n;i++){const z=.05-.012-(i+.5)*len/n;
+  // Flat bands, each rolled a little the other way round the handle, so they cross without
+  // standing proud of it (tilting them along the handle made a saw edge).
+  parts.push(box(.03,.034,len/n*.56,COLOUR.wrap,{at:[0,0,z],rz:(i%2?.5:-.5)}));}
+ parts.push(box(.03,.034,.02,COLOUR.horn,{at:[0,0,.05-handle+.01]}));              // kashira
+ return parts;
+}
+
 const BUILD={
  // An automatic pistol: slide, frame, an angled grip, a trigger guard. The muzzle is SHAPE.pistol.
  pistol:()=>[
@@ -79,7 +128,7 @@ const BUILD={
  katana:()=>{
   const {handle,tip}=SHAPE.katana,bladeStart=.085;
   return [
-   box(.03,.034,handle,COLOUR.wrap,{at:[0,0,.05-handle/2]}),
+   ...tsuka(handle),
    tube(.017,.012,COLOUR.tsuba,{at:[0,0,.05-handle-.004]}),
    part(new CylinderGeometry(.042,.042,.008,14),COLOUR.tsuba,{at:[0,0,.066],rx:Math.PI/2}),
    box(.012,.034,.014,COLOUR.tsuba,{at:[0,.002,.077]}),
@@ -107,18 +156,18 @@ const BUILD={
  // Stage 1: the submachine gun's magazine, its own mesh so a reload can take it out of the gun.
  // Built about its own top (where it seats), which sits at SMG_MAG in the gun's frame.
  smgMag:()=>[box(.028,.13,.034,COLOUR.black,{at:[0,-.065,0],rx:.12})],
- // The katana in its scabbard, for the back: the same handle and guard, and a lacquered saya over
- // the blade's length.
+ // The katana in its scabbard, worn at the left hip (Katana A): the same handle and guard, and the
+ // curved lacquered saya with its fittings over the blade's length.
  sheathed:()=>{
   const {handle,tip}=SHAPE.katana;
   return [
-   box(.03,.034,handle,COLOUR.wrap,{at:[0,0,.05-handle/2]}),
+   ...tsuka(handle),
    part(new CylinderGeometry(.042,.042,.008,14),COLOUR.tsuba,{at:[0,0,.066],rx:Math.PI/2}),
-   box(.022,.04,tip-.07,COLOUR.saya,{at:[0,-.004,.07+(tip-.07)/2+.005]}),
+   sayaBody(.072,tip-.05,COLOUR.lacquer),...sayaFittings(.072,tip-.05)
   ];
  },
  // The scabbard alone, while the katana is in the hand.
- saya:()=>{const {tip}=SHAPE.katana;return [box(.022,.04,tip-.07,COLOUR.saya,{at:[0,-.004,.07+(tip-.07)/2+.005]})];},
+ saya:()=>{const {tip}=SHAPE.katana;return [sayaBody(.072,tip-.05,COLOUR.lacquer),...sayaFittings(.072,tip-.05)];},
  // The pistol in a hip holster: only the grip and the back of the slide show above the leather.
  holstered:()=>[
   box(.036,.05,.2,COLOUR.holster,{at:[0,.05,.075]}),
@@ -159,12 +208,27 @@ const CARRY=Object.freeze({
  // The pistol at the right hip, muzzle down, the slide's top facing forward.
  hip:{bone:'pelvis',at:[-.185,.93,-.02],forward:[0,-1,.08],up:[0,.08,1],kind:'holstered'},
  // The katana across the back, the handle over the right shoulder and the scabbard's end at the
- // left hip, the edge facing out.
+ // left hip, the edge facing out. (No longer used for the katana: see `obi`.)
  back:{bone:'spine_03',at:[-.2,1.46,-.19],forward:[.42,-.9,0],up:[0,0,-1],kind:'sheathed'},
+ // Katana A: the katana worn as it is worn -- thrust through the sash at the left hip, edge up, the
+ // handle forward and a little up across the belly, the scabbard running back past the left
+ // thigh, angled out and down so the leg swings clear of it. The right hand reaches across the
+ // body to draw it, which is what a draw from here is.
+ obi:{bone:'pelvis',at:[.1,.99,.13],forward:[.2,-.36,-.91],up:[0,.93,-.36],kind:'sheathed'},
  // Stage 1: the submachine gun slung behind the right shoulder, muzzle down to the left, the grip
  // where the right hand finds it over the shoulder blade.
+ // Katana A: still where the hand fetches it from and puts it back (hands.mjs), but no longer drawn
+ // there -- see SHOW_SLUNG_SMG.
  sling:{bone:'spine_03',at:[-.17,1.33,-.2],forward:[.3,-.95,0],up:[0,0,-1],kind:'smg'}
 });
+
+/**
+ * Katana A: the slung submachine gun is not drawn on the back. At 0.6 m it read, from every side,
+ * as a long black plank hung behind the shoulder (laid flat, its stock stood above the shoulder
+ * and it cut into the back). The draw still fetches it from over the shoulder; the way GTA does
+ * it, a weapon not in the hand is not shown.
+ */
+export const SHOW_SLUNG_SMG=false;
 
 /**
  * The weapons on one figure. `carry` lists what the body carries: the player has the pistol and
@@ -200,12 +264,12 @@ export function createWeaponRig(root,{carry=['pistol','katana']}={}){
   return m;
  };
  if(carry.includes('pistol'))stowed.pistol=place('hip');
- if(carry.includes('katana')){stowed.katana=place('back');stowed.saya=place('back','saya');}
+ if(carry.includes('katana')){stowed.katana=place('obi');stowed.saya=place('obi','saya');}
  if(carry.includes('smg'))stowed.smg=place('sling');
  // Stage 1: the magazine in the gun, and a second one on the sling (a slung gun has one too).
  const mag=inHand.smg?make('smgMag',inHand.smg):null;
  if(mag)mag.position.set(...SMG_MAG);
- if(stowed.smg){const m2=make('smgMag',stowed.smg);m2.position.set(...SMG_MAG);m2.visible=true;}
+ if(stowed.smg){const m2=make('smgMag',stowed.smg);m2.position.set(...SMG_MAG);m2.visible=SHOW_SLUNG_SMG;}
  let current=null,magFree=false,magHidden=false;
  const inv=new Matrix4();
  const v=new Vector3(),q=new Quaternion();
@@ -218,7 +282,7 @@ export function createWeaponRig(root,{carry=['pistol','katana']}={}){
    if(stowed.pistol)stowed.pistol.visible=!hidden&&current!=='pistol';
    if(stowed.katana)stowed.katana.visible=!hidden&&current!=='katana';
    if(stowed.saya)stowed.saya.visible=!hidden&&current==='katana';
-   if(stowed.smg)stowed.smg.visible=!hidden&&current!=='smg';
+   if(stowed.smg)stowed.smg.visible=SHOW_SLUNG_SMG&&!hidden&&current!=='smg';
    if(mag){mag.visible=!hidden&&current==='smg'&&!magHidden;if(!magFree)mag.position.set(...SMG_MAG);}
   },
   /**
@@ -226,6 +290,11 @@ export function createWeaponRig(root,{carry=['pistol','katana']}={}){
    * carried), in world space. False for what is not carried anywhere (the fists).
    */
   stowPoint(kind,out){const m=stowed[kind];if(!m)return false;m.updateWorldMatrix(true,false);out.setFromMatrixPosition(m.matrixWorld);return true;},
+  /**
+   * Katana A: a point along the stowed scabbard, `along` metres from the guard toward its end
+   * (0.1 is the mouth, where the left hand holds it for a draw), in world space.
+   */
+  sayaPoint(along,out){const m=stowed.saya??stowed.katana;if(!m)return false;m.updateWorldMatrix(true,false);out.set(0,0,along).applyMatrix4(m.matrixWorld);return true;},
   /** Stage 1: a point in the drawn submachine gun's frame, in world space (for the reload's hand). */
   gunPoint(local,out){const m=current==='smg'?inHand.smg:null;if(!m)return false;m.updateWorldMatrix(true,false);out.set(local[0],local[1],local[2]).applyMatrix4(m.matrixWorld);return true;},
   /**

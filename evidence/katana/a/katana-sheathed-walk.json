@@ -1,0 +1,16 @@
+{
+ "url": "http://<local>/qa/gta-upgrade/weaponbench.html?pose=katana-sheathed-walk",
+ "ready": true,
+ "bench": {
+  "poses": [
+   "katana-sheathed-walk"
+  ],
+  "lines": [
+   "front | player's right | behind | player's left",
+   "katana-sheathed-walk: katana sheathed, walking"
+  ],
+  "calls": 7
+ },
+ "console": [],
+ "errors": 0
+}
