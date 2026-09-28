@@ -1,0 +1,16 @@
+{
+ "url": "http://<local>/qa/gta-upgrade/weaponbench.html?pose=katana-c-land",
+ "ready": true,
+ "bench": {
+  "poses": [
+   "katana-c-land"
+  ],
+  "lines": [
+   "front | player's right | behind | player's left",
+   "katana-c-land: the cut: the front foot lands with the blade (0.8s)  | grip-to-palm 0.7 cm"
+  ],
+  "calls": 8
+ },
+ "console": [],
+ "errors": 0
+}

@@ -1,0 +1,16 @@
+{
+ "url": "http://<local>/qa/gta-upgrade/weaponbench.html?pose=katana-c-coil",
+ "ready": true,
+ "bench": {
+  "poses": [
+   "katana-c-coil"
+  ],
+  "lines": [
+   "front | player's right | behind | player's left",
+   "katana-c-coil: coil: raised, hips and chest wound (0.5s)  | grip-to-palm 0.7 cm"
+  ],
+  "calls": 8
+ },
+ "console": [],
+ "errors": 0
+}

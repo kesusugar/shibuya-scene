@@ -1,0 +1,16 @@
+{
+ "url": "http://<local>/qa/gta-upgrade/weaponbench.html?pose=katana-c-zanshin",
+ "ready": true,
+ "bench": {
+  "poses": [
+   "katana-c-zanshin"
+  ],
+  "lines": [
+   "front | player's right | behind | player's left",
+   "katana-c-zanshin: zanshin: the blade held low, eyes on the person (1.2s)  | grip-to-palm 0.7 cm"
+  ],
+  "calls": 8
+ },
+ "console": [],
+ "errors": 0
+}

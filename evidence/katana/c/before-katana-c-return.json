@@ -1,0 +1,16 @@
+{
+ "url": "http://<local>/qa/gta-upgrade/weaponbench.html?pose=katana-c-return",
+ "ready": true,
+ "bench": {
+  "poses": [
+   "katana-c-return"
+  ],
+  "lines": [
+   "front | player's right | behind | player's left",
+   "katana-c-return: the way back to guard (1.6s)  | grip-to-palm 0.7 cm"
+  ],
+  "calls": 8
+ },
+ "console": [],
+ "errors": 0
+}
