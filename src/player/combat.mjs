@@ -39,6 +39,9 @@ export const COMBAT=Object.freeze({range:1.75,notice:4.5,playerDamage:25,npcDama
  // rhythm varies by speed rather than by a second animation), and a cut that meets a wall or a
  // car stops where it met it: the clip holds there for `clankHold` s, then hands back to the gait.
  katanaFast:1.12,clankHold:.16,bodyRadius:.3,katanaWitness:.9,
+ // Katana A: this long with the katana out and no cut, it goes back into its scabbard at the hip
+ // (noto), and the next cut draws it out as it cuts (iai).
+ notoAfter:5,
  // PLAN-WEAPONS R11: how hard a fatal shot pushes the body, m/s, with no lift. A car's throw is
  // 2.4 m/s and up; a bullet does not carry a person.
  shotPush:.7,
@@ -139,6 +142,7 @@ export function katanaSweep({x,z,heading},c0,c1,{solid=()=>false,car=()=>false,p
 export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapon=()=>'fists'}={}){
  let pending=false,target=null,disposed=false,swingIndex=0;
  let swing=null;                       // the attack in flight, or null
+ let katanaIdle=0;                     // Katana A: seconds with the katana out and no cut (noto after COMBAT.notoAfter)
  let lastBlow=null;                    // the most recent landed blow, for QA
  const stats={swings:0,hits:0,misses:0,npcHits:0,npcDeaths:0,witnessEvents:0,witnesses:0,cuts:0,clanks:0,shotHits:0,headshots:0,
   byResponse:{fight:0,flee:0,backoff:0}};
@@ -338,7 +342,11 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
   const base=katana?SWORD:attackOf(name);
   const timing=rate===1?base:{...base,duration:base.duration/rate,windup:base.windup/rate,activeEnd:base.activeEnd/rate,peak:base.peak/rate};
   const state=player.state,aim=crowd?lockOn(crowd,state):null;
-  swing={id:swingIndex,name,timing,elapsed:0,phase:PHASE.WINDUP,hitConsumed:false,aim,katana,rate,cut:new Set(),stopped:null};
+  // Katana A: from the scabbard, this cut is a draw-cut (iai): the hand draws the blade on the way
+  // into the cut's own wind-up; the timing and the blow are the same.
+  const iai=katana&&!!state.katanaSheathed;
+  if(katana){state.katanaSheathed=false;katanaIdle=0;state.drawCut=iai;if(iai)stats.iai=(stats.iai??0)+1;}
+  swing={id:swingIndex,name,timing,elapsed:0,phase:PHASE.WINDUP,hitConsumed:false,aim,katana,rate,cut:new Set(),stopped:null,iai};
   // §9aj G1: the one the swing is thrown at gets a detailed body before it lands.
   if(aim)aim.aimedUntil=(crowd?.time??0)+timing.duration+.3;
   stats.swings++;
@@ -360,6 +368,11 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
    const state=player.state;
    state.attackTime=Math.max(0,(state.attackTime??0)-dt);
    state.hurtTime=Math.max(0,(state.hurtTime??0)-dt);
+   // Katana A: the katana goes back into its scabbard after a while with no cut (noto). Any other
+   // weapon, or picking the katana again, starts it drawn.
+   if(weapon()==='katana'&&state.alive!==false){
+    if(!swing&&!state.katanaSheathed){katanaIdle+=Math.max(0,dt);if(katanaIdle>=COMBAT.notoAfter){state.katanaSheathed=true;stats.noto=(stats.noto??0)+1;}}
+   }else{katanaIdle=0;state.katanaSheathed=false;state.drawCut=false;}
 
    // A new swing only starts when the last one has finished. Holding the button does not
    // stack punches, and a press during recovery is dropped rather than queued.
@@ -405,6 +418,7 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
     // coarse steps all produce it, and a punch that silently does nothing when the frame
     // rate dips is worse than one that lands a frame late.
     const crossed=swing.elapsed>=windup&&before<activeEnd;
+    if(swing.phase!==PHASE.WINDUP)state.drawCut=false;
     if(swing.katana){
      if(crossed&&!swing.stopped&&state.alive)cut(crowd,player,before,swing.elapsed);
     }else if(crossed&&!swing.hitConsumed&&state.alive){
@@ -536,7 +550,7 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
   },
   snapshot(){return {...stats,byResponse:{...stats.byResponse},lastBlow,target:target?.id??null,
    phase:swing?swing.phase:PHASE.IDLE,clip:swing?swing.name:null,stopped:swing?.stopped?.what??null};},
-  reset(){pending=false;target=null;swing=null;},
+  reset(){pending=false;target=null;swing=null;katanaIdle=0;},
   dispose(){disposed=true;pending=false;target=null;swing=null;}
  };
 }

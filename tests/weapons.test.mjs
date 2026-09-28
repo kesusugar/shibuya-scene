@@ -100,7 +100,7 @@ test('R3: the grip stays within 3 cm of the palm through every frame of every we
  }
 });
 
-test('R3: a stowed weapon rides its bone -- the pistol at the right hip, the katana on the back',async()=>{
+test('R3 / Katana A: a stowed weapon rides its bone -- the pistol at the right hip, the katana at the left hip',async()=>{
  const figure=createPlayerFigure(await humanoid(),undefined,{weapons:['pistol','katana']});
  const state={x:0,y:0,z:0,speed:1.4,heading:0,bodyHeading:0,alive:true,attackTime:0,weapon:'fists'};
  const hip=figure.root.getObjectByName('weapon-holstered'),back=figure.root.getObjectByName('weapon-sheathed');
@@ -111,15 +111,19 @@ test('R3: a stowed weapon rides its bone -- the pistol at the right hip, the kat
  assert.ok(hip.visible&&back.visible,'fists out: both carried weapons are shown stowed');
  assert.ok(far<.3,`the holstered pistol drifted ${far.toFixed(2)} m from the pelvis while walking`);
  hip.getWorldPosition(a);assert.ok(a.x<0,'the holster is not on the right hip (right is -x)');
- // Behind the chest, whatever the walk's lean does to both.
- back.getWorldPosition(a);figure.root.getObjectByName('spine_03').getWorldPosition(b);
- assert.ok(a.z-b.z<-.05,`the katana is ${(a.z-b.z).toFixed(2)} m from the chest along the facing, not on the back`);
- // Stage 1: drawing is a hand movement -- the hand goes over the shoulder first, and the katana
- // comes out of the scabbard when it gets there (hands.mjs), not on the key press.
+ // Katana A: worn through the sash at the left hip (+x is left), the guard in front of the hip,
+ // the handle forward of it and the scabbard running back past the thigh.
+ back.getWorldPosition(a);pelvis.getWorldPosition(b);
+ assert.ok(a.x-b.x>.04,`the katana is ${(a.x-b.x).toFixed(2)} m to the left of the pelvis, not at the left hip`);
+ assert.ok(a.z-b.z>0&&a.distanceTo(b)<.3,`the guard is not at the front of the hip (${(a.z-b.z).toFixed(2)} m ahead, ${a.distanceTo(b).toFixed(2)} m away)`);
+ const end=new Vector3(0,0,.7).applyMatrix4(back.matrixWorld);
+ assert.ok(end.z<b.z-.2&&end.y<a.y,'the scabbard does not run back and down past the thigh');
+ // Stage 1: drawing is a hand movement -- the hand goes to the handle at the hip first, and the
+ // katana comes out of the scabbard when it gets there (hands.mjs), not on the key press.
  state.weapon='katana';figure.update(state,1/30);
- assert.ok(back.visible&&!figure.root.getObjectByName('weapon-katana').visible,'the katana left the back before the hand reached it');
+ assert.ok(back.visible&&!figure.root.getObjectByName('weapon-katana').visible,'the katana left the scabbard before the hand reached it');
  for(let t=0;t<DRAW.holster+DRAW.draw;t+=1/30)figure.update(state,1/30);
- assert.ok(!back.visible&&figure.root.getObjectByName('weapon-saya').visible,'a drawn katana leaves its scabbard on the back');
+ assert.ok(!back.visible&&figure.root.getObjectByName('weapon-saya').visible,'a drawn katana leaves its scabbard at the hip');
  assert.ok(figure.root.getObjectByName('weapon-katana').visible);
  figure.dispose();
 });
