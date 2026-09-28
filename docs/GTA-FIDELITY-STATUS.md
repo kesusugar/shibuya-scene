@@ -6660,6 +6660,43 @@ the game uses, and checks the emitted CSS for what the game ships (its overlay s
 layer, the reduced-motion rules). The scrollbar, scroll-fade and mask utilities only the removed
 scroller components used are no longer emitted (Tailwind emits what the source uses).
 
+## 9bh. Photo mode (backlog ②): a free camera over a stopped world, the HUD gone, stills saved
+
+For the promo footage. In play, **P** or the HUD's **撮影** button (Esc, P or the panel's 戻る to
+leave) -- `src/player/photo-mode.mjs`:
+- **The world's time**: stopped on entry; **T** cycles stopped → 1/4 → running (the frame loop's
+  `dt` is scaled by `photo.timeScale`; the sky's own cross-fade runs on real time, so **N** --
+  dawn → day → dusk → night -- turns over while the world is stopped).
+- **The free camera** starts where the game camera was: **WASD** fly (forward along the view,
+  strafe level), **Q/E** down/up, **Shift** ×4, **Alt** ×¼, the **mouse** (pointer lock) looks,
+  the **wheel** or **[ ]** zoom 12-95°, **Z/X** tilt up to 0.6 rad. Kept within 60 m of where
+  photo mode began and 0.25 m above the ground. On a pad: left stick flies, right stick looks,
+  ZL/ZR down/up, L/R zoom, the bottom face button takes the still.
+- **Nothing over the picture**: the page's panels, the play HUD, the touch pad and the markers over
+  the player and the car are hidden; the help (bottom left; **H** hides it) is the only overlay.
+  While photo mode is on the frame is drawn at full resolution (the dynamic resolution waits).
+- **Enter** (or the panel's 撮る) saves the frame as `shibuya-YYYYMMDD-HHMMSS.png`, taken right
+  after it is drawn.
+- **The game is untouched**: while photo mode has the view the player's controller takes no input
+  (`player.suspend`, which also lets go of anything held), its keys and mouse never reach the game's
+  handlers (the photo listeners run first and stop them), and leaving gives the game camera back
+  where it was, the body where it stood.
+
+Checked in the real scene, headless (`qa/gta-upgrade/photo-mode-stills.mjs`, LOW day, 0 console
+errors): the HUD gone and the help shown on entry; over 60 frames each, the crowd's clock moved 0 s
+stopped, 0.50 s in 1.95 s at 1/4 (0.26), 2.17 s in 2.17 s running; the still saved through the
+page's own download at 1280×720 (85% non-blank); back in play with the HUD and the body unmoved.
+(Headless Chrome draws no frames while nothing polls it, so these are counted in frames, not waited
+for in seconds.) Tests: `tests/photo-mode.test.mjs` (the time cycle, flying and its limits, the
+file name, the body taking no input and getting it back). Evidence: `evidence/photo-mode/`
+(play, entered, flown up, low and tilted, turned to night, back; `07-saved-*.png` is a saved still).
+
+The 撮影 / 撮る / 戻る buttons were added after these stills were taken (the help panel in them has
+no buttons yet).
+
+Not done: flying the free camera by touch (a phone can enter, take the still from where the game
+camera was, and leave); a device look is owed.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
