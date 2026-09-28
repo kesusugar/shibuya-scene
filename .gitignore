@@ -90,3 +90,23 @@ next-env.d.ts
 /assets/audio/upstream/
 # ground textures (RUN 12.3): upstream downloads are verified, never committed
 /assets/textures/upstream/
+
+# public-release hardening
+# logs (intentional QA evidence logs under evidence/ stay tracked)
+*.log
+!/evidence/**/*.log
+# secrets and local credentials
+.dev.vars
+.dev.vars.*
+*.key
+*.p12
+*.pfx
+*.local
+.claude/settings.local.json
+# editors and OS files
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+# git bundles used for hand-offs
+*.bundle

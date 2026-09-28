@@ -17,7 +17,7 @@
 ### bundleから安全に新しい作業フォルダを作る
 
 ```powershell
-git clone -b codex/prebaked-motion "C:\Users\keisu\Downloads\shibuya-scene-handoff.bundle" shibuya-scene-handoff
+git clone -b codex/prebaked-motion "<LOCAL_PATH>\shibuya-scene-handoff.bundle" shibuya-scene-handoff
 cd shibuya-scene-handoff
 git remote rename origin handoff-bundle
 git remote add origin https://github.com/kesusugar/shibuya-scene.git

@@ -140,3 +140,12 @@ Reproduce the exact snapshot: decompress data-source/shibuya.osm.gz; run python 
 Workspace maintenance removed the first uncommitted S1 checkout. This source was reconstructed from the visible implementation record and surviving OSM bytes. See evidence/s1 for validation of this restored copy. STOP after S1; no deployment.
 
 RUN S10 adds pooled procedural pedestrians, OSM sidewalk routing, signal-coordinated crossings, local avoidance and quality/LOD profiles. Run `node --test tests/s10-crowd.test.mjs` for the integrated 180-second crowd/traffic audit. Detailed counts and validation limits are recorded in evidence/s10/S10_REPORT.txt. S11 and later stages remain out of scope.
+
+## Licences, credits and third-party material
+
+- Third-party code, map data, characters, motion capture, textures and sounds, each with its licence and source: [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). Licence texts: `LICENSES/`, `public/licenses/`, `data-source/LICENSE.txt`; pinned upstream records: `assets/*/upstream.lock.json`.
+- Map data © OpenStreetMap contributors, ODbL-1.0.
+- Motion capture: "The data used in this project was obtained from mocap.cs.cmu.edu. The database was created with funding from NSF EIA-0196217."
+- Real brand and building names shown on in-game signs are the trademarks of their owners. The signs are drawn procedurally for a streetscape reconstruction; no official logo artwork is included, and no affiliation or endorsement is implied.
+- This repository's own code has no licence chosen yet; until one is added, all rights are reserved by the author.
+- Security issues: see [`SECURITY.md`](SECURITY.md).
