@@ -119,9 +119,13 @@ await js('window.__SHIBUYA_PLAYER__.setTouch({forward:0})');
 checks.outAtA0=await probe();
 await run(1);
 await still('06-a0-exit','up and out at A0',{view:{yaw:3.14,dist:6,height:2.6,target:1}});
-// Wait for the level to clear (or 60 s of game time).
+// Keep running, away from the exit (the way it faces), until the level clears (or 60 s of game time).
 {const t0=await js('window.__SHIBUYA_LIFE__.sim.time');
- const cleared=await runUntil('window.__SHIBUYA_POLICE__.wanted.state.stars===0',60,'the level clears');
+ const away=`(()=>{const T=window.__SHIBUYA_TUNNEL__,p=window.__SHIBUYA_PLAYER__,e=T.ends[1];p.state.heading=Math.atan2(e.out.x,e.out.z);p.setTouch({forward:1,running:true});})()`;
+ await js('window.__SHIBUYA_QA__.render(false)');let cleared=false;const wall=Date.now()+240000;
+ while(Date.now()<wall){await js(away);if(await js('window.__SHIBUYA_POLICE__.wanted.state.stars===0')){cleared=true;break;}if((await js('window.__SHIBUYA_LIFE__.sim.time'))-t0>60)break;await sleep(25);}
+ await js('window.__SHIBUYA_PLAYER__.setTouch({forward:0})');await run(.5);
+ await still('07-got-away','the level cleared, away from A0',{view:{yaw:3.14,dist:6,height:2.6,target:1}});
  checks.cleared={cleared,after:+((await js('window.__SHIBUYA_LIFE__.sim.time'))-t0).toFixed(1),reason:await js('window.__SHIBUYA_POLICE__.wanted.state.cleared'),final:await probe()};}
 const errors=log.filter(l=>l.type==='error'||l.type==='exception');
 writeFileSync(join(out,'tunnel-scene.json'),JSON.stringify({query,checks,steps,console:log,errors:errors.length},null,1)+'\n');
