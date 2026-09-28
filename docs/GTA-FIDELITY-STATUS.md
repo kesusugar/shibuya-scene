@@ -6633,6 +6633,33 @@ cut's zanshin; the player's right and the front) and the bench shots `katana-d-*
 Known limits: the rising and level cuts are the capture's own footwork (no step in like the kesa's);
 between cuts the feet blend over 0.3 s; a device look is still owed.
 
+## 9bg. Starter clean-up: the template's unused parts removed
+
+The project began from a site template (shadcn component catalog, a D1/Drizzle database, a
+ChatGPT sign-in helper, an example API route). The game uses one component of it -- the settings
+switch -- and none of the rest. Removed, after checking every import:
+- 60 of the 61 files in `components/ui/` (kept: `switch.tsx`, used by `app/ShibuyaScene.tsx` and
+  `app/GyroSettings.tsx`), and `hooks/use-mobile.ts` (the sidebar's);
+- `app/chatgpt-auth.ts` (imported nowhere), `examples/d1/`, `db/`, `drizzle/`, `drizzle.config.ts`,
+  the `db:generate` script;
+- 18 dependencies and 1 dev dependency that only those files used (`@base-ui/react`,
+  `@hookform/resolvers`, `@shadcn/react`, `class-variance-authority`, `cmdk`, `date-fns`,
+  `drizzle-orm`, `embla-carousel-react`, `input-otp`, `lucide-react`, `next-themes`,
+  `react-day-picker`, `react-hook-form`, `react-resizable-panels`, `recharts`, `sonner`, `vaul`,
+  `zod`; `drizzle-kit`). The lock file only lost entries (115): nothing else was re-resolved.
+  `npm audit --omit=dev`: 0.
+- The package is named `shibuya-scene` (was `site-creator-vinext-starter`).
+
+Kept on purpose: the hosting set-up (`worker/index.ts`, `build/sites-vite-plugin.ts` -- which copies
+`drizzle/` only if it exists -- and `vite.config.ts` with its D1 binding), `components.json`,
+`lib/utils.ts` (the switch's), `radix-ui`, `clsx`, `tailwind-merge`, and the stylesheet imports in
+`app/globals.css` (`tw-animate-css`, the vendored shadcn Tailwind CSS).
+
+`tests/ui-components.test.mjs` tested the catalog (progress, chart, sidebar); it now tests the switch
+the game uses, and checks the emitted CSS for what the game ships (its overlay styles, the animation
+layer, the reduced-motion rules). The scrollbar, scroll-fade and mask utilities only the removed
+scroller components used are no longer emitted (Tailwind emits what the source uses).
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
