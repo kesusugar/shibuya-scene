@@ -6,9 +6,10 @@
 // its peak speed: the part of the swing that would cut someone standing there. The sweep is the
 // tip's bearing (atan2(x, z), + is the body's left) at the start and end of that window.
 //
-//   node qa/gta-upgrade/sword-timing.mjs
+//   node qa/gta-upgrade/sword-timing.mjs [clip=SwordAttack]
 //
-// Paste the printed object into SWORD in src/player/attack-timing.mjs.
+// Paste the printed object into SWORD (or, Katana D, SWORD_GYAKU / SWORD_YOKO for SwordGyaku /
+// SwordYoko) in src/player/attack-timing.mjs.
 import {readFileSync} from 'node:fs';
 import * as T from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
@@ -23,8 +24,9 @@ const rigOf=id=>{let f=null;gltf.scene.traverse(o=>{if(!f&&o.userData?.rig===id)
 const rig=rigOf(report.rigs[0].id);
 const bone=name=>{let f=null;rig.traverse(o=>{if(!f&&o.isBone&&o.name===name)f=o;});return f;};
 const hand=bone('hand_r'),pelvis=bone('pelvis');
-const clip=gltf.animations.find(c=>c.name==='SwordAttack');
-if(!clip)throw new Error('SwordAttack missing: run npm run convert:character');
+const NAME=process.argv[2]??'SwordAttack';
+const clip=gltf.animations.find(c=>c.name===NAME);
+if(!clip)throw new Error(`${NAME} missing: run npm run convert:character`);
 const mixer=new T.AnimationMixer(rig),action=mixer.clipAction(clip);action.play();
 
 const g=GRIP.katana,tipLocal=new T.Vector3(...g.at).addScaledVector(new T.Vector3(...g.forward).normalize(),SHAPE.katana.tip);
@@ -55,12 +57,14 @@ const peak=rows.slice(first,last+1).reduce((a,r)=>Math.hypot(r.x,r.z)>Math.hypot
 // The window opens on the first fast sample in front: the one before it is still over the
 // shoulder, behind the body, and would let a cut reach someone standing behind the player.
 const open=rows[first],close=rows[last];
-const out={name:'SwordAttack',hand:'right',duration:+clip.duration.toFixed(3),
+const out={name:NAME,hand:'right',duration:+clip.duration.toFixed(3),
  windup:+open.t.toFixed(3),activeEnd:+close.t.toFixed(3),peak:+peak.t.toFixed(3),
  sweepFrom:+bearing(open).toFixed(3),sweepTo:+bearing(close).toFixed(3),
  tipReach:+Math.max(...rows.slice(first,last+1).map(r=>Math.hypot(r.x,r.z))).toFixed(3),
  // The tip's bearing through the window, for the hit test: [seconds, radians], sampled.
  sweep:rows.slice(first,last+1).map(r=>[+r.t.toFixed(3),+bearing(r).toFixed(3)]),
+ // Katana D: the tip's height through the window (m), for where a cut meets a body.
+ heights:rows.slice(first,last+1).map(r=>+r.y.toFixed(2)),
  tipHeight:[+Math.min(...rows.slice(first,last+1).map(r=>r.y)).toFixed(2),+Math.max(...rows.slice(first,last+1).map(r=>r.y)).toFixed(2)]};
 console.log(`peak tip speed ${peakSpeed.toFixed(1)} m/s, fast pass steps ${first}-${last}`);
 for(const r of rows.slice(Math.max(0,first-3),last+3))

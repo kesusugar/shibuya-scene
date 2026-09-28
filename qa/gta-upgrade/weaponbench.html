@@ -50,6 +50,16 @@ const POSES=[
   ['katana-c-zanshin',1.2,'zanshin: the blade held low, eyes on the person'],['katana-c-return',1.6,'the way back to guard']].map(([id,at,label])=>({id,
   label:`${label} (${at}s)`,wide:true,state:{weapon:'katana'},run(f,s){s.attackName='SwordAttack';s.attackDuration=s.attackTime=SWORD.duration;
    for(let t=0;t<at;t+=dt){f.update(s,dt);s.attackTime=Math.max(1e-3,s.attackTime-dt);}}})),
+ // Katana D: the combo -- each cut as its blade passes (the trail behind it), and the last one's zanshin.
+ ...[['katana-d-kesa','SwordAttack',.84,'1 kesa (袈裟): down from high left to low right'],['katana-d-gyaku','SwordGyaku',.42,'2 rising cut (逆袈裟): from low right up to high left'],
+  ['katana-d-yoko','SwordYoko',.33,'3 level cut (横一文字): chest height, left to right'],['katana-d-zanshin','SwordYoko',.7,'3 zanshin after the level cut']].map(([id,clip,at,label])=>({id,
+  label:`${label} (${at}s)`,wide:true,state:{weapon:'katana'},run(f,s){const len=report.clips.find(c=>c.name===clip).seconds;
+   s.attackName=clip;s.attackDuration=s.attackTime=len;for(let t=0;t<at;t+=dt){f.update(s,dt);s.attackTime=Math.max(1e-3,s.attackTime-dt);}}})),
+ // Katana D: any sword clip at any time, full body: ?pose=cut&clip=SwordGyaku&at=0.3
+ ...(only==='cut'?[(()=>{const q=new URLSearchParams(location.search),clip=q.get('clip')??'SwordAttack',at=+(q.get('at')??.5);
+  const len=report.clips?.find?.(c=>c.name===clip)?.seconds??SWORD.duration;
+  return {id:'cut',label:`${clip} at ${at}s`,wide:true,state:{weapon:'katana'},run(f,s){s.attackName=clip;s.attackDuration=s.attackTime=len;
+   for(let t=0;t<at;t+=dt){f.update(s,dt);s.attackTime=Math.max(1e-3,s.attackTime-dt);}}};})()]:[]),
  // W2: the pistol. The target (the yellow ball) is 6 m ahead at chest height; the red line is the
  // muzzle ray, drawn to the target's distance.
  {id:'pistol-aim',label:'pistol aimed, standing',state:{weapon:'pistol',aim:1,aimHeading:0},run(f,s){for(let i=0;i<30;i++)f.update(s,dt);}},

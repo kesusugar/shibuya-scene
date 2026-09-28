@@ -15,7 +15,7 @@
 // crowd, and the HQ crowd never decides combat -- it reads `struck` and `combatDead` off the
 // pedestrian, exactly as it already reads them for a car.
 import {legWound} from '../life/street-reactions.mjs';
-import {ATTACKS,attackOf,SWORD,swordBearing,WARP} from './attack-timing.mjs';
+import {ATTACKS,attackOf,SWORD,swordBearing,swordHeight,KATANA_COMBO,WARP} from './attack-timing.mjs';
 import {HIT_STOP} from './hit-stop.mjs';
 import {WEAPONS} from './weapons.mjs';
 import {blowOn,RESPONSE,responseOf} from '../life/temperament.mjs';
@@ -35,10 +35,12 @@ export const COMBAT=Object.freeze({range:1.75,notice:4.5,playerDamage:25,npcDama
  // What a punch does to the people who see it, and how far that carries. Bounded on purpose:
  // one punch must not empty the crossing.
  witnessRadius:11,witnessSeverity:.72,
- // PLAN-WEAPONS W1: the katana. Every other cut is played 12% faster (R5: one clip, so the
- // rhythm varies by speed rather than by a second animation), and a cut that meets a wall or a
- // car stops where it met it: the clip holds there for `clankHold` s, then hands back to the gait.
- katanaFast:1.12,clankHold:.16,bodyRadius:.3,katanaWitness:.9,
+ // PLAN-WEAPONS W1: the katana. A cut that meets a wall or a car stops where it met it: the clip
+ // holds there for `clankHold` s, then hands back to the gait. (Every other cut was once played
+ // 12% faster to vary a single cut's rhythm; Katana D's combo of three cuts replaced that.)
+ clankHold:.16,bodyRadius:.3,katanaWitness:.9,
+ // Katana D: a rising cut lifts a body it kills a little (m/s up, before the ragdoll's own halving).
+ cutLift:.5,
  // Katana A: this long with the katana out and no cut, it goes back into its scabbard at the hip
  // (noto), and the next cut draws it out as it cuts (iai).
  notoAfter:5,
@@ -94,27 +96,30 @@ function shift(crowd,p,nx,nz){
 }
 const turn=(a,b)=>Math.atan2(Math.sin(b-a),Math.cos(b-a));
 
+/** How far a cut reaches, centre to centre: its tip at its furthest plus a body (the kesa: WEAPONS.katana.reach). */
+export const cutReach=timing=>timing===SWORD?WEAPONS.katana.reach:timing.tipReach+(WEAPONS.katana.reach-SWORD.tipReach);
+
 /**
  * The katana's cut against the street, for one step of a swing (PLAN-WEAPONS R6). Pure.
  *
- * The blade tip sweeps the measured bearings (attack-timing.mjs SWORD) between clip times `c0`
- * and `c1`. A solid (wall) or a car on the blade's line, sampled at the tip and half-way along,
+ * The blade tip sweeps the measured bearings of `timing` (attack-timing.mjs SWORD, or Katana D's
+ * SWORD_GYAKU / SWORD_YOKO) between clip times `c0` and `c1`. A solid (wall) or a car on the blade's line, sampled at the tip and half-way along,
  * stops the cut there: `stop` is the bearing and point where it met it, and nobody past that
  * point is cut. People are cut if they are within `reach` and inside the swept wedge, widened by
  * their body radius. Returns {from, to, stop, people}.
  */
-export function katanaSweep({x,z,heading},c0,c1,{solid=()=>false,car=()=>false,people=[],reach=WEAPONS.katana.reach}={}){
- const a=Math.max(c0,SWORD.windup),b=Math.min(c1,SWORD.activeEnd);
+export function katanaSweep({x,z,heading},c0,c1,{solid=()=>false,car=()=>false,people=[],timing=SWORD,reach=cutReach(timing)}={}){
+ const a=Math.max(c0,timing.windup),b=Math.min(c1,timing.activeEnd);
  const out={from:null,to:null,stop:null,people:[]};
- if(!(b>a)&&!(c0<=SWORD.windup&&c1>=SWORD.activeEnd))return out;
- const from=swordBearing(a),to=swordBearing(b);
+ if(!(b>a)&&!(c0<=timing.windup&&c1>=timing.activeEnd))return out;
+ const from=swordBearing(a,timing),to=swordBearing(b,timing);
  out.from=from;out.to=to;
  // March the arc in small steps so a thin wall between two samples is not stepped over.
  const steps=Math.max(1,Math.ceil(Math.abs(to-from)/.08));
  let end=to;
  for(let i=0;i<=steps&&!out.stop;i++){
   const t=from+(to-from)*i/steps,h=heading+t;
-  for(const r of [SWORD.tipReach,SWORD.tipReach*.6]){
+  for(const r of [timing.tipReach,timing.tipReach*.6]){
    const px=x+Math.sin(h)*r,pz=z+Math.cos(h)*r;
    if(solid(px,pz)||car(px,pz)){out.stop={bearing:t,x:px,z:pz,what:solid(px,pz)?'wall':'car'};end=t;break;}
   }
@@ -146,6 +151,7 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
  let swing=null;                       // the attack in flight, or null
  let katanaIdle=0;                     // Katana A: seconds with the katana out and no cut (noto after COMBAT.notoAfter)
  let lastBlow=null;                    // the most recent landed blow, for QA
+ let lastCutDir=null;                  // Katana D: the last cut's direction and zone, for QA
  const stats={swings:0,hits:0,misses:0,npcHits:0,npcDeaths:0,witnessEvents:0,witnesses:0,cuts:0,clanks:0,shotHits:0,headshots:0,
   byResponse:{fight:0,flee:0,backoff:0}};
 
@@ -294,9 +300,10 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
   */
  function cut(crowd,player,before,elapsed){
   const state=player.state,ctx=crowd.network?.ctx;
-  const people=nearby(crowd,state.x,state.z,WEAPONS.katana.reach).filter(p=>eligible(p,crowd)&&!swing.cut.has(p.id));
+  const T=swing.timing,reach=cutReach(T);
+  const people=nearby(crowd,state.x,state.z,reach).filter(p=>eligible(p,crowd)&&!swing.cut.has(p.id));
   const r=katanaSweep({x:state.x,z:state.z,heading:state.attackHeading??state.bodyHeading??state.heading},
-   before*swing.rate,elapsed*swing.rate,{people,
+   before*swing.rate,elapsed*swing.rate,{people,timing:T,reach,
     solid:(x,z)=>!!ctx?.solid?.(x,z,.02),car:(x,z)=>!!crowd.vehicleOverlap?.(x,z,.05)});
   for(const p of r.people){
    swing.cut.add(p.id);swing.hitConsumed=true;stats.cuts++;
@@ -304,22 +311,27 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
    const fatal=p.combatHealth<=0;
    const blow=blowOn(state,p,{attack:'PunchCross',fatal});
    p.hurtUntil=crowd.time+blow.hold;p.hurtDuration=blow.hold;
-   {const l=Math.hypot(blow.impulse.x,blow.impulse.z)||1;p.hurtX=blow.impulse.x/l;p.hurtZ=blow.impulse.z/l;p.hurtStrong=true;}
    // The player is armed: whoever the blade meets runs, screaming (owner's rule).
    stats.hits++;stats.byResponse[RESPONSE.FLEE]++;
-   // Where the blade met them, from how far through its sweep it was at their bearing (the tip
-   // comes down from over the head to the knee), and the way it was going: across the body from
-   // its left to its right, and away from the swordsman.
+   // Katana D: where the blade met them and the way it was going, from the cut's own measured
+   // sweep: the tip's height at the moment its bearing crossed theirs (the kesa comes down from
+   // over the head to the knee, the rising cut goes up, the level cut stays at the chest), and
+   // across the body the way the blade travels (left to right, or right to left), and away.
    const h=state.attackHeading??state.bodyHeading??state.heading??0,rel=turn(h,angleTo(state,p));
-   const u=Math.max(0,Math.min(1,(SWORD.sweepFrom-rel)/(SWORD.sweepFrom-SWORD.sweepTo||1)));
-   const tip=SWORD.tipHeight[1]+(SWORD.tipHeight[0]-SWORD.tipHeight[1])*u;
-   const away=angleTo(state,p),rx=-Math.cos(h),rz=Math.sin(h);
+   const at=T.sweep.reduce((m,[t,b])=>Math.abs(b-rel)<Math.abs(m[1]-rel)?[t,b]:m,T.sweep[0])[0];
+   const tip=swordHeight(at,T),side=T.sweepTo<T.sweepFrom?1:-1,rising=T.heights?T.heights.at(-1)-T.heights[0]>.4:false;
+   const away=angleTo(state,p),rx=-Math.cos(h)*side,rz=Math.sin(h)*side;
    let bx=Math.sin(away)*.6+rx*.8,bz=Math.cos(away)*.6+rz*.8;{const l=Math.hypot(bx,bz)||1;bx/=l;bz/=l;}
+   // The flinch and the stagger go the way the blade went (a kesa knocks them down and across, a
+   // level cut across the other way), as hard as the blow.
+   p.hurtX=bx;p.hurtZ=bz;p.hurtStrong=true;
    // §9ak: a cut does not throw a body like a car does. It gives way where it stands, carried a
-   // little along the blade (COMBAT.cutPush m/s, no lift), and the ragdoll does the rest.
-   if(fatal)kill(crowd,p,state,{x:bx*COMBAT.cutPush,z:bz*COMBAT.cutPush,y:0});
-   else{scare(crowd,p,state,{scream:true,urgency:1});if(!onRails(p)){p.staggerX=blow.impulse.x;p.staggerZ=blow.impulse.z;p.staggerLeft=blow.hold;}}
-   mark(crowd,p,{dirX:bx,dirZ:bz,zone:tip>1.45?'head':tip<.8?'legs':'body',strength:1.2,fatal,kind:'katana'});
+   // little along the blade (COMBAT.cutPush m/s; a rising cut lifts it a little), and the ragdoll
+   // does the rest.
+   if(fatal)kill(crowd,p,state,{x:bx*COMBAT.cutPush,z:bz*COMBAT.cutPush,y:rising?COMBAT.cutLift:0});
+   else{scare(crowd,p,state,{scream:true,urgency:1});if(!onRails(p)){const m=Math.hypot(blow.impulse.x,blow.impulse.z);p.staggerX=bx*m;p.staggerZ=bz*m;p.staggerLeft=blow.hold;}}
+   swing.hits=(swing.hits??0)+1;lastCutDir={x:bx,z:bz,zone:tip>1.45?'head':tip<.8?'legs':'body',cut:T.name};
+   mark(crowd,p,{dirX:bx,dirZ:bz,zone:lastCutDir.zone,strength:1.2,fatal,kind:'katana'});
    onBlow?.({victim:p.id,blow,response:RESPONSE.FLEE,time:crowd.time});
    lastBlow={victim:p.id,response:RESPONSE.FLEE,strength:'strong',quarter:blow.quarter,fatal,time:crowd.time,weapon:'katana'};
    onEvent?.('blade_hit',{x:p.x,z:p.z,intensity:1,id:p.id});
@@ -330,7 +342,7 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
    swing.stopped=r.stop;stats.clanks++;
    onEvent?.('blade_clank',{x:r.stop.x,z:r.stop.z,intensity:1,what:r.stop.what});
    // Hold the clip at the frame the blade met the wall, briefly, then the gait has the body back.
-   state.attackHold=Math.min(SWORD.activeEnd,elapsed*swing.rate)/SWORD.duration;
+   state.attackHold=Math.min(T.activeEnd,elapsed*swing.rate)/T.duration;
    state.attackTime=Math.min(state.attackTime??0,COMBAT.clankHold);
    swing.elapsed=Math.max(swing.elapsed,swing.timing.duration-COMBAT.clankHold);
   }
@@ -357,14 +369,15 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
  }
 
  /** One swing's worth of state. The clip decides its own timing; see attack-timing.mjs. */
- function start(player,crowd){
+ function start(player,crowd,step=0){
   const katana=weapon()==='katana';
-  const name=katana?SWORD.name:ATTACKS[swingIndex%ATTACKS.length].name;
+  // Katana D: a cut is the `step`th of the combo (the kesa unless it carries on from the last).
+  const name=katana?KATANA_COMBO[step].name:ATTACKS[swingIndex%ATTACKS.length].name;
   swingIndex++;
-  // A cut plays at 1x or katanaFast; its window and length scale with it. The clip time is
-  // elapsed * rate, which is what the sweep table is indexed by.
-  const rate=katana&&swingIndex%2===0?COMBAT.katanaFast:1;
-  const base=katana?SWORD:attackOf(name);
+  // Every swing now plays at its clip's own speed (`rate` stays for the warp and the sweep's
+  // clock, which are indexed by elapsed * rate).
+  const rate=1;
+  const base=katana?KATANA_COMBO[step]:attackOf(name);
   const timing=rate===1?base:{...base,duration:base.duration/rate,windup:base.windup/rate,activeEnd:base.activeEnd/rate,peak:base.peak/rate,
    ...(base.cancelAt?{cancelAt:base.cancelAt/rate}:{})};
   const state=player.state,aim=crowd?lockOn(crowd,state,katana?WARP.range:COMBAT.lockRange):null;
@@ -372,7 +385,8 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
   // into the cut's own wind-up; the timing and the blow are the same.
   const iai=katana&&!!state.katanaSheathed;
   if(katana){state.katanaSheathed=false;katanaIdle=0;state.drawCut=iai;if(iai)stats.iai=(stats.iai??0)+1;}
-  swing={id:swingIndex,name,timing,elapsed:0,phase:PHASE.WINDUP,hitConsumed:false,aim,katana,rate,cut:new Set(),stopped:null,iai};
+  swing={id:swingIndex,name,timing,elapsed:0,phase:PHASE.WINDUP,hitConsumed:false,aim,katana,rate,cut:new Set(),stopped:null,iai,step,chained:false};
+  if(katana)stats.combo=Math.max(stats.combo??0,step+1);
   if(katana&&aim&&Math.hypot(aim.x-state.x,aim.z-state.z)>WARP.standoff)stats.warps=(stats.warps??0)+1;
   // §9aj G1: the one the swing is thrown at gets a detailed body before it lands.
   if(aim)aim.aimedUntil=(crowd?.time??0)+timing.duration+.3;
@@ -404,6 +418,17 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
 
    // Katana C: past the end of its zanshin a cut's way back to guard may be cut short -- by the
    // next cut, or by walking off (the controller drops `attackTime` when `attackCancel` is set).
+   // Katana D: a press during a cut, before its `chainAt`, is kept; at `chainAt` the next cut of
+   // the combo starts from there (kesa, then the rising cut, then the level cut). A press after
+   // it (in a zanshin) is dropped as before, and the combo starts again from the kesa.
+   if(swing?.katana&&swing.timing.chainAt&&!swing.stopped){
+    if(pending&&swing.elapsed<swing.timing.chainAt){swing.chained=true;pending=false;}
+    if(swing.chained&&swing.elapsed>=swing.timing.chainAt&&state.alive!==false){
+     const next=(swing.step+1)%KATANA_COMBO.length;
+     finish(crowd,state);state.attackTime=0;state.attackHold=null;stats.chains=(stats.chains??0)+1;
+     start(player,crowd,next);onEvent?.('punch_swing',{x:state.x,z:state.z,intensity:.6});
+    }
+   }
    if(swing?.timing.cancelAt&&swing.phase===PHASE.RECOVERY){
     const open=swing.elapsed>=swing.timing.cancelAt;state.attackCancel=open;
     if(open&&(pending||!((state.attackTime??0)>0))){finish(crowd,state);state.attackTime=0;state.attackHold=null;}
@@ -581,7 +606,7 @@ export function createMeleeCombat({onWitness=null,onBlow=null,onEvent=null,weapo
    if(!willFight(crowd,p))return false;
    engage(crowd,p,player.state);return true;
   },
-  snapshot(){return {...stats,byResponse:{...stats.byResponse},lastBlow,target:target?.id??null,
+  snapshot(){return {...stats,byResponse:{...stats.byResponse},lastBlow,lastCutDir,step:swing?.katana?swing.step:null,target:target?.id??null,
    phase:swing?swing.phase:PHASE.IDLE,clip:swing?swing.name:null,stopped:swing?.stopped?.what??null};},
   reset(){pending=false;target=null;swing=null;katanaIdle=0;},
   dispose(){disposed=true;pending=false;target=null;swing=null;}

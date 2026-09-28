@@ -1,0 +1,16 @@
+{
+ "url": "http://<local>/qa/gta-upgrade/weaponbench.html?pose=katana-d-zanshin",
+ "ready": true,
+ "bench": {
+  "poses": [
+   "katana-d-zanshin"
+  ],
+  "lines": [
+   "front | player's right | behind | player's left",
+   "katana-d-zanshin: 3 zanshin after the level cut (0.7s)  | grip-to-palm 0.7 cm"
+  ],
+  "calls": 8
+ },
+ "console": [],
+ "errors": 0
+}

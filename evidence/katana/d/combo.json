@@ -1,0 +1,18 @@
+{
+ "url": "http://<local>/qa/gta-upgrade/katana-compare.html?set=d",
+ "ready": true,
+ "bench": {
+  "size": [
+   790,
+   1528
+  ],
+  "lines": [
+   "1 袈裟 kesa",
+   "2 逆袈裟 rising",
+   "3 横一文字 level",
+   "3 残心 zanshin"
+  ]
+ },
+ "console": [],
+ "errors": 0
+}
