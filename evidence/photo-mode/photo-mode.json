@@ -1,0 +1,186 @@
+{
+ "query": "qa=1&tier=low&time=day&camera=scramble",
+ "checks": {
+  "entered": true,
+  "hudInPhoto": {
+   "hud": false,
+   "help": true,
+   "photo": true
+  },
+  "stopped": {
+   "frames": 61,
+   "clock": 0,
+   "real": 1.733
+  },
+  "quarter": {
+   "frames": 60,
+   "clock": 0.467,
+   "real": 1.833
+  },
+  "quarterScale": 0.25,
+  "running": {
+   "frames": 60,
+   "clock": 2.2,
+   "real": 2.2
+  },
+  "timeScaleBack": 0,
+  "saved": [
+   {
+    "name": "shibuya-20260928-105316.png",
+    "bytes": 2037145,
+    "width": 1280,
+    "height": 720,
+    "lit": 0.853
+   }
+  ],
+  "left": true,
+  "hudAfter": {
+   "hud": true,
+   "help": false,
+   "photo": false
+  },
+  "playerUnmoved": true
+ },
+ "steps": [
+  {
+   "name": "01-play",
+   "note": "playing, the game camera and the HUD",
+   "state": {
+    "player": {
+     "x": 12,
+     "z": 23.9,
+     "weapon": "fists",
+     "health": 100
+    },
+    "car": {
+     "active": true,
+     "type": "ownCar",
+     "speed": 0,
+     "damage": 0,
+     "wear": null
+    },
+    "radio": null,
+    "fps": 0.1,
+    "drawCalls": 436,
+    "triangles": 14060891
+   }
+  },
+  {
+   "name": "02-photo",
+   "note": "photo mode entered: the HUD gone, the help shown, the world stopped",
+   "state": {
+    "player": {
+     "x": 12,
+     "z": 23.9,
+     "weapon": "fists",
+     "health": 100
+    },
+    "car": {
+     "active": true,
+     "type": "ownCar",
+     "speed": 0,
+     "damage": 0,
+     "wear": null
+    },
+    "radio": null,
+    "fps": 0.1,
+    "drawCalls": 432,
+    "triangles": 14060843
+   }
+  },
+  {
+   "name": "03-photo-high",
+   "note": "flown up and back, looking down",
+   "state": {
+    "player": {
+     "x": 12,
+     "z": 23.9,
+     "weapon": "fists",
+     "health": 100
+    },
+    "car": {
+     "active": true,
+     "type": "ownCar",
+     "speed": 0,
+     "damage": 0,
+     "wear": null
+    },
+    "radio": null,
+    "fps": 0.1,
+    "drawCalls": 417,
+    "triangles": 13904611
+   }
+  },
+  {
+   "name": "04-photo-tilt",
+   "note": "low, zoomed in and tilted",
+   "state": {
+    "player": {
+     "x": 12,
+     "z": 23.9,
+     "weapon": "fists",
+     "health": 100
+    },
+    "car": {
+     "active": true,
+     "type": "ownCar",
+     "speed": 0,
+     "damage": 0,
+     "wear": null
+    },
+    "radio": null,
+    "fps": 0.1,
+    "drawCalls": 434,
+    "triangles": 13944519
+   }
+  },
+  {
+   "name": "05-photo-night",
+   "note": "the time of day turned to night in photo mode",
+   "state": {
+    "player": {
+     "x": 12,
+     "z": 23.9,
+     "weapon": "fists",
+     "health": 100
+    },
+    "car": {
+     "active": true,
+     "type": "ownCar",
+     "speed": 0,
+     "damage": 0,
+     "wear": null
+    },
+    "radio": null,
+    "fps": 0.2,
+    "drawCalls": 442,
+    "triangles": 13946695
+   }
+  },
+  {
+   "name": "06-back",
+   "note": "back in play: the game camera and the HUD",
+   "state": {
+    "player": {
+     "x": 12,
+     "z": 23.9,
+     "weapon": "fists",
+     "health": 100
+    },
+    "car": {
+     "active": true,
+     "type": "ownCar",
+     "speed": 0,
+     "damage": 0,
+     "wear": null
+    },
+    "radio": null,
+    "fps": 0.1,
+    "drawCalls": 444,
+    "triangles": 19330569
+   }
+  }
+ ],
+ "console": [],
+ "errors": 0
+}
