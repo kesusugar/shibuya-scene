@@ -411,6 +411,8 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
   get disowned(){return disowned;},
 
   setBudget(n){stats.budget=Math.max(0,n|0);},
+  /** Crowd performance: draw from `camera` only the citizens it can see (hq-crowd.mjs `cull`). */
+  cull(camera,options){return crowd.cull(camera,options);},
 
   inspect(){
    const got=crowd.inspect();

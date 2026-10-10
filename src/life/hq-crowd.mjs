@@ -20,7 +20,7 @@
  */
 import {InstancedMesh,InstancedBufferAttribute,BufferGeometry,BufferAttribute,
         MeshStandardMaterial,DataTexture,RGBAFormat,FloatType,NearestFilter,
-        Object3D,Group,DynamicDrawUsage} from 'three';
+        Object3D,Group,DynamicDrawUsage,Frustum,Matrix4,Sphere} from 'three';
 import {PACE,paceStep,cadence} from './pace.mjs';
 import {GARMENT_PATTERN_GLSL,GARMENT_UNPACK_GLSL,packGarment} from './garment-pattern.mjs';
 
@@ -344,12 +344,18 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
   geometry.setAttribute('aShoe',shoeAttr);
 
   root.add(mesh);
-  lanes.push({archetype,mesh,geometry,material,level,lod:level.name,
-   clipAttr,animAttr,palAttr,shoeAttr,prevAttr,blendAttr,count:0,
+  const lane={archetype,mesh,geometry,material,level,lod:level.name,
+   clipAttr,animAttr,palAttr,shoeAttr,prevAttr,blendAttr,count:0,visible:-1,
    // slot -> citizen index, so a slot can be vacated by swapping the last one into it.
    owners:new Int32Array(capacity).fill(-1),
-   triangles:level.triangles,vertices:level.vertices});
+   triangles:level.triangles,vertices:level.vertices};
+  // Crowd performance: after `cull(camera)` the citizens that camera can see are slots
+  // [0, visible). That camera draws only them (the main pass and the AO pass, which use it);
+  // any other camera -- a reflection -- still draws the whole lane.
+  mesh.onBeforeRender=(_r,_s,camera)=>{mesh.count=camera===cull.camera&&lane.visible>=0?Math.min(lane.visible,lane.count):lane.count;};
+  lanes.push(lane);
  }
+ const cull={camera:null,frustum:new Frustum(),matrix:new Matrix4(),sphere:new Sphere()};
 
  // ---- per-citizen state, as typed arrays -------------------------------------------
  //
@@ -468,6 +474,28 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
   lane.blendAttr.setXY(slot,state.blendStart[i],state.blendDur[i]);
   lane.clipAttr.needsUpdate=true;lane.animAttr.needsUpdate=true;
   lane.prevAttr.needsUpdate=true;lane.blendAttr.needsUpdate=true;
+ }
+
+ // ---- crowd performance: per-instance culling and partial uploads --------------------
+ //
+ // Every attribute a lane draws from, with its item size. A slot is a citizen's place in all of
+ // them at once, so moving a citizen means moving every one.
+ const slotAttrs=lane=>[[lane.mesh.instanceMatrix,16],[lane.clipAttr,2],[lane.animAttr,2],[lane.palAttr,4],
+  [lane.shoeAttr,2],[lane.prevAttr,4],[lane.blendAttr,2]];
+ /** Exchange two slots of a lane: every attribute, and who owns each. */
+ function swapSlots(lane,a,b){
+  for(const [attr,size] of slotAttrs(lane)){const v=attr.array,pa=a*size,pb=b*size;
+   for(let k=0;k<size;k++){const t=v[pa+k];v[pa+k]=v[pb+k];v[pb+k]=t;}}
+  const oa=lane.owners[a],ob=lane.owners[b];lane.owners[a]=ob;lane.owners[b]=oa;
+  if(oa>=0)state.slot[oa]=b;if(ob>=0)state.slot[ob]=a;
+ }
+ /**
+  * Upload only the slots in use. The buffers are sized for the worst case (over a thousand
+  * slots a lane, twelve lanes) and the whole of each was sent every frame; [0, count) is what is
+  * drawn. Ranges are set fresh for every attribute, so a stale one can never hide a slot.
+  */
+ function setRanges(lane){
+  for(const [attr,size] of slotAttrs(lane)){attr.clearUpdateRanges();attr.addUpdateRange(0,Math.max(1,lane.count)*size);}
  }
 
  return {
@@ -789,8 +817,9 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
    let triangles=0,vertices=0,draws=0;
    for(const lane of lanes){
     lane.mesh.count=lane.count;
-    lane.mesh.instanceMatrix.needsUpdate=true;
-    if(lane.count)lane.shoeAttr.needsUpdate=true;
+    setRanges(lane);
+    // An empty lane draws nothing, so its buffers need not go anywhere.
+    if(lane.count){lane.mesh.instanceMatrix.needsUpdate=true;lane.shoeAttr.needsUpdate=true;}
     if(lane.count){draws++;triangles+=lane.count*lane.triangles;vertices+=lane.count*lane.vertices;}
    }
    stats.population=population;stats.drawCalls=draws;
@@ -799,9 +828,43 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
    return stats;
   },
 
+  /**
+   * Crowd performance: put the citizens `camera` can see first in each lane, so it draws only
+   * them. Nobody is removed or paused -- everyone is still simulated, animated and positioned;
+   * the rest are simply not sent to the GPU from this camera. A body's bounds are a sphere 2.1 m
+   * round a point 0.9 m above its feet (standing, or lying full length after a fall), plus
+   * `margin`. Call it after `update` and before drawing, with the camera's matrices current.
+   * Pass null to draw everyone from every camera again.
+   */
+  cull(camera,{margin=.5}={}){
+   cull.camera=camera;
+   if(!camera){for(const lane of lanes)lane.visible=-1;stats.visible=null;return null;}
+   cull.matrix.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse);
+   cull.frustum.setFromProjectionMatrix(cull.matrix);
+   const sphere=cull.sphere;sphere.radius=2.1+margin;
+   const seen=i=>{sphere.center.set(state.x[i],state.y[i]+.9,state.z[i]);return cull.frustum.intersectsSphere(sphere);};
+   let visible=0,swaps=0,triangles=0;
+   for(const lane of lanes){
+    // Two ends inwards: an unseen one at the front changes places with a seen one at the back.
+    // The partition from the frame before is almost right, so only what changed is moved.
+    let lo=0,hi=lane.count-1,moved=0;
+    while(lo<=hi){
+     if(seen(lane.owners[lo])){lo++;continue;}
+     while(hi>lo&&!seen(lane.owners[hi]))hi--;
+     if(hi<=lo)break;
+     swapSlots(lane,lo,hi);moved++;lo++;hi--;
+    }
+    lane.visible=lo;visible+=lo;triangles+=lo*lane.triangles;swaps+=moved;
+    if(moved){setRanges(lane);for(const [attr] of slotAttrs(lane))if(lane.count)attr.needsUpdate=true;}
+   }
+   stats.visible={citizens:visible,triangles,swaps};
+   return stats.visible;
+  },
+
   inspect(){
    const byLod={};for(const l of lanes)byLod[l.lod]=(byLod[l.lod]??0)+l.count;
    return {population,lod,lods:levels,byLod,drawCalls:stats.drawCalls,triangles:stats.triangles,
+    visible:stats.visible??null,
     vertices:stats.vertices,updateMs:Number((stats.updateMs??0).toFixed(3)),
     stateChanges:stats.stateChanges,
     skeletons:0,mixers:0,

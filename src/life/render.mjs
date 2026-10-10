@@ -134,18 +134,22 @@ export function buildCrowd(data,options={}){
   // The HQ layer draws whoever it can afford, EXCLUDING anyone the near pool already has --
   // a citizen drawn twice is the failure this mask exists to prevent.
   const drawn=hq?hq.sync(sim.pool,hqCamera??playerFocus,dt,{time:sim.time,exclude:near}):null;
-  const detailed=drawn?new Set([...near,...drawn]):near;lastNear=near;lastDrawn=drawn;for(const k of Object.keys(meshes))counts[k]=0;shadows.begin();for(const p of sim.pool){if(!p.active||p.controlled)continue;const def=ARCHETYPES[p.archetype],h=def.height*(.96+(p.id%5)*.02),w=def.width*(1.06+(p.id%7)*.015),walk=p.speed>.05,phase=p.animationTime*(walk?7:1)+p.phase,fidelity=p.lod==='near'?1:p.lod==='mid'?.65:.15,sway=walk?Math.sin(phase)*.035*fidelity:Math.sin(phase)*.012,bob=walk?Math.abs(Math.cos(phase))*.024*fidelity:Math.sin(phase)*.008;
+  lastNear=near;lastDrawn=drawn;for(const k of Object.keys(meshes))counts[k]=0;shadows.begin();for(const p of sim.pool){if(!p.active||p.controlled)continue;const def=ARCHETYPES[p.archetype];
    const blend=dt?Math.min(1,dt*(p.lod==='far'?10:25)):1;p.renderX+=(p.x-p.renderX)*blend;p.renderZ+=(p.z-p.renderZ)*blend;
    // A thrown body's shadow belongs to the road it is over, not to the body: `p.height`
    // follows the arc, so using it would send the shadow into the air with the person.
    const struck=p.struck!==undefined;
    shadows.add(p.renderX,struck?p.flyGround:p.height,p.renderZ,def.width,struck?p.flyHeight:0);
-   const body=pickVariant(p.id,BODY_VARIANTS),hair=pickVariant(p.id,HAIR_VARIANTS,307),shirt=BODY_COLORS[p.id%BODY_COLORS.length],skin=SKIN_COLORS[p.id%SKIN_COLORS.length],hairColor=def.gray?HAIR_COLORS[3]:HAIR_COLORS[p.id%3];
    // RUN 11.0. The props below were NOT masked with the body, so every HQ or near citizen
    // carrying one still wore the legacy renderer's box phone, bag, suitcase, cane or cone
    // umbrella, sized for a capsule and tumbling on the legacy arc after a hit. Live at HIGH
    // with the HQ crowd up: 971 of them, which is what read as old blocky bodies in the crowd.
-   const legacyBody=!detailed.has(p.id);
+   // Crowd performance: whoever the near pool or the HQ crowd draws needs nothing below, so it
+   // is skipped before any of it is worked out (at HIGH that is everyone, every frame).
+   const legacyBody=!near.has(p.id)&&!drawn?.has(p.id);
+   if(!legacyBody)continue;
+   const h=def.height*(.96+(p.id%5)*.02),w=def.width*(1.06+(p.id%7)*.015),walk=p.speed>.05,phase=p.animationTime*(walk?7:1)+p.phase,fidelity=p.lod==='near'?1:p.lod==='mid'?.65:.15,sway=walk?Math.sin(phase)*.035*fidelity:Math.sin(phase)*.012,bob=walk?Math.abs(Math.cos(phase))*.024*fidelity:Math.sin(phase)*.008;
+   const body=pickVariant(p.id,BODY_VARIANTS),hair=pickVariant(p.id,HAIR_VARIANTS,307),shirt=BODY_COLORS[p.id%BODY_COLORS.length],skin=SKIN_COLORS[p.id%SKIN_COLORS.length],hairColor=def.gray?HAIR_COLORS[3]:HAIR_COLORS[p.id%3];
    if(legacyBody)part(body,p,0,h*.02+bob,0,w,h*.78,w*.58,shirt,sway);
    // About 26 cm across on a 1.7 m figure: roughly half the old 51 cm, and a little over
    // life-size rather than at it. Life-size was tried and is wrong here -- these bodies are
@@ -160,7 +164,11 @@ export function buildCrowd(data,options={}){
    if(legacyBody&&hasAccessory(p,'umbrella'))part('umbrella',p,.08,h*.99,0,.38,.62,.38,shirt);
   }
   shadows.end();
-  stats.triangles=0;stats.batches=0;for(const [k,m] of Object.entries(meshes)){m.count=counts[k];if(m.count)stats.batches++;stats.triangles+=m.count*triangleCount(geometry[k]);geometry[k].attributes.gait.needsUpdate=true;geometry[k].attributes.action.needsUpdate=true;m.instanceMatrix.needsUpdate=true;if(m.instanceColor)m.instanceColor.needsUpdate=true;}
+  stats.triangles=0;stats.batches=0;for(const [k,m] of Object.entries(meshes)){m.count=counts[k];if(m.count)stats.batches++;stats.triangles+=m.count*triangleCount(geometry[k]);
+   // Crowd performance: a mesh drawing nobody uploads nothing, and one drawing someone uploads
+   // only the instances in use (the buffers are sized for the whole pool).
+   if(!m.count)continue;
+   for(const a of [geometry[k].attributes.gait,geometry[k].attributes.action,m.instanceMatrix,m.instanceColor]){if(!a)continue;a.clearUpdateRanges();a.addUpdateRange(0,m.count*a.itemSize);a.needsUpdate=true;}}
   // Reported apart from `batches` and `materials` on purpose. Those two numbers are the
   // character instancing contract that r1-crowd-density asserts; folding a decoration into
   // them would make the contract mean something else.
@@ -215,5 +223,7 @@ export function buildCrowd(data,options={}){
   get nearCharacters(){return nearCharacters;},
   // The humanoid arrives late, exactly as it does for the player. Until it does the near
   // pool runs on baked figures, so nothing waits on it.
-  setNearCharacterAsset(a){nearCharacters?.setHumanAsset(a);},update(dt,camera){if(disposed)return;if(camera)sim.setCamera(camera.x,camera.z);sim.update(dt);sync(dt);},setTier(t){sim.setTier(t);nearCharacters?.setTier(t);sync();},dispose(){if(disposed)return;disposed=true;hq?.dispose();hq=null;nearCharacters?.dispose();shadows.dispose();sim.dispose();for(const m of Object.values(meshes))m.dispose();for(const g of Object.values(geometry))g.dispose();material.dispose();headMaterial.dispose();hairMaterial.dispose();debug?.geometry.dispose();debug?.material.dispose();root.removeFromParent();root.clear();}};
+  setNearCharacterAsset(a){nearCharacters?.setHumanAsset(a);},
+  /** Crowd performance: the mass crowd draws from `camera` only who it can see (null: everyone). */
+  cull(camera){return hq?.cull?.(camera)??null;},update(dt,camera){if(disposed)return;if(camera)sim.setCamera(camera.x,camera.z);sim.update(dt);sync(dt);},setTier(t){sim.setTier(t);nearCharacters?.setTier(t);sync();},dispose(){if(disposed)return;disposed=true;hq?.dispose();hq=null;nearCharacters?.dispose();shadows.dispose();sim.dispose();for(const m of Object.values(meshes))m.dispose();for(const g of Object.values(geometry))g.dispose();material.dispose();headMaterial.dispose();hairMaterial.dispose();debug?.geometry.dispose();debug?.material.dispose();root.removeFromParent();root.clear();}};
 }
