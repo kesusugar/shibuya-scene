@@ -114,13 +114,14 @@ As a frame-rate ceiling from the CPU alone (1000 / mean, on this machine): idle 
 fps; firefight 26-34 -> 44-45 fps. On the owner's PC the GPU may be the tighter limit; that
 is what change 5 is for.
 
-Node, simulation only (`sim-bench.mjs`, 3 x 900 frames, identical end state):
+Node, simulation only (`sim-bench.mjs`, 3 x 900 frames, identical end state -- hash `745aeb48`
+before and after). Two pairs; the machine's speed drifted between them, the ratio did not:
 
-| | mean | p95 | p99 |
+| | Pair 1 mean (p95 / p99) | Pair 2 mean (p95 / p99), back to back | Change |
 |---|---|---|---|
-| crowd | 9.41 -> 5.49 ms (-42%) | 18.1 -> 11.1 | 26.0 -> 15.1 |
-| traffic | 3.31 -> 1.78 ms (-46%) | 5.0 -> 2.8 | 5.8 -> 3.3 |
-| total | 12.71 -> 7.27 ms (-43%) | 22.1 -> 13.1 | 29.3 -> 16.8 |
+| crowd | 9.41 -> 5.49 ms (18.1 -> 11.1 / 26.0 -> 15.1) | 11.61 -> 6.72 ms (22.1 -> 13.5 / 30.5 -> 18.0) | **-42%** |
+| traffic | 3.31 -> 1.78 ms (5.0 -> 2.8 / 5.8 -> 3.3) | 3.71 -> 2.02 ms (5.8 -> 3.1 / 7.8 -> 4.1) | **-46%** |
+| total | 12.71 -> 7.27 ms (22.1 -> 13.1 / 29.3 -> 16.8) | 15.32 -> 8.74 ms (26.6 -> 16.0 / 34.3 -> 20.4) | **-43%** |
 
 GPU work submitted per frame (`render-bench.mjs`, HIGH, day; counts, not time). The crowd near
 the start changes from second to second, so the fair comparison is culling on and off in the
@@ -138,6 +139,14 @@ and ~1.4-2.0 GB for the whole headless browser, before and after (no new allocat
 
 
 ## Risks, and how they were checked
+
+- **The prebuilt pack.** `public/data/shibuya-static-models.json` is keyed by a hash of the
+  sources that build it, and `src/geo/core.mjs`, `src/life/network.mjs` and
+  `src/traffic/graph.mjs` are among them, so it was re-baked (`npm run bake:static`). Its
+  contents are unchanged: every field but the key and the build timings is identical.
+- **`SpatialIndex` items keep their shape** (`{bounds, value, keys}`): the per-query
+  de-duplication mark lives in a map of its own, so a restored pack's index still deep-equals a
+  freshly built one (`tests/static-context.test.mjs`).
 
 - **Behaviour.** Changes 1-4 are speed only; `sim-bench.mjs` proves the final state of every
   pedestrian and vehicle after 40 s is bit-for-bit the same. The two grids changed key type, so
