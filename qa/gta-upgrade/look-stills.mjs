@@ -70,7 +70,8 @@ async function still(name,note,{view=null,hud=false}={}){
  steps.push({name,note,state});await js('window.__SHIBUYA_QA__.view(null)');console.log(`  ${name}: ${note} ${JSON.stringify(state).slice(0,240)}`);
 }
 const HIDE='.play-dashboard,.play-mission,.play-map,.tc{visibility:hidden!important}';
-const want=k=>!only.length||only.includes(k);
+// Tuning: ONLY=day-street,... (pairs), MODES=gta (one side), PLAYER=0 (no player views).
+const want=k=>!only.length||only.includes(k),MODES=(process.env.MODES??'classic,gta').split(',');
 
 await call('Runtime.enable');await call('Page.enable');
 await call('Emulation.setDeviceMetricsOverride',{width:W,height:H,deviceScaleFactor:1,mobile:false});
@@ -79,7 +80,8 @@ await until('window.__SHIBUYA_QA__?.ready',600,'the scene');
 const result=[];
 const cam=async label=>{await js(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()===${JSON.stringify(label)})?.click()`);await run(.5);};
 async function pair(name,view){
- for(const mode of ['classic','gta']){
+ if(!want(name))return;
+ for(const mode of MODES){
   await js(`window.__SHIBUYA_QA__.look('${mode}')`);await run(.3);
   await still(`${name}-${mode}`,mode,{view});
  }
@@ -87,12 +89,14 @@ async function pair(name,view){
 await run(15);
 for(const phase of (process.env.PHASES??'day,dusk,night').split(',')){
  await js(`window.__SHIBUYA_QA__.phase('${phase}')`);await run(.5);
- for(const [label,id] of [['Scramble High','overview'],['Scramble Street','street'],['QFRONT','qfront']]){await cam(label);await pair(`${phase}-${id}`,null);}
+ for(const [label,id] of [['Scramble High','overview'],['Scramble Street','street'],['QFRONT','qfront']]){if(!want(`${phase}-${id}`))continue;await cam(label);await pair(`${phase}-${id}`,null);}
 }
 // The player on the pavement by the crossing, the camera behind, at the end of the day.
+if(process.env.PLAYER!=='0'){
 await js(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='プレイヤー')?.click()`);
 await until('window.__SHIBUYA_PLAYER__&&window.__SHIBUYA_LIFE__',120,'player mode');
 await run(1);
 for(const phase of ['day','dusk']){await js(`window.__SHIBUYA_QA__.phase('${phase}')`);await run(.5);await pair(`${phase}-player`,{yaw:3.14,dist:5,height:2.1,target:1.5});}
+}
 writeFileSync(join(out,'look.json'),JSON.stringify({query,steps},null,1)+'\n');
 ws.close();chrome.kill();process.exit(0);

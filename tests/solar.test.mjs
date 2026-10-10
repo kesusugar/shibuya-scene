@@ -41,7 +41,9 @@ test('GTA look: lower stronger sun, darker fill, haze, clouds, and a grade per p
  assert.ok(solar.material.uniforms.clouds.value>0,'no clouds');
  assert.ok(GRADE.sat>1&&GRADE.contrast>1&&GRADE.vignette>0);
  assert.ok(GRADE.highlight.x>GRADE.highlight.z&&GRADE.shadow.z>GRADE.shadow.x,'highlights not warm / shadows not cool');
+ assert.ok(GRADE.wb.x>GRADE.wb.z,'the day is not white-balanced warm');
  solar.select('night',false);solar.update(0);
+ assert.deepEqual(GRADE.wb.toArray(),[1,1,1],'night is not white-balanced neutral');
  assert.equal(env.key.intensity,SOLAR_PHASES.night.key);assert.equal(renderer.toneMappingExposure,SOLAR_PHASES.night.exposure);
  // classic gives the neutral grade back.
  LOOK.mode='classic';solar.select('day',false);solar.update(0);

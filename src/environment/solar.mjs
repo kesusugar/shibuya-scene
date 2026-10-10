@@ -11,8 +11,8 @@ export const SOLAR_PHASES=Object.freeze({
 export function solarSample(from,to,t){const P=phasesFor(SOLAR_PHASES),a=P[from],b=P[to],s=Math.max(0,Math.min(1,t));return blend(a,b,s*s*(3-2*s));}
 const WHITE=new Color(0xffffff),DAY_FILL=new Color(0xfff6e9);
 const lerpArr=(x,y,t)=>x.map((v,i)=>v+(y[i]-v)*t);
-function blend(a,b,t){const out={};for(const k of ['angle','night','key','fill','exposure','fog','clouds'])out[k]=(a[k]??0)+((b[k]??0)-(a[k]??0))*t;for(const k of ['sky','horizon','sun'])out[k]=new Color(a[k]).lerp(new Color(b[k]),t);
- const ga=a.grade,gb=b.grade;if(ga&&gb)out.grade={sat:ga.sat+(gb.sat-ga.sat)*t,contrast:ga.contrast+(gb.contrast-ga.contrast)*t,vignette:ga.vignette+(gb.vignette-ga.vignette)*t,shadow:lerpArr(ga.shadow,gb.shadow,t),highlight:lerpArr(ga.highlight,gb.highlight,t)};return out;}
+function blend(a,b,t){const out={};for(const k of ['angle','night','key','fill','exposure','fog','clouds'])out[k]=(a[k]??0)+((b[k]??0)-(a[k]??0))*t;out.env=(a.env??1)+((b.env??1)-(a.env??1))*t;for(const k of ['sky','horizon','sun'])out[k]=new Color(a[k]).lerp(new Color(b[k]),t);
+ const ga=a.grade,gb=b.grade;if(ga&&gb)out.grade={sat:ga.sat+(gb.sat-ga.sat)*t,contrast:ga.contrast+(gb.contrast-ga.contrast)*t,vignette:ga.vignette+(gb.vignette-ga.vignette)*t,wb:lerpArr(ga.wb,gb.wb,t),shadow:lerpArr(ga.shadow,gb.shadow,t),highlight:lerpArr(ga.highlight,gb.highlight,t)};return out;}
 // The sky: a gradient, the sun, and (GTA look) a layer of drifting cumulus -- value-noise fbm on a
 // plane above the city, lit from the sun's side, thinning towards the horizon.
 const SKY_FRAGMENT=`varying vec3 ray;uniform vec3 top,horizon,sunColor,direction;uniform float sunVisible,clouds,cloudTime,night;
@@ -39,10 +39,12 @@ export class SolarCycle{
   e.key.position.copy(direction).multiplyScalar(220);if(direction.y<0)e.key.position.y=80;e.key.color.copy(s.sun);e.key.intensity=s.key;e.fill.intensity=s.fill;e.fill.color.copy(s.sky).lerp(WHITE,.65).lerp(DAY_FILL,(1-s.night)*.7);
   if(e.renderer)e.renderer.toneMappingExposure=s.exposure;
   this.material.uniforms.top.value.copy(s.sky);this.material.uniforms.horizon.value.copy(s.horizon);this.material.uniforms.sunColor.value.copy(s.sun);this.material.uniforms.sunVisible.value=Math.max(0,Math.min(1,direction.y*15));
+  // The look's share of the sky's image-based light (the blue in the shadows), on top of whatever the fidelity look set.
+  if(this.scene.environment){const now=this.scene.environmentIntensity;if(now!==this.envWritten)this.envBase=now;this.envWritten=this.scene.environmentIntensity=this.envBase*s.env;}
   if(this.scene.fog){this.scene.fog.color.copy(s.horizon);if(this.scene.fog.isFogExp2)this.scene.fog.density=s.fog;}
   this.cloudTime+=Math.max(0,dt);this.material.uniforms.clouds.value=s.clouds;this.material.uniforms.cloudTime.value=this.cloudTime;this.material.uniforms.night.value=s.night;
   // The time-of-day grade, read by the HIGH pipeline's grade pass.
-  if(s.grade){GRADE.sat=s.grade.sat;GRADE.contrast=s.grade.contrast;GRADE.vignette=s.grade.vignette;GRADE.shadow.fromArray(s.grade.shadow);GRADE.highlight.fromArray(s.grade.highlight);}
+  if(s.grade){GRADE.wb.fromArray(s.grade.wb);GRADE.sat=s.grade.sat;GRADE.contrast=s.grade.contrast;GRADE.vignette=s.grade.vignette;GRADE.shadow.fromArray(s.grade.shadow);GRADE.highlight.fromArray(s.grade.highlight);}
   for(const r of e.roots.values())for(const b of r.materials.values()){if(b.emission){b.emission.uniform.value=s.night;b.emission.glow.value=e.nightglow*s.night;}if(b.night!==null)b.material.emissiveIntensity=b.intensity+(b.night-b.intensity)*s.night;}
   for(const l of [...f.lights,...f.spots])l.intensity=l.visible?l.userData.nightIntensity*s.night:0;
  }
