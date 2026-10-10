@@ -6,6 +6,7 @@ import {VEHICLES} from '../traffic/config.mjs';
 import {QUALITY,ARCHETYPES,POOL_SIZE,RADIUS,district} from './config.mjs';
 import {route,edgePose,inCrossing} from './network.mjs';
 import {kerbQueued} from './stance.mjs';
+import {GRID_KEY} from './grid-key.mjs';
 
 // Fixed actor objects and spatial buckets. Routes allocate only on destination changes.
 // Below this the player's car is treated as an obstacle and walked around; at or above it
@@ -87,17 +88,17 @@ const FLEE_TURNS=[0,.35,-.35,.7,-.7,1.05,-1.05,1.45,-1.45];
 
 export class CrowdSimulation{
  constructor(network,{traffic=null,tier='medium',seed='shibuya-s10',choreography=false,heroStart=false}={}){
-  this.network=network;this.traffic=traffic;this.signals=traffic?.signals??null;this.rng=seededRandom(seed);this.tier=tier;this.heroStart=heroStart;this.time=0;this.accumulator=0;this.camera={x:55,z:65};this.grid=new Map();this.splashes=[];this.voices=[];this.queue=new Map();this.exits=new Map();this.groups=[];this.temp={};this.next={};this.lodClock=0;this.refillClock=0;
+  this.network=network;this.traffic=traffic;this.signals=traffic?.signals??null;this.rng=seededRandom(seed);this.tier=tier;this.heroStart=heroStart;this.time=0;this.accumulator=0;this.camera={x:55,z:65};this.grid=Object.assign(new Map(),{key:GRID_KEY});this.splashes=[];this.voices=[];this.queue=new Map();this.exits=new Map();this.groups=[];this.temp={};this.next={};this.lodClock=0;this.refillClock=0;
   this.stats={spawned:0,despawned:0,reasons:{},recoveries:0,stuck:0,routeCompletions:0,signalViolations:0,entries:{},completed:{},neighborChecks:0,avoidanceChecks:0,updateMs:0,throttled:0,spawnDeferred:0};
   this.pool=Array.from({length:POOL_SIZE},(_,id)=>({id,active:false,x:0,z:0,heading:0,height:0,archetype:'casual',mode:'ambient',state:'walking',group:-1,leader:-1,route:[],routeIndex:0,edge:-1,progress:0,destination:-1,node:-1,speed:0,baseSpeed:1.3,age:0,stuck:0,pause:0,crossing:null,queueKey:null,lod:'near',elapsed:0,phase:0,color:0,animationTime:0,renderX:0,renderZ:0,previousX:0,previousZ:0,travelled:0,lastHeading:0,downUntil:0,scatterX:0,scatterZ:0,scatterUntil:0,voiceUntil:0,voiceSaid:-99,voiceUrgency:0,
    flyX:0,flyY:0,flyZ:0,flyHeight:0,flyGround:0,flySettled:0,spin:0,spinRate:0,region:'commercial'}));
   this.candidates=network.eligible;this.byRegion=Object.fromEntries(['hachiko','center-gai','station','commercial'].map(k=>[k,this.candidates.filter(n=>n.district===k)]));this.crossCandidates=network.crossings.filter(e=>e.kind!=='normal'&&network.nodes[e.from].component===network.nodes[e.to].component);const lanes=new Map();for(const e of this.crossCandidates){const key=e.crossingId+':'+e.direction;if(!lanes.has(key))lanes.set(key,[]);lanes.get(key).push(e);}const groups=[...lanes.values()];this.crossCandidates=[];for(let row=0;row<Math.max(0,...groups.map(g=>g.length));row++)for(const group of groups)if(group[row])this.crossCandidates.push(group[row]);this.crossCursor=0;this.choreography=choreography?new ScrambleChoreography(this):null;this.refill(true);
  }
- cell(x,z){return Math.floor(x/2)+','+Math.floor(z/2);}
+ cell(x,z){return GRID_KEY(Math.floor(x/2),Math.floor(z/2));}
  insert(p){const k=this.cell(p.x,p.z);if(!this.grid.has(k))this.grid.set(k,[]);this.grid.get(k).push(p);}
  rebuild(){for(const b of this.grid.values())b.length=0;for(const p of this.pool)if(p.active)this.insert(p);}
- blocked(x,z,p,r=RADIUS*2+.06,includeReservations=true){if(p?.choreographed)return false;if(includeReservations&&!p?.crossing)for(const [id,owners] of this.exits){const e=this.network.edges[p?.edge];if(owners.has(p?.id)||e?.crossingId&&e.to===id)continue;const n=this.network.nodes[id];const distance=Math.hypot(x-n.x,z-n.z);if(distance<.85&&(!p||distance<=Math.hypot(p.x-n.x,p.z-n.z)))return true;}const ix=Math.floor(x/2),iz=Math.floor(z/2);for(let i=ix-1;i<=ix+1;i++)for(let j=iz-1;j<=iz+1;j++)for(const q of this.grid.get(i+','+j)??[]){if(q===p||!q.active||q.choreographed)continue;this.stats.neighborChecks++;if((q.x-x)**2+(q.z-z)**2<r*r)return true;}return false;}
- vehicleOverlap(x,z,r=RADIUS+.1){if(!this.traffic)return false;const ix=Math.floor(x/15),iz=Math.floor(z/15);for(let i=ix-1;i<=ix+1;i++)for(let j=iz-1;j<=iz+1;j++)for(const v of this.traffic.grid.get(i+','+j)??[]){if(!v.active)continue;if(v.controlled&&Math.abs(v.speed)>=DODGE_SPEED)continue;const def=VEHICLES[v.type],dx=x-v.x,dz=z-v.z,c=Math.cos(v.heading),s=Math.sin(v.heading);if(Math.abs(dx*c-dz*s)<def.width/2+r&&Math.abs(dx*s+dz*c)<def.length/2+r)return true;}return false;}
+ blocked(x,z,p,r=RADIUS*2+.06,includeReservations=true){if(p?.choreographed)return false;if(includeReservations&&!p?.crossing)for(const [id,owners] of this.exits){const e=this.network.edges[p?.edge];if(owners.has(p?.id)||e?.crossingId&&e.to===id)continue;const n=this.network.nodes[id];const distance=Math.hypot(x-n.x,z-n.z);if(distance<.85&&(!p||distance<=Math.hypot(p.x-n.x,p.z-n.z)))return true;}const ix=Math.floor(x/2),iz=Math.floor(z/2);for(let i=ix-1;i<=ix+1;i++)for(let j=iz-1;j<=iz+1;j++)for(const q of this.grid.get(GRID_KEY(i,j))??[]){if(q===p||!q.active||q.choreographed)continue;this.stats.neighborChecks++;if((q.x-x)**2+(q.z-z)**2<r*r)return true;}return false;}
+ vehicleOverlap(x,z,r=RADIUS+.1){if(!this.traffic)return false;const ix=Math.floor(x/15),iz=Math.floor(z/15);for(let i=ix-1;i<=ix+1;i++)for(let j=iz-1;j<=iz+1;j++)for(const v of this.traffic.grid.get(GRID_KEY(i,j))??[]){if(!v.active)continue;if(v.controlled&&Math.abs(v.speed)>=DODGE_SPEED)continue;const def=VEHICLES[v.type],dx=x-v.x,dz=z-v.z,c=Math.cos(v.heading),s=Math.sin(v.heading);if(Math.abs(dx*c-dz*s)<def.width/2+r&&Math.abs(dx*s+dz*c)<def.length/2+r)return true;}return false;}
  leave(p){for(const [id,owners] of this.exits){owners.delete(p.id);if(!owners.size)this.exits.delete(id);}if(p.crossing){this.signals?.leavePedestrian(p.crossing,p.id);p.crossing=null;}if(p.queueKey){this.queue.get(p.queueKey)?.delete(p.id);p.queueKey=null;}}
  /**
   * Tell a pedestrian to get out of the way, pointing where. Idle and paused actors are woken
@@ -157,7 +158,7 @@ export class CrowdSimulation{
   * unpacks from its edge inwards instead of being frozen by a strict never-closer rule.
   */
  fleeCrowded(p,x,z){const cx=Math.floor(x/2),cz=Math.floor(z/2),r=FLEE.personal;let now=0,next=0;
-  for(let i=cx-1;i<=cx+1;i++)for(let j=cz-1;j<=cz+1;j++)for(const q of this.grid.get(i+','+j)??[]){
+  for(let i=cx-1;i<=cx+1;i++)for(let j=cz-1;j<=cz+1;j++)for(const q of this.grid.get(GRID_KEY(i,j))??[]){
    if(q===p||!q.active||q.struck!==undefined)continue;
    next+=Math.max(0,r-Math.hypot(q.x-x,q.z-z));now+=Math.max(0,r-Math.hypot(q.x-p.x,q.z-p.z));}
   return next>now+.03;}
@@ -220,14 +221,14 @@ export class CrowdSimulation{
   // stops in one) and used to leave bodies overlapping its panels; they step out sideways now,
   // at walking pace, whatever the car is doing.
   if(speed<DODGE_SPEED){const hx=Math.sin(car.heading),hz=Math.cos(car.heading),r=halfL+1.2;
-   for(let i=Math.floor((car.x-r)/2);i<=Math.floor((car.x+r)/2);i++)for(let j=Math.floor((car.z-r)/2);j<=Math.floor((car.z+r)/2);j++)for(const p of this.grid.get(i+','+j)??[]){
+   for(let i=Math.floor((car.x-r)/2);i<=Math.floor((car.x+r)/2);i++)for(let j=Math.floor((car.z-r)/2);j<=Math.floor((car.z+r)/2);j++)for(const p of this.grid.get(GRID_KEY(i,j))??[]){
     if(!p.active||p.controlled||p.struck!==undefined||p.flee)continue;
     const dx=p.x-car.x,dz=p.z-car.z,along=dx*hx+dz*hz,across=dx*hz-dz*hx;
     if(Math.abs(along)>halfL+.3||Math.abs(across)>halfW+.3)continue;
     const side=Math.abs(across)>.1?Math.sign(across):(p.id%2?1:-1);
     if(this.flee(p,hz*side,-hx*side,{urgency:0,dodge:true,from:car,speed:1.5,distance:halfW+.75-Math.abs(across)}))n++;}
    return n;}const x0=Math.floor((car.x-reach)/2),x1=Math.floor((car.x+reach)/2),z0=Math.floor((car.z-reach)/2),z1=Math.floor((car.z+reach)/2);
-  for(let i=x0;i<=x1;i++)for(let j=z0;j<=z1;j++)for(const p of this.grid.get(i+','+j)??[]){
+  for(let i=x0;i<=x1;i++)for(let j=z0;j<=z1;j++)for(const p of this.grid.get(GRID_KEY(i,j))??[]){
    if(!p.active||p.controlled||p.struck!==undefined||p.combatDead)continue;
    const dx=p.x-car.x,dz=p.z-car.z,along=dx*fx+dz*fz,across=dx*rx+dz*rz,dist=Math.hypot(dx,dz);
    if(along<-halfL-.5||dist>reach)continue;
@@ -249,7 +250,7 @@ export class CrowdSimulation{
   * away from it; further out fewer of them do. Deterministic per person, like everything here.
   */
  panic(x,z,{radius=9,severity=.8}={}){let n=0;const r=radius;
-  for(let i=Math.floor((x-r)/2);i<=Math.floor((x+r)/2);i++)for(let j=Math.floor((z-r)/2);j<=Math.floor((z+r)/2);j++)for(const p of this.grid.get(i+','+j)??[]){
+  for(let i=Math.floor((x-r)/2);i<=Math.floor((x+r)/2);i++)for(let j=Math.floor((z-r)/2);j<=Math.floor((z+r)/2);j++)for(const p of this.grid.get(GRID_KEY(i,j))??[]){
    if(!p.active||p.controlled||p.struck!==undefined)continue;const dx=p.x-x,dz=p.z-z,d=Math.hypot(dx,dz);if(d>r)continue;
    if(hash01(p.id,5)>.25+.7*severity*(1-d/r))continue;
    if(this.flee(p,dx,dz,{urgency:severity*(1-.5*d/r),from:{x,z}}))n++;}

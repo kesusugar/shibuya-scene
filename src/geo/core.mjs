@@ -24,10 +24,30 @@ export function inPreparedRing(p,r,boundary=true){let inside=false;for(let i=0,j
 export function inPolygon(p,polygon){return inRing(p,polygon.outer)&&!(polygon.holes??[]).some(h=>inRing(p,h));}
 export function seededRandom(seed){let a=2166136261;for(const c of String(seed)){a^=c.charCodeAt(0);a=Math.imul(a,16777619);}return ()=>{a+=0x6D2B79F5;let t=a;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return ((t^t>>>14)>>>0)/4294967296;};}
 export class SpatialIndex{
- constructor(cellSize=25){if(!Number.isFinite(cellSize)||cellSize<=0)throw Error('Invalid cell size');this.size=cellSize;this.cells=new Map();this.items=new Map();}
- keys(b){if(![b.minX,b.maxX,b.minZ,b.maxZ].every(Number.isFinite)||b.minX>b.maxX||b.minZ>b.maxZ)throw Error('Invalid bounds');const out=[];for(let x=Math.floor(b.minX/this.size);x<=Math.floor(b.maxX/this.size);x++)for(let z=Math.floor(b.minZ/this.size);z<=Math.floor(b.maxZ/this.size);z++)out.push(`${x},${z}`);return out;}
- insert(id,b,value){this.remove(id);const keys=this.keys(b);this.items.set(id,{bounds:{...b},value,keys});for(const k of keys){if(!this.cells.has(k))this.cells.set(k,new Set());this.cells.get(k).add(id);}return this;}
+ // Crowd performance: cells are keyed by a number, not an "x,z" string, and a query walks them
+ // without building intermediate arrays or sets (it was a large share of the crowd's garbage).
+ // The results, and their order, are what they were: cell by cell (x, then z), each cell in
+ // insertion order, each item once, filtered by its bounds.
+ constructor(cellSize=25){if(!Number.isFinite(cellSize)||cellSize<=0)throw Error('Invalid cell size');this.size=cellSize;this.cells=new Map();this.items=new Map();this.stamp=0;this.walking=false;}
+ keys(b){const out=[];this.eachKey(b,(x,z)=>out.push(`${x},${z}`));return out;}
+ eachKey(b,fn){if(![b.minX,b.maxX,b.minZ,b.maxZ].every(Number.isFinite)||b.minX>b.maxX||b.minZ>b.maxZ)throw Error('Invalid bounds');for(let x=Math.floor(b.minX/this.size);x<=Math.floor(b.maxX/this.size);x++)for(let z=Math.floor(b.minZ/this.size);z<=Math.floor(b.maxZ/this.size);z++)fn(x,z,x*2097152+z);}
+ insert(id,b,value){this.remove(id);const keys=[];this.eachKey(b,(x,z,k)=>keys.push(k));this.items.set(id,{bounds:{...b},value,keys,seen:0});for(const k of keys){let c=this.cells.get(k);if(!c)this.cells.set(k,c=new Set());c.add(id);}return this;}
  remove(id){const item=this.items.get(id);if(!item)return;for(const k of item.keys){const c=this.cells.get(k);c.delete(id);if(!c.size)this.cells.delete(k);}this.items.delete(id);}
- query(b){const ids=new Set(this.keys(b).flatMap(k=>[...(this.cells.get(k)??[])]));return [...ids].filter(id=>overlaps(this.items.get(id).bounds,b)).map(id=>({id,value:this.items.get(id).value}));}
+ /** `fn({id,value})` for each item whose bounds overlap `b`, in query order; stops when it returns true. Returns whether it stopped. */
+ some(b,fn){if(!(Number.isFinite(b.minX)&&Number.isFinite(b.maxX)&&Number.isFinite(b.minZ)&&Number.isFinite(b.maxZ))||b.minX>b.maxX||b.minZ>b.maxZ)throw Error('Invalid bounds');
+  // A callback that queries this index again gets its own de-duplication (a set), so the outer
+  // walk's marks are never overwritten.
+  if(this.walking)return this.someNested(b,fn);
+  this.walking=true;try{
+  const stamp=++this.stamp,x0=Math.floor(b.minX/this.size),x1=Math.floor(b.maxX/this.size),z0=Math.floor(b.minZ/this.size),z1=Math.floor(b.maxZ/this.size);
+  for(let x=x0;x<=x1;x++)for(let z=z0;z<=z1;z++){const c=this.cells.get(x*2097152+z);if(!c)continue;
+   for(const id of c){const item=this.items.get(id);if(item.seen===stamp)continue;item.seen=stamp;if(overlaps(item.bounds,b)&&fn({id,value:item.value}))return true;}}
+  return false;}finally{this.walking=false;}}
+ someNested(b,fn){const seen=new Set();const x0=Math.floor(b.minX/this.size),x1=Math.floor(b.maxX/this.size),z0=Math.floor(b.minZ/this.size),z1=Math.floor(b.maxZ/this.size);
+  for(let x=x0;x<=x1;x++)for(let z=z0;z<=z1;z++){const c=this.cells.get(x*2097152+z);if(!c)continue;
+   for(const id of c){if(seen.has(id))continue;seen.add(id);const item=this.items.get(id);if(overlaps(item.bounds,b)&&fn({id,value:item.value}))return true;}}
+  return false;}
+ query(b){const out=[];this.some(b,r=>{out.push(r);return false;});return out;}
  clear(){this.cells.clear();this.items.clear();}
 }
+
