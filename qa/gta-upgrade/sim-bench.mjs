@@ -19,6 +19,9 @@ import {TrafficSimulation} from '../../src/traffic/simulation.mjs';
 import {CrowdSimulation} from '../../src/life/simulation.mjs';
 
 const frames=+(process.argv[2]??900),repeats=+(process.argv[3]??3),out=process.argv[4];
+// CAMERA=x,z: where the crowd's AI level of detail is measured from (default the crossing, 0,0;
+// e.g. CAMERA=-260,180 for a player out in the city with the crossing crowd far away).
+const [camX,camZ]=(process.env.CAMERA??'0,0').split(',').map(Number);
 const t0=performance.now();
 const pack=JSON.parse(readFileSync('public/data/shibuya-static-models.json','utf8'));
 pack.ground=restoreGroundModel(pack.ground);
@@ -43,7 +46,7 @@ for(let r=0;r<repeats;r++){
  const traffic=new TrafficSimulation(pack.traffic.high,{tier:'high',street:pack.street.high,heroStart:true});
  traffic.signals.time=88;
  const crowd=new CrowdSimulation(pack.life.high,{tier:'high',traffic,choreography:true,heroStart:true});
- crowd.setCamera(0,0);
+ crowd.setCamera(camX,camZ);
  for(let f=0;f<300;f++){traffic.update(1/30);crowd.update(1/30);}
  for(let f=0;f<frames;f++){
   let a=performance.now();traffic.update(1/30);let b=performance.now();trafficMs.push(b-a);
@@ -52,6 +55,6 @@ for(let r=0;r<repeats;r++){
  hashes.push(hash(crowd,traffic));
  crowd.dispose?.();traffic.dispose?.();
 }
-const result={frames,repeats,loadMs:Math.round(loadMs),crowd:stats(crowdMs),traffic:stats(trafficMs),total:stats(crowdMs.map((v,i)=>v+trafficMs[i])),hashes};
+const result={camera:[camX,camZ],frames,repeats,loadMs:Math.round(loadMs),crowd:stats(crowdMs),traffic:stats(trafficMs),total:stats(crowdMs.map((v,i)=>v+trafficMs[i])),hashes};
 console.log(JSON.stringify(result));
 if(out)writeFileSync(out,JSON.stringify(result,null,1)+'\n');

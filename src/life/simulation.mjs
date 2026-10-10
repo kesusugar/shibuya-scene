@@ -7,6 +7,14 @@ import {QUALITY,ARCHETYPES,POOL_SIZE,RADIUS,district} from './config.mjs';
 import {route,edgePose,inCrossing} from './network.mjs';
 import {kerbQueued} from './stance.mjs';
 import {GRID_KEY} from './grid-key.mjs';
+// Crowd performance: the choreographed scramble cast (most of the crowd) walks fixed tracks, so
+// away from the camera it is moved less often -- 30 Hz near (within 65 m), 15 Hz mid, 10 Hz far --
+// staggered by id so they do not all move on the same step, with the skipped time carried into
+// the next one, so everyone covers the same ground. Only the
+// moment a waiting body sets off, or a crossing one is released, can come up to 0.1 s later.
+// Other pedestrians on a crossing stay at 30 Hz (they steer round each other there). Until a
+// camera is given (setCamera) nobody is known to be far, and the whole cast runs at 30 Hz.
+export const CAST_INTERVAL=Object.freeze({near:1/30,mid:1/15,far:1/10});
 
 // Fixed actor objects and spatial buckets. Routes allocate only on destination changes.
 // Below this the player's car is treated as an obstacle and walked around; at or above it
@@ -321,7 +329,7 @@ export class CrowdSimulation{
  setPopulation(k){this.population=Math.max(.1,Math.min(1,Number(k)||1));return this.population;}
  despawn(p,reason){if(!p.active)return;this.leave(p);p.active=false;this.stats.despawned++;this.stats.reasons[reason]=(this.stats.reasons[reason]??0)+1;if(reason==='stuck'){this.stats.stuck++;this.stats.recoveries++;}}
  setTier(tier){if(!QUALITY[tier])throw Error('Unknown crowd tier');if(tier===this.tier)return;this.tier=tier;this.choreography?.occupied.clear();for(const p of this.pool){if(p.controlled)continue;if(p.active&&!p.crossing)this.despawn(p,'profile');else if(p.active){p.group=-1;p.leader=-1;p.mode='ambient';}}this.groups.length=0;this.refill(true);}
- setCamera(x,z){this.camera.x=x;this.camera.z=z;}
+ setCamera(x,z){this.camera.x=x;this.camera.z=z;this.cameraSet=true;}
  chooseDestination(p,node,short=false){if(p.mode==='patrol')return patrolRoute(this.network,p);if(p.leader>=0&&this.pool[p.leader]?.active){const lead=this.pool[p.leader],dest=lead.destination,path=route(this.network,node.id,dest);if(path.length){p.route=path;p.routeIndex=0;p.edge=path[0];p.progress=0;p.node=node.id;p.destination=dest;return true;}}const region=short?node.district:this.rng()<.55?(node.district==='hachiko'?'center-gai':'hachiko'):node.district,candidates=this.byRegion[region]?.filter(n=>n.component===node.component&&Math.hypot(n.x-node.x,n.z-node.z)>(short?3:12)&&(!short||Math.hypot(n.x-node.x,n.z-node.z)<16));let list=candidates.length?candidates:this.candidates.filter(n=>n.component===node.component&&Math.hypot(n.x-node.x,n.z-node.z)>4);if(!list.length)return false;
   for(let i=0;i<5;i++){const dest=list[Math.floor(this.rng()*list.length)],path=route(this.network,node.id,dest.id);if(!path.length)continue;if(short&&(path.some(id=>this.network.edges[id].crossingId)||path.reduce((sum,id)=>sum+this.network.edges[id].length,0)>30))continue;const first=this.network.nodes[this.network.edges[path[0]].to],dot=Math.sin(p.heading)*(first.x-node.x)+Math.cos(p.heading)*(first.z-node.z);if(p.travelled>2&&dot<-.2&&i<4)continue;p.route=path;p.routeIndex=0;p.edge=path[0];p.progress=0;p.node=node.id;p.destination=dest.id;return true;}return false;
  }
@@ -441,7 +449,7 @@ export class CrowdSimulation{
   for(const p of this.pool)if(p.active&&p.flee&&!p.controlled&&p.struck===undefined){p.fleeRank=-Math.hypot(p.x-p.flee.ox,p.z-p.flee.oz);flights.push(p);}
   if(flights.length){flights.sort((a,b)=>a.fleeRank-b.fleeRank);for(const p of flights)this.fleeStep(p,dt);}
   // Rotate priority each fixed tick; ordering does not permanently privilege low IDs.
-  const start=Math.floor(this.time*30)%this.pool.length;for(let j=0;j<this.pool.length;j++){const p=this.pool[(start+j)%this.pool.length];if(!p.active||p.controlled)continue;
+  const tick=Math.round(this.time*30),start=Math.floor(this.time*30)%this.pool.length;for(let j=0;j<this.pool.length;j++){const p=this.pool[(start+j)%this.pool.length];if(!p.active||p.controlled)continue;
    if(p.struck!==undefined){p.struck+=dt;p.speed=0;this.fly(p,dt);
     // An extracted driver is a world pedestrian, not a disposable hit marker. Finish their
     // fall as the HQ knockdown enters RECOVER, then give them a nearby walkable route. The
@@ -471,7 +479,7 @@ export class CrowdSimulation{
     // collects them (aftermath.mjs), not FALL_SECONDS; a car's victim goes as before.
     if(p.struck>=FALL_SECONDS&&(!p.combatDead||p.collected)){p.struck=undefined;this.despawn(p,p.collected?'collected':'struck');p.downUntil=this.time+RESPAWN_SECONDS;}continue;}
    if(p.flee){p.elapsed=0;continue;}   // moved in the flight pass above
-   p.elapsed+=dt;const interval=p.crossing||p.choreographed?1/30:p.mode==='idle'?.5:p.lod==='near'?1/30:p.lod==='mid'?1/15:.2;if(p.elapsed+1e-8<interval){this.stats.throttled++;continue;}const elapsed=p.elapsed;p.elapsed=0;this.move(p,elapsed);}
+   p.elapsed+=dt;if(p.choreographed){const every=this.cameraSet?Math.round((CAST_INTERVAL[p.lod]??1/30)*30):1;if(every>1&&(tick+p.id)%every!==0){this.stats.throttled++;continue;}}else{const interval=p.crossing?1/30:p.mode==='idle'?.5:p.lod==='near'?1/30:p.lod==='mid'?1/15:.2;if(p.elapsed+1e-8<interval){this.stats.throttled++;continue;}}const elapsed=p.elapsed;p.elapsed=0;this.move(p,elapsed);}
   if(this.refillClock>=2){this.refillClock=0;this.refill();}
  }
  // `postUpdate(dt)`, if set, runs after the steps and before anything draws them: the player's
