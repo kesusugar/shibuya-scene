@@ -137,8 +137,13 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
   stats.reacting=reacting;stats.down=down;
  }
 
+ // Crowd performance (owner's trial, `?l0cap=N`): at most N citizens at full detail (L0). When
+ // more stand inside the L0 band, only the nearest N keep it and the rest are drawn at L1; the
+ // distance of the N-th nearest is `l0Reach`, set at each review. 0 (the default) is no cap.
+ let l0Cap=0,l0Reach=Infinity;const reachScratch=[];
  const lodFor=(distance,current)=>{
   for(const band of HQ_LOD.bands){
+   if(band.lod==='L0'&&distance>l0Reach)continue;
    if(distance<=band.in)return band.lod;
    // Already in this band and not yet past its release distance: stay.
    if(current===band.lod&&distance<=band.out)return band.lod;
@@ -188,6 +193,14 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
    reviewClock+=dt;
    const review=reviewClock>=HQ_LOD.reviewInterval;
    if(review)reviewClock=0;
+   if(review){
+    l0Reach=Infinity;
+    if(l0Cap>0){
+     const out=HQ_LOD.bands[0].out;reachScratch.length=0;
+     for(let k=0;k<take;k++)if(candidates[k].d<=out)reachScratch.push(candidates[k].d);
+     if(reachScratch.length>l0Cap){reachScratch.sort((a,b)=>a-b);l0Reach=reachScratch[l0Cap-1];}
+    }
+   }
    let moves=0;
 
    for(let k=0;k<take;k++){
@@ -411,6 +424,8 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
   get disowned(){return disowned;},
 
   setBudget(n){stats.budget=Math.max(0,n|0);},
+  /** Crowd performance trial: at most `n` citizens at full detail (L0); 0 for no cap. */
+  setL0Cap(n){n=Math.max(0,n|0);if(n===l0Cap)return;l0Cap=n;l0Reach=Infinity;stats.l0Cap=l0Cap;},
   /** Crowd performance: draw from `camera` only the citizens it can see (hq-crowd.mjs `cull`). */
   cull(camera,options){return crowd.cull(camera,options);},
 

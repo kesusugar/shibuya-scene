@@ -575,7 +575,7 @@ export default function Home(){
  const observer=new ResizeObserver(resize);observer.observe(mount.current);
  // PLAN-PERFORMANCE P0: ?perf=1 shows where a frame's time goes; ?perf=sweep also switches each
  // feature off in turn and records the difference; ?off=a,b keeps features off for a manual A/B.
- const perfMode=params.get('perf');const perfOff=new Set<string>();let perfProbe:any=null,perfOverlay:any=null,perfSweep:any=null,perfClock=0,perfLast:number|null=null,perfReadyFrames=0,perfSaved:any={};const perfApplied:any={};
+ const perfMode=params.get('perf');let l0CapParam=Math.max(0,Number(params.get('l0cap'))||0);const perfOff=new Set<string>();let perfProbe:any=null,perfOverlay:any=null,perfSweep:any=null,perfClock=0,perfLast:number|null=null,perfReadyFrames=0,perfSaved:any={};const perfApplied:any={};
  const perfModules:any={crowd:'life',traffic:'traffic',trains:'trains',signs:'signs',streetscape:'streetscape',nightglow:'nightglow',buildings:'buildings'};
  const applyPerfOff=(off:Set<string>)=>{perfOff.clear();for(const f of off)perfOff.add(f);
   if(renderer)renderer.shadowMap.autoUpdate=!off.has('shadow');
@@ -607,7 +607,7 @@ export default function Home(){
   const glow=nightglowEntry.hooks.current;
   roadReflection?.update(scene,view,{active:currentTier==='high'&&!!glow?.stats.active,time:performance.now()/1000,
    hide:[ground?.root,lifeEntry.hooks.current?.root,glow?.root,blood?.mesh]});
-  glow?.setMirror?.(ROAD_REFLECTION_UNIFORMS.s13ReflectStrength.value/ROAD_REFLECTION.strength);if(perfOff.has('render'))return;view.updateMatrixWorld();lifeEntry.hooks.current?.cull?.(perfOff.has('cull')?null:view);if(!fidelity.render(system.entries.get('postprocess').enabled&&!perfOff.has('post'),!!nightglowEntry.hooks.current?.stats.active)){if(nightglowEntry.hooks.current)nightglowEntry.hooks.current.render(scene,view);else renderer?.render(scene,view);}if(startup&&renderer){const renderedAt=performance.now();startup.milestone('firstRendererFrameMs',renderedAt);const appeared=new Set(startupTrace.appearanceEvents.map((event:any)=>event.name));if(appeared.has('firstGroundVisible')&&appeared.has('firstBuildingVisible')&&appeared.has('firstHeroVisible'))startup.milestone('firstSceneFrameMs',renderedAt);if(completeBeforeRender){startup.milestone('finalSceneFrameMs',renderedAt);startup.milestone('interactiveReadyMs',renderedAt);finalizeStartupTiming();}}};
+  glow?.setMirror?.(ROAD_REFLECTION_UNIFORMS.s13ReflectStrength.value/ROAD_REFLECTION.strength);if(perfOff.has('render'))return;view.updateMatrixWorld();lifeEntry.hooks.current?.setL0Cap?.(l0CapParam);lifeEntry.hooks.current?.cull?.(perfOff.has('cull')?null:view);if(!fidelity.render(system.entries.get('postprocess').enabled&&!perfOff.has('post'),!!nightglowEntry.hooks.current?.stats.active)){if(nightglowEntry.hooks.current)nightglowEntry.hooks.current.render(scene,view);else renderer?.render(scene,view);}if(startup&&renderer){const renderedAt=performance.now();startup.milestone('firstRendererFrameMs',renderedAt);const appeared=new Set(startupTrace.appearanceEvents.map((event:any)=>event.name));if(appeared.has('firstGroundVisible')&&appeared.has('firstBuildingVisible')&&appeared.has('firstHeroVisible'))startup.milestone('firstSceneFrameMs',renderedAt);if(completeBeforeRender){startup.milestone('finalSceneFrameMs',renderedAt);startup.milestone('interactiveReadyMs',renderedAt);finalizeStartupTiming();}}};
  const requiredStages=['data','ground','buildings','heroes','station','stationDetail','signs','streetscape','traffic','life','trains','construction','environment','nightglow','postprocess'];
  const requiredTimingStages=[...requiredStages,'fidelity'];
  const prerequisitesReady=()=>!!renderer&&!renderer.getContext().isContextLost()&&currentTier==='high'&&dayNight.active&&!!fidelity.pipeline&&requiredStages.every(id=>system.entries.get(id)?.status==='ready')&&!!ground&&['buildings','heroes','station','stationDetail','signs','streetscape','traffic','life','trains','construction','nightglow'].every(id=>!!system.entries.get(id)?.hooks.current)&&buildQueue.snapshot().queueLength===0&&!buildQueue.snapshot().activeBuildName;
@@ -624,7 +624,7 @@ export default function Home(){
   render(on:boolean){if(on)perfOff.delete("render");else perfOff.add("render");return !perfOff.has("render");},
   get frames(){return renderedFrames;},
   // {dist, height, yaw (from the player's heading), target (height looked at)} or null for the follow camera.
-  view(v:any){qaView=v?{...v}:null;return !!qaView;}});(window as any).__SHIBUYA_QA__=qaApi;(window as any).__SHIBUYA_MIRROR__=roadReflection;}
+  view(v:any){qaView=v?{...v}:null;return !!qaView;},l0cap(n:number){l0CapParam=Math.max(0,Number(n)||0);return l0CapParam;},hqStats(){return lifeEntry.hooks.current?.stats?.hqCrowd??null;}});(window as any).__SHIBUYA_QA__=qaApi;(window as any).__SHIBUYA_MIRROR__=roadReflection;}
  // ?diag=1 (or ?pad=1, which opens straight on the controller tab) -- a panel that can be
  // read and driven with a thumb, because "why will the car not move?" gets asked on a phone
  // where there is no console. Its own controls feed the same axes the keys and the pad do,
