@@ -6777,9 +6777,11 @@ and without lowering quality. Full analysis, measurements and next steps:
 - the simulation's hot lookups no longer build strings, sets or arrays (numeric grid and cache
   keys, an allocation-free `SpatialIndex`, a banded road test): the same seeded run ends in
   exactly the same state (`qa/gta-upgrade/sim-bench.mjs` hashes it) for 43% less CPU;
-- nothing is reverted, nothing removed; the remaining levers (an L0 cap in view, the far crowd
-  out of the AO pass, the scramble cast's update rate) change what is seen or timed and wait for
-  the owner.
+- round 2, each approved by the owner from same-moment comparison stills: at most 48 citizens
+  at full detail (L0) by default; a far level L3 (L2 simplified to a quarter, beyond 70 m); the
+  scramble cast moved at 15/10 Hz beyond 65/140 m from the camera (staggered, time carried);
+- nothing is reverted, nothing removed; next: the far crowd out of the AO pass, impostors beyond
+  L3, and device numbers (`?perf=sweep`).
 
 ## 10–15. Historical roadmap (superseded by §9g)
 

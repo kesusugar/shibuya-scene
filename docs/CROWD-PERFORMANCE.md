@@ -157,21 +157,32 @@ and ~1.4-2.0 GB for the whole headless browser, before and after (no new allocat
   the crossing with culling on and off show the same crowd.
 - **The reflection.** It draws the whole crowd (no culling from its camera), as before.
 
+## Round 2: the owner's go-ahead
+
+7 and 8 were shown as comparison stills of the same moment (the switch made live and every
+citizen's LOD reviewed at once, 0.3 s of game time before the still) and approved by the owner
+before becoming the default. 9 was the third step of the same plan ("continue"); it changes no
+image, so it was judged by audits instead.
+
+| # | Change | Files | Measured effect | Seen |
+|---|---|---|---|---|
+| 7 | **At most 48 citizens at full detail (L0)**, the nearest; the rest of the L0 band at L1. `?l0cap=0` lifts it, `?l0cap=N` sets another | `src/life/hq-layer.mjs` (`L0_CAP_DEFAULT`), `app/ShibuyaScene.tsx` | densest spot by the crossing: crowd triangles in view 3.61 M -> 1.80 M (-50%), frame 8.6 M -> 5.2 M | `evidence/crowd-perf/l0cap/` -- "fully acceptable" |
+| 8 | **A far level of detail L3** beyond 70 m (80 m to let go): each archetype's L2 simplified to about a quarter (2,014-2,827 -> 470-687 triangles, error 1.2-1.5%, garment colour edges kept) by `scripts/bake-crowd-l3.mjs` (meshoptimizer, shipped with three). Only a new index list over L2's own vertices: the same skinning, colours, palette and animation. `?l3=0` leaves it out | `public/data/crowd/hq-crowd-l3.json`, `src/life/hq-crowd.mjs` (`withL3`), `src/life/hq-layer.mjs` | the overview of the crossing: crowd triangles 3.95 M -> 2.02 M (-49%), frame 9.4 M -> 5.6 M | `evidence/crowd-perf/l3/` -- "no problem" |
+| 9 | **The scramble cast moved less often away from the camera**: 30 Hz within 65 m, 15 Hz to 140 m, 10 Hz beyond, staggered by id, the skipped time carried (same ground covered). Never before a camera is known, never within 65 m of it; other pedestrians on a crossing stay at 30 Hz | `src/life/simulation.mjs` (`CAST_INTERVAL`) | Node, camera out in the city: crowd 2.76 -> 2.27 ms (-18%), p95 unchanged; at the crossing nothing changes (the state hash is identical) | 3-minute audits at three cameras: 0 signal and red-light violations, crossings completed 2,490 -> 2,479 (starts up to 0.1 s later) |
+
+The crowd audit's "major" count (278 at every camera, before and after) is not from this work:
+it is the same on master with the in-game configuration (choreography and the hero start on),
+which the S10 audit test does not use.
+
 ## Not done, and what would come next
 
-Proposed, in order of value; each needs the owner's eye because each touches what is seen:
-
-1. **A cap on full-detail (L0) people in view.** 380 people stand within 14 m at the start, each
-   ~14 k triangles. Keeping, say, the nearest 48 in view at L0 and the rest at L1 (5 k) would cut
-   the crowd's remaining triangles by roughly half; people at 8-14 m in L1 are hard to tell from
-   L0, but it is a visible-quality decision.
-2. **Leave far citizens out of GTAO's normal pass** (they are drawn in it only to occlude the
+1. **Leave far citizens out of GTAO's normal pass** (they are drawn in it only to occlude the
    ambient-occlusion estimate around them). Halves their cost again; slightly changes the AO.
-3. **The scramble cast's update rate by distance** (30 Hz for everyone today). It changes timing
-   on the crossing, so it needs its own audit (the S10 crossing tests).
-4. **Shadow-map size / cascade review and a lighter AO for integrated graphics** -- only with the
+2. **Impostors (flat sprites) beyond L3** for the very far crowd: a sprite cannot easily keep
+   each citizen's own palette, which is why L3 was chosen first.
+3. **Shadow-map size / cascade review and a lighter AO for integrated graphics** -- only with the
    owner's `?perf=sweep` numbers from the device.
-5. **WebGPU** is not needed for any of the above.
+4. **WebGPU** is not needed for any of the above.
 
 ## Reproduce
 
@@ -181,4 +192,8 @@ node qa/gta-upgrade/sim-bench.mjs 900 3             # Node, simulation CPU + sta
 node qa/gta-upgrade/scene-cost.mjs out.json         # browser, CPU per situation (drawing off)
 node qa/gta-upgrade/render-bench.mjs out.json       # browser, draws / primitives / uploads
 node qa/gta-upgrade/render-bench.mjs out.json "qa=1&perf=1&tier=high&time=day&camera=scramble&off=cull"
+CAMERA=-200,150 node qa/gta-upgrade/sim-bench.mjs 900 3   # the cast away from the camera
+node scripts/bake-crowd-l3.mjs                      # re-make the far level from L2
+node qa/gta-upgrade/l0cap-stills.mjs out            # stills: no cap / 48 / 24 / no cap
+node qa/gta-upgrade/l3-stills.mjs out               # stills: L3 off / on, overview and kerb
 ```
