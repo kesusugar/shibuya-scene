@@ -13,6 +13,7 @@ import {buildTrains} from '../src/trains/render.mjs';
 import {buildCrowd} from '../src/life/render.mjs';
 import {L0_CAP_DEFAULT} from '../src/life/hq-layer.mjs';
 import {withL3} from '../src/life/hq-crowd.mjs';
+import {LOOK} from '../src/environment/look-profile.mjs';
 import {createHQRequester} from '../src/app/hq-request.mjs';
 import {buildPedestrianNetworkAsync} from '../src/life/network.mjs';
 import {buildTraffic} from '../src/traffic/render.mjs';
@@ -454,7 +455,7 @@ export default function Home(){
  constructionEntry.hooks=buildingLifecycle({timingKey:'construction',timingName:'S15 Construction',parent:groups.world,build:(data:any,record:any)=>{const started=performance.now(),result=buildConstruction(data,{generic:buildingsEntry.hooks.current?.model,time:clock,tier:currentTrafficTier});if(record?.timing)record.timing.computeMs+=performance.now()-started;return result;},onReport:setConstructionReport,onReady(result:any){constructionEntry.status='ready';console.info('[S15 Construction]',result.stats);setModules(system.snapshot());},onError(e:any){constructionEntry.status='failed';console.error('[S15 Construction]',e);setModules(system.snapshot());}});
  system.setEnabled('construction',(config.only===null||config.only.includes('construction'))&&!config.skip.includes('construction'));
  const postEntry=system.entries.get('postprocess');postEntry.hooks={build(){nightglowEntry.hooks.current?.setPostprocess(true);},dispose(){nightglowEntry.hooks.current?.setPostprocess(false);}};if(postEntry.enabled)postEntry.status='ready';
- const solar=new SolarCycle(scene,dayNight,fidelity,clock);
+ if(params.get('look')==='classic')LOOK.mode='classic';const solar=new SolarCycle(scene,dayNight,fidelity,clock);
  const unsub=clock.subscribe((v:any)=>{system.timeChanged(v);setTime(v.value);setEnvironmentReport(dayNight.snapshot());});
  // §9aj G3: dynamic resolution holds the frame budget when the GPU is the limit (?dynres=0 turns it off).
  const dynRes=createDynamicResolution({budgetMs:1000/(PROFILES[config.tier]?.fps??60),enabled:params.get('dynres')!=='0'});let dynLast:number|null=null;
@@ -630,7 +631,7 @@ export default function Home(){
   render(on:boolean){if(on)perfOff.delete("render");else perfOff.add("render");return !perfOff.has("render");},
   get frames(){return renderedFrames;},
   // {dist, height, yaw (from the player's heading), target (height looked at)} or null for the follow camera.
-  view(v:any){qaView=v?{...v}:null;return !!qaView;},farLod(on:boolean){lifeEntry.hooks.current?.setFarLod?.(on);return on;},l0cap(n:number){l0CapParam=Math.max(0,Number(n)||0);lifeEntry.hooks.current?.setL0Cap?.(l0CapParam);lifeEntry.hooks.current?.relod?.();return l0CapParam;},hqStats(){return lifeEntry.hooks.current?.stats?.hqCrowd??null;}});(window as any).__SHIBUYA_QA__=qaApi;(window as any).__SHIBUYA_MIRROR__=roadReflection;}
+  view(v:any){qaView=v?{...v}:null;return !!qaView;},look(mode:string){LOOK.mode=mode==='classic'?'classic':'gta';solar.select(solar.phase,false);return LOOK.mode;},phase(p:string){solar.select(p,false);return p;},farLod(on:boolean){lifeEntry.hooks.current?.setFarLod?.(on);return on;},l0cap(n:number){l0CapParam=Math.max(0,Number(n)||0);lifeEntry.hooks.current?.setL0Cap?.(l0CapParam);lifeEntry.hooks.current?.relod?.();return l0CapParam;},hqStats(){return lifeEntry.hooks.current?.stats?.hqCrowd??null;}});(window as any).__SHIBUYA_QA__=qaApi;(window as any).__SHIBUYA_MIRROR__=roadReflection;}
  // ?diag=1 (or ?pad=1, which opens straight on the controller tab) -- a panel that can be
  // read and driven with a thumb, because "why will the car not move?" gets asked on a phone
  // where there is no console. Its own controls feed the same axes the keys and the pad do,

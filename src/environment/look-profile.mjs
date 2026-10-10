@@ -1,0 +1,45 @@
+// GTA-style look (the owner's brief, 2026-10-10): what makes Los Santos read as Los Santos is
+// mostly light and colour, not polygons -- a sun low enough to model the city with long shadows,
+// shadows that stay dark, a time-of-day colour grade (warm highlights, cool shadows, more
+// saturation and contrast), haze that builds with distance, and a sky with clouds in it. This is
+// that "timecycle", per solar phase, blended with the phases like everything else in SolarCycle.
+//
+// `classic` is the calibration before it (the SOLAR_PHASES values and no grade), kept for A/B:
+// ?look=classic, or LOOK.mode='classic' then SolarCycle.select(phase,false).
+//
+// Grade fields (the pipeline's grade pass applies them in linear HDR, before tone mapping):
+//   sat       saturation, 1 = unchanged
+//   contrast  slope in log2 exposure around mid-grey (0.18), 1 = unchanged
+//   shadow    RGB multiplier for the darks;  highlight: for the lights (split toning)
+//   vignette  darkening at the corners, 0..1
+// Other fields: fog (FogExp2 density), clouds (0..1 cover in the sky shader).
+
+export const LOOK = {mode: 'gta'};
+
+const NEUTRAL = Object.freeze({sat: 1, contrast: 1, shadow: [1, 1, 1], highlight: [1, 1, 1], vignette: 0});
+export const NEUTRAL_GRADE = NEUTRAL;
+
+/** Overrides of SOLAR_PHASES for the GTA look, and the grade, fog and clouds of each phase. */
+export const GTA_PHASES = Object.freeze({
+ dawn: {angle: .32, key: 1.35, fill: .20, exposure: .80, horizon: 0xffbe8c, sun: 0xffc58e,
+  fog: .0016, clouds: .45,
+  grade: {sat: 1.10, contrast: 1.10, shadow: [.92, .94, 1.08], highlight: [1.08, 1.0, .90], vignette: .20}},
+ day: {angle: .82, key: 2.05, fill: .17, exposure: .76, sky: 0x6f9fcf, horizon: 0xc8d2d8, sun: 0xfff0d8,
+  fog: .00115, clouds: .38,
+  grade: {sat: 1.12, contrast: 1.12, shadow: [.93, .97, 1.06], highlight: [1.05, 1.0, .93], vignette: .18}},
+ dusk: {angle: 2.92, key: 1.05, fill: .18, exposure: .82, horizon: 0xff9a5c, sun: 0xff8f4f,
+  fog: .0015, clouds: .5,
+  grade: {sat: 1.18, contrast: 1.15, shadow: [.88, .91, 1.10], highlight: [1.10, .98, .86], vignette: .22}},
+ night: {fog: .0012, clouds: .2,
+  grade: {sat: 1.0, contrast: 1.04, shadow: [.96, .98, 1.04], highlight: [1.02, 1.0, .97], vignette: .10}}
+});
+
+/** The phase table SolarCycle uses: `base` (SOLAR_PHASES) with the GTA overrides, or as it was. */
+export function phasesFor(base, mode = LOOK.mode) {
+ const out = {};
+ for (const [k, v] of Object.entries(base)) {
+  const extra = mode === 'classic' ? null : GTA_PHASES[k];
+  out[k] = {fog: k === 'night' ? .0012 : .0007, clouds: 0, grade: NEUTRAL, ...v, ...(extra ?? {})};
+ }
+ return out;
+}
