@@ -140,7 +140,7 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
  // Crowd performance (owner's trial, `?l0cap=N`): at most N citizens at full detail (L0). When
  // more stand inside the L0 band, only the nearest N keep it and the rest are drawn at L1; the
  // distance of the N-th nearest is `l0Reach`, set at each review. 0 (the default) is no cap.
- let l0Cap=0,l0Reach=Infinity;const reachScratch=[];
+ let l0Cap=0,l0Reach=Infinity,fullReview=false;const reachScratch=[];
  const lodFor=(distance,current)=>{
   for(const band of HQ_LOD.bands){
    if(band.lod==='L0'&&distance>l0Reach)continue;
@@ -191,8 +191,9 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
    if(take<count)selectNearest(candidates,count,take);
 
    reviewClock+=dt;
-   const review=reviewClock>=HQ_LOD.reviewInterval;
+   const review=reviewClock>=HQ_LOD.reviewInterval||fullReview;
    if(review)reviewClock=0;
+   const moveLimit=fullReview?Infinity:HQ_LOD.movesPerFrame;fullReview=false;
    if(review){
     l0Reach=Infinity;
     if(l0Cap>0){
@@ -292,7 +293,7 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
     // A person the simulation is carrying away from a car is running, whatever a glance said.
     else if(want===STATE.FLEE&&(now===STATE.LOOK||now===STATE.STARTLE||now===STATE.RECOVER))crowd.setState(i,STATE.FLEE,{force:true});
 
-    if(review&&moves<HQ_LOD.movesPerFrame){
+    if(review&&moves<moveLimit){
      const lane=crowd.state.lane[i];
      const current=crowd.lanes[lane]?.lod;
      const wanted=lodFor(d,current);
@@ -426,6 +427,8 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
   setBudget(n){stats.budget=Math.max(0,n|0);},
   /** Crowd performance trial: at most `n` citizens at full detail (L0); 0 for no cap. */
   setL0Cap(n){n=Math.max(0,n|0);if(n===l0Cap)return;l0Cap=n;l0Reach=Infinity;stats.l0Cap=l0Cap;},
+  /** QA: on the next sync, review every citizen's LOD at once (no per-frame move limit). */
+  relod(){fullReview=true;},
   /** Crowd performance: draw from `camera` only the citizens it can see (hq-crowd.mjs `cull`). */
   cull(camera,options){return crowd.cull(camera,options);},
 

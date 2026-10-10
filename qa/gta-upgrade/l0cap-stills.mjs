@@ -17,8 +17,8 @@
 //
 // The player stands in the densest part of the crowd by the crossing, with the light red so the
 // kerbs are full; the camera looks over the shoulder into the crowd. One still with no cap, then
-// the cap is set live (__SHIBUYA_QA__.l0cap) to 48 and to 24, the LOD reviews given time to move
-// everyone (24 moves a review), and a still of each from the same camera. Beside each: how many
+// the cap is set live (__SHIBUYA_QA__.l0cap, which reviews everyone's LOD at once) to 48 and to
+// 24, a still of each from the same camera 0.3 s later, then uncapped again. Beside each: how many
 // people are at each LOD and how many crowd triangles the camera draws.
 import {spawn} from 'node:child_process';
 import {mkdirSync,writeFileSync} from 'node:fs';
@@ -90,12 +90,13 @@ await run(1);
 const view={yaw:3.14,dist:6.5,height:2.4,target:1.4};
 const crowdNow=()=>js(`(()=>{const h=window.__SHIBUYA_QA__.hqStats?.();return h&&{byLod:h.byLod,visible:h.visible,population:h.population,l0Cap:window.__SHIBUYA_QA__.l0cap?.(window.__L0__??0)};})()`);
 const result=[];
-for(const cap of [0,48,24]){
+// Set the cap and review everyone's LOD at once (no per-frame limit), then only 0.3 s of game
+// time before the still: the crowd is where it was, only how it is drawn changes. The last
+// still is the uncapped one again, to show the crowd did not move on meanwhile.
+for(const [cap,name] of [[0,'l0cap-off'],[48,'l0cap-48'],[24,'l0cap-24'],[0,'l0cap-off-again']]){
  await js(`window.__L0__=${cap};window.__SHIBUYA_QA__.l0cap(${cap})`);
- // Every review moves at most 24 citizens; 4 reviews a second. Let them all move.
- await run(cap?8:2);
- await still(cap?`l0cap-${cap}`:'l0cap-off',cap?`at most ${cap} people at full detail`:'no cap (as today)',{view});
- await run(1.2);
+ await run(.3);
+ await still(name,cap?`at most ${cap} people at full detail`:'no cap (as today)',{view});
  result.push({cap,crowd:await crowdNow(),state:steps.at(-1)?.state});
  console.log('  ',cap,JSON.stringify(result.at(-1).crowd));
 }

@@ -226,6 +226,8 @@ export function buildCrowd(data,options={}){
   setNearCharacterAsset(a){nearCharacters?.setHumanAsset(a);},
   /** Crowd performance trial: at most `n` people at full detail (0: no cap); kept for a crowd made later. */
   setL0Cap(n){l0Cap=n;hq?.setL0Cap?.(n);},
+  /** QA: every citizen's LOD reviewed on the next frame. */
+  relod(){hq?.relod?.();},
   /** Crowd performance: the mass crowd draws from `camera` only who it can see (null: everyone). */
   cull(camera){return hq?.cull?.(camera)??null;},update(dt,camera){if(disposed)return;if(camera)sim.setCamera(camera.x,camera.z);sim.update(dt);sync(dt);},setTier(t){sim.setTier(t);nearCharacters?.setTier(t);sync();},dispose(){if(disposed)return;disposed=true;hq?.dispose();hq=null;nearCharacters?.dispose();shadows.dispose();sim.dispose();for(const m of Object.values(meshes))m.dispose();for(const g of Object.values(geometry))g.dispose();material.dispose();headMaterial.dispose();hairMaterial.dispose();debug?.geometry.dispose();debug?.material.dispose();root.removeFromParent();root.clear();}};
 }

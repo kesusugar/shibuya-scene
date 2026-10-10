@@ -624,7 +624,7 @@ export default function Home(){
   render(on:boolean){if(on)perfOff.delete("render");else perfOff.add("render");return !perfOff.has("render");},
   get frames(){return renderedFrames;},
   // {dist, height, yaw (from the player's heading), target (height looked at)} or null for the follow camera.
-  view(v:any){qaView=v?{...v}:null;return !!qaView;},l0cap(n:number){l0CapParam=Math.max(0,Number(n)||0);return l0CapParam;},hqStats(){return lifeEntry.hooks.current?.stats?.hqCrowd??null;}});(window as any).__SHIBUYA_QA__=qaApi;(window as any).__SHIBUYA_MIRROR__=roadReflection;}
+  view(v:any){qaView=v?{...v}:null;return !!qaView;},l0cap(n:number){l0CapParam=Math.max(0,Number(n)||0);lifeEntry.hooks.current?.setL0Cap?.(l0CapParam);lifeEntry.hooks.current?.relod?.();return l0CapParam;},hqStats(){return lifeEntry.hooks.current?.stats?.hqCrowd??null;}});(window as any).__SHIBUYA_QA__=qaApi;(window as any).__SHIBUYA_MIRROR__=roadReflection;}
  // ?diag=1 (or ?pad=1, which opens straight on the controller tab) -- a panel that can be
  // read and driven with a thumb, because "why will the car not move?" gets asked on a phone
  // where there is no console. Its own controls feed the same axes the keys and the pad do,
