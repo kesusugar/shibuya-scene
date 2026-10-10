@@ -21,6 +21,8 @@ import {createHash} from 'node:crypto';
 import {join} from 'node:path';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {MeshoptSimplifier} from 'three/examples/jsm/libs/meshopt_simplifier.module.js';
+import {AnimationMixer,Matrix4,Vector3} from 'three';
+import {citizenClips} from '../src/life/citizen-pose.mjs';
 globalThis.ProgressEvent??=class{constructor(type,init={}){Object.assign(this,{type},init);}};
 
 const SRC=process.argv[2];
@@ -41,12 +43,43 @@ const push=typed=>{
  buffers.push(view);if(pad)buffers.push(Buffer.alloc(pad));
  const at=offset;offset+=view.length+pad;return {byteOffset:at,byteLength:view.length,count:typed.length};
 };
-// The bone atlas first, byte for byte.
+// The crowd skeleton's bone atlas, byte for byte (each citizen also gets its own, below).
 const atlas=push(new Float32Array(hqBin.buffer.slice(hqBin.byteOffset+hq.atlas.byteOffset,hqBin.byteOffset+hq.atlas.byteOffset+hq.atlas.byteLength)));
 
+// Look 2b: each citizen has its own skeleton (build-citizens.py, natural fit) and so its own bone
+// atlas -- the same rows and clips as hq-crowd, computed from the crowd's clips handed over as
+// rotations, with a natural stance (src/life/citizen-pose.mjs).
 const load=async file=>{const b=readFileSync(file);return new Promise((res,rej)=>new GLTFLoader().parse(b.buffer.slice(b.byteOffset,b.byteOffset+b.byteLength),'',res,rej));};
 const fingers=new Map();
 for(const [name,i] of boneIndex)if(/^(index|middle|pinky|ring|thumb)_/.test(name))fingers.set(i,boneIndex.get(name.endsWith('_l')?'hand_l':'hand_r'));
+
+const Q=await load('public/data/character/citizen.glb');
+let qPelvis=0;{let rig=null;Q.scene.traverse(o=>{if(!rig&&o.userData?.rig==='m')rig=o;});rig.updateMatrixWorld(true);
+ rig.traverse(o=>{if(o.isBone&&o.name==='pelvis')qPelvis=o.getWorldPosition(new Vector3()).y;});}
+function boneAtlas(scene,mesh,female){
+ const bones=hq.boneNames.map(n=>mesh.skeleton.bones.find(b=>b.name===n));
+ const inverse=hq.boneNames.map(n=>mesh.skeleton.boneInverses[mesh.skeleton.bones.findIndex(b=>b.name===n)]);
+ scene.updateMatrixWorld(true);
+ const pelvisY=bones[hq.boneNames.indexOf('pelvis')].getWorldPosition(new Vector3()).y;
+ const clips=citizenClips(Q.animations,scene,{pelvisScale:pelvisY/qPelvis,female});
+ const out=new Float32Array(hq.atlas.rows*hq.bones*12),m=new Matrix4(),mixer=new AnimationMixer(scene);
+ for(const spec of hq.clips){
+  const clip=clips.find(c=>c.name===spec.source);if(!clip)throw new Error(`no clip ${spec.source}`);
+  const action=mixer.clipAction(clip);action.reset().play();
+  for(let f=0;f<spec.frames;f++){
+   mixer.setTime(0);action.time=(f/spec.frames)*clip.duration;mixer.update(0);scene.updateMatrixWorld(true);
+   for(let b=0;b<bones.length;b++){
+    m.multiplyMatrices(bones[b].matrixWorld,inverse[b]);const e=m.elements,o=((spec.row+f)*hq.bones+b)*12;
+    out[o]=e[0];out[o+1]=e[4];out[o+2]=e[8];out[o+3]=e[12];out[o+4]=e[1];out[o+5]=e[5];out[o+6]=e[9];out[o+7]=e[13];out[o+8]=e[2];out[o+9]=e[6];out[o+10]=e[10];out[o+11]=e[14];
+   }
+  }
+  action.stop();
+ }
+ mixer.uncacheRoot(scene);
+ // The rest pose, for the near pool: each bone's local position in the atlas order.
+ const rest=new Float32Array(bones.length*3);bones.forEach((b,i)=>rest.set([b.position.x,b.position.y,b.position.z],i*3));
+ return {atlas:out,rest,pelvisScale:pelvisY/qPelvis};
+}
 
 mkdirSync(`${OUT}/citizens`,{recursive:true});
 const archetypes=[];
@@ -90,9 +123,13 @@ for(const c of SPEC.citizens){
   const typed=n>65535?new Uint32Array(idx):new Uint16Array(idx);
   levels.push({name:lod.name,vertices:n,triangles:idx.length/3,indexType:typed.BYTES_PER_ELEMENT===4?'u32':'u16',...entries,index:push(typed)});
  }
+ const baked=boneAtlas(gltf.scene,mesh,c.macro.gender<.5);
+ const boneAtlasEntry=push(baked.atlas),restEntry=push(baked.rest);
  copyFileSync(join(SRC,c.id+'.webp'),`${OUT}/citizens/${c.id}.webp`);
  archetypes.push({id:c.id,texture:`/data/crowd/citizens/${c.id}.webp`,means:meta.means,macro:c.macro,outfit:c.outfit,shoes:c.shoes,hair:c.hair,
-  skin:c.skin,naturalHeight:hq.archetypes[0].naturalHeight,scaleToGame:hq.archetypes[0].scaleToGame,meshHeight:+(bbox[4]-bbox[1]).toFixed(4),
+  skin:c.skin,naturalHeight:+(bbox[4]-bbox[1]).toFixed(4),scaleToGame:hq.archetypes[0].scaleToGame,meshHeight:+(bbox[4]-bbox[1]).toFixed(4),
+  female:c.macro.gender<.5,pelvisScale:+baked.pelvisScale.toFixed(4),
+  boneAtlas:{...boneAtlasEntry,rows:hq.atlas.rows,width:hq.atlas.width,height:hq.atlas.height,format:'RGBA32F'},rest:restEntry,
   regions:Object.fromEntries(['skin','top','bottom','hair','shoe','keep'].map((k,i)=>[k,regions[i]])),levels});
  console.log(`  ${c.id.padEnd(13)} ${n}v  `+levels.map(l=>`${l.name} ${l.triangles}t`).join('  ')+`  h ${(bbox[4]-bbox[1]).toFixed(3)}`);
 }

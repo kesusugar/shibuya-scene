@@ -22,6 +22,7 @@ import {clone} from 'three/addons/utils/SkeletonUtils.js';
 import {GARMENT_PATTERN_GLSL,GARMENT_UNPACK_GLSL,packGarment} from '../life/garment-pattern.mjs';
 import {CITIZEN_FRAGMENT,CITIZEN_ROUGHNESS,citizenSkin} from '../life/hq-crowd.mjs';
 import {CITIZEN_PACK} from '../life/citizen-pack.mjs';
+import {citizenClips} from '../life/citizen-pose.mjs';
 
 /**
  * A citizen's five surfaces. Everything on the humanoid body is a mix of these. The patterns
@@ -154,6 +155,20 @@ export function dressTexturedCitizen(root,palette,skin){
  return {materials,
   recolour(next){colours={...colours,...next};for(const m of materials){m.userData.uniforms.uNearPal.value.copy(pack(colours));m.userData.uniforms.uNearShoe.value=PACK_RGB(colours.shoe);}}};
 }
+/** Put the bones of a cloned crowd rig at a citizen's own joints (Look 2b; rotations untouched). */
+function restCitizen(pack,citizen,byName){
+ const rest=new Float32Array(pack.bin,citizen.rest.byteOffset,citizen.rest.count);
+ pack.manifest.boneNames.forEach((n,i)=>byName.get(n)?.position.set(rest[i*3],rest[i*3+1],rest[i*3+2]));
+}
+/** A citizen's clips: the crowd's, as rotations, with the natural stance; once per archetype. */
+const nearClipCache=new Map();
+function nearClips(pack,citizen,node,animations){
+ let c=nearClipCache.get(citizen.id);if(c)return c;
+ const rig=clone(node),byName=new Map();rig.traverse(o=>{if(o.isBone)byName.set(o.name,o);});
+ restCitizen(pack,citizen,byName);rig.updateMatrixWorld(true);
+ c=citizenClips(animations,rig,{pelvisScale:citizen.pelvisScale??1,female:!!citizen.female});
+ nearClipCache.set(citizen.id,c);return c;
+}
 /** The near body of a citizen archetype: its L0 mesh from the citizens pack, shared by every instance. */
 const nearGeometry=new Map();
 function citizenGeometry(pack,archetype){
@@ -228,7 +243,7 @@ function asset({id,template,clips,gait,gaitDetail,height,scale,dress,bones,legBo
     }
     skeletons.add(shared);
    }
-   return {root,clips,
+   return {root,clips:chosen?.clips??clips,
     recolour:clothes.recolour,
     /**
      * How broad this body is, as a factor on the two horizontal axes.
@@ -341,17 +356,26 @@ export function humanoidCitizen(gltf,report,base=WARDROBE){
   if(citizen){
    let node=null;root.traverse(o=>{if(!node&&o.userData?.rig===rigs[0].id)node=o;});
    if(!node)throw new Error(`character asset has no rig ${rigs[0].id}`);
-   return {node,scale:rigs[0].scaleToGame,height:rigs[0].height,
+   return {node,scale:rigs[0].scaleToGame,height:citizen.rest?citizen.naturalHeight:rigs[0].height,
+    clips:citizen.rest?nearClips(pack,citizen,node,gltf.animations):clips,
     prepare(copy){
      let body=null;const shed=[];
      copy.traverse(o=>{if(o.isSkinnedMesh){if(!body)body=o;shed.push(o);}});
      const byName=new Map();copy.traverse(o=>{if(o.isBone)byName.set(o.name,o);});
-     const inverse=new Map(body.skeleton.bones.map((b,i)=>[b.name,body.skeleton.boneInverses[i]]));
      const names=pack.manifest.boneNames;
-     const skeleton=new Skeleton(names.map(n=>byName.get(n)),names.map(n=>inverse.get(n).clone()));
+     let skeleton;
+     if(citizen.rest){
+      // Look 2b: the citizen's own skeleton -- the crowd skeleton's bones at this person's joints.
+      restCitizen(pack,citizen,byName);copy.updateMatrixWorld(true);
+      skeleton=new Skeleton(names.map(n=>byName.get(n)));
+     }else{
+      const inverse=new Map(body.skeleton.bones.map((b,i)=>[b.name,body.skeleton.boneInverses[i]]));
+      skeleton=new Skeleton(names.map(n=>byName.get(n)),names.map(n=>inverse.get(n).clone()));
+     }
      const mesh=new SkinnedMesh(citizenGeometry(pack,citizen));
      mesh.name='citizen-'+citizen.id;
-     body.parent.add(mesh);mesh.bind(skeleton,body.bindMatrix.clone());
+     body.parent.add(mesh);
+     if(citizen.rest){mesh.updateMatrixWorld(true);mesh.bind(skeleton);}else mesh.bind(skeleton,body.bindMatrix.clone());
      for(const o of shed){o.removeFromParent();if(o.skeleton!==skeleton)o.skeleton?.dispose?.();}
      copy.userData.citizen={id:citizen.id,skin:pack.skins.get(citizen.id)??pack.skins.set(citizen.id,citizenSkin(citizen,pack.texture)).get(citizen.id)};
     }};

@@ -111,3 +111,36 @@ test('citizens: up close (the near pool) a citizen is the same mesh, skinned to 
   }
  }finally{CITIZEN_PACK.current=null;}
 });
+
+// Look 2b, the owner's two complaints, as numbers: "Gundam bodies" (everyone on the superhero
+// skeleton) and "everyone leans forward at the lights" (the fighter's Idle).
+test('citizens: their own shoulders, and an upright stance at the lights',async()=>{
+ const report=JSON.parse(readFileSync('public/data/character/citizen.json','utf8'));
+ const bytes=readFileSync('public/data/character/citizen.glb');
+ const gltf=await new Promise((res,rej)=>new GLTFLoader().parse(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),'',res,rej));
+ const asset=humanoidCitizen(gltf,report);
+ CITIZEN_PACK.current={manifest,bin,texture:null,skins:new Map()};
+ try{
+  const span={};
+  for(const c of CITIZENS){
+   const inst=asset.instance(undefined,c),root=inst.root;root.scale.set(1,1,1);
+   const bone=n=>{let f=null;root.traverse(o=>{if(!f&&o.isBone&&o.name===n)f=o;});return f;};
+   const P=n=>bone(n).getWorldPosition(new Vector3());
+   root.updateMatrixWorld(true);span[c.id]=P('upperarm_l').distanceTo(P('upperarm_r'));
+   const mixer=new AnimationMixer(root),clip=inst.clips.find(x=>x.name==='Idle');mixer.clipAction(clip).play();
+   for(const t of [0,.3,.6]){
+    mixer.setTime(t*clip.duration);root.updateMatrixWorld(true);
+    const d=P('neck_01').sub(P('pelvis')),lean=Math.atan2(d.z,d.y)*180/Math.PI;
+    const arm=P('lowerarm_l').sub(P('upperarm_l')),out=Math.atan2(Math.abs(arm.x),-arm.y)*180/Math.PI;
+    const knee=P('thigh_l').sub(P('calf_l')).angleTo(P('foot_l').sub(P('calf_l')))*180/Math.PI;
+    assert.ok(lean<4,`${c.id} leans ${lean.toFixed(1)} deg forward at the lights`);
+    assert.ok(out<10,`${c.id} holds the arm ${out.toFixed(1)} deg out`);
+    assert.ok(knee>163,`${c.id} stands with the knee at ${knee.toFixed(1)} deg`);
+   }
+   inst.dispose();
+  }
+  // The crowd skeleton's shoulders are 42.4 cm apart; nobody is drawn on them any more.
+  for(const [id,s] of Object.entries(span))assert.ok(s<.40,`${id}: shoulders ${s.toFixed(3)} m`);
+  assert.ok(span['office-f']<span['salaryman']*.92,'a woman as broad as a man');
+ }finally{CITIZEN_PACK.current=null;}
+});

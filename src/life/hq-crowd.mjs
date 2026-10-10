@@ -335,6 +335,12 @@ export const CITIZEN_ROUGHNESS=`#include <roughnessmap_fragment>
  roughnessFactor=crowdR<0.5?0.6:crowdR<1.5?0.86:crowdR<2.5?0.8:crowdR<3.5?0.5:crowdR<4.5?0.45:0.4;`;
 let WHITE=null;
 /** The texture and tint means of a textured archetype. `texture(archetype)` loads its atlas. */
+/** A bone atlas (RGBA32F, three texels per bone, a row per baked frame) from the pack. */
+function boneTexture(bin,entry){
+ const t=new DataTexture(new Float32Array(bin,entry.byteOffset,entry.count),entry.width,entry.height,RGBAFormat,FloatType);
+ t.minFilter=t.magFilter=NearestFilter;t.generateMipmaps=false;t.needsUpdate=true;
+ return t;
+}
 export function citizenSkin(archetype,texture){
  if(!WHITE){WHITE=new DataTexture(new Uint8Array([255,255,255,255]),1,1,RGBAFormat);WHITE.needsUpdate=true;}
  const m=archetype.means??{};
@@ -389,15 +395,12 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
  // they are depends on how far away they happen to be.
  const levels=lods??[lod];
  const root=new Group();root.name='hq-crowd';
- const atlasData=new Float32Array(bin,manifest.atlas.byteOffset,manifest.atlas.count);
- const atlas=new DataTexture(atlasData,manifest.atlas.width,manifest.atlas.height,
-  RGBAFormat,FloatType);
- atlas.minFilter=atlas.magFilter=NearestFilter;
- atlas.generateMipmaps=false;atlas.needsUpdate=true;
+ const atlas=boneTexture(bin,manifest.atlas);
  const atlasSize={x:manifest.atlas.width,y:manifest.atlas.height};
 
  const clips=new Map(manifest.clips.map(c=>[c.name,c]));
  const skins=new Map();                // Look 2: archetype id -> {map, means}
+ const atlases=new Map();              // Look 2b: archetype id -> its own bone atlas
  const headBones=[Math.max(0,manifest.boneNames?.indexOf('neck_01')??0),Math.max(0,manifest.boneNames?.indexOf('Head')??0)];
  const lanes=[];                       // one per archetype
  const scratch=new Object3D();
@@ -411,7 +414,9 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
   const low=geometry.boundingBox.min.y,tall=Math.max(1e-3,geometry.boundingBox.max.y-low);
   // One material per archetype, shared by its levels: one texture, one program.
   const skin=textured?(skins.get(archetype.id)??skins.set(archetype.id,citizenSkin(archetype,texture)).get(archetype.id)):null;
-  installCrowdSkinning(material,atlas,atlasSize,{interpolate,neck:[low+tall*HEAD_TURN.neck,tall*HEAD_TURN.band],skin,headBones});
+  // Look 2b: a citizen on its own skeleton has its own bone atlas (same rows, same clips).
+  const own=archetype.boneAtlas?(atlases.get(archetype.id)??atlases.set(archetype.id,boneTexture(bin,archetype.boneAtlas)).get(archetype.id)):atlas;
+  installCrowdSkinning(material,own,atlasSize,{interpolate,neck:[low+tall*HEAD_TURN.neck,tall*HEAD_TURN.band],skin,headBones});
   const mesh=new InstancedMesh(geometry,material,capacity);
   mesh.instanceMatrix.setUsage(DynamicDrawUsage);
   mesh.frustumCulled=false;mesh.count=0;
@@ -966,7 +971,7 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
   dispose(){
    for(const lane of lanes){lane.geometry.dispose();lane.material.dispose();
     lane.mesh.dispose?.();lane.mesh.removeFromParent();}
-   atlas.dispose();root.removeFromParent();root.clear();
+   atlas.dispose();for(const t of atlases.values())t.dispose();root.removeFromParent();root.clear();
    population=0;byId.clear();
   }
  };

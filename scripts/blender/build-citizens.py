@@ -20,6 +20,7 @@
 #  4. One skinned mesh + the armature go to <outDir>/<id>.glb, the atlas to <outDir>/<id>.png.
 import bpy,sys,os,json,math
 import numpy as np
+from mathutils import Vector,Matrix
 args=sys.argv[sys.argv.index('--')+1:]
 spec=json.load(open(args[0]));out=args[1];only=set(args[2].split(','))if len(args)>2 else None
 from bl_ext.user_default.mpfb.services.humanservice import HumanService
@@ -99,6 +100,62 @@ def fit(Q,rig):
    s=pb.constraints.new('STRETCH_TO');s.target=e;s.volume='NO_VOLUME';s.rest_length=pb.bone.length
  bpy.context.view_layer.update()
 
+def pose_natural(Q,rig):
+ """Look 2b: pose MPFB's rig into the crowd skeleton's T-pose by ROTATION only -- every bone
+ turned so it points the way the matching Quaternius bone points, at its own length. The
+ person keeps their own proportions (a woman's shoulders, a heavy man's reach); only the stance
+ is the skeleton's, so its clips can be handed over as rotations."""
+ mpfb={b.name.lower():b.name for b in rig.data.bones}
+ qn={bn.name.lower():bn.name for bn in Q.data.bones}
+ bpy.context.view_layer.objects.active=rig;bpy.ops.object.mode_set(mode='EDIT')
+ for name,child in CHILD.items():
+  a=rig.data.edit_bones.get(mpfb.get(name.lower(),'?'));c=rig.data.edit_bones.get(mpfb.get(child.lower(),'?'))
+  if a and c and (c.head-a.head).length>1e-4:a.tail=c.head.copy()
+ bpy.ops.object.mode_set(mode='OBJECT')
+ bpy.ops.object.mode_set(mode='POSE')
+ def walk(b):
+  yield b
+  for c in b.children:yield from walk(c)
+ roots=[b for b in rig.pose.bones if b.parent is None]
+ QW=Q.matrix_world
+ for root in roots:
+  for pb in walk(root):
+   q=qn.get(pb.name.lower());ch=CHILD.get(q) if q else None
+   if not ch or ch not in Q.data.bones:continue
+   want=(QW@Q.data.bones[ch].head_local-QW@Q.data.bones[q].head_local).normalized()
+   bpy.context.view_layer.update()
+   m=rig.matrix_world@pb.matrix;head=m.to_translation();have=(m.to_3x3()@Vector((0,1,0))).normalized()
+   R=have.rotation_difference(want).to_matrix().to_4x4()
+   T=Matrix.Translation(head)
+   pb.matrix=rig.matrix_world.inverted()@T@R@Matrix.Translation(-head)@m
+ bpy.ops.object.mode_set(mode='OBJECT');bpy.context.view_layer.update()
+
+def natural_armature(Q,rig,name):
+ """The citizen's own skeleton: the crowd skeleton's bones, names and orientations, with every
+ joint moved to where this person's joint is in the pose above. Same rest orientations means
+ the crowd's clips apply as they are, rotation for rotation."""
+ A=Q.copy();A.data=Q.data.copy();A.name=name+'-rig';bpy.context.scene.collection.objects.link(A)
+ heads={}
+ for pb in rig.pose.bones:heads[pb.name.lower()]=(rig.matrix_world@pb.matrix).to_translation()
+ bpy.ops.object.select_all(action='DESELECT');bpy.context.view_layer.objects.active=A;A.select_set(True)
+ bpy.ops.object.mode_set(mode='EDIT')
+ inv=A.matrix_world.inverted();Qb=Q.data.bones
+ def walk(b):
+  yield b
+  for c in b.children:yield from walk(c)
+ shift={}
+ for root in [b for b in A.data.edit_bones if b.parent is None]:
+  for eb in walk(root):
+   q=Qb[eb.name];vec=eb.tail-eb.head
+   h=heads.get(eb.name.lower())
+   if h is not None:new=inv@h
+   else:
+    p=eb.parent;new=q.head_local+(shift.get(p.name,Vector((0,0,0))) if p else Vector((0,0,0)))
+   shift[eb.name]=new-q.head_local
+   roll=eb.roll;eb.head=new;eb.tail=new+vec;eb.roll=roll
+ bpy.ops.object.mode_set(mode='OBJECT')
+ return A
+
 def role_of(o,roles):
  n=o.name.lower()
  if n=='human':return 'body'
@@ -118,7 +175,10 @@ def pixels(img,size):
  a=np.array(im.pixels[:],dtype=np.float32).reshape(size,size,4);bpy.data.images.remove(im);return a
 
 def build(c,Q):
- b,rig,roles=human(c);fit(Q,rig)
+ b,rig,roles=human(c)
+ natural=spec.get('fit','natural')=='natural'
+ if natural:pose_natural(Q,rig)
+ else:fit(Q,rig)
  dg=bpy.context.evaluated_depsgraph_get()
  atlas=np.zeros((ATLAS,ATLAS,4),dtype=np.float32)
  parts=[]
@@ -229,11 +289,12 @@ def build(c,Q):
   if vg.name not in qb:body.vertex_groups.remove(vg)
  body.data.materials.clear()
  mat=bpy.data.materials.new(c['id']);body.data.materials.append(mat)
- body.parent=Q;m=body.modifiers.new('arm','ARMATURE');m.object=Q
- # Clean up everything MPFB made.
+ arm=natural_armature(Q,rig,c['id']) if natural else Q
+ body.parent=arm;m=body.modifiers.new('arm','ARMATURE');m.object=arm
+ # Clean up everything MPFB made (and, for a natural fit, the crowd skeleton it was posed to).
  for o in list(bpy.data.objects):
-  if o not in (Q,body):bpy.data.objects.remove(o)
- Q.data.pose_position='POSE'
+  if o not in (arm,body):bpy.data.objects.remove(o)
+ Q=arm;Q.name='Armature';Q.data.pose_position='POSE'
  img=bpy.data.images.new(c['id']+'-atlas',ATLAS,ATLAS,alpha=True);img.pixels[:]=np.clip(atlas,0,1).ravel()
  img.filepath_raw=os.path.join(out,c['id']+'.png');img.file_format='PNG';img.save()
  img.filepath_raw=os.path.join(out,c['id']+'.webp');img.file_format='WEBP';bpy.context.scene.render.image_settings.quality=88;img.save()
