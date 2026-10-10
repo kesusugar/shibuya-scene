@@ -6763,6 +6763,24 @@ Not done: patrol cars do not drive round
 to the far exit ahead of the player; only this one passage is walkable (the map's other underground
 footways are not built).
 
+## 9bj. Crowd performance: the same crowd for less work
+
+The owner asked for "musou"-style crowd performance without fewer people, cars or buildings
+and without lowering quality. Full analysis, measurements and next steps:
+`docs/CROWD-PERFORMANCE.md`. In short:
+
+- the crowd was already instanced with GPU skinning from a baked atlas and typed-array state
+  (RUN 7); what it lacked was culling -- every citizen was drawn from every camera, in the scene
+  pass and again in GTAO's -- and it re-uploaded whole buffers every frame;
+- the HQ crowd is now culled per citizen against the main camera (a reflection still draws
+  everyone; `?off=cull` turns it off), and lanes upload only the slots in use;
+- the simulation's hot lookups no longer build strings, sets or arrays (numeric grid and cache
+  keys, an allocation-free `SpatialIndex`, a banded road test): the same seeded run ends in
+  exactly the same state (`qa/gta-upgrade/sim-bench.mjs` hashes it) for 43% less CPU;
+- nothing is reverted, nothing removed; the remaining levers (an L0 cap in view, the far crowd
+  out of the AO pass, the scramble cast's update rate) change what is seen or timed and wait for
+  the owner.
+
 ## 10–15. Historical roadmap (superseded by §9g)
 
 NPC behaviour (RUN 7 — **WIP only, see below**), melee combat (8), knockdown (9), vehicle
