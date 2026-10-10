@@ -161,6 +161,74 @@ a T-pose whose sleeves reach neck height, so a citizen looking at the player tur
 the neck. Live, that showed as long spikes over the crowd. For the citizens, the head weight is
 now the skinning's own: all of the head bone and half of the neck.
 
+### Look 2b: own proportions and a natural stance
+
+The owner's next feedback, the day after: "Gundam bodies", and everyone leaning forward while
+waiting at the lights. Both were measured before anything was changed.
+
+**Gundam bodies.** Every citizen had been stretched onto the crowd's Quaternius superhero
+skeleton.
+
+| Measure | Superhero skeleton | MakeHuman man | MakeHuman woman |
+| --- | --- | --- | --- |
+| Shoulders (upper-arm joints apart) | 42.4 cm | 36.8 cm | 30.5 cm |
+| Arm (upper arm to hand) | 49.4 cm | 47.8 cm | 42.8 cm |
+
+So men's shoulders were widened by about 15% and women's by about 39%.
+
+**Leaning forward.** The Quaternius clips are a fighter's set.
+
+| Clip | Forward lean | Knees | Pelvis | Arms out from the body |
+| --- | --- | --- | --- | --- |
+| Idle | 7–9° | 153–159° | 7 cm down | 20–23° |
+| Walk | 11–12° | | | |
+| Guard | 49° (a crouch) | | | |
+
+Guard is played by anyone wary but standing. A person standing upright leans 0–3°, with knees
+at about 175° and arms 5–8° out.
+
+**What a big open-world game does instead** (general technique; no game code was used):
+
+- Every pedestrian model shares one skeleton *topology* but has its own bone lengths.
+- Animation is applied as rotations, so a body keeps its proportions.
+- Movement and idle sets are chosen per kind of person (men, women, business, elderly).
+- People waiting play varied idles.
+
+**Changes:**
+
+- **Own skeleton.** `build-citizens.py` (natural fit, now the default) poses MPFB's rig into the
+  crowd skeleton's T-pose by rotation only. Every bone points the way the matching Quaternius bone
+  points, at its own length. It then builds the citizen's own armature: the crowd skeleton's bones,
+  names and rest orientations at this person's joints, and binds the mesh to it.
+- **Clips as rotations.** `src/life/citizen-pose.mjs` hands the crowd's clips over as rotations
+  only. The pelvis translation is the one kept, scaled by leg length. Because the rest orientations
+  match, a rotation means the same thing on both skeletons.
+- **Natural stance (`STANCE`).** These clips are resampled at 30 fps and corrected:
+
+  | Clip | Lean target | Knee bend taken out | Arms in | Feet |
+  | --- | --- | --- | --- | --- |
+  | Idle | 1.5° | 80% | 13° | grounded every frame |
+  | Walk | 4° | | 8° | grounded every frame |
+  | Run | 14° | | 10° | one shift for the whole clip |
+  | Startle | 6° | | 6° | grounded every frame |
+  | Guard | 3° | 60% | 8° | grounded every frame (now a wary upright Idle, not a crouch) |
+
+  - Only lean *beyond* the target is removed.
+  - Arms come in within the frontal plane only, so the walk's swing is kept; women's arms come
+    in a further 4°.
+- **Bake.** `bake-crowd-citizens.mjs` bakes a bone atlas per citizen: the same rows and clips as
+  hq-crowd, from these clips. It also stores each citizen's rest joints for the near pool, which
+  builds the same skeleton and the same clips.
+
+**Result** (enforced by `tests/citizens.test.mjs`):
+
+- Idle lean is 1–2°, arms 4–5° out, knees about 170°, with the feet on the ground.
+- Walk lean is about 4°.
+- Every citizen's shoulders are narrower than 40 cm, and a woman's are narrower than a man's.
+
+The pack is now 15 MiB, because each citizen carries its own bone atlas. Half-float atlases would
+halve that.
+
 ### Cost
 
 - **Triangles.** L0 is 16k triangles against the old body's 13.9k, and only the nearest 48 are
@@ -172,6 +240,7 @@ now the skinning's own: all of the head bone and half of the neck.
 ## Next
 
 - **Look 2, next.**
+  - Idle variety while waiting (weight shift, phone, arms folded), with gendered and elderly walks.
   - More citizens: kids, tourists, uniforms and hats.
   - The player as a citizen.
   - A normal-map atlas for the near pool.
