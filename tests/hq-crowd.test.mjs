@@ -4,6 +4,9 @@ import {readFileSync} from 'node:fs';
 import {createHQCrowd,STATE,CLIP_FOR,STATE_HOLD,BLEND,LOOK_TURN,HEAD_TURN} from '../src/life/hq-crowd.mjs';
 import {createCrowdGrid,applyVehicleThreat,THREAT} from '../src/life/hq-threat.mjs';
 import {appearanceOf,ARCHETYPES,PALETTE} from '../src/life/appearance.mjs';
+// These tests pin the RUN 6.8 bodies and the classic hq-crowd pack (?people=classic); Look 2's
+// MakeHuman citizens are covered by tests/citizens.test.mjs.
+import {PEOPLE as PEOPLE_MODE} from '../src/life/appearance.mjs';PEOPLE_MODE.mode='classic';
 
 const manifest=JSON.parse(readFileSync('public/data/crowd/hq-crowd.json','utf8'));
 const raw=readFileSync('public/data/crowd/hq-crowd.bin');

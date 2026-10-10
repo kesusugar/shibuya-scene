@@ -38,6 +38,37 @@ export const ARCHETYPES=Object.freeze([
  Object.freeze({id:'f:Hair_SimpleParted',rig:'f',hair:'Hair_SimpleParted',name:'short bob',height:0.975,width:0.97})
 ]);
 
+/**
+ * Look 2 (docs/GTA-LOOK.md): the MakeHuman CC0 citizens (public/data/crowd/citizens.json), ten
+ * builds instead of two superhero bodies -- thin and heavy, young and old, men and women, each in
+ * their own clothes. Their mesh carries the build; `height` is the per-person scale on top.
+ *
+ * `rig` and `hair` name the closest RUN 6.8 body, for anything still drawing those (the classic
+ * crowd, `?people=classic`). `tops`/`bottoms`, where given, narrow the palette to what that person
+ * would wear: a salaryman's suit is dark.
+ */
+const SUITS=Object.freeze([0x1b1f27,0x24303d,0x2f3a45,0x333c47,0x3a4149,0x1c2028,0x2a2f38]);
+// The citizens' skins are modelled (face, lips, shading); a tint far from the modelled tone reads
+// as paint. East Asian faces take the lighter tones; the two mixed-ancestry builds take any.
+const SKINS_EA=Object.freeze([0xe8c9a8,0xdfb994,0xd6ad86,0xc79a72]);
+const GREYS=Object.freeze([0x8c8a86,0xa9a6a0,0x6f6b66,0xc4c1bb,0x55524e]);
+export const CITIZENS=Object.freeze([
+ Object.freeze({id:'salaryman',   rig:'m',hair:'Hair_SimpleParted',name:'salaryman',      height:1.000,width:1,tops:SUITS,bottoms:SUITS,skins:SKINS_EA,style:'office'}),
+ Object.freeze({id:'salaryman-50',rig:'m',hair:'Hair_Buzzed',      name:'salaryman, 50s',  height:.975,width:1,tops:SUITS,bottoms:SUITS,style:'office',skins:SKINS_EA}),
+ Object.freeze({id:'student-m',   rig:'m',hair:'Hair_SimpleParted',name:'student',        height:1.015,width:1,skins:SKINS_EA}),
+ Object.freeze({id:'jacket-m',    rig:'m',hair:'Hair_Buzzed',      name:'jacket',         height:1.020,width:1}),
+ Object.freeze({id:'elder-m',     rig:'m',hair:'Hair_Buzzed',      name:'older man',      height:.955,width:1,skins:SKINS_EA,hairs:GREYS}),
+ Object.freeze({id:'office-f',    rig:'f',hair:'Hair_SimpleParted',name:'office',         height:.935,width:1,tops:null,bottoms:SUITS,style:'office',skins:SKINS_EA}),
+ Object.freeze({id:'student-f',   rig:'f',hair:'Hair_Long',        name:'student',        height:.925,width:1,skins:SKINS_EA}),
+ Object.freeze({id:'casual-f',    rig:'f',hair:'Hair_SimpleParted',name:'casual',         height:.915,width:1,skins:SKINS_EA}),
+ Object.freeze({id:'sport-f',     rig:'f',hair:'Hair_Long',        name:'sporty',         height:.950,width:1}),
+ Object.freeze({id:'elder-f',     rig:'f',hair:'Hair_SimpleParted',name:'older woman',    height:.895,width:1,skins:SKINS_EA,hairs:GREYS})
+]);
+/** Which people the city is drawn with: 'citizens' (Look 2) or 'classic' (RUN 6.8). */
+export const PEOPLE={mode:'citizens'};
+/** The archetype list `appearanceOf` draws from, for the current PEOPLE.mode. */
+export const activeArchetypes=()=>PEOPLE.mode==='classic'?ARCHETYPES:CITIZENS;
+
 export const APPEARANCE=Object.freeze({
  // Per-person jitter on top of the archetype's own multiplier. Height and width both stay
  // inside what the RUN 5 foot IK can absorb on a kerb: the solver adapts a correct animation
@@ -173,7 +204,7 @@ export function appearanceOf(id,baseHeight=1.76){
   return {...look,id,top:UNIFORM.top,bottom:UNIFORM.bottom,shoe:UNIFORM.shoe,topPattern:0,bottomPattern:0,uniform:true};
  }
  const h=hash(id),g=hash2(id);
- const archetype=ARCHETYPES[h%ARCHETYPES.length];
+ const list=activeArchetypes(),archetype=list[h%list.length];
  const height=Math.min(APPEARANCE.maxHeight,Math.max(APPEARANCE.minHeight,
   baseHeight*archetype.height*(1+spread(h,8)*APPEARANCE.heightJitter)));
  const width=archetype.width*(1+spread(g,8)*APPEARANCE.widthJitter);
@@ -181,10 +212,10 @@ export function appearanceOf(id,baseHeight=1.76){
  return {
   id,archetype,
   rig:archetype.rig,hair:archetype.hair,
-  skin:pick(h,16,SKINS),
-  hairColour:pick(h,22,HAIRS),
-  top:pick(g,0,TOPS),
-  bottom:pick(g,16,BOTTOMS),
+  skin:pick(h,16,archetype.skins??SKINS),
+  hairColour:pick(h,22,archetype.hairs??HAIRS),
+  top:pick(g,0,archetype.tops??TOPS),
+  bottom:pick(g,16,archetype.bottoms??BOTTOMS),
   shoe:pick(g,24,SHOES),
   topPattern:pattern.top,bottomPattern:pattern.bottom,
   height,width
@@ -220,8 +251,9 @@ export function deduplicate(looks){
   let top=look.top,attempts=0;
   // A uniform is the same on everyone who wears it (W2): never re-coloured.
   if(look.uniform){out.set(look.id,look);continue;}
-  while(taken.has(`${look.archetype.id}|${top}`)&&attempts<TOPS.length){
-   top=TOPS[(TOPS.indexOf(top)+1)%TOPS.length];attempts++;
+  const tops=look.archetype.tops??TOPS;
+  while(taken.has(`${look.archetype.id}|${top}`)&&attempts<tops.length){
+   top=tops[(tops.indexOf(top)+1)%tops.length];attempts++;
   }
   taken.add(`${look.archetype.id}|${top}`);
   out.set(look.id,top===look.top?look:{...look,top});

@@ -20,7 +20,7 @@
  */
 import {InstancedMesh,InstancedBufferAttribute,BufferGeometry,BufferAttribute,
         MeshStandardMaterial,DataTexture,RGBAFormat,FloatType,NearestFilter,
-        Object3D,Group,DynamicDrawUsage,Frustum,Matrix4,Sphere} from 'three';
+        Object3D,Group,DynamicDrawUsage,Frustum,Matrix4,Sphere,Vector3} from 'three';
 import {PACE,paceStep,cadence} from './pace.mjs';
 import {GARMENT_PATTERN_GLSL,GARMENT_UNPACK_GLSL,packGarment} from './garment-pattern.mjs';
 
@@ -122,13 +122,14 @@ const PACK=c=>((c>>16)&255)*65536+((c>>8)&255)*256+(c&255);
  * and every instance picks its own row. That is the whole trick, and it is why nothing here
  * needs a Skeleton object.
  */
-function installCrowdSkinning(material,atlas,size,{interpolate=true,neck=[1.5,.06]}={}){
- material.defines={...material.defines,HQ_CROWD:'1',...(interpolate?{HQ_LERP:'1'}:{})};
+function installCrowdSkinning(material,atlas,size,{interpolate=true,neck=[1.5,.06],skin=null,headBones=[0,0]}={}){
+ material.defines={...material.defines,HQ_CROWD:'1',...(interpolate?{HQ_LERP:'1'}:{}),...(skin?{HQ_TEXTURED:'1'}:{})};
  material.onBeforeCompile=shader=>{
   shader.uniforms.boneAtlas={value:atlas};
   shader.uniforms.boneAtlasSize={value:size};
   shader.uniforms.crowdTime={value:0};
   shader.uniforms.crowdNeck={value:neck};
+  if(skin){shader.uniforms.crowdMap={value:skin.map};shader.uniforms.crowdMeans={value:skin.means};shader.uniforms.crowdHeadBones={value:headBones};}
   material.userData.shader=shader;
   shader.vertexShader=shader.vertexShader.replace('#include <common>',`#include <common>
 attribute vec4 skinIndex;
@@ -142,12 +143,20 @@ attribute vec4 aPal;      // skin, top, bottom, hair -- each RGB packed into one
 // crowd shader already fills the 16 vertex attributes WebGL guarantees, and a 17th fails to link.
 attribute vec2 aShoe;
 uniform vec2 crowdNeck;   // bind-pose neck height and fade band, model units
+#ifdef HQ_TEXTURED
+uniform vec2 crowdHeadBones; // Look 2: atlas index of neck_01, Head
+#endif
 uniform sampler2D boneAtlas;
 uniform vec2 boneAtlasSize;
 uniform float crowdTime;
 varying vec4 vPal;
 varying float vShoe;
 varying vec3 vGarm;       // Step A: bind-pose position, where the clothes' patterns are drawn
+#ifdef HQ_TEXTURED
+attribute vec4 crowdUV;   // Look 2: atlas u, v, and region / 8
+varying vec2 vCrowdUV;
+varying float vRegion;
+#endif
 
 vec3 unpackRGB(float v){
  float r=floor(v/65536.0);
@@ -224,11 +233,21 @@ mat4 crowdSkinMatrix(){
  objectNormal=mat3(crowdBone)*objectNormal;
  // RUN 12.4: turn the head. Weighted by bind-pose height, so it follows the neck through any clip.
  float crowdHeadW=aShoe.y==0.0?0.0:smoothstep(crowdNeck.x-crowdNeck.y,crowdNeck.x+crowdNeck.y,position.y);
+#ifdef HQ_TEXTURED
+ // Look 2: the citizens are bound in a T-pose whose sleeves reach neck height, and a height
+ // weight turned their arms about the neck -- spikes, live, wherever people looked at the player.
+ // Their head weight is the skinning's own: all of the head bone, half of the neck.
+ crowdHeadW=aShoe.y==0.0?0.0:dot(skinWeight,vec4(1.0)-step(vec4(0.5),abs(skinIndex-vec4(crowdHeadBones.y))))
+  +0.5*dot(skinWeight,vec4(1.0)-step(vec4(0.5),abs(skinIndex-vec4(crowdHeadBones.x))));
+#endif
  float crowdHa=aShoe.y*crowdHeadW,crowdHc=cos(crowdHa),crowdHs=sin(crowdHa);
  mat3 crowdHeadRot=mat3(crowdHc,0.0,-crowdHs, 0.0,1.0,0.0, crowdHs,0.0,crowdHc);
  vec3 crowdNeckAt=(crowdBone*vec4(0.0,crowdNeck.x,0.0,1.0)).xyz;
  objectNormal=crowdHeadRot*objectNormal;
- vPal=aPal;vShoe=aShoe.x;vGarm=position;`);
+ vPal=aPal;vShoe=aShoe.x;vGarm=position;
+#ifdef HQ_TEXTURED
+ vCrowdUV=crowdUV.xy;vRegion=crowdUV.z*8.0;
+#endif`);
   shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>',
 `#include <begin_vertex>
  transformed=(crowdBone*vec4(transformed,1.0)).xyz;
@@ -240,6 +259,12 @@ mat4 crowdSkinMatrix(){
 varying vec4 vPal;
 varying float vShoe;
 varying vec3 vGarm;
+#ifdef HQ_TEXTURED
+varying vec2 vCrowdUV;
+varying float vRegion;
+uniform sampler2D crowdMap;
+uniform vec3 crowdMeans[5];
+#endif
 ${GARMENT_UNPACK_GLSL}${GARMENT_PATTERN_GLSL}vec3 unpackRGB(float v){
  float r=floor(v/65536.0);
  float g=floor(mod(v,65536.0)/256.0);
@@ -261,7 +286,7 @@ ${GARMENT_UNPACK_GLSL}${GARMENT_PATTERN_GLSL}vec3 unpackRGB(float v){
  // where the eye needs it.
  return mix(pow(c*0.9478672986+0.0521327014,vec3(2.4)),c*0.0773993808,step(c,vec3(0.04045)));
 }`);
-  shader.fragmentShader=shader.fragmentShader.replace('#include <color_fragment>',`
+  shader.fragmentShader=shader.fragmentShader.replace('#include <color_fragment>',skin?CITIZEN_FRAGMENT:`
  float wShoe=max(0.0,1.0-vColor.r-vColor.g-vColor.b-vColor.a);
  // Step A: the top and bottom carry a pattern id in their top three bits (7-bit colour).
  // Evaluated unconditionally: fwidth() inside a branch is undefined.
@@ -273,11 +298,48 @@ ${GARMENT_UNPACK_GLSL}${GARMENT_PATTERN_GLSL}vec3 unpackRGB(float v){
   // surface is one number and skin, cotton, denim, hair and a shoe all read as the same
   // plastic -- which under the scene's tone mapping came out as a washed-out white crowd,
   // visibly different from the RUN 6.8 bodies standing next to them.
-  shader.fragmentShader=shader.fragmentShader.replace('#include <roughnessmap_fragment>',
+  shader.fragmentShader=shader.fragmentShader.replace('#include <roughnessmap_fragment>',skin?CITIZEN_ROUGHNESS:
 `#include <roughnessmap_fragment>
  roughnessFactor=vColor.r*0.62+vColor.g*0.86+vColor.b*0.80+vColor.a*0.52+wShoe*0.44;`);
  };
- material.customProgramCacheKey=()=>'hq-crowd-'+(interpolate?'lerp':'snap');
+ material.customProgramCacheKey=()=>'hq-crowd-'+(interpolate?'lerp':'snap')+(skin?'-tex':'');
+}
+
+/**
+ * Look 2: the textured citizens (public/data/crowd/citizens.json). The atlas is the person as
+ * modelled -- skin, face, clothes with their folds, shoes, hair -- and each region is recoloured
+ * to this citizen's palette: the texel times palette / the region's dominant colour (`means`),
+ * so folds, seams and the face survive the recolour. Within a region only texels near its
+ * dominant colour are recoloured (the atlas alpha, from build-citizens.py): a suit changes colour,
+ * its white collar and its tie do not. Hair, brows, lashes and eyes use alpha as a cut-out.
+ * Regions: 0 skin, 1 top, 2 bottom, 3 hair, 4 shoe, 5 keep.
+ */
+export const CITIZEN_FRAGMENT=`
+ vec4 crowdTex=texture2D(crowdMap,vCrowdUV);
+ float crowdR=floor(vRegion+0.5);
+ bool crowdCut=(crowdR>2.5&&crowdR<3.5)||crowdR>4.5;
+ if(crowdCut&&crowdTex.a<0.5)discard;
+ // The texture carries the cloth -- weave, seams, folds, a tie -- so the procedural patterns of the
+ // untextured crowd (Step A) are not drawn over it: a plaid over denim read as neither.
+ vec3 crowdTop=unpackGarment(vPal.y);
+ vec3 crowdBottom=unpackGarment(vPal.z);
+ vec3 crowdPal=unpackRGB(vPal.x),crowdMean=crowdMeans[0];
+ if(crowdR>0.5){crowdPal=crowdTop;crowdMean=crowdMeans[1];}
+ if(crowdR>1.5){crowdPal=crowdBottom;crowdMean=crowdMeans[2];}
+ if(crowdR>2.5){crowdPal=unpackRGB(vPal.w);crowdMean=crowdMeans[3];}
+ if(crowdR>3.5){crowdPal=unpackRGB(vShoe);crowdMean=crowdMeans[4];}
+ float crowdW=crowdR>4.5?0.0:(crowdR>2.5&&crowdR<3.5?1.0:crowdTex.a);
+ vec3 crowdTint=min(crowdTex.rgb*crowdPal/max(crowdMean,vec3(0.004)),vec3(1.0));
+ diffuseColor.rgb=mix(crowdTex.rgb,crowdTint,crowdW);`;
+export const CITIZEN_ROUGHNESS=`#include <roughnessmap_fragment>
+ roughnessFactor=crowdR<0.5?0.6:crowdR<1.5?0.86:crowdR<2.5?0.8:crowdR<3.5?0.5:crowdR<4.5?0.45:0.4;`;
+let WHITE=null;
+/** The texture and tint means of a textured archetype. `texture(archetype)` loads its atlas. */
+export function citizenSkin(archetype,texture){
+ if(!WHITE){WHITE=new DataTexture(new Uint8Array([255,255,255,255]),1,1,RGBAFormat);WHITE.needsUpdate=true;}
+ const m=archetype.means??{};
+ const means=['skin','top','bottom','hair','shoe'].map(k=>new Vector3(...(m[k]??[.5,.5,.5])));
+ return {map:texture?.(archetype)??WHITE,means};
 }
 
 function geometryFrom(level,bin){
@@ -288,7 +350,9 @@ function geometryFrom(level,bin){
  g.setAttribute('normal',slice(level.normal,Float32Array,3));
  g.setAttribute('skinIndex',slice(level.skinIndex,Uint8Array,4));
  g.setAttribute('skinWeight',slice(level.skinWeight,Uint8Array,4,true));
- g.setAttribute('color',slice(level.color,Uint8Array,4,true));
+ // Look 2: a textured citizen carries its atlas u, v and region in the slot the colour mask used.
+ if(level.crowdUV)g.setAttribute('crowdUV',slice(level.crowdUV,Uint16Array,4,true));
+ else g.setAttribute('color',slice(level.color,Uint8Array,4,true));
  // L3 (crowd performance) carries its own index list, over L2's vertices; see withL3.
  g.setIndex(level.indexData?new BufferAttribute(level.indexData,1):slice(level.index,level.indexType==='u32'?Uint32Array:Uint16Array,1));
  g.computeBoundingSphere();
@@ -319,7 +383,7 @@ export function withL3(manifest,l3,decode){
  * @param bin      its .bin, as an ArrayBuffer
  * @param capacity how many citizens each archetype may hold
  */
-export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,interpolate=true}={}){
+export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,interpolate=true,texture=null}={}){
  // RUN 7B: a lane per (archetype, LOD). A citizen moves between LODs by changing lane, which
  // is a slot swap -- geometry, palette and phase all come with them, so nothing about who
  // they are depends on how far away they happen to be.
@@ -333,16 +397,21 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
  const atlasSize={x:manifest.atlas.width,y:manifest.atlas.height};
 
  const clips=new Map(manifest.clips.map(c=>[c.name,c]));
+ const skins=new Map();                // Look 2: archetype id -> {map, means}
+ const headBones=[Math.max(0,manifest.boneNames?.indexOf('neck_01')??0),Math.max(0,manifest.boneNames?.indexOf('Head')??0)];
  const lanes=[];                       // one per archetype
  const scratch=new Object3D();
 
  for(const archetype of manifest.archetypes)for(const wanted of levels){
   const level=archetype.levels.find(l=>l.name===wanted)??archetype.levels[0];
   const geometry=geometryFrom(level,bin);
-  const material=new MeshStandardMaterial({vertexColors:true,roughness:.82,metalness:0});
+  const textured=!!level.crowdUV;
+  const material=new MeshStandardMaterial({vertexColors:!textured,roughness:.82,metalness:0});
   geometry.computeBoundingBox();
   const low=geometry.boundingBox.min.y,tall=Math.max(1e-3,geometry.boundingBox.max.y-low);
-  installCrowdSkinning(material,atlas,atlasSize,{interpolate,neck:[low+tall*HEAD_TURN.neck,tall*HEAD_TURN.band]});
+  // One material per archetype, shared by its levels: one texture, one program.
+  const skin=textured?(skins.get(archetype.id)??skins.set(archetype.id,citizenSkin(archetype,texture)).get(archetype.id)):null;
+  installCrowdSkinning(material,atlas,atlasSize,{interpolate,neck:[low+tall*HEAD_TURN.neck,tall*HEAD_TURN.band],skin,headBones});
   const mesh=new InstancedMesh(geometry,material,capacity);
   mesh.instanceMatrix.setUsage(DynamicDrawUsage);
   mesh.frustumCulled=false;mesh.count=0;
@@ -603,6 +672,10 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
 
   /** Which lane holds a given archetype at a given LOD, or -1. */
   laneFor(archetypeId,lodName){
+   // Look 2: a citizen id the pack does not have (the classic hq-crowd pack) draws as the RUN 6.8
+   // body it names, so the appearance and the pack never have to be switched together.
+   if(archetypeId&&typeof archetypeId==='object'){const a=archetypeId;
+    archetypeId=lanes.some(l=>l.archetype.id===a.id)?a.id:`${a.rig}:${a.hair}`;}
    return lanes.findIndex(l=>l.archetype.id===archetypeId&&l.lod===lodName);
   },
 

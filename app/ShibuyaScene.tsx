@@ -14,6 +14,8 @@ import {buildCrowd} from '../src/life/render.mjs';
 import {L0_CAP_DEFAULT} from '../src/life/hq-layer.mjs';
 import {withL3} from '../src/life/hq-crowd.mjs';
 import {LOOK} from '../src/environment/look-profile.mjs';
+import {PEOPLE} from '../src/life/appearance.mjs';
+import {loadCitizenPack,citizenTextures,CITIZEN_PACK} from '../src/life/citizen-pack.mjs';
 import {createHQRequester} from '../src/app/hq-request.mjs';
 import {buildPedestrianNetworkAsync} from '../src/life/network.mjs';
 import {buildTraffic} from '../src/traffic/render.mjs';
@@ -422,19 +424,25 @@ export default function Home(){
  // rollback). Its prebuilt pack is fetched once, AFTER the city is standing, and every crowd the
  // life module builds gets its own layer: a single page-wide "already asked" flag left a rebuilt
  // crowd on the legacy bodies for good. See src/app/hq-request.mjs.
- const hqRequester=createHQRequester({
-  load:()=>{const base=(import.meta as any).env?.BASE_URL??'/';return Promise.all([
+ const loadClassicHQ=(base:string):Promise<[any,any]>=>Promise.all([
    fetch(`${base}data/crowd/hq-crowd.json`).then(r=>{if(!r.ok)throw new Error(`hq manifest ${r.status}`);return r.json();}),
    fetch(`${base}data/crowd/hq-crowd.bin`).then(r=>{if(!r.ok)throw new Error(`hq pack ${r.status}`);return r.arrayBuffer();}),
    // Crowd performance: the far level L3 (scripts/bake-crowd-l3.mjs). Optional -- without it the
    // crowd has its three levels as before; ?l3=0 leaves it out.
    params.get('l3')==='0'?Promise.resolve(null):fetch(`${base}data/crowd/hq-crowd-l3.json`).then(r=>r.ok?r.json():null).catch(()=>null)])
-   .then(([manifest,bin,l3]:any[])=>[l3?withL3(manifest,l3,(b:string)=>Uint8Array.from(atob(b),c=>c.charCodeAt(0))):manifest,bin]);},
+   .then(([manifest,bin,l3]:any[])=>[l3?withL3(manifest,l3,(b:string)=>Uint8Array.from(atob(b),c=>c.charCodeAt(0))):manifest,bin] as [any,any]);
+ const citizenTexture=citizenTextures((import.meta as any).env?.BASE_URL??'/');
+ const hqRequester=createHQRequester({
+  // Look 2: the MakeHuman citizens (src/life/citizen-pack.mjs) unless ?people=classic; if their
+  // pack cannot be had, the RUN 6.8 bodies below, and the appearance falls back with them.
+  load:():Promise<[any,any]>=>{const base=(import.meta as any).env?.BASE_URL??'/';
+   if(PEOPLE.mode!=='classic')return (loadCitizenPack(base) as Promise<[any,any]>).then(([manifest,bin])=>{CITIZEN_PACK.current={manifest,bin,texture:citizenTexture,skins:new Map()};return [manifest,bin] as [any,any];}).catch((e:any)=>{console.warn('[HQ crowd] citizens unavailable, classic people',String(e));PEOPLE.mode='classic';return loadClassicHQ(base);});
+   return loadClassicHQ(base);},
   current:()=>lifeEntry.hooks.current,
   // A pedestrian the reaction system has thrown must stop being walked along a route by the
   // simulation, or the two fight over the same body. `leave` is the simulation's own path
   // out of a crossing, which is what keeps the signal group released.
-  options:(hooks:any)=>({
+  options:(hooks:any)=>({texture:citizenTexture,
    onDisown:(id:number)=>{const p=hooks.sim?.pool?.[id];if(p&&p.active){hooks.sim.leave(p);p.reactionOwned=true;}},
    onReclaim:(id:number)=>{const p=hooks.sim?.pool?.[id];if(p)p.reactionOwned=false;}}),
   onEnabled:(hooks:any,layer:any,budget:number,[manifest,bin]:any)=>{
@@ -455,7 +463,7 @@ export default function Home(){
  constructionEntry.hooks=buildingLifecycle({timingKey:'construction',timingName:'S15 Construction',parent:groups.world,build:(data:any,record:any)=>{const started=performance.now(),result=buildConstruction(data,{generic:buildingsEntry.hooks.current?.model,time:clock,tier:currentTrafficTier});if(record?.timing)record.timing.computeMs+=performance.now()-started;return result;},onReport:setConstructionReport,onReady(result:any){constructionEntry.status='ready';console.info('[S15 Construction]',result.stats);setModules(system.snapshot());},onError(e:any){constructionEntry.status='failed';console.error('[S15 Construction]',e);setModules(system.snapshot());}});
  system.setEnabled('construction',(config.only===null||config.only.includes('construction'))&&!config.skip.includes('construction'));
  const postEntry=system.entries.get('postprocess');postEntry.hooks={build(){nightglowEntry.hooks.current?.setPostprocess(true);},dispose(){nightglowEntry.hooks.current?.setPostprocess(false);}};if(postEntry.enabled)postEntry.status='ready';
- if(params.get('look')==='classic')LOOK.mode='classic';const solar=new SolarCycle(scene,dayNight,fidelity,clock);
+ if(params.get('look')==='classic')LOOK.mode='classic';if(params.get('people')==='classic')PEOPLE.mode='classic';const solar=new SolarCycle(scene,dayNight,fidelity,clock);
  const unsub=clock.subscribe((v:any)=>{system.timeChanged(v);setTime(v.value);setEnvironmentReport(dayNight.snapshot());});
  // §9aj G3: dynamic resolution holds the frame budget when the GPU is the limit (?dynres=0 turns it off).
  const dynRes=createDynamicResolution({budgetMs:1000/(PROFILES[config.tier]?.fps??60),enabled:params.get('dynres')!=='0'});let dynLast:number|null=null;

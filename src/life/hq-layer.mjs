@@ -85,14 +85,15 @@ export function selectNearest(list,count,k){
 }
 
 export function createHQLayer(manifest,bin,{budget=1978,lods=null,
-                                            interpolate=true,onDisown=null,onReclaim=null}={}){
+                                            interpolate=true,onDisown=null,onReclaim=null,texture=null}={}){
  // Capacity is per lane, and a lane is one archetype at one LOD. The worst case is everyone
  // in one archetype at one LOD, which cannot happen, so this is sized for a generous share.
- const perLane=Math.ceil(budget*.55)+24;
+ // Look 2 has ten archetypes, not four: the generous share shrinks with the count.
+ const perLane=Math.ceil(budget*Math.min(.55,2.4/manifest.archetypes.length))+24;
  // L3 when the manifest has it for every archetype (withL3), else the three levels as before.
  lods??=manifest.archetypes.every(a=>a.levels.some(l=>l.name==='L3'))?['L0','L1','L2','L3']:['L0','L1','L2'];
  let farLod=lods.includes('L3');
- const crowd=createHQCrowd(manifest,bin,{capacity:perLane,lods,interpolate});
+ const crowd=createHQCrowd(manifest,bin,{capacity:perLane,lods,interpolate,texture});
  const grid=createCrowdGrid();
  const awareness=createAwareness();
  const scratch=[];
@@ -115,6 +116,10 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=null,
 
  for(const a of manifest.archetypes)for(const l of lods)
   laneCache.set(`${a.id}|${l}`,crowd.laneFor(a.id,l));
+ // Look 2: the lane an appearance archetype draws in -- its own, or with the classic pack the
+ // RUN 6.8 body it names (see laneFor).
+ const packIds=new Set(manifest.archetypes.map(a=>a.id));
+ const laneId=a=>packIds.has(a.id)?a.id:`${a.rig}:${a.hair}`;
 
  /** A body is owned by the reaction system exactly while it is off its feet. */
  const thrownNow=i=>{
@@ -227,7 +232,7 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=null,
      // and arriving on the pavement as a different person would undo the whole point of the
      // driver having an identity. Everyone else has no such field and is themselves.
      const look=appearanceOf(p.appearanceId??p.id,p.height!==undefined?undefined:undefined);
-     const lane=laneCache.get(`${look.archetype.id}|${lodFor(d,null)}`);
+     const lane=laneCache.get(`${laneId(look.archetype)}|${lodFor(d,null)}`);
      i=crowd.spawn(p.id,look,lane??0,
       {x:p.renderX??p.x,y:p.height??0,z:p.renderZ??p.z,heading:p.heading??0,speed:p.speed??0});
      if(i<0)continue;                            // a lane is full; they stay legacy this frame
@@ -313,7 +318,7 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=null,
      const wanted=lodFor(d,current);
      if(wanted==='L0')l0Given++;   // ties at the N-th distance cannot take the cap past N
      if(wanted!==current){
-      const target=laneCache.get(`${appearanceOf(p.appearanceId??p.id).archetype.id}|${wanted}`);
+      const target=laneCache.get(`${laneId(appearanceOf(p.appearanceId??p.id).archetype)}|${wanted}`);
       if(target!==undefined&&target>=0&&crowd.moveLane(i,target)){moves++;stats.moves++;}
      }
     }
