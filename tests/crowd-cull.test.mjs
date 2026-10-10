@@ -115,3 +115,32 @@ test('L0 cap: only the nearest N are drawn at full detail, the rest of the band 
  layer.setL0Cap(0);layer.relod();layer.sync(people,cam,0,{time:0});
  assert.equal(layer.crowd.inspect().byLod.L0,uncapped);
 });
+
+// The far level L3 (scripts/bake-crowd-l3.mjs): L2's own vertices with about a quarter of its
+// triangles, for citizens beyond 70 m; switchable off, and nobody removed either way.
+import {withL3} from '../src/life/hq-crowd.mjs';
+test('L3: every archetype gets a far level over L2, a quarter of the triangles, used only beyond 70 m',()=>{
+ const l3=JSON.parse(readFileSync('public/data/crowd/hq-crowd-l3.json','utf8'));
+ const m=withL3(manifest,l3,b=>Buffer.from(b,'base64'));
+ for(const a of m.archetypes){
+  const l2=a.levels.find(l=>l.name==='L2'),far=a.levels.find(l=>l.name==='L3');
+  assert.ok(far,`${a.id} has no L3`);
+  assert.equal(far.position.byteOffset,l2.position.byteOffset,'L3 must draw L2 vertices');
+  assert.ok(far.triangles<l2.triangles*.3&&far.triangles>l2.triangles*.15,`${a.id}: ${far.triangles} of ${l2.triangles}`);
+  assert.ok(far.indexData.every(v=>v<l2.vertices),'an L3 index outside L2');
+ }
+ // People on a line away from the camera: 50 m is L2, 100 m is L3; with L3 off, both L2.
+ const people=[];for(let id=0;id<40;id++){const z=20+id*3;people.push({id,active:true,controlled:false,archetype:'adult',state:'walking',x:0,z,renderX:0,renderZ:z,
+  height:0,heading:0,speed:1.3,crossing:null,queueKey:null,edge:3,route:[3]});}
+ const layer=createHQLayer(m,bin,{budget:40}),cam={x:0,z:0};
+ layer.sync(people,cam,0,{time:0});layer.relod();layer.sync(people,cam,0,{time:0});
+ const lodOf=p=>layer.crowd.lanes[layer.crowd.state.lane[layer.crowd.indexOf(p.id)]].lod;
+ assert.equal(layer.farLod,true);
+ assert.equal(lodOf(people.find(p=>p.z>=50&&p.z<53)),'L2');
+ assert.equal(lodOf(people.find(p=>p.z>=100&&p.z<103)),'L3');
+ layer.setFarLod(false);layer.sync(people,cam,0,{time:0});
+ assert.ok(people.every(p=>lodOf(p)!=='L3'),'L3 still drawn with it off');
+ assert.equal(layer.crowd.population,40);
+ // Without the file the crowd is the three levels it was.
+ assert.equal(createHQLayer(manifest,bin,{budget:8}).farLod,false);
+});

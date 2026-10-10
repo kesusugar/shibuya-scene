@@ -12,6 +12,7 @@ import {DayNightSystem} from '../src/environment/day-night.mjs';
 import {buildTrains} from '../src/trains/render.mjs';
 import {buildCrowd} from '../src/life/render.mjs';
 import {L0_CAP_DEFAULT} from '../src/life/hq-layer.mjs';
+import {withL3} from '../src/life/hq-crowd.mjs';
 import {createHQRequester} from '../src/app/hq-request.mjs';
 import {buildPedestrianNetworkAsync} from '../src/life/network.mjs';
 import {buildTraffic} from '../src/traffic/render.mjs';
@@ -423,7 +424,11 @@ export default function Home(){
  const hqRequester=createHQRequester({
   load:()=>{const base=(import.meta as any).env?.BASE_URL??'/';return Promise.all([
    fetch(`${base}data/crowd/hq-crowd.json`).then(r=>{if(!r.ok)throw new Error(`hq manifest ${r.status}`);return r.json();}),
-   fetch(`${base}data/crowd/hq-crowd.bin`).then(r=>{if(!r.ok)throw new Error(`hq pack ${r.status}`);return r.arrayBuffer();})]);},
+   fetch(`${base}data/crowd/hq-crowd.bin`).then(r=>{if(!r.ok)throw new Error(`hq pack ${r.status}`);return r.arrayBuffer();}),
+   // Crowd performance: the far level L3 (scripts/bake-crowd-l3.mjs). Optional -- without it the
+   // crowd has its three levels as before; ?l3=0 leaves it out.
+   params.get('l3')==='0'?Promise.resolve(null):fetch(`${base}data/crowd/hq-crowd-l3.json`).then(r=>r.ok?r.json():null).catch(()=>null)])
+   .then(([manifest,bin,l3]:any[])=>[l3?withL3(manifest,l3,(b:string)=>Uint8Array.from(atob(b),c=>c.charCodeAt(0))):manifest,bin]);},
   current:()=>lifeEntry.hooks.current,
   // A pedestrian the reaction system has thrown must stop being walked along a route by the
   // simulation, or the two fight over the same body. `leave` is the simulation's own path
@@ -625,7 +630,7 @@ export default function Home(){
   render(on:boolean){if(on)perfOff.delete("render");else perfOff.add("render");return !perfOff.has("render");},
   get frames(){return renderedFrames;},
   // {dist, height, yaw (from the player's heading), target (height looked at)} or null for the follow camera.
-  view(v:any){qaView=v?{...v}:null;return !!qaView;},l0cap(n:number){l0CapParam=Math.max(0,Number(n)||0);lifeEntry.hooks.current?.setL0Cap?.(l0CapParam);lifeEntry.hooks.current?.relod?.();return l0CapParam;},hqStats(){return lifeEntry.hooks.current?.stats?.hqCrowd??null;}});(window as any).__SHIBUYA_QA__=qaApi;(window as any).__SHIBUYA_MIRROR__=roadReflection;}
+  view(v:any){qaView=v?{...v}:null;return !!qaView;},farLod(on:boolean){lifeEntry.hooks.current?.setFarLod?.(on);return on;},l0cap(n:number){l0CapParam=Math.max(0,Number(n)||0);lifeEntry.hooks.current?.setL0Cap?.(l0CapParam);lifeEntry.hooks.current?.relod?.();return l0CapParam;},hqStats(){return lifeEntry.hooks.current?.stats?.hqCrowd??null;}});(window as any).__SHIBUYA_QA__=qaApi;(window as any).__SHIBUYA_MIRROR__=roadReflection;}
  // ?diag=1 (or ?pad=1, which opens straight on the controller tab) -- a panel that can be
  // read and driven with a thumb, because "why will the car not move?" gets asked on a phone
  // where there is no console. Its own controls feed the same axes the keys and the pad do,

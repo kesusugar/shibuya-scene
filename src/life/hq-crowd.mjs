@@ -289,9 +289,27 @@ function geometryFrom(level,bin){
  g.setAttribute('skinIndex',slice(level.skinIndex,Uint8Array,4));
  g.setAttribute('skinWeight',slice(level.skinWeight,Uint8Array,4,true));
  g.setAttribute('color',slice(level.color,Uint8Array,4,true));
- g.setIndex(slice(level.index,level.indexType==='u32'?Uint32Array:Uint16Array,1));
+ // L3 (crowd performance) carries its own index list, over L2's vertices; see withL3.
+ g.setIndex(level.indexData?new BufferAttribute(level.indexData,1):slice(level.index,level.indexType==='u32'?Uint32Array:Uint16Array,1));
  g.computeBoundingSphere();
  return g;
+}
+
+/**
+ * Crowd performance: add the far level L3 to a manifest, from public/data/crowd/hq-crowd-l3.json
+ * (scripts/bake-crowd-l3.mjs): each archetype's L2 vertices with a simplified index list, about a
+ * quarter of the triangles. The same skinning, garment colours and palette: only fewer triangles.
+ * Returns a new manifest; an archetype the file does not cover gets no L3. `decode(base64)` gives
+ * the bytes (atob in the page, Buffer in Node).
+ */
+export function withL3(manifest,l3,decode){
+ const byId=new Map((l3?.archetypes??[]).map(a=>[a.id,a]));
+ return {...manifest,archetypes:manifest.archetypes.map(a=>{
+  const far=byId.get(a.id),l2=a.levels.find(l=>l.name==='L2');
+  if(!far||!l2)return a;
+  const bytes=decode(far.index),indexData=new Uint16Array(bytes.buffer,bytes.byteOffset,bytes.byteLength/2);
+  return {...a,levels:[...a.levels.filter(l=>l.name!=='L3'),{...l2,name:'L3',triangles:far.triangles,indexData}]};
+ })};
 }
 
 /**

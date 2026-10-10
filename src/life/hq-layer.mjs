@@ -38,6 +38,9 @@ import {appearanceOf} from './appearance.mjs';
 export const L0_CAP_DEFAULT=48;
 export const HQ_LOD=Object.freeze({
  bands:[{lod:'L0',in:14,out:17},{lod:'L1',in:38,out:44},{lod:'L2',in:Infinity,out:Infinity}],
+ // Crowd performance: with the far level L3 (withL3 in hq-crowd.mjs) L2 ends at 70 m (80 m to
+ // let go) and L3 is everyone beyond -- about 40 px tall on a 1080p screen.
+ bandsWithL3:[{lod:'L0',in:14,out:17},{lod:'L1',in:38,out:44},{lod:'L2',in:70,out:80},{lod:'L3',in:Infinity,out:Infinity}],
  movesPerFrame:24,      // bounded: an LOD change is a slot swap, but not thousands at once
  reviewInterval:.25,    // seconds between LOD reviews; the camera does not move that fast
  // §9aj G3: the far band (L2, beyond ~44 m) is placed every `farEvery` frames, staggered by id,
@@ -81,11 +84,14 @@ export function selectNearest(list,count,k){
  return list;
 }
 
-export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
+export function createHQLayer(manifest,bin,{budget=1978,lods=null,
                                             interpolate=true,onDisown=null,onReclaim=null}={}){
  // Capacity is per lane, and a lane is one archetype at one LOD. The worst case is everyone
  // in one archetype at one LOD, which cannot happen, so this is sized for a generous share.
  const perLane=Math.ceil(budget*.55)+24;
+ // L3 when the manifest has it for every archetype (withL3), else the three levels as before.
+ lods??=manifest.archetypes.every(a=>a.levels.some(l=>l.name==='L3'))?['L0','L1','L2','L3']:['L0','L1','L2'];
+ let farLod=lods.includes('L3');
  const crowd=createHQCrowd(manifest,bin,{capacity:perLane,lods,interpolate});
  const grid=createCrowdGrid();
  const awareness=createAwareness();
@@ -149,13 +155,14 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
  // distance of the N-th nearest is `l0Reach`, set at each review. 0 (the default) is no cap.
  let l0Cap=0,l0Reach=Infinity,l0Given=0,fullReview=false;const reachScratch=[];
  const lodFor=(distance,current)=>{
-  for(const band of HQ_LOD.bands){
+  const bands=farLod?HQ_LOD.bandsWithL3:HQ_LOD.bands;
+  for(const band of bands){
    if(band.lod==='L0'&&(distance>l0Reach||l0Given>=l0Cap&&l0Cap>0))continue;
    if(distance<=band.in)return band.lod;
    // Already in this band and not yet past its release distance: stay.
    if(current===band.lod&&distance<=band.out)return band.lod;
   }
-  return HQ_LOD.bands[HQ_LOD.bands.length-1].lod;
+  return bands[bands.length-1].lod;
  };
 
  /** Which clip a pedestrian's own simulated state calls for. */
@@ -231,7 +238,7 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
     // A body the reaction system owns is NOT repositioned from the route: it is mid-flight.
     // G3: a far citizen doing nothing in particular is placed every farEvery frames.
     let placeDt=dt;
-    if(!born&&crowd.lanes[crowd.state.lane[i]]?.lod==='L2'&&crowd.state.behaviour[i]===STATE.NORMAL
+    if(!born&&(crowd.lanes[crowd.state.lane[i]]?.lod==='L2'||crowd.lanes[crowd.state.lane[i]]?.lod==='L3')&&crowd.state.behaviour[i]===STATE.NORMAL
      &&!rising.has(p.id)&&p.struck===undefined){
      const skipped=(farSkipped.get(p.id)??0)+dt;
      if((syncFrame+p.id)%HQ_LOD.farEvery!==0){farSkipped.set(p.id,skipped);stats.farSkipped=(stats.farSkipped??0)+1;}
@@ -435,6 +442,9 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
   setBudget(n){stats.budget=Math.max(0,n|0);},
   /** Crowd performance trial: at most `n` citizens at full detail (L0); 0 for no cap. */
   setL0Cap(n){n=Math.max(0,n|0);if(n===l0Cap)return;l0Cap=n;l0Reach=Infinity;stats.l0Cap=l0Cap;},
+  /** Crowd performance: use the far level L3 (if this crowd has it); false draws L2 beyond 38 m as before. */
+  setFarLod(on){const want=!!on&&lods.includes('L3');if(want!==farLod){farLod=want;fullReview=true;}},
+  get farLod(){return farLod;},
   /** QA: on the next sync, review every citizen's LOD at once (no per-frame move limit). */
   relod(){fullReview=true;},
   /** Crowd performance: draw from `camera` only the citizens it can see (hq-crowd.mjs `cull`). */

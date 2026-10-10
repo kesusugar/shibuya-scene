@@ -226,6 +226,8 @@ export function buildCrowd(data,options={}){
   setNearCharacterAsset(a){nearCharacters?.setHumanAsset(a);},
   /** Crowd performance trial: at most `n` people at full detail (0: no cap); kept for a crowd made later. */
   setL0Cap(n){l0Cap=n;hq?.setL0Cap?.(n);},
+  /** Crowd performance: the far level L3 on or off (QA comparison). */
+  setFarLod(on){hq?.setFarLod?.(on);},
   /** QA: every citizen's LOD reviewed on the next frame. */
   relod(){hq?.relod?.();},
   /** Crowd performance: the mass crowd draws from `camera` only who it can see (null: everyone). */
