@@ -29,6 +29,13 @@ import {appearanceOf} from './appearance.mjs';
  * `out` is hysteresis: a citizen promoted to L0 at 12 m is not demoted until 15 m, so a camera
  * drifting on a boundary does not swap their body back and forth every frame.
  */
+/**
+ * Crowd performance: by default at most this many citizens are drawn at full detail (L0); the
+ * rest of the L0 band is drawn at L1. Chosen by the owner from the comparison stills
+ * (evidence/crowd-perf/l0cap): the crowd reads the same, its triangles halve. `?l0cap=0` lifts
+ * it, `?l0cap=N` sets another.
+ */
+export const L0_CAP_DEFAULT=48;
 export const HQ_LOD=Object.freeze({
  bands:[{lod:'L0',in:14,out:17},{lod:'L1',in:38,out:44},{lod:'L2',in:Infinity,out:Infinity}],
  movesPerFrame:24,      // bounded: an LOD change is a slot swap, but not thousands at once
@@ -140,10 +147,10 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
  // Crowd performance (owner's trial, `?l0cap=N`): at most N citizens at full detail (L0). When
  // more stand inside the L0 band, only the nearest N keep it and the rest are drawn at L1; the
  // distance of the N-th nearest is `l0Reach`, set at each review. 0 (the default) is no cap.
- let l0Cap=0,l0Reach=Infinity,fullReview=false;const reachScratch=[];
+ let l0Cap=0,l0Reach=Infinity,l0Given=0,fullReview=false;const reachScratch=[];
  const lodFor=(distance,current)=>{
   for(const band of HQ_LOD.bands){
-   if(band.lod==='L0'&&distance>l0Reach)continue;
+   if(band.lod==='L0'&&(distance>l0Reach||l0Given>=l0Cap&&l0Cap>0))continue;
    if(distance<=band.in)return band.lod;
    // Already in this band and not yet past its release distance: stay.
    if(current===band.lod&&distance<=band.out)return band.lod;
@@ -195,7 +202,7 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
    if(review)reviewClock=0;
    const moveLimit=fullReview?Infinity:HQ_LOD.movesPerFrame;fullReview=false;
    if(review){
-    l0Reach=Infinity;
+    l0Reach=Infinity;l0Given=0;
     if(l0Cap>0){
      const out=HQ_LOD.bands[0].out;reachScratch.length=0;
      for(let k=0;k<take;k++)if(candidates[k].d<=out)reachScratch.push(candidates[k].d);
@@ -297,6 +304,7 @@ export function createHQLayer(manifest,bin,{budget=1978,lods=['L0','L1','L2'],
      const lane=crowd.state.lane[i];
      const current=crowd.lanes[lane]?.lod;
      const wanted=lodFor(d,current);
+     if(wanted==='L0')l0Given++;   // ties at the N-th distance cannot take the cap past N
      if(wanted!==current){
       const target=laneCache.get(`${appearanceOf(p.appearanceId??p.id).archetype.id}|${wanted}`);
       if(target!==undefined&&target>=0&&crowd.moveLane(i,target)){moves++;stats.moves++;}

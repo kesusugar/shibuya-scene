@@ -88,3 +88,30 @@ test('only the slots in use are uploaded',()=>{
   assert.equal(r.length,1);assert.equal(r[0].start,0);assert.equal(r[0].count,Math.max(1,lane.count)*16);
  }
 });
+
+// The owner's choice from evidence/crowd-perf/l0cap: at most 48 citizens at full detail (L0),
+// the nearest; the rest of the L0 band at L1. Nobody is removed.
+import {createHQLayer,L0_CAP_DEFAULT,HQ_LOD} from '../src/life/hq-layer.mjs';
+test('L0 cap: only the nearest N are drawn at full detail, the rest of the band at L1, nobody removed',()=>{
+ assert.equal(L0_CAP_DEFAULT,48);
+ // 600 people in a 1 m grid round the camera: ~600 within the L0 band.
+ const people=[];for(let id=0;id<600;id++){const row=Math.floor(id/25),col=id%25;
+  people.push({id,active:true,controlled:false,archetype:'adult',state:'walking',x:col-12,z:row-12,renderX:col-12,renderZ:row-12,
+   height:0,heading:0,speed:1.3,crossing:null,queueKey:null,edge:3,route:[3]});}
+ const layer=createHQLayer(manifest,bin,{budget:600}),cam={x:0,z:0};
+ layer.sync(people,cam,0,{time:0});layer.relod();layer.sync(people,cam,0,{time:0});
+ const uncapped=layer.crowd.inspect().byLod.L0;
+ assert.ok(uncapped>200,`only ${uncapped} at L0 before the cap`);
+ layer.setL0Cap(L0_CAP_DEFAULT);layer.relod();layer.sync(people,cam,0,{time:0});
+ const got=layer.crowd.inspect();
+ assert.equal(got.byLod.L0,L0_CAP_DEFAULT);
+ assert.equal(got.population,600,'the cap removed people');
+ // The ones kept at L0 are the nearest.
+ const lodOf=p=>layer.crowd.lanes[layer.crowd.state.lane[layer.crowd.indexOf(p.id)]].lod;
+ const d=p=>Math.hypot(p.x,p.z),l0=people.filter(p=>lodOf(p)==='L0'),rest=people.filter(p=>lodOf(p)!=='L0'&&d(p)<=HQ_LOD.bands[0].in);
+ assert.ok(Math.max(...l0.map(d))<=Math.min(...rest.map(d))+1e-9,'a farther citizen kept full detail over a nearer one');
+ assert.ok(rest.every(p=>lodOf(p)==='L1'));
+ // Lifting the cap gives full detail back.
+ layer.setL0Cap(0);layer.relod();layer.sync(people,cam,0,{time:0});
+ assert.equal(layer.crowd.inspect().byLod.L0,uncapped);
+});

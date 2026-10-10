@@ -11,6 +11,7 @@ import {SolarCycle} from '../src/environment/solar.mjs';
 import {DayNightSystem} from '../src/environment/day-night.mjs';
 import {buildTrains} from '../src/trains/render.mjs';
 import {buildCrowd} from '../src/life/render.mjs';
+import {L0_CAP_DEFAULT} from '../src/life/hq-layer.mjs';
 import {createHQRequester} from '../src/app/hq-request.mjs';
 import {buildPedestrianNetworkAsync} from '../src/life/network.mjs';
 import {buildTraffic} from '../src/traffic/render.mjs';
@@ -575,7 +576,7 @@ export default function Home(){
  const observer=new ResizeObserver(resize);observer.observe(mount.current);
  // PLAN-PERFORMANCE P0: ?perf=1 shows where a frame's time goes; ?perf=sweep also switches each
  // feature off in turn and records the difference; ?off=a,b keeps features off for a manual A/B.
- const perfMode=params.get('perf');let l0CapParam=Math.max(0,Number(params.get('l0cap'))||0);const perfOff=new Set<string>();let perfProbe:any=null,perfOverlay:any=null,perfSweep:any=null,perfClock=0,perfLast:number|null=null,perfReadyFrames=0,perfSaved:any={};const perfApplied:any={};
+ const perfMode=params.get('perf');let l0CapParam=params.has('l0cap')?Math.max(0,Number(params.get('l0cap'))||0):L0_CAP_DEFAULT;const perfOff=new Set<string>();let perfProbe:any=null,perfOverlay:any=null,perfSweep:any=null,perfClock=0,perfLast:number|null=null,perfReadyFrames=0,perfSaved:any={};const perfApplied:any={};
  const perfModules:any={crowd:'life',traffic:'traffic',trains:'trains',signs:'signs',streetscape:'streetscape',nightglow:'nightglow',buildings:'buildings'};
  const applyPerfOff=(off:Set<string>)=>{perfOff.clear();for(const f of off)perfOff.add(f);
   if(renderer)renderer.shadowMap.autoUpdate=!off.has('shadow');
