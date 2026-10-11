@@ -229,6 +229,77 @@ at about 175° and arms 5–8° out.
 The pack is now 15 MiB, because each citizen carries its own bone atlas. Half-float atlases would
 halve that.
 
+### Look 2c: what people do while they wait, how they walk, and the player
+
+The owner asked for idle variety while waiting, for walks by gender and age, and for the player
+on the new pipeline. The leaked GTA V source was not used, and never will be: it is stolen
+proprietary code. The motion comes from public, licensed motion capture.
+
+**Source.** 100STYLE (Mason, Starke and Komura, 2022), released under CC BY 4.0 (see
+`LICENSES/100style.txt` and `THIRD_PARTY_NOTICES.md`). It is one performer recording a hundred
+styles of locomotion at 60 fps, each style with an idle and walks.
+
+**What was taken:**
+
+- **Idles:** Neutral, phone call (right and left), arms folded, hands in pockets, hands behind
+  the back, akimbo, old, and restless.
+- **Walks:** Neutral, Old, Rushed, Heavyset, OnPhone, HandsInPockets and WiggleHips.
+
+**Retarget: `scripts/mocap/style-clips.mjs`.**
+
+- **Rest correction.** It is the same rest-correction method as `scripts/cmu/retarget.mjs`.
+  100STYLE's zero pose is a T-pose facing +Z, as the crowd skeleton's rest is, so each joint's
+  world turn from rest is applied to the target's rest.
+- **In place.** The heading (the hips' yaw, unwrapped and smoothed over one second) is turned
+  back, and the horizontal travel is dropped.
+- **Loops.** Each loop is the best-matching start and end inside the dataset's own cut, with the
+  seam cross-faded. A walk is also held to the clip's cruising speed, so a loop cannot land on a
+  turn, a start or a stop.
+- **Feet.** The clip is grounded once, and every walk loop starts as the left foot is lowest
+  (left contact at phase 0).
+- **Blended walks.** Two walks are blends, phase-aligned:
+  - `Walk.elder` is Neutral with 30% of Old (Old alone is a 0.24 m/s shuffle);
+  - `Walk.female` is Neutral with 25% of WiggleHips.
+- **Output.** `public/data/character/citizen-moves.json`: idles at 15 fps and walks at 30 fps,
+  about 0.5 MB.
+
+**On the citizens.** In `src/life/citizen-pose.mjs`:
+
+- **Grounding only.** The captured clips are grounded on each body's own legs, never
+  straightened.
+- **Head level.** Walks whose performer looked at the floor have the head raised, judged by where
+  the face points, to at most 6° down.
+- **`Idle.text`.** This is the standing idle with both hands brought to a phone at the lower chest
+  by two-bone IK every frame, so the sway stays, and the head down. 100STYLE's "on phone" is a call
+  held to the ear; what a Shibuya crossing is full of is people looking down at a screen.
+- **`Idle.folded`.** The elbows come forward a little, so folded forearms clear a broader chest.
+
+**Per person (`src/life/appearance.mjs`).**
+
+- **`MOVES`.** Each citizen kind has its idles, walks and hurried walk. A person keeps theirs for
+  good, because they are a pure function of the id.
+- **`CITIZENS_FOR_STYLE`.** The body matches the simulation's own kind of pedestrian:
+  - an office worker is in a suit;
+  - an elderly walker is an older person.
+- **Per-citizen clip tables.** `bake-crowd-citizens.mjs` bakes each citizen's moves after the
+  shared rows, into its own half-float bone atlas. The crowd (`hq-crowd`) then plays:
+  - the person's idle where it would play Idle;
+  - their walk where it would play Walk, at a cadence from the clip's own stride;
+  - their hurried walk above 1.55 m/s, with hysteresis.
+- **Timing.** Each person has their own phase and rate, so a queue at the lights is not a chorus
+  line.
+
+**Near pool and player.**
+
+- **Near pool.** It walks each kind's usual walk, with a gait ladder built from that walk's stride
+  and contact. Its idle is set per person (`figure.setMoves`).
+- **Player.** Once the citizens pack is in, the player is rebuilt as the young man in a T-shirt
+  and jeans, at 1.76 m, keeping the red top.
+  - The T-shirt's printed MakeHuman logo is painted out at build time (spec `plain`).
+  - The holster and scabbard spots move with the body's own hip and spine
+    (`weapon-mesh.mjs`, `carryRef`).
+  - `?people=classic` keeps the RUN 6.8 player.
+
 ### Cost
 
 - **Triangles.** L0 is 16k triangles against the old body's 13.9k, and only the nearest 48 are
@@ -240,7 +311,8 @@ halve that.
 ## Next
 
 - **Look 2, next.**
-  - Idle variety while waiting (weight shift, phone, arms folded), with gendered and elderly walks.
+  - A phone prop in hand for `Idle.text`.
+  - A texting walk.
   - More citizens: kids, tourists, uniforms and hats.
   - The player as a citizen.
   - A normal-map atlas for the near pool.
