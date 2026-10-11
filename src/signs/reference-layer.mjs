@@ -7,7 +7,10 @@
 
 import {makePlacement, placementIssues} from './model.mjs';
 import {CAMERAS} from '../app/foundation.mjs';
-import {resolveReferenceAds, referenceBasis} from './reference-ads.mjs';
+import {resolveReferenceAds, referenceBasis, PANELS} from './reference-ads.mjs';
+
+/** Reference ads that hang as a stacked pair: [top, base]. */
+export const STACKED = Object.freeze([[15, 16]]);
 
 /** Vertical mounts read as blades; everything else keeps the facade plane. */
 const VERTICAL = new Set(['wall_panel_vertical', 'sleeve_sign_vertical', 'sleeve_sign_vertical_banner', 'neon_sign_vertical']);
@@ -127,6 +130,18 @@ export function applyReferenceAds(signs, hosts, {camera = CAMERAS.find(c => c.id
   });
  });
 
+ // Cityscape: Hisamitsu and Salonpas are one stacked pair on the real building. When the
+ // inventory's own slot for Hisamitsu cannot be hosted (it resolves wider than its mount), the
+ // tall Salonpas slot is shared: Hisamitsu over the top half, Salonpas under it.
+ for (const [top, base] of STACKED) {
+  if (placed.some(p => p.ad.id === top)) continue;
+  const i = placed.findIndex(p => p.ad.id === base), ad = PANELS.find(a => a.id === top);
+  if (i < 0 || !ad || placed[i].height < 5) continue;
+  const b = placed[i], half = b.height / 2 - .12;
+  placed[i] = {...b, y: b.y - b.height / 4, height: half};
+  placed.push({...b, ad, y: b.y + b.height / 4, height: half});
+ }
+
  const rejected = [];
  const added = placed.map(p => {
   const vertical = VERTICAL.has(p.ad.mount);
@@ -157,7 +172,9 @@ export function applyReferenceAds(signs, hosts, {camera = CAMERAS.find(c => c.id
  }
  const keptIds = new Set(accepted.map(s => s.referenceAd.id));
  const clear = clearLineOfSight(kept, accepted, basis);
+ // A stacked top that found a place is no longer unplaced.
+ const hosted = unplaced.filter(u => !keptIds.has(u.id));
  return {basis, signs: [...clear, ...accepted], placed: placed.filter(p => keptIds.has(p.ad.id)),
-  unplaced: [...unplaced, ...rejected], rejected,
+  unplaced: [...hosted, ...rejected], rejected,
   replaced: signs.length - kept.length, decluttered: kept.length - clear.length};
 }

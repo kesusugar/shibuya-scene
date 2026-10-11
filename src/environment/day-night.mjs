@@ -39,6 +39,10 @@ s12Window*=mix(1.0,0.18,smoothstep(90.0,210.0,length(instanceMatrix[3].xz)));\ns
    // Cityscape C1: windows drawn per floor and bay on the far blocks (far-city.mjs).
    vertex=FAR_CITY_VERTEX+'\n';fragment+=FAR_CITY_GLSL+'\n';body=FAR_CITY_VERTEX_BODY;
    shader.fragmentShader=shader.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\n'+FAR_CITY_FRAGMENT);
+  }else if(mode==='treeGlow'){
+   // Cityscape: street trees at night are lit from below by the shops and lamps round them; a
+   // warm wash on the leaves, stronger on the underside of the crown.
+   shader.fragmentShader=shader.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\ntotalEmissiveRadiance+=vec3(.16,.12,.05)*s12Night*(.55+.45*clamp(-normal.y,0.,1.));');
   }else if(mode==='wall'){
    shader.fragmentShader=shader.fragmentShader.replace('#include <color_fragment>','#include <color_fragment>\ndiffuseColor.rgb *= mix(vec3(0.68,0.70,0.72),vec3(0.32,0.37,0.46),s12Night);');
   }else if(mode==='groundPool'||mode==='groundPoolRoad'||mode==='groundPoolWalk'){
@@ -86,6 +90,7 @@ export class DayNightSystem{
    if(/^buildings-(windows|shopWindows)$/.test(o.name)||/^hero-panels-glass/.test(o.name))mode='window';
    if(o.name==='buildings-curtainWindows')mode='curtainWindow';
    if(o.name==='buildings-far')mode='farCity';
+   if(o.name==='streetscape-sphere-leaf')mode='treeGlow';
    if(o.name==='hero-qfrontGlass'&&!o.material.transparent)mode='deepGlass';
    if(/^ground-(asphalt|sidewalk|curb|paint|tactile|land)$/.test(o.name))mode='groundPool';
    if(o.name==='ground-asphalt')mode='groundPoolRoad';

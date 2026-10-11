@@ -88,8 +88,17 @@ export function* buildSignModelSteps(data,{tier='medium',referenceMatch=false,ge
   const host={id:b.id,key:b.key,label:'generic-facade',polygon:b.polygon,bottom:b.base,top:b.base+b.height};hosts.push(host);const rng=seededRandom(b.key+':s7');const e={...b.frontage,tangent:[(b.frontage.b[0]-b.frontage.a[0])/b.frontage.length,(b.frontage.b[1]-b.frontage.a[1])/b.frontage.length],index:0};if(e.length<2||e.distance>25)continue;
   const central=referenceMatch&&['frontage','scramble','centerGai'].includes(region)&&Math.hypot(...b.centroid)<120;const slot=Math.max(1,Math.floor((e.length-.5)/(central?4:5)));const rows=Math.min(central?8:region==='centerGai'?4:3,Math.floor((b.height-1.5)/3.5));
   for(let row=0;row<rows;row++)for(let col=0;col<slot;col++){const roll=rng(),kindRoll=rng(),variant=Math.floor(rng()*32);if(roll>density)continue;const w=Math.min(5,e.length/slot-.45),height=row===0?(central?1.8:1):central?2.65:1.55,y=b.base+2.5+row*3.5;let category=row===0?(col%2?'entrance':'box'):kindRoll<.35?'directory':kindRoll<.65?'flush':kindRoll<.85?'billboard':'screen';submit(makePlacement(host,e,{id:b.key+':'+row+':'+col,category,along:(col+.5)*e.length/slot,y,width:category==='directory'?Math.min(w,1):w,height:category==='directory'?2.6:height,region,variant}));}
-  const bladeRoll=rng();if(bladeRoll<density&&region!=='peripheral'&&b.height>11&&e.length>3)submit(makePlacement(host,e,{id:b.key+':blade',category:'blade',along:.4,y:b.base+8,width:1.25,height:3.8,region,variant:2}));
-  if(rng()<density*.4&&b.height>16&&e.length>4)submit(makePlacement(host,e,{id:b.key+':roofline',category:'rooftop',y:host.top-1.15,width:Math.min(5,e.length-.5),height:1.9,region,variant:3}));
+  const bladeRoll=rng();if(bladeRoll<density&&region!=='peripheral'&&b.height>11&&e.length>3){
+   // Cityscape: a mixed-use building near the crossing hangs a tenant column -- one lit board per
+   // floor, stacked up its corner (袖看板) -- and a busy one a second column at the other end. Further
+   // out it is the single tall blade it always was.
+   const near=['frontage','scramble','centerGai'].includes(region)&&Math.hypot(...b.centroid)<170;
+   if(near){const floors=Math.max(2,Math.min(9,Math.floor((b.height-4.5)/2.35)));
+    const columns=e.length>9&&rng()<.55?[.4,e.length-.4]:[.4];
+    for(const [c,along] of columns.entries())for(let k=0;k<floors;k++)submit(makePlacement(host,e,{id:b.key+':tenant:'+c+':'+k,category:'blade',along,y:b.base+4.4+k*2.35,width:1.15,height:2.05,region,variant:(k+c*3+Math.floor(rng()*4))%4}));}
+   else submit(makePlacement(host,e,{id:b.key+':blade',category:'blade',along:.4,y:b.base+8,width:1.25,height:3.8,region,variant:2}));}
+  // Cityscape: round the crossing most roofs carry a lit board.
+  if(rng()<density*(Math.hypot(...b.centroid)<170?.85:.4)&&b.height>14&&e.length>4)submit(makePlacement(host,e,{id:b.key+':roofline',category:'rooftop',y:host.top-1.15,width:Math.min(5,e.length-.5),height:1.9,region,variant:3}));
  }
  for(const h of heroes){const config=HERO_SIGNS[h.key],region=['qfront','magnet','seibuA','seibuB'].includes(h.key)?'frontage':h.key==='109'?'dogenzaka':'station';const heroHosts=h.masses.map((m,i)=>({id:h.id,key:h.key+':mass:'+i,...m}));hosts.push(...heroHosts);
   const sourceAnchors=h.anchors.filter(a=>!['entranceRecess','emissiveFacade'].includes(a.category)&&a.worldPosition[1]<config.upper+.2);let used=0;const screenAnchors=sourceAnchors.filter(a=>a.category==='largeScreen'),screenTotal=screenAnchors.reduce((n,a)=>n+a.width,0);let screenAlong=0;
