@@ -185,16 +185,375 @@
    "female": false,
    "pelvisScale": 0.9845,
    "boneAtlas": {
-    "byteOffset": 1609772,
-    "byteLength": 906360,
-    "count": 453180,
-    "rows": 581,
+    "byteOffset": 1610876,
+    "byteLength": 917280,
+    "count": 458640,
+    "rows": 588,
     "width": 195,
-    "height": 581,
+    "height": 588,
     "format": "RGBA16F"
    },
    "rest": {
-    "byteOffset": 2516132,
+    "byteOffset": 2528156,
+    "byteLength": 780,
+    "count": 195
+   },
+   "clips": [
+    {
+     "name": "Idle",
+     "source": "Idle",
+     "row": 0,
+     "frames": 38,
+     "duration": 2.5,
+     "fps": 15,
+     "loop": true
+    },
+    {
+     "name": "Walk",
+     "source": "Walk",
+     "row": 38,
+     "frames": 32,
+     "duration": 1.3333,
+     "fps": 24,
+     "loop": true
+    },
+    {
+     "name": "Run",
+     "source": "Run",
+     "row": 70,
+     "frames": 21,
+     "duration": 0.7083,
+     "fps": 30,
+     "loop": true
+    },
+    {
+     "name": "Startle",
+     "source": "Startle",
+     "row": 91,
+     "frames": 10,
+     "duration": 0.4333,
+     "fps": 24,
+     "loop": false
+    },
+    {
+     "name": "Guard",
+     "source": "Guard",
+     "row": 101,
+     "frames": 44,
+     "duration": 2.9333,
+     "fps": 15,
+     "loop": true
+    },
+    {
+     "name": "Fall",
+     "source": "Fall",
+     "row": 145,
+     "frames": 58,
+     "duration": 2.4,
+     "fps": 24,
+     "loop": false
+    },
+    {
+     "name": "Idle.stand",
+     "source": "Idle.stand",
+     "row": 203,
+     "frames": 51,
+     "duration": 5.1001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Idle.text",
+     "source": "Idle.text",
+     "row": 254,
+     "frames": 51,
+     "duration": 5.1001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Idle.phone",
+     "source": "Idle.phone",
+     "row": 305,
+     "frames": 82,
+     "duration": 8.2002,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Idle.restless",
+     "source": "Idle.restless",
+     "row": 387,
+     "frames": 31,
+     "duration": 3.1001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Idle.behind",
+     "source": "Idle.behind",
+     "row": 418,
+     "frames": 50,
+     "duration": 5.0001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Walk.neutral",
+     "source": "Walk.neutral",
+     "row": 468,
+     "frames": 33,
+     "duration": 1.3834,
+     "fps": 24,
+     "loop": true,
+     "stride": 1.1037
+    },
+    {
+     "name": "Walk.text",
+     "source": "Walk.text",
+     "row": 501,
+     "frames": 33,
+     "duration": 1.3834,
+     "fps": 24,
+     "loop": true,
+     "stride": 1.1037
+    },
+    {
+     "name": "Walk.phone",
+     "source": "Walk.phone",
+     "row": 534,
+     "frames": 34,
+     "duration": 1.4334,
+     "fps": 24,
+     "loop": true,
+     "stride": 1.1357
+    },
+    {
+     "name": "Walk.rushed",
+     "source": "Walk.rushed",
+     "row": 568,
+     "frames": 20,
+     "duration": 0.8167,
+     "fps": 24,
+     "loop": true,
+     "stride": 1.732
+    }
+   ],
+   "regions": {
+    "skin": 8488,
+    "top": 6816,
+    "bottom": 1434,
+    "hair": 1794,
+    "shoe": 1846,
+    "keep": 470,
+    "phone": 20,
+    "screen": 4
+   },
+   "levels": [
+    {
+     "name": "L0",
+     "vertices": 20872,
+     "triangles": 16012,
+     "indexType": "u16",
+     "position": {
+      "byteOffset": 633360,
+      "byteLength": 250464,
+      "count": 62616
+     },
+     "normal": {
+      "byteOffset": 883824,
+      "byteLength": 250464,
+      "count": 62616
+     },
+     "skinIndex": {
+      "byteOffset": 1134288,
+      "byteLength": 83488,
+      "count": 83488
+     },
+     "skinWeight": {
+      "byteOffset": 1217776,
+      "byteLength": 83488,
+      "count": 83488
+     },
+     "crowdUV": {
+      "byteOffset": 1301264,
+      "byteLength": 166976,
+      "count": 83488
+     },
+     "index": {
+      "byteOffset": 1468240,
+      "byteLength": 96072,
+      "count": 48036
+     }
+    },
+    {
+     "name": "L1",
+     "vertices": 20872,
+     "triangles": 5212,
+     "indexType": "u16",
+     "position": {
+      "byteOffset": 633360,
+      "byteLength": 250464,
+      "count": 62616
+     },
+     "normal": {
+      "byteOffset": 883824,
+      "byteLength": 250464,
+      "count": 62616
+     },
+     "skinIndex": {
+      "byteOffset": 1134288,
+      "byteLength": 83488,
+      "count": 83488
+     },
+     "skinWeight": {
+      "byteOffset": 1217776,
+      "byteLength": 83488,
+      "count": 83488
+     },
+     "crowdUV": {
+      "byteOffset": 1301264,
+      "byteLength": 166976,
+      "count": 83488
+     },
+     "index": {
+      "byteOffset": 1564312,
+      "byteLength": 31272,
+      "count": 15636
+     }
+    },
+    {
+     "name": "L2",
+     "vertices": 20872,
+     "triangles": 1899,
+     "indexType": "u16",
+     "position": {
+      "byteOffset": 633360,
+      "byteLength": 250464,
+      "count": 62616
+     },
+     "normal": {
+      "byteOffset": 883824,
+      "byteLength": 250464,
+      "count": 62616
+     },
+     "skinIndex": {
+      "byteOffset": 1134288,
+      "byteLength": 83488,
+      "count": 83488
+     },
+     "skinWeight": {
+      "byteOffset": 1217776,
+      "byteLength": 83488,
+      "count": 83488
+     },
+     "crowdUV": {
+      "byteOffset": 1301264,
+      "byteLength": 166976,
+      "count": 83488
+     },
+     "index": {
+      "byteOffset": 1595584,
+      "byteLength": 11394,
+      "count": 5697
+     }
+    },
+    {
+     "name": "L3",
+     "vertices": 20872,
+     "triangles": 649,
+     "indexType": "u16",
+     "position": {
+      "byteOffset": 633360,
+      "byteLength": 250464,
+      "count": 62616
+     },
+     "normal": {
+      "byteOffset": 883824,
+      "byteLength": 250464,
+      "count": 62616
+     },
+     "skinIndex": {
+      "byteOffset": 1134288,
+      "byteLength": 83488,
+      "count": 83488
+     },
+     "skinWeight": {
+      "byteOffset": 1217776,
+      "byteLength": 83488,
+      "count": 83488
+     },
+     "crowdUV": {
+      "byteOffset": 1301264,
+      "byteLength": 166976,
+      "count": 83488
+     },
+     "index": {
+      "byteOffset": 1606980,
+      "byteLength": 3894,
+      "count": 1947
+     }
+    }
+   ]
+  },
+  {
+   "id": "salaryman-50",
+   "texture": "/data/crowd/citizens/salaryman-50.webp",
+   "means": {
+    "skin": [
+     0.63076,
+     0.31855,
+     0.20156
+    ],
+    "top": [
+     0.02217,
+     0.02217,
+     0.02217
+    ],
+    "bottom": [
+     0.02122,
+     0.02122,
+     0.02122
+    ],
+    "hair": [
+     0.01681,
+     0.01681,
+     0.01681
+    ],
+    "shoe": [
+     0.00518,
+     0.00402,
+     0.00439
+    ]
+   },
+   "macro": {
+    "gender": 1,
+    "age": 0.7,
+    "weight": 0.85,
+    "muscle": 0.3
+   },
+   "outfit": [
+    "male_elegantsuit01"
+   ],
+   "shoes": "shoes03",
+   "hair": "short04",
+   "skin": "middleage_asian_male",
+   "naturalHeight": 1.7608,
+   "scaleToGame": 0.96725,
+   "meshHeight": 1.7608,
+   "female": false,
+   "pelvisScale": 0.9797,
+   "boneAtlas": {
+    "byteOffset": 3500572,
+    "byteLength": 809640,
+    "count": 404820,
+    "rows": 519,
+    "width": 195,
+    "height": 519,
+    "format": "RGBA16F"
+   },
+   "rest": {
+    "byteOffset": 4310212,
     "byteLength": 780,
     "count": 195
    },
@@ -290,356 +649,9 @@
      "loop": true
     },
     {
-     "name": "Idle.folded",
-     "source": "Idle.folded",
-     "row": 437,
-     "frames": 57,
-     "duration": 5.7001,
-     "fps": 10,
-     "loop": true
-    },
-    {
-     "name": "Walk.neutral",
-     "source": "Walk.neutral",
-     "row": 494,
-     "frames": 33,
-     "duration": 1.3834,
-     "fps": 24,
-     "loop": true,
-     "stride": 1.1037
-    },
-    {
-     "name": "Walk.phone",
-     "source": "Walk.phone",
-     "row": 527,
-     "frames": 34,
-     "duration": 1.4334,
-     "fps": 24,
-     "loop": true,
-     "stride": 1.1357
-    },
-    {
-     "name": "Walk.rushed",
-     "source": "Walk.rushed",
-     "row": 561,
-     "frames": 20,
-     "duration": 0.8167,
-     "fps": 24,
-     "loop": true,
-     "stride": 1.732
-    }
-   ],
-   "regions": {
-    "skin": 8488,
-    "top": 6816,
-    "bottom": 1434,
-    "hair": 1794,
-    "shoe": 1846,
-    "keep": 470
-   },
-   "levels": [
-    {
-     "name": "L0",
-     "vertices": 20848,
-     "triangles": 16000,
-     "indexType": "u16",
-     "position": {
-      "byteOffset": 633360,
-      "byteLength": 250176,
-      "count": 62544
-     },
-     "normal": {
-      "byteOffset": 883536,
-      "byteLength": 250176,
-      "count": 62544
-     },
-     "skinIndex": {
-      "byteOffset": 1133712,
-      "byteLength": 83392,
-      "count": 83392
-     },
-     "skinWeight": {
-      "byteOffset": 1217104,
-      "byteLength": 83392,
-      "count": 83392
-     },
-     "crowdUV": {
-      "byteOffset": 1300496,
-      "byteLength": 166784,
-      "count": 83392
-     },
-     "index": {
-      "byteOffset": 1467280,
-      "byteLength": 96000,
-      "count": 48000
-     }
-    },
-    {
-     "name": "L1",
-     "vertices": 20848,
-     "triangles": 5200,
-     "indexType": "u16",
-     "position": {
-      "byteOffset": 633360,
-      "byteLength": 250176,
-      "count": 62544
-     },
-     "normal": {
-      "byteOffset": 883536,
-      "byteLength": 250176,
-      "count": 62544
-     },
-     "skinIndex": {
-      "byteOffset": 1133712,
-      "byteLength": 83392,
-      "count": 83392
-     },
-     "skinWeight": {
-      "byteOffset": 1217104,
-      "byteLength": 83392,
-      "count": 83392
-     },
-     "crowdUV": {
-      "byteOffset": 1300496,
-      "byteLength": 166784,
-      "count": 83392
-     },
-     "index": {
-      "byteOffset": 1563280,
-      "byteLength": 31200,
-      "count": 15600
-     }
-    },
-    {
-     "name": "L2",
-     "vertices": 20848,
-     "triangles": 1899,
-     "indexType": "u16",
-     "position": {
-      "byteOffset": 633360,
-      "byteLength": 250176,
-      "count": 62544
-     },
-     "normal": {
-      "byteOffset": 883536,
-      "byteLength": 250176,
-      "count": 62544
-     },
-     "skinIndex": {
-      "byteOffset": 1133712,
-      "byteLength": 83392,
-      "count": 83392
-     },
-     "skinWeight": {
-      "byteOffset": 1217104,
-      "byteLength": 83392,
-      "count": 83392
-     },
-     "crowdUV": {
-      "byteOffset": 1300496,
-      "byteLength": 166784,
-      "count": 83392
-     },
-     "index": {
-      "byteOffset": 1594480,
-      "byteLength": 11394,
-      "count": 5697
-     }
-    },
-    {
-     "name": "L3",
-     "vertices": 20848,
-     "triangles": 649,
-     "indexType": "u16",
-     "position": {
-      "byteOffset": 633360,
-      "byteLength": 250176,
-      "count": 62544
-     },
-     "normal": {
-      "byteOffset": 883536,
-      "byteLength": 250176,
-      "count": 62544
-     },
-     "skinIndex": {
-      "byteOffset": 1133712,
-      "byteLength": 83392,
-      "count": 83392
-     },
-     "skinWeight": {
-      "byteOffset": 1217104,
-      "byteLength": 83392,
-      "count": 83392
-     },
-     "crowdUV": {
-      "byteOffset": 1300496,
-      "byteLength": 166784,
-      "count": 83392
-     },
-     "index": {
-      "byteOffset": 1605876,
-      "byteLength": 3894,
-      "count": 1947
-     }
-    }
-   ]
-  },
-  {
-   "id": "salaryman-50",
-   "texture": "/data/crowd/citizens/salaryman-50.webp",
-   "means": {
-    "skin": [
-     0.63076,
-     0.31855,
-     0.20156
-    ],
-    "top": [
-     0.02217,
-     0.02217,
-     0.02217
-    ],
-    "bottom": [
-     0.02122,
-     0.02122,
-     0.02122
-    ],
-    "hair": [
-     0.01681,
-     0.01681,
-     0.01681
-    ],
-    "shoe": [
-     0.00518,
-     0.00402,
-     0.00439
-    ]
-   },
-   "macro": {
-    "gender": 1,
-    "age": 0.7,
-    "weight": 0.85,
-    "muscle": 0.3
-   },
-   "outfit": [
-    "male_elegantsuit01"
-   ],
-   "shoes": "shoes03",
-   "hair": "short04",
-   "skin": "middleage_asian_male",
-   "naturalHeight": 1.7608,
-   "scaleToGame": 0.96725,
-   "meshHeight": 1.7608,
-   "female": false,
-   "pelvisScale": 0.9797,
-   "boneAtlas": {
-    "byteOffset": 3487444,
-    "byteLength": 826800,
-    "count": 413400,
-    "rows": 530,
-    "width": 195,
-    "height": 530,
-    "format": "RGBA16F"
-   },
-   "rest": {
-    "byteOffset": 4314244,
-    "byteLength": 780,
-    "count": 195
-   },
-   "clips": [
-    {
-     "name": "Idle",
-     "source": "Idle",
-     "row": 0,
-     "frames": 38,
-     "duration": 2.5,
-     "fps": 15,
-     "loop": true
-    },
-    {
-     "name": "Walk",
-     "source": "Walk",
-     "row": 38,
-     "frames": 32,
-     "duration": 1.3333,
-     "fps": 24,
-     "loop": true
-    },
-    {
-     "name": "Run",
-     "source": "Run",
-     "row": 70,
-     "frames": 21,
-     "duration": 0.7083,
-     "fps": 30,
-     "loop": true
-    },
-    {
-     "name": "Startle",
-     "source": "Startle",
-     "row": 91,
-     "frames": 10,
-     "duration": 0.4333,
-     "fps": 24,
-     "loop": false
-    },
-    {
-     "name": "Guard",
-     "source": "Guard",
-     "row": 101,
-     "frames": 44,
-     "duration": 2.9333,
-     "fps": 15,
-     "loop": true
-    },
-    {
-     "name": "Fall",
-     "source": "Fall",
-     "row": 145,
-     "frames": 58,
-     "duration": 2.4,
-     "fps": 24,
-     "loop": false
-    },
-    {
-     "name": "Idle.stand",
-     "source": "Idle.stand",
-     "row": 203,
-     "frames": 51,
-     "duration": 5.1001,
-     "fps": 10,
-     "loop": true
-    },
-    {
-     "name": "Idle.behind",
-     "source": "Idle.behind",
-     "row": 254,
-     "frames": 50,
-     "duration": 5.0001,
-     "fps": 10,
-     "loop": true
-    },
-    {
-     "name": "Idle.folded",
-     "source": "Idle.folded",
-     "row": 304,
-     "frames": 57,
-     "duration": 5.7001,
-     "fps": 10,
-     "loop": true
-    },
-    {
-     "name": "Idle.pockets",
-     "source": "Idle.pockets",
-     "row": 361,
-     "frames": 87,
-     "duration": 8.7002,
-     "fps": 10,
-     "loop": true
-    },
-    {
      "name": "Walk.heavy",
      "source": "Walk.heavy",
-     "row": 448,
+     "row": 437,
      "frames": 29,
      "duration": 1.2167,
      "fps": 24,
@@ -649,7 +661,7 @@
     {
      "name": "Walk.neutral",
      "source": "Walk.neutral",
-     "row": 477,
+     "row": 466,
      "frames": 33,
      "duration": 1.3834,
      "fps": 24,
@@ -659,7 +671,7 @@
     {
      "name": "Walk.rushed",
      "source": "Walk.rushed",
-     "row": 510,
+     "row": 499,
      "frames": 20,
      "duration": 0.8167,
      "fps": 24,
@@ -673,149 +685,151 @@
     "bottom": 1434,
     "hair": 983,
     "shoe": 2510,
-    "keep": 470
+    "keep": 470,
+    "phone": 20,
+    "screen": 4
    },
    "levels": [
     {
      "name": "L0",
-     "vertices": 20701,
-     "triangles": 16000,
+     "vertices": 20725,
+     "triangles": 16012,
      "indexType": "u16",
      "position": {
-      "byteOffset": 2516912,
-      "byteLength": 248412,
-      "count": 62103
+      "byteOffset": 2528936,
+      "byteLength": 248700,
+      "count": 62175
      },
      "normal": {
-      "byteOffset": 2765324,
-      "byteLength": 248412,
-      "count": 62103
+      "byteOffset": 2777636,
+      "byteLength": 248700,
+      "count": 62175
      },
      "skinIndex": {
-      "byteOffset": 3013736,
-      "byteLength": 82804,
-      "count": 82804
+      "byteOffset": 3026336,
+      "byteLength": 82900,
+      "count": 82900
      },
      "skinWeight": {
-      "byteOffset": 3096540,
-      "byteLength": 82804,
-      "count": 82804
+      "byteOffset": 3109236,
+      "byteLength": 82900,
+      "count": 82900
      },
      "crowdUV": {
-      "byteOffset": 3179344,
-      "byteLength": 165608,
-      "count": 82804
+      "byteOffset": 3192136,
+      "byteLength": 165800,
+      "count": 82900
      },
      "index": {
-      "byteOffset": 3344952,
-      "byteLength": 96000,
-      "count": 48000
+      "byteOffset": 3357936,
+      "byteLength": 96072,
+      "count": 48036
      }
     },
     {
      "name": "L1",
-     "vertices": 20701,
-     "triangles": 5199,
+     "vertices": 20725,
+     "triangles": 5211,
      "indexType": "u16",
      "position": {
-      "byteOffset": 2516912,
-      "byteLength": 248412,
-      "count": 62103
+      "byteOffset": 2528936,
+      "byteLength": 248700,
+      "count": 62175
      },
      "normal": {
-      "byteOffset": 2765324,
-      "byteLength": 248412,
-      "count": 62103
+      "byteOffset": 2777636,
+      "byteLength": 248700,
+      "count": 62175
      },
      "skinIndex": {
-      "byteOffset": 3013736,
-      "byteLength": 82804,
-      "count": 82804
+      "byteOffset": 3026336,
+      "byteLength": 82900,
+      "count": 82900
      },
      "skinWeight": {
-      "byteOffset": 3096540,
-      "byteLength": 82804,
-      "count": 82804
+      "byteOffset": 3109236,
+      "byteLength": 82900,
+      "count": 82900
      },
      "crowdUV": {
-      "byteOffset": 3179344,
-      "byteLength": 165608,
-      "count": 82804
+      "byteOffset": 3192136,
+      "byteLength": 165800,
+      "count": 82900
      },
      "index": {
-      "byteOffset": 3440952,
-      "byteLength": 31194,
-      "count": 15597
+      "byteOffset": 3454008,
+      "byteLength": 31266,
+      "count": 15633
      }
     },
     {
      "name": "L2",
-     "vertices": 20701,
+     "vertices": 20725,
      "triangles": 1900,
      "indexType": "u16",
      "position": {
-      "byteOffset": 2516912,
-      "byteLength": 248412,
-      "count": 62103
+      "byteOffset": 2528936,
+      "byteLength": 248700,
+      "count": 62175
      },
      "normal": {
-      "byteOffset": 2765324,
-      "byteLength": 248412,
-      "count": 62103
+      "byteOffset": 2777636,
+      "byteLength": 248700,
+      "count": 62175
      },
      "skinIndex": {
-      "byteOffset": 3013736,
-      "byteLength": 82804,
-      "count": 82804
+      "byteOffset": 3026336,
+      "byteLength": 82900,
+      "count": 82900
      },
      "skinWeight": {
-      "byteOffset": 3096540,
-      "byteLength": 82804,
-      "count": 82804
+      "byteOffset": 3109236,
+      "byteLength": 82900,
+      "count": 82900
      },
      "crowdUV": {
-      "byteOffset": 3179344,
-      "byteLength": 165608,
-      "count": 82804
+      "byteOffset": 3192136,
+      "byteLength": 165800,
+      "count": 82900
      },
      "index": {
-      "byteOffset": 3472148,
+      "byteOffset": 3485276,
       "byteLength": 11400,
       "count": 5700
      }
     },
     {
      "name": "L3",
-     "vertices": 20701,
+     "vertices": 20725,
      "triangles": 649,
      "indexType": "u16",
      "position": {
-      "byteOffset": 2516912,
-      "byteLength": 248412,
-      "count": 62103
+      "byteOffset": 2528936,
+      "byteLength": 248700,
+      "count": 62175
      },
      "normal": {
-      "byteOffset": 2765324,
-      "byteLength": 248412,
-      "count": 62103
+      "byteOffset": 2777636,
+      "byteLength": 248700,
+      "count": 62175
      },
      "skinIndex": {
-      "byteOffset": 3013736,
-      "byteLength": 82804,
-      "count": 82804
+      "byteOffset": 3026336,
+      "byteLength": 82900,
+      "count": 82900
      },
      "skinWeight": {
-      "byteOffset": 3096540,
-      "byteLength": 82804,
-      "count": 82804
+      "byteOffset": 3109236,
+      "byteLength": 82900,
+      "count": 82900
      },
      "crowdUV": {
-      "byteOffset": 3179344,
-      "byteLength": 165608,
-      "count": 82804
+      "byteOffset": 3192136,
+      "byteLength": 165800,
+      "count": 82900
      },
      "index": {
-      "byteOffset": 3483548,
+      "byteOffset": 3496676,
       "byteLength": 3894,
       "count": 1947
      }
@@ -871,16 +885,16 @@
    "female": false,
    "pelvisScale": 0.9093,
    "boneAtlas": {
-    "byteOffset": 5121240,
-    "byteLength": 861120,
-    "count": 430560,
-    "rows": 552,
+    "byteOffset": 5118312,
+    "byteLength": 992160,
+    "count": 496080,
+    "rows": 636,
     "width": 195,
-    "height": 552,
+    "height": 636,
     "format": "RGBA16F"
    },
    "rest": {
-    "byteOffset": 5982360,
+    "byteOffset": 6110472,
     "byteLength": 780,
     "count": 195
    },
@@ -958,27 +972,46 @@
      "loop": true
     },
     {
-     "name": "Idle.pockets",
-     "source": "Idle.pockets",
-     "row": 315,
-     "frames": 87,
-     "duration": 8.7002,
-     "fps": 10,
-     "loop": true
-    },
-    {
      "name": "Idle.restless",
      "source": "Idle.restless",
-     "row": 402,
+     "row": 315,
      "frames": 31,
      "duration": 3.1001,
      "fps": 10,
      "loop": true
     },
     {
+     "name": "Idle.stand",
+     "source": "Idle.stand",
+     "row": 346,
+     "frames": 51,
+     "duration": 5.1001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Idle.pockets",
+     "source": "Idle.pockets",
+     "row": 397,
+     "frames": 87,
+     "duration": 8.7002,
+     "fps": 10,
+     "loop": true
+    },
+    {
      "name": "Walk.neutral",
      "source": "Walk.neutral",
-     "row": 433,
+     "row": 484,
+     "frames": 33,
+     "duration": 1.3834,
+     "fps": 24,
+     "loop": true,
+     "stride": 1.0194
+    },
+    {
+     "name": "Walk.text",
+     "source": "Walk.text",
+     "row": 517,
      "frames": 33,
      "duration": 1.3834,
      "fps": 24,
@@ -988,7 +1021,7 @@
     {
      "name": "Walk.phone",
      "source": "Walk.phone",
-     "row": 466,
+     "row": 550,
      "frames": 34,
      "duration": 1.4334,
      "fps": 24,
@@ -998,7 +1031,7 @@
     {
      "name": "Walk.pockets",
      "source": "Walk.pockets",
-     "row": 500,
+     "row": 584,
      "frames": 32,
      "duration": 1.35,
      "fps": 24,
@@ -1008,7 +1041,7 @@
     {
      "name": "Walk.rushed",
      "source": "Walk.rushed",
-     "row": 532,
+     "row": 616,
      "frames": 20,
      "duration": 0.8167,
      "fps": 24,
@@ -1022,149 +1055,151 @@
     "bottom": 950,
     "hair": 1034,
     "shoe": 1738,
-    "keep": 470
+    "keep": 470,
+    "phone": 20,
+    "screen": 4
    },
    "levels": [
     {
      "name": "L0",
-     "vertices": 16593,
-     "triangles": 16000,
+     "vertices": 16617,
+     "triangles": 16012,
      "indexType": "u16",
      "position": {
-      "byteOffset": 4315024,
-      "byteLength": 199116,
-      "count": 49779
+      "byteOffset": 4310992,
+      "byteLength": 199404,
+      "count": 49851
      },
      "normal": {
-      "byteOffset": 4514140,
-      "byteLength": 199116,
-      "count": 49779
+      "byteOffset": 4510396,
+      "byteLength": 199404,
+      "count": 49851
      },
      "skinIndex": {
-      "byteOffset": 4713256,
-      "byteLength": 66372,
-      "count": 66372
+      "byteOffset": 4709800,
+      "byteLength": 66468,
+      "count": 66468
      },
      "skinWeight": {
-      "byteOffset": 4779628,
-      "byteLength": 66372,
-      "count": 66372
+      "byteOffset": 4776268,
+      "byteLength": 66468,
+      "count": 66468
      },
      "crowdUV": {
-      "byteOffset": 4846000,
-      "byteLength": 132744,
-      "count": 66372
+      "byteOffset": 4842736,
+      "byteLength": 132936,
+      "count": 66468
      },
      "index": {
-      "byteOffset": 4978744,
-      "byteLength": 96000,
-      "count": 48000
+      "byteOffset": 4975672,
+      "byteLength": 96072,
+      "count": 48036
      }
     },
     {
      "name": "L1",
-     "vertices": 16593,
-     "triangles": 5200,
+     "vertices": 16617,
+     "triangles": 5212,
      "indexType": "u16",
      "position": {
-      "byteOffset": 4315024,
-      "byteLength": 199116,
-      "count": 49779
+      "byteOffset": 4310992,
+      "byteLength": 199404,
+      "count": 49851
      },
      "normal": {
-      "byteOffset": 4514140,
-      "byteLength": 199116,
-      "count": 49779
+      "byteOffset": 4510396,
+      "byteLength": 199404,
+      "count": 49851
      },
      "skinIndex": {
-      "byteOffset": 4713256,
-      "byteLength": 66372,
-      "count": 66372
+      "byteOffset": 4709800,
+      "byteLength": 66468,
+      "count": 66468
      },
      "skinWeight": {
-      "byteOffset": 4779628,
-      "byteLength": 66372,
-      "count": 66372
+      "byteOffset": 4776268,
+      "byteLength": 66468,
+      "count": 66468
      },
      "crowdUV": {
-      "byteOffset": 4846000,
-      "byteLength": 132744,
-      "count": 66372
+      "byteOffset": 4842736,
+      "byteLength": 132936,
+      "count": 66468
      },
      "index": {
-      "byteOffset": 5074744,
-      "byteLength": 31200,
-      "count": 15600
+      "byteOffset": 5071744,
+      "byteLength": 31272,
+      "count": 15636
      }
     },
     {
      "name": "L2",
-     "vertices": 16593,
+     "vertices": 16617,
      "triangles": 1899,
      "indexType": "u16",
      "position": {
-      "byteOffset": 4315024,
-      "byteLength": 199116,
-      "count": 49779
+      "byteOffset": 4310992,
+      "byteLength": 199404,
+      "count": 49851
      },
      "normal": {
-      "byteOffset": 4514140,
-      "byteLength": 199116,
-      "count": 49779
+      "byteOffset": 4510396,
+      "byteLength": 199404,
+      "count": 49851
      },
      "skinIndex": {
-      "byteOffset": 4713256,
-      "byteLength": 66372,
-      "count": 66372
+      "byteOffset": 4709800,
+      "byteLength": 66468,
+      "count": 66468
      },
      "skinWeight": {
-      "byteOffset": 4779628,
-      "byteLength": 66372,
-      "count": 66372
+      "byteOffset": 4776268,
+      "byteLength": 66468,
+      "count": 66468
      },
      "crowdUV": {
-      "byteOffset": 4846000,
-      "byteLength": 132744,
-      "count": 66372
+      "byteOffset": 4842736,
+      "byteLength": 132936,
+      "count": 66468
      },
      "index": {
-      "byteOffset": 5105944,
+      "byteOffset": 5103016,
       "byteLength": 11394,
       "count": 5697
      }
     },
     {
      "name": "L3",
-     "vertices": 16593,
+     "vertices": 16617,
      "triangles": 650,
      "indexType": "u16",
      "position": {
-      "byteOffset": 4315024,
-      "byteLength": 199116,
-      "count": 49779
+      "byteOffset": 4310992,
+      "byteLength": 199404,
+      "count": 49851
      },
      "normal": {
-      "byteOffset": 4514140,
-      "byteLength": 199116,
-      "count": 49779
+      "byteOffset": 4510396,
+      "byteLength": 199404,
+      "count": 49851
      },
      "skinIndex": {
-      "byteOffset": 4713256,
-      "byteLength": 66372,
-      "count": 66372
+      "byteOffset": 4709800,
+      "byteLength": 66468,
+      "count": 66468
      },
      "skinWeight": {
-      "byteOffset": 4779628,
-      "byteLength": 66372,
-      "count": 66372
+      "byteOffset": 4776268,
+      "byteLength": 66468,
+      "count": 66468
      },
      "crowdUV": {
-      "byteOffset": 4846000,
-      "byteLength": 132744,
-      "count": 66372
+      "byteOffset": 4842736,
+      "byteLength": 132936,
+      "count": 66468
      },
      "index": {
-      "byteOffset": 5117340,
+      "byteOffset": 5114412,
       "byteLength": 3900,
       "count": 1950
      }
@@ -1224,16 +1259,16 @@
    "female": false,
    "pelvisScale": 1.0215,
    "boneAtlas": {
-    "byteOffset": 6822792,
-    "byteLength": 911040,
-    "count": 455520,
-    "rows": 584,
+    "byteOffset": 6952008,
+    "byteLength": 875160,
+    "count": 437580,
+    "rows": 561,
     "width": 195,
-    "height": 584,
+    "height": 561,
     "format": "RGBA16F"
    },
    "rest": {
-    "byteOffset": 7733832,
+    "byteOffset": 7827168,
     "byteLength": 780,
     "count": 195
    },
@@ -1311,36 +1346,46 @@
      "loop": true
     },
     {
-     "name": "Idle.pockets",
-     "source": "Idle.pockets",
-     "row": 305,
-     "frames": 87,
-     "duration": 8.7002,
-     "fps": 10,
-     "loop": true
-    },
-    {
-     "name": "Idle.folded",
-     "source": "Idle.folded",
-     "row": 392,
-     "frames": 57,
-     "duration": 5.7001,
-     "fps": 10,
-     "loop": true
-    },
-    {
      "name": "Idle.akimbo",
      "source": "Idle.akimbo",
-     "row": 449,
+     "row": 305,
      "frames": 50,
      "duration": 5.0001,
      "fps": 10,
      "loop": true
     },
     {
+     "name": "Idle.restless",
+     "source": "Idle.restless",
+     "row": 355,
+     "frames": 31,
+     "duration": 3.1001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Idle.folded",
+     "source": "Idle.folded",
+     "row": 386,
+     "frames": 57,
+     "duration": 5.7001,
+     "fps": 10,
+     "loop": true
+    },
+    {
      "name": "Walk.neutral",
      "source": "Walk.neutral",
-     "row": 499,
+     "row": 443,
+     "frames": 33,
+     "duration": 1.3834,
+     "fps": 24,
+     "loop": true,
+     "stride": 1.1452
+    },
+    {
+     "name": "Walk.text",
+     "source": "Walk.text",
+     "row": 476,
      "frames": 33,
      "duration": 1.3834,
      "fps": 24,
@@ -1350,7 +1395,7 @@
     {
      "name": "Walk.pockets",
      "source": "Walk.pockets",
-     "row": 532,
+     "row": 509,
      "frames": 32,
      "duration": 1.35,
      "fps": 24,
@@ -1360,7 +1405,7 @@
     {
      "name": "Walk.rushed",
      "source": "Walk.rushed",
-     "row": 564,
+     "row": 541,
      "frames": 20,
      "duration": 0.8167,
      "fps": 24,
@@ -1374,149 +1419,151 @@
     "bottom": 950,
     "hair": 3050,
     "shoe": 1738,
-    "keep": 470
+    "keep": 470,
+    "phone": 20,
+    "screen": 4
    },
    "levels": [
     {
      "name": "L0",
-     "vertices": 17429,
-     "triangles": 15999,
+     "vertices": 17453,
+     "triangles": 16011,
      "indexType": "u16",
      "position": {
-      "byteOffset": 5983140,
-      "byteLength": 209148,
-      "count": 52287
+      "byteOffset": 6111252,
+      "byteLength": 209436,
+      "count": 52359
      },
      "normal": {
-      "byteOffset": 6192288,
-      "byteLength": 209148,
-      "count": 52287
+      "byteOffset": 6320688,
+      "byteLength": 209436,
+      "count": 52359
      },
      "skinIndex": {
-      "byteOffset": 6401436,
-      "byteLength": 69716,
-      "count": 69716
+      "byteOffset": 6530124,
+      "byteLength": 69812,
+      "count": 69812
      },
      "skinWeight": {
-      "byteOffset": 6471152,
-      "byteLength": 69716,
-      "count": 69716
+      "byteOffset": 6599936,
+      "byteLength": 69812,
+      "count": 69812
      },
      "crowdUV": {
-      "byteOffset": 6540868,
-      "byteLength": 139432,
-      "count": 69716
+      "byteOffset": 6669748,
+      "byteLength": 139624,
+      "count": 69812
      },
      "index": {
-      "byteOffset": 6680300,
-      "byteLength": 95994,
-      "count": 47997
+      "byteOffset": 6809372,
+      "byteLength": 96066,
+      "count": 48033
      }
     },
     {
      "name": "L1",
-     "vertices": 17429,
-     "triangles": 5200,
+     "vertices": 17453,
+     "triangles": 5212,
      "indexType": "u16",
      "position": {
-      "byteOffset": 5983140,
-      "byteLength": 209148,
-      "count": 52287
+      "byteOffset": 6111252,
+      "byteLength": 209436,
+      "count": 52359
      },
      "normal": {
-      "byteOffset": 6192288,
-      "byteLength": 209148,
-      "count": 52287
+      "byteOffset": 6320688,
+      "byteLength": 209436,
+      "count": 52359
      },
      "skinIndex": {
-      "byteOffset": 6401436,
-      "byteLength": 69716,
-      "count": 69716
+      "byteOffset": 6530124,
+      "byteLength": 69812,
+      "count": 69812
      },
      "skinWeight": {
-      "byteOffset": 6471152,
-      "byteLength": 69716,
-      "count": 69716
+      "byteOffset": 6599936,
+      "byteLength": 69812,
+      "count": 69812
      },
      "crowdUV": {
-      "byteOffset": 6540868,
-      "byteLength": 139432,
-      "count": 69716
+      "byteOffset": 6669748,
+      "byteLength": 139624,
+      "count": 69812
      },
      "index": {
-      "byteOffset": 6776296,
-      "byteLength": 31200,
-      "count": 15600
+      "byteOffset": 6905440,
+      "byteLength": 31272,
+      "count": 15636
      }
     },
     {
      "name": "L2",
-     "vertices": 17429,
+     "vertices": 17453,
      "triangles": 1899,
      "indexType": "u16",
      "position": {
-      "byteOffset": 5983140,
-      "byteLength": 209148,
-      "count": 52287
+      "byteOffset": 6111252,
+      "byteLength": 209436,
+      "count": 52359
      },
      "normal": {
-      "byteOffset": 6192288,
-      "byteLength": 209148,
-      "count": 52287
+      "byteOffset": 6320688,
+      "byteLength": 209436,
+      "count": 52359
      },
      "skinIndex": {
-      "byteOffset": 6401436,
-      "byteLength": 69716,
-      "count": 69716
+      "byteOffset": 6530124,
+      "byteLength": 69812,
+      "count": 69812
      },
      "skinWeight": {
-      "byteOffset": 6471152,
-      "byteLength": 69716,
-      "count": 69716
+      "byteOffset": 6599936,
+      "byteLength": 69812,
+      "count": 69812
      },
      "crowdUV": {
-      "byteOffset": 6540868,
-      "byteLength": 139432,
-      "count": 69716
+      "byteOffset": 6669748,
+      "byteLength": 139624,
+      "count": 69812
      },
      "index": {
-      "byteOffset": 6807496,
+      "byteOffset": 6936712,
       "byteLength": 11394,
       "count": 5697
      }
     },
     {
      "name": "L3",
-     "vertices": 17429,
+     "vertices": 17453,
      "triangles": 650,
      "indexType": "u16",
      "position": {
-      "byteOffset": 5983140,
-      "byteLength": 209148,
-      "count": 52287
+      "byteOffset": 6111252,
+      "byteLength": 209436,
+      "count": 52359
      },
      "normal": {
-      "byteOffset": 6192288,
-      "byteLength": 209148,
-      "count": 52287
+      "byteOffset": 6320688,
+      "byteLength": 209436,
+      "count": 52359
      },
      "skinIndex": {
-      "byteOffset": 6401436,
-      "byteLength": 69716,
-      "count": 69716
+      "byteOffset": 6530124,
+      "byteLength": 69812,
+      "count": 69812
      },
      "skinWeight": {
-      "byteOffset": 6471152,
-      "byteLength": 69716,
-      "count": 69716
+      "byteOffset": 6599936,
+      "byteLength": 69812,
+      "count": 69812
      },
      "crowdUV": {
-      "byteOffset": 6540868,
-      "byteLength": 139432,
-      "count": 69716
+      "byteOffset": 6669748,
+      "byteLength": 139624,
+      "count": 69812
      },
      "index": {
-      "byteOffset": 6818892,
+      "byteOffset": 6948108,
       "byteLength": 3900,
       "count": 1950
      }
@@ -1571,7 +1618,7 @@
    "female": false,
    "pelvisScale": 0.9828,
    "boneAtlas": {
-    "byteOffset": 8466380,
+    "byteOffset": 8559716,
     "byteLength": 611520,
     "count": 305760,
     "rows": 392,
@@ -1580,7 +1627,7 @@
     "format": "RGBA16F"
    },
    "rest": {
-    "byteOffset": 9077900,
+    "byteOffset": 9171236,
     "byteLength": 780,
     "count": 195
    },
@@ -1649,20 +1696,20 @@
      "loop": true
     },
     {
-     "name": "Idle.behind",
-     "source": "Idle.behind",
+     "name": "Idle.stand",
+     "source": "Idle.stand",
      "row": 256,
-     "frames": 50,
-     "duration": 5.0001,
+     "frames": 51,
+     "duration": 5.1001,
      "fps": 10,
      "loop": true
     },
     {
-     "name": "Idle.stand",
-     "source": "Idle.stand",
-     "row": 306,
-     "frames": 51,
-     "duration": 5.1001,
+     "name": "Idle.behind",
+     "source": "Idle.behind",
+     "row": 307,
+     "frames": 50,
+     "duration": 5.0001,
      "fps": 10,
      "loop": true
     },
@@ -1683,7 +1730,9 @@
     "bottom": 950,
     "hair": 983,
     "shoe": 1846,
-    "keep": 470
+    "keep": 470,
+    "phone": 0,
+    "screen": 0
    },
    "levels": [
     {
@@ -1692,32 +1741,32 @@
      "triangles": 15999,
      "indexType": "u16",
      "position": {
-      "byteOffset": 7734612,
+      "byteOffset": 7827948,
       "byteLength": 176784,
       "count": 44196
      },
      "normal": {
-      "byteOffset": 7911396,
+      "byteOffset": 8004732,
       "byteLength": 176784,
       "count": 44196
      },
      "skinIndex": {
-      "byteOffset": 8088180,
+      "byteOffset": 8181516,
       "byteLength": 58928,
       "count": 58928
      },
      "skinWeight": {
-      "byteOffset": 8147108,
+      "byteOffset": 8240444,
       "byteLength": 58928,
       "count": 58928
      },
      "crowdUV": {
-      "byteOffset": 8206036,
+      "byteOffset": 8299372,
       "byteLength": 117856,
       "count": 58928
      },
      "index": {
-      "byteOffset": 8323892,
+      "byteOffset": 8417228,
       "byteLength": 95994,
       "count": 47997
      }
@@ -1728,32 +1777,32 @@
      "triangles": 5199,
      "indexType": "u16",
      "position": {
-      "byteOffset": 7734612,
+      "byteOffset": 7827948,
       "byteLength": 176784,
       "count": 44196
      },
      "normal": {
-      "byteOffset": 7911396,
+      "byteOffset": 8004732,
       "byteLength": 176784,
       "count": 44196
      },
      "skinIndex": {
-      "byteOffset": 8088180,
+      "byteOffset": 8181516,
       "byteLength": 58928,
       "count": 58928
      },
      "skinWeight": {
-      "byteOffset": 8147108,
+      "byteOffset": 8240444,
       "byteLength": 58928,
       "count": 58928
      },
      "crowdUV": {
-      "byteOffset": 8206036,
+      "byteOffset": 8299372,
       "byteLength": 117856,
       "count": 58928
      },
      "index": {
-      "byteOffset": 8419888,
+      "byteOffset": 8513224,
       "byteLength": 31194,
       "count": 15597
      }
@@ -1764,32 +1813,32 @@
      "triangles": 1899,
      "indexType": "u16",
      "position": {
-      "byteOffset": 7734612,
+      "byteOffset": 7827948,
       "byteLength": 176784,
       "count": 44196
      },
      "normal": {
-      "byteOffset": 7911396,
+      "byteOffset": 8004732,
       "byteLength": 176784,
       "count": 44196
      },
      "skinIndex": {
-      "byteOffset": 8088180,
+      "byteOffset": 8181516,
       "byteLength": 58928,
       "count": 58928
      },
      "skinWeight": {
-      "byteOffset": 8147108,
+      "byteOffset": 8240444,
       "byteLength": 58928,
       "count": 58928
      },
      "crowdUV": {
-      "byteOffset": 8206036,
+      "byteOffset": 8299372,
       "byteLength": 117856,
       "count": 58928
      },
      "index": {
-      "byteOffset": 8451084,
+      "byteOffset": 8544420,
       "byteLength": 11394,
       "count": 5697
      }
@@ -1800,32 +1849,32 @@
      "triangles": 650,
      "indexType": "u16",
      "position": {
-      "byteOffset": 7734612,
+      "byteOffset": 7827948,
       "byteLength": 176784,
       "count": 44196
      },
      "normal": {
-      "byteOffset": 7911396,
+      "byteOffset": 8004732,
       "byteLength": 176784,
       "count": 44196
      },
      "skinIndex": {
-      "byteOffset": 8088180,
+      "byteOffset": 8181516,
       "byteLength": 58928,
       "count": 58928
      },
      "skinWeight": {
-      "byteOffset": 8147108,
+      "byteOffset": 8240444,
       "byteLength": 58928,
       "count": 58928
      },
      "crowdUV": {
-      "byteOffset": 8206036,
+      "byteOffset": 8299372,
       "byteLength": 117856,
       "count": 58928
      },
      "index": {
-      "byteOffset": 8462480,
+      "byteOffset": 8555816,
       "byteLength": 3900,
       "count": 1950
      }
@@ -1880,16 +1929,16 @@
    "female": true,
    "pelvisScale": 0.8917,
    "boneAtlas": {
-    "byteOffset": 10005720,
-    "byteLength": 831480,
-    "count": 415740,
-    "rows": 533,
+    "byteOffset": 10100160,
+    "byteLength": 882960,
+    "count": 441480,
+    "rows": 566,
     "width": 195,
-    "height": 533,
+    "height": 566,
     "format": "RGBA16F"
    },
    "rest": {
-    "byteOffset": 10837200,
+    "byteOffset": 10983120,
     "byteLength": 780,
     "count": 195
    },
@@ -1995,9 +2044,19 @@
      "stride": 0.9316
     },
     {
+     "name": "Walk.text",
+     "source": "Walk.text",
+     "row": 479,
+     "frames": 33,
+     "duration": 1.3834,
+     "fps": 24,
+     "loop": true,
+     "stride": 0.9997
+    },
+    {
      "name": "Walk.phone",
      "source": "Walk.phone",
-     "row": 479,
+     "row": 512,
      "frames": 34,
      "duration": 1.4334,
      "fps": 24,
@@ -2007,7 +2066,7 @@
     {
      "name": "Walk.rushed",
      "source": "Walk.rushed",
-     "row": 513,
+     "row": 546,
      "frames": 20,
      "duration": 0.8167,
      "fps": 24,
@@ -2021,149 +2080,151 @@
     "bottom": 408,
     "hair": 5432,
     "shoe": 1846,
-    "keep": 470
+    "keep": 470,
+    "phone": 20,
+    "screen": 4
    },
    "levels": [
     {
      "name": "L0",
-     "vertices": 19579,
-     "triangles": 15999,
+     "vertices": 19603,
+     "triangles": 16011,
      "indexType": "u16",
      "position": {
-      "byteOffset": 9078680,
-      "byteLength": 234948,
-      "count": 58737
+      "byteOffset": 9172016,
+      "byteLength": 235236,
+      "count": 58809
      },
      "normal": {
-      "byteOffset": 9313628,
-      "byteLength": 234948,
-      "count": 58737
+      "byteOffset": 9407252,
+      "byteLength": 235236,
+      "count": 58809
      },
      "skinIndex": {
-      "byteOffset": 9548576,
-      "byteLength": 78316,
-      "count": 78316
+      "byteOffset": 9642488,
+      "byteLength": 78412,
+      "count": 78412
      },
      "skinWeight": {
-      "byteOffset": 9626892,
-      "byteLength": 78316,
-      "count": 78316
+      "byteOffset": 9720900,
+      "byteLength": 78412,
+      "count": 78412
      },
      "crowdUV": {
-      "byteOffset": 9705208,
-      "byteLength": 156632,
-      "count": 78316
+      "byteOffset": 9799312,
+      "byteLength": 156824,
+      "count": 78412
      },
      "index": {
-      "byteOffset": 9861840,
-      "byteLength": 95994,
-      "count": 47997
+      "byteOffset": 9956136,
+      "byteLength": 96066,
+      "count": 48033
      }
     },
     {
      "name": "L1",
-     "vertices": 19579,
-     "triangles": 5200,
+     "vertices": 19603,
+     "triangles": 5212,
      "indexType": "u16",
      "position": {
-      "byteOffset": 9078680,
-      "byteLength": 234948,
-      "count": 58737
+      "byteOffset": 9172016,
+      "byteLength": 235236,
+      "count": 58809
      },
      "normal": {
-      "byteOffset": 9313628,
-      "byteLength": 234948,
-      "count": 58737
+      "byteOffset": 9407252,
+      "byteLength": 235236,
+      "count": 58809
      },
      "skinIndex": {
-      "byteOffset": 9548576,
-      "byteLength": 78316,
-      "count": 78316
+      "byteOffset": 9642488,
+      "byteLength": 78412,
+      "count": 78412
      },
      "skinWeight": {
-      "byteOffset": 9626892,
-      "byteLength": 78316,
-      "count": 78316
+      "byteOffset": 9720900,
+      "byteLength": 78412,
+      "count": 78412
      },
      "crowdUV": {
-      "byteOffset": 9705208,
-      "byteLength": 156632,
-      "count": 78316
+      "byteOffset": 9799312,
+      "byteLength": 156824,
+      "count": 78412
      },
      "index": {
-      "byteOffset": 9957836,
-      "byteLength": 31200,
-      "count": 15600
+      "byteOffset": 10052204,
+      "byteLength": 31272,
+      "count": 15636
      }
     },
     {
      "name": "L2",
-     "vertices": 19579,
+     "vertices": 19603,
      "triangles": 1899,
      "indexType": "u16",
      "position": {
-      "byteOffset": 9078680,
-      "byteLength": 234948,
-      "count": 58737
+      "byteOffset": 9172016,
+      "byteLength": 235236,
+      "count": 58809
      },
      "normal": {
-      "byteOffset": 9313628,
-      "byteLength": 234948,
-      "count": 58737
+      "byteOffset": 9407252,
+      "byteLength": 235236,
+      "count": 58809
      },
      "skinIndex": {
-      "byteOffset": 9548576,
-      "byteLength": 78316,
-      "count": 78316
+      "byteOffset": 9642488,
+      "byteLength": 78412,
+      "count": 78412
      },
      "skinWeight": {
-      "byteOffset": 9626892,
-      "byteLength": 78316,
-      "count": 78316
+      "byteOffset": 9720900,
+      "byteLength": 78412,
+      "count": 78412
      },
      "crowdUV": {
-      "byteOffset": 9705208,
-      "byteLength": 156632,
-      "count": 78316
+      "byteOffset": 9799312,
+      "byteLength": 156824,
+      "count": 78412
      },
      "index": {
-      "byteOffset": 9989036,
+      "byteOffset": 10083476,
       "byteLength": 11394,
       "count": 5697
      }
     },
     {
      "name": "L3",
-     "vertices": 19579,
+     "vertices": 19603,
      "triangles": 881,
      "indexType": "u16",
      "position": {
-      "byteOffset": 9078680,
-      "byteLength": 234948,
-      "count": 58737
+      "byteOffset": 9172016,
+      "byteLength": 235236,
+      "count": 58809
      },
      "normal": {
-      "byteOffset": 9313628,
-      "byteLength": 234948,
-      "count": 58737
+      "byteOffset": 9407252,
+      "byteLength": 235236,
+      "count": 58809
      },
      "skinIndex": {
-      "byteOffset": 9548576,
-      "byteLength": 78316,
-      "count": 78316
+      "byteOffset": 9642488,
+      "byteLength": 78412,
+      "count": 78412
      },
      "skinWeight": {
-      "byteOffset": 9626892,
-      "byteLength": 78316,
-      "count": 78316
+      "byteOffset": 9720900,
+      "byteLength": 78412,
+      "count": 78412
      },
      "crowdUV": {
-      "byteOffset": 9705208,
-      "byteLength": 156632,
-      "count": 78316
+      "byteOffset": 9799312,
+      "byteLength": 156824,
+      "count": 78412
      },
      "index": {
-      "byteOffset": 10000432,
+      "byteOffset": 10094872,
       "byteLength": 5286,
       "count": 2643
      }
@@ -2218,16 +2279,16 @@
    "female": true,
    "pelvisScale": 0.8476,
    "boneAtlas": {
-    "byteOffset": 11894052,
-    "byteLength": 758160,
-    "count": 379080,
-    "rows": 486,
+    "byteOffset": 12041076,
+    "byteLength": 809640,
+    "count": 404820,
+    "rows": 519,
     "width": 195,
-    "height": 486,
+    "height": 519,
     "format": "RGBA16F"
    },
    "rest": {
-    "byteOffset": 12652212,
+    "byteOffset": 12850716,
     "byteLength": 780,
     "count": 195
    },
@@ -2333,9 +2394,19 @@
      "stride": 0.8854
     },
     {
+     "name": "Walk.text",
+     "source": "Walk.text",
+     "row": 432,
+     "frames": 33,
+     "duration": 1.3834,
+     "fps": 24,
+     "loop": true,
+     "stride": 0.9502
+    },
+    {
      "name": "Walk.phone",
      "source": "Walk.phone",
-     "row": 432,
+     "row": 465,
      "frames": 34,
      "duration": 1.4334,
      "fps": 24,
@@ -2345,7 +2416,7 @@
     {
      "name": "Walk.rushed",
      "source": "Walk.rushed",
-     "row": 466,
+     "row": 499,
      "frames": 20,
      "duration": 0.8167,
      "fps": 24,
@@ -2359,149 +2430,151 @@
     "bottom": 4526,
     "hair": 3312,
     "shoe": 1738,
-    "keep": 470
+    "keep": 470,
+    "phone": 20,
+    "screen": 4
    },
    "levels": [
     {
      "name": "L0",
-     "vertices": 22840,
-     "triangles": 16000,
+     "vertices": 22864,
+     "triangles": 16012,
      "indexType": "u16",
      "position": {
-      "byteOffset": 10837980,
-      "byteLength": 274080,
-      "count": 68520
+      "byteOffset": 10983900,
+      "byteLength": 274368,
+      "count": 68592
      },
      "normal": {
-      "byteOffset": 11112060,
-      "byteLength": 274080,
-      "count": 68520
+      "byteOffset": 11258268,
+      "byteLength": 274368,
+      "count": 68592
      },
      "skinIndex": {
-      "byteOffset": 11386140,
-      "byteLength": 91360,
-      "count": 91360
+      "byteOffset": 11532636,
+      "byteLength": 91456,
+      "count": 91456
      },
      "skinWeight": {
-      "byteOffset": 11477500,
-      "byteLength": 91360,
-      "count": 91360
+      "byteOffset": 11624092,
+      "byteLength": 91456,
+      "count": 91456
      },
      "crowdUV": {
-      "byteOffset": 11568860,
-      "byteLength": 182720,
-      "count": 91360
+      "byteOffset": 11715548,
+      "byteLength": 182912,
+      "count": 91456
      },
      "index": {
-      "byteOffset": 11751580,
-      "byteLength": 96000,
-      "count": 48000
+      "byteOffset": 11898460,
+      "byteLength": 96072,
+      "count": 48036
      }
     },
     {
      "name": "L1",
-     "vertices": 22840,
-     "triangles": 5200,
+     "vertices": 22864,
+     "triangles": 5212,
      "indexType": "u16",
      "position": {
-      "byteOffset": 10837980,
-      "byteLength": 274080,
-      "count": 68520
+      "byteOffset": 10983900,
+      "byteLength": 274368,
+      "count": 68592
      },
      "normal": {
-      "byteOffset": 11112060,
-      "byteLength": 274080,
-      "count": 68520
+      "byteOffset": 11258268,
+      "byteLength": 274368,
+      "count": 68592
      },
      "skinIndex": {
-      "byteOffset": 11386140,
-      "byteLength": 91360,
-      "count": 91360
+      "byteOffset": 11532636,
+      "byteLength": 91456,
+      "count": 91456
      },
      "skinWeight": {
-      "byteOffset": 11477500,
-      "byteLength": 91360,
-      "count": 91360
+      "byteOffset": 11624092,
+      "byteLength": 91456,
+      "count": 91456
      },
      "crowdUV": {
-      "byteOffset": 11568860,
-      "byteLength": 182720,
-      "count": 91360
+      "byteOffset": 11715548,
+      "byteLength": 182912,
+      "count": 91456
      },
      "index": {
-      "byteOffset": 11847580,
-      "byteLength": 31200,
-      "count": 15600
+      "byteOffset": 11994532,
+      "byteLength": 31272,
+      "count": 15636
      }
     },
     {
      "name": "L2",
-     "vertices": 22840,
+     "vertices": 22864,
      "triangles": 1899,
      "indexType": "u16",
      "position": {
-      "byteOffset": 10837980,
-      "byteLength": 274080,
-      "count": 68520
+      "byteOffset": 10983900,
+      "byteLength": 274368,
+      "count": 68592
      },
      "normal": {
-      "byteOffset": 11112060,
-      "byteLength": 274080,
-      "count": 68520
+      "byteOffset": 11258268,
+      "byteLength": 274368,
+      "count": 68592
      },
      "skinIndex": {
-      "byteOffset": 11386140,
-      "byteLength": 91360,
-      "count": 91360
+      "byteOffset": 11532636,
+      "byteLength": 91456,
+      "count": 91456
      },
      "skinWeight": {
-      "byteOffset": 11477500,
-      "byteLength": 91360,
-      "count": 91360
+      "byteOffset": 11624092,
+      "byteLength": 91456,
+      "count": 91456
      },
      "crowdUV": {
-      "byteOffset": 11568860,
-      "byteLength": 182720,
-      "count": 91360
+      "byteOffset": 11715548,
+      "byteLength": 182912,
+      "count": 91456
      },
      "index": {
-      "byteOffset": 11878780,
+      "byteOffset": 12025804,
       "byteLength": 11394,
       "count": 5697
      }
     },
     {
      "name": "L3",
-     "vertices": 22840,
+     "vertices": 22864,
      "triangles": 646,
      "indexType": "u16",
      "position": {
-      "byteOffset": 10837980,
-      "byteLength": 274080,
-      "count": 68520
+      "byteOffset": 10983900,
+      "byteLength": 274368,
+      "count": 68592
      },
      "normal": {
-      "byteOffset": 11112060,
-      "byteLength": 274080,
-      "count": 68520
+      "byteOffset": 11258268,
+      "byteLength": 274368,
+      "count": 68592
      },
      "skinIndex": {
-      "byteOffset": 11386140,
-      "byteLength": 91360,
-      "count": 91360
+      "byteOffset": 11532636,
+      "byteLength": 91456,
+      "count": 91456
      },
      "skinWeight": {
-      "byteOffset": 11477500,
-      "byteLength": 91360,
-      "count": 91360
+      "byteOffset": 11624092,
+      "byteLength": 91456,
+      "count": 91456
      },
      "crowdUV": {
-      "byteOffset": 11568860,
-      "byteLength": 182720,
-      "count": 91360
+      "byteOffset": 11715548,
+      "byteLength": 182912,
+      "count": 91456
      },
      "index": {
-      "byteOffset": 11890176,
+      "byteOffset": 12037200,
       "byteLength": 3876,
       "count": 1938
      }
@@ -2556,16 +2629,16 @@
    "female": true,
    "pelvisScale": 0.9102,
    "boneAtlas": {
-    "byteOffset": 13442456,
-    "byteLength": 781560,
-    "count": 390780,
-    "rows": 501,
+    "byteOffset": 13642064,
+    "byteLength": 833040,
+    "count": 416520,
+    "rows": 534,
     "width": 195,
-    "height": 501,
+    "height": 534,
     "format": "RGBA16F"
    },
    "rest": {
-    "byteOffset": 14224016,
+    "byteOffset": 14475104,
     "byteLength": 780,
     "count": 195
    },
@@ -2671,9 +2744,19 @@
      "stride": 0.9509
     },
     {
+     "name": "Walk.text",
+     "source": "Walk.text",
+     "row": 472,
+     "frames": 33,
+     "duration": 1.3834,
+     "fps": 24,
+     "loop": true,
+     "stride": 1.0204
+    },
+    {
      "name": "Walk.heavy",
      "source": "Walk.heavy",
-     "row": 472,
+     "row": 505,
      "frames": 29,
      "duration": 1.2167,
      "fps": 24,
@@ -2687,149 +2770,151 @@
     "bottom": 950,
     "hair": 1688,
     "shoe": 1846,
-    "keep": 470
+    "keep": 470,
+    "phone": 20,
+    "screen": 4
    },
    "levels": [
     {
      "name": "L0",
-     "vertices": 16175,
-     "triangles": 15999,
+     "vertices": 16199,
+     "triangles": 16011,
      "indexType": "u16",
      "position": {
-      "byteOffset": 12652992,
-      "byteLength": 194100,
-      "count": 48525
+      "byteOffset": 12851496,
+      "byteLength": 194388,
+      "count": 48597
      },
      "normal": {
-      "byteOffset": 12847092,
-      "byteLength": 194100,
-      "count": 48525
+      "byteOffset": 13045884,
+      "byteLength": 194388,
+      "count": 48597
      },
      "skinIndex": {
-      "byteOffset": 13041192,
-      "byteLength": 64700,
-      "count": 64700
+      "byteOffset": 13240272,
+      "byteLength": 64796,
+      "count": 64796
      },
      "skinWeight": {
-      "byteOffset": 13105892,
-      "byteLength": 64700,
-      "count": 64700
+      "byteOffset": 13305068,
+      "byteLength": 64796,
+      "count": 64796
      },
      "crowdUV": {
-      "byteOffset": 13170592,
-      "byteLength": 129400,
-      "count": 64700
+      "byteOffset": 13369864,
+      "byteLength": 129592,
+      "count": 64796
      },
      "index": {
-      "byteOffset": 13299992,
-      "byteLength": 95994,
-      "count": 47997
+      "byteOffset": 13499456,
+      "byteLength": 96066,
+      "count": 48033
      }
     },
     {
      "name": "L1",
-     "vertices": 16175,
-     "triangles": 5199,
+     "vertices": 16199,
+     "triangles": 5211,
      "indexType": "u16",
      "position": {
-      "byteOffset": 12652992,
-      "byteLength": 194100,
-      "count": 48525
+      "byteOffset": 12851496,
+      "byteLength": 194388,
+      "count": 48597
      },
      "normal": {
-      "byteOffset": 12847092,
-      "byteLength": 194100,
-      "count": 48525
+      "byteOffset": 13045884,
+      "byteLength": 194388,
+      "count": 48597
      },
      "skinIndex": {
-      "byteOffset": 13041192,
-      "byteLength": 64700,
-      "count": 64700
+      "byteOffset": 13240272,
+      "byteLength": 64796,
+      "count": 64796
      },
      "skinWeight": {
-      "byteOffset": 13105892,
-      "byteLength": 64700,
-      "count": 64700
+      "byteOffset": 13305068,
+      "byteLength": 64796,
+      "count": 64796
      },
      "crowdUV": {
-      "byteOffset": 13170592,
-      "byteLength": 129400,
-      "count": 64700
+      "byteOffset": 13369864,
+      "byteLength": 129592,
+      "count": 64796
      },
      "index": {
-      "byteOffset": 13395988,
-      "byteLength": 31194,
-      "count": 15597
+      "byteOffset": 13595524,
+      "byteLength": 31266,
+      "count": 15633
      }
     },
     {
      "name": "L2",
-     "vertices": 16175,
+     "vertices": 16199,
      "triangles": 1900,
      "indexType": "u16",
      "position": {
-      "byteOffset": 12652992,
-      "byteLength": 194100,
-      "count": 48525
+      "byteOffset": 12851496,
+      "byteLength": 194388,
+      "count": 48597
      },
      "normal": {
-      "byteOffset": 12847092,
-      "byteLength": 194100,
-      "count": 48525
+      "byteOffset": 13045884,
+      "byteLength": 194388,
+      "count": 48597
      },
      "skinIndex": {
-      "byteOffset": 13041192,
-      "byteLength": 64700,
-      "count": 64700
+      "byteOffset": 13240272,
+      "byteLength": 64796,
+      "count": 64796
      },
      "skinWeight": {
-      "byteOffset": 13105892,
-      "byteLength": 64700,
-      "count": 64700
+      "byteOffset": 13305068,
+      "byteLength": 64796,
+      "count": 64796
      },
      "crowdUV": {
-      "byteOffset": 13170592,
-      "byteLength": 129400,
-      "count": 64700
+      "byteOffset": 13369864,
+      "byteLength": 129592,
+      "count": 64796
      },
      "index": {
-      "byteOffset": 13427184,
+      "byteOffset": 13626792,
       "byteLength": 11400,
       "count": 5700
      }
     },
     {
      "name": "L3",
-     "vertices": 16175,
+     "vertices": 16199,
      "triangles": 645,
      "indexType": "u16",
      "position": {
-      "byteOffset": 12652992,
-      "byteLength": 194100,
-      "count": 48525
+      "byteOffset": 12851496,
+      "byteLength": 194388,
+      "count": 48597
      },
      "normal": {
-      "byteOffset": 12847092,
-      "byteLength": 194100,
-      "count": 48525
+      "byteOffset": 13045884,
+      "byteLength": 194388,
+      "count": 48597
      },
      "skinIndex": {
-      "byteOffset": 13041192,
-      "byteLength": 64700,
-      "count": 64700
+      "byteOffset": 13240272,
+      "byteLength": 64796,
+      "count": 64796
      },
      "skinWeight": {
-      "byteOffset": 13105892,
-      "byteLength": 64700,
-      "count": 64700
+      "byteOffset": 13305068,
+      "byteLength": 64796,
+      "count": 64796
      },
      "crowdUV": {
-      "byteOffset": 13170592,
-      "byteLength": 129400,
-      "count": 64700
+      "byteOffset": 13369864,
+      "byteLength": 129592,
+      "count": 64796
      },
      "index": {
-      "byteOffset": 13438584,
+      "byteOffset": 13638192,
       "byteLength": 3870,
       "count": 1935
      }
@@ -2889,16 +2974,16 @@
    "female": true,
    "pelvisScale": 0.9809,
    "boneAtlas": {
-    "byteOffset": 15145716,
-    "byteLength": 659880,
-    "count": 329940,
-    "rows": 423,
+    "byteOffset": 15397908,
+    "byteLength": 739440,
+    "count": 369720,
+    "rows": 474,
     "width": 195,
-    "height": 423,
+    "height": 474,
     "format": "RGBA16F"
    },
    "rest": {
-    "byteOffset": 15805596,
+    "byteOffset": 16137348,
     "byteLength": 780,
     "count": 195
    },
@@ -2976,9 +3061,18 @@
      "loop": true
     },
     {
+     "name": "Idle.text",
+     "source": "Idle.text",
+     "row": 285,
+     "frames": 51,
+     "duration": 5.1001,
+     "fps": 10,
+     "loop": true
+    },
+    {
      "name": "Idle.akimbo",
      "source": "Idle.akimbo",
-     "row": 285,
+     "row": 336,
      "frames": 50,
      "duration": 5.0001,
      "fps": 10,
@@ -2987,7 +3081,7 @@
     {
      "name": "Walk.female",
      "source": "Walk.female",
-     "row": 335,
+     "row": 386,
      "frames": 35,
      "duration": 1.4375,
      "fps": 24,
@@ -2997,7 +3091,7 @@
     {
      "name": "Walk.neutral",
      "source": "Walk.neutral",
-     "row": 370,
+     "row": 421,
      "frames": 33,
      "duration": 1.3834,
      "fps": 24,
@@ -3007,7 +3101,7 @@
     {
      "name": "Walk.rushed",
      "source": "Walk.rushed",
-     "row": 403,
+     "row": 454,
      "frames": 20,
      "duration": 0.8167,
      "fps": 24,
@@ -3021,149 +3115,151 @@
     "bottom": 950,
     "hair": 3902,
     "shoe": 1738,
-    "keep": 470
+    "keep": 470,
+    "phone": 20,
+    "screen": 4
    },
    "levels": [
     {
      "name": "L0",
-     "vertices": 19461,
-     "triangles": 16000,
+     "vertices": 19485,
+     "triangles": 16012,
      "indexType": "u16",
      "position": {
-      "byteOffset": 14224796,
-      "byteLength": 233532,
-      "count": 58383
+      "byteOffset": 14475884,
+      "byteLength": 233820,
+      "count": 58455
      },
      "normal": {
-      "byteOffset": 14458328,
-      "byteLength": 233532,
-      "count": 58383
+      "byteOffset": 14709704,
+      "byteLength": 233820,
+      "count": 58455
      },
      "skinIndex": {
-      "byteOffset": 14691860,
-      "byteLength": 77844,
-      "count": 77844
+      "byteOffset": 14943524,
+      "byteLength": 77940,
+      "count": 77940
      },
      "skinWeight": {
-      "byteOffset": 14769704,
-      "byteLength": 77844,
-      "count": 77844
+      "byteOffset": 15021464,
+      "byteLength": 77940,
+      "count": 77940
      },
      "crowdUV": {
-      "byteOffset": 14847548,
-      "byteLength": 155688,
-      "count": 77844
+      "byteOffset": 15099404,
+      "byteLength": 155880,
+      "count": 77940
      },
      "index": {
-      "byteOffset": 15003236,
-      "byteLength": 96000,
-      "count": 48000
+      "byteOffset": 15255284,
+      "byteLength": 96072,
+      "count": 48036
      }
     },
     {
      "name": "L1",
-     "vertices": 19461,
-     "triangles": 5200,
+     "vertices": 19485,
+     "triangles": 5212,
      "indexType": "u16",
      "position": {
-      "byteOffset": 14224796,
-      "byteLength": 233532,
-      "count": 58383
+      "byteOffset": 14475884,
+      "byteLength": 233820,
+      "count": 58455
      },
      "normal": {
-      "byteOffset": 14458328,
-      "byteLength": 233532,
-      "count": 58383
+      "byteOffset": 14709704,
+      "byteLength": 233820,
+      "count": 58455
      },
      "skinIndex": {
-      "byteOffset": 14691860,
-      "byteLength": 77844,
-      "count": 77844
+      "byteOffset": 14943524,
+      "byteLength": 77940,
+      "count": 77940
      },
      "skinWeight": {
-      "byteOffset": 14769704,
-      "byteLength": 77844,
-      "count": 77844
+      "byteOffset": 15021464,
+      "byteLength": 77940,
+      "count": 77940
      },
      "crowdUV": {
-      "byteOffset": 14847548,
-      "byteLength": 155688,
-      "count": 77844
+      "byteOffset": 15099404,
+      "byteLength": 155880,
+      "count": 77940
      },
      "index": {
-      "byteOffset": 15099236,
-      "byteLength": 31200,
-      "count": 15600
+      "byteOffset": 15351356,
+      "byteLength": 31272,
+      "count": 15636
      }
     },
     {
      "name": "L2",
-     "vertices": 19461,
+     "vertices": 19485,
      "triangles": 1899,
      "indexType": "u16",
      "position": {
-      "byteOffset": 14224796,
-      "byteLength": 233532,
-      "count": 58383
+      "byteOffset": 14475884,
+      "byteLength": 233820,
+      "count": 58455
      },
      "normal": {
-      "byteOffset": 14458328,
-      "byteLength": 233532,
-      "count": 58383
+      "byteOffset": 14709704,
+      "byteLength": 233820,
+      "count": 58455
      },
      "skinIndex": {
-      "byteOffset": 14691860,
-      "byteLength": 77844,
-      "count": 77844
+      "byteOffset": 14943524,
+      "byteLength": 77940,
+      "count": 77940
      },
      "skinWeight": {
-      "byteOffset": 14769704,
-      "byteLength": 77844,
-      "count": 77844
+      "byteOffset": 15021464,
+      "byteLength": 77940,
+      "count": 77940
      },
      "crowdUV": {
-      "byteOffset": 14847548,
-      "byteLength": 155688,
-      "count": 77844
+      "byteOffset": 15099404,
+      "byteLength": 155880,
+      "count": 77940
      },
      "index": {
-      "byteOffset": 15130436,
+      "byteOffset": 15382628,
       "byteLength": 11394,
       "count": 5697
      }
     },
     {
      "name": "L3",
-     "vertices": 19461,
+     "vertices": 19485,
      "triangles": 647,
      "indexType": "u16",
      "position": {
-      "byteOffset": 14224796,
-      "byteLength": 233532,
-      "count": 58383
+      "byteOffset": 14475884,
+      "byteLength": 233820,
+      "count": 58455
      },
      "normal": {
-      "byteOffset": 14458328,
-      "byteLength": 233532,
-      "count": 58383
+      "byteOffset": 14709704,
+      "byteLength": 233820,
+      "count": 58455
      },
      "skinIndex": {
-      "byteOffset": 14691860,
-      "byteLength": 77844,
-      "count": 77844
+      "byteOffset": 14943524,
+      "byteLength": 77940,
+      "count": 77940
      },
      "skinWeight": {
-      "byteOffset": 14769704,
-      "byteLength": 77844,
-      "count": 77844
+      "byteOffset": 15021464,
+      "byteLength": 77940,
+      "count": 77940
      },
      "crowdUV": {
-      "byteOffset": 14847548,
-      "byteLength": 155688,
-      "count": 77844
+      "byteOffset": 15099404,
+      "byteLength": 155880,
+      "count": 77940
      },
      "index": {
-      "byteOffset": 15141832,
+      "byteOffset": 15394024,
       "byteLength": 3882,
       "count": 1941
      }
@@ -3218,16 +3314,16 @@
    "female": true,
    "pelvisScale": 0.9126,
    "boneAtlas": {
-    "byteOffset": 16582668,
-    "byteLength": 531960,
-    "count": 265980,
-    "rows": 341,
+    "byteOffset": 16914420,
+    "byteLength": 611520,
+    "count": 305760,
+    "rows": 392,
     "width": 195,
-    "height": 341,
+    "height": 392,
     "format": "RGBA16F"
    },
    "rest": {
-    "byteOffset": 17114628,
+    "byteOffset": 17525940,
     "byteLength": 780,
     "count": 195
    },
@@ -3296,9 +3392,18 @@
      "loop": true
     },
     {
+     "name": "Idle.stand",
+     "source": "Idle.stand",
+     "row": 256,
+     "frames": 51,
+     "duration": 5.1001,
+     "fps": 10,
+     "loop": true
+    },
+    {
      "name": "Idle.behind",
      "source": "Idle.behind",
-     "row": 256,
+     "row": 307,
      "frames": 50,
      "duration": 5.0001,
      "fps": 10,
@@ -3307,7 +3412,7 @@
     {
      "name": "Walk.elder",
      "source": "Walk.elder",
-     "row": 306,
+     "row": 357,
      "frames": 35,
      "duration": 1.4584,
      "fps": 24,
@@ -3321,7 +3426,9 @@
     "bottom": 408,
     "hair": 1034,
     "shoe": 2510,
-    "keep": 470
+    "keep": 470,
+    "phone": 0,
+    "screen": 0
    },
    "levels": [
     {
@@ -3330,32 +3437,32 @@
      "triangles": 15999,
      "indexType": "u16",
      "position": {
-      "byteOffset": 15806376,
+      "byteOffset": 16138128,
       "byteLength": 190140,
       "count": 47535
      },
      "normal": {
-      "byteOffset": 15996516,
+      "byteOffset": 16328268,
       "byteLength": 190140,
       "count": 47535
      },
      "skinIndex": {
-      "byteOffset": 16186656,
+      "byteOffset": 16518408,
       "byteLength": 63380,
       "count": 63380
      },
      "skinWeight": {
-      "byteOffset": 16250036,
+      "byteOffset": 16581788,
       "byteLength": 63380,
       "count": 63380
      },
      "crowdUV": {
-      "byteOffset": 16313416,
+      "byteOffset": 16645168,
       "byteLength": 126760,
       "count": 63380
      },
      "index": {
-      "byteOffset": 16440176,
+      "byteOffset": 16771928,
       "byteLength": 95994,
       "count": 47997
      }
@@ -3366,32 +3473,32 @@
      "triangles": 5199,
      "indexType": "u16",
      "position": {
-      "byteOffset": 15806376,
+      "byteOffset": 16138128,
       "byteLength": 190140,
       "count": 47535
      },
      "normal": {
-      "byteOffset": 15996516,
+      "byteOffset": 16328268,
       "byteLength": 190140,
       "count": 47535
      },
      "skinIndex": {
-      "byteOffset": 16186656,
+      "byteOffset": 16518408,
       "byteLength": 63380,
       "count": 63380
      },
      "skinWeight": {
-      "byteOffset": 16250036,
+      "byteOffset": 16581788,
       "byteLength": 63380,
       "count": 63380
      },
      "crowdUV": {
-      "byteOffset": 16313416,
+      "byteOffset": 16645168,
       "byteLength": 126760,
       "count": 63380
      },
      "index": {
-      "byteOffset": 16536172,
+      "byteOffset": 16867924,
       "byteLength": 31194,
       "count": 15597
      }
@@ -3402,32 +3509,32 @@
      "triangles": 1900,
      "indexType": "u16",
      "position": {
-      "byteOffset": 15806376,
+      "byteOffset": 16138128,
       "byteLength": 190140,
       "count": 47535
      },
      "normal": {
-      "byteOffset": 15996516,
+      "byteOffset": 16328268,
       "byteLength": 190140,
       "count": 47535
      },
      "skinIndex": {
-      "byteOffset": 16186656,
+      "byteOffset": 16518408,
       "byteLength": 63380,
       "count": 63380
      },
      "skinWeight": {
-      "byteOffset": 16250036,
+      "byteOffset": 16581788,
       "byteLength": 63380,
       "count": 63380
      },
      "crowdUV": {
-      "byteOffset": 16313416,
+      "byteOffset": 16645168,
       "byteLength": 126760,
       "count": 63380
      },
      "index": {
-      "byteOffset": 16567368,
+      "byteOffset": 16899120,
       "byteLength": 11400,
       "count": 5700
      }
@@ -3438,32 +3545,32 @@
      "triangles": 650,
      "indexType": "u16",
      "position": {
-      "byteOffset": 15806376,
+      "byteOffset": 16138128,
       "byteLength": 190140,
       "count": 47535
      },
      "normal": {
-      "byteOffset": 15996516,
+      "byteOffset": 16328268,
       "byteLength": 190140,
       "count": 47535
      },
      "skinIndex": {
-      "byteOffset": 16186656,
+      "byteOffset": 16518408,
       "byteLength": 63380,
       "count": 63380
      },
      "skinWeight": {
-      "byteOffset": 16250036,
+      "byteOffset": 16581788,
       "byteLength": 63380,
       "count": 63380
      },
      "crowdUV": {
-      "byteOffset": 16313416,
+      "byteOffset": 16645168,
       "byteLength": 126760,
       "count": 63380
      },
      "index": {
-      "byteOffset": 16578768,
+      "byteOffset": 16910520,
       "byteLength": 3900,
       "count": 1950
      }
@@ -3473,7 +3580,7 @@
  ],
  "output": {
   "file": "public/data/crowd/citizens.bin",
-  "bytes": 17115408,
-  "sha256": "f25d3c058012408a3cf0eaffded0889cd6738abae08b64875d07b4c543bd10fc"
+  "bytes": 17526720,
+  "sha256": "045ee9d1664e645b4a573acd981ddf9f8b22d3dbfd18c361dfb224688b388499"
  }
 }
