@@ -32,9 +32,10 @@ export const GTA_PHASES = Object.freeze({
  dusk: {angle: 2.92, key: 1.05, fill: .18, exposure: .82, horizon: 0xff9a5c, sun: 0xff8f4f,
   fog: .0015, clouds: .5, env: .6,
   grade: {wb: [1.10, .99, .86], sat: 1.18, contrast: 1.15, shadow: [.95, .95, 1.05], highlight: [1.08, .98, .88], vignette: .22}},
- // Cityscape: a city's night sky is not black. Its own light glows in the haze low down, warm
- // over the street lamps and cool above; the fog takes the horizon colour, so the far city sits in it.
- night: {sky: 0x060a17, horizon: 0x2c2633, fog: .0012, clouds: .2,
+ // Cityscape: Shibuya's night is blue-hour dark, not black. The sky is deep blue with the city's own
+ // light low in the haze; the fog takes the horizon colour, so the far city sits in it; and a
+ // stronger cool fill lets the buildings read as navy masses rather than as holes.
+ night: {sky: 0x0a1532, horizon: 0x3b3f5e, fill: .5, fog: .0012, clouds: .2,
   grade: {sat: 1.0, contrast: 1.04, shadow: [.96, .98, 1.04], highlight: [1.02, 1.0, .97], vignette: .10}}
 });
 

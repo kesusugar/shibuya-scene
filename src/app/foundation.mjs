@@ -9,7 +9,7 @@ export const CAMERAS = Object.freeze([
 {id:'109',label:'CAM-06 109',position:[0,5,0],target:[-150,25,-10]},
 {id:'center-gai',label:'CAM-07 Center-gai',position:[-25,2,-30],target:[-100,8,-70]},
 {id:'photo',label:'CAM-08 Night Photo',position:[42,8,45],target:[-25,20,-35],time:'night'},
-{id:'ref',label:'CAM-09 Crossing North',position:[4,50,66],target:[-6,12,-34]},
+{id:'ref',label:'CAM-09 Crossing North',position:[12,86,136],target:[-4,14,-28],fov:32},
 {id:'station',label:'Station inspection',position:[100,65,130],target:[45,15,70]}]);
 export const MODULES = ['geo','data','ground','buildings','station','signs','streetscape','traffic','life','trains','construction','environment','nightglow','postprocess','perf','camera','debug'];
 export function parseConfig(search='') {const q=new URLSearchParams(search),qa=q.get('qa')==='1',requestedCamera=q.get('camera'),camera=requestedCamera==='scramble-street'?'street':requestedCamera;const selectedTier=q.get('tier')??'medium';const list=k=>q.has(k)?q.get(k).split(',').map(s=>s.trim()).filter(Boolean):null;return {qa,tier:qa?'high':Object.hasOwn(PROFILES,selectedTier)?selectedTier:'medium',camera:CAMERAS.some(c=>c.id===camera)?(camera??'scramble'):'scramble',time:q.get('time')==='night'?'night':'day',explicitTime:q.has('time'),only:list('only'),skip:list('skip')??[],debug:q.get('debug')==='1'};}

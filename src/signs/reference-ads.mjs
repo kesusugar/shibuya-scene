@@ -80,6 +80,16 @@ export const EXTRA_PANELS = Object.freeze([
   left: 0, top: 0, width: 0, height: 0, aspect: .714, mount: 'wall_panel', priority: 'high', hero: 'magnet', extra: true},
  {id: 206, zone: 'right_tower_finance_column', brand: 'アイフル', category: 'consumer_finance',
   left: 0, top: 0, width: 0, height: 0, aspect: .714, mount: 'wall_panel', priority: 'high', hero: 'magnet', extra: true},
+ {id: 207, zone: 'right_tower_finance_column', brand: 'プロミス', category: 'consumer_finance',
+  left: 0, top: 0, width: 0, height: 0, aspect: .714, mount: 'wall_panel', priority: 'high', hero: 'magnet', extra: true},
+ {id: 208, zone: 'right_tower_finance_column', brand: 'SMBCモビット', category: 'consumer_finance',
+  left: 0, top: 0, width: 0, height: 0, aspect: .714, mount: 'wall_panel', priority: 'high', hero: 'magnet', extra: true},
+ {id: 209, zone: 'right_tower_finance_column', brand: '楽天カード', category: 'consumer_finance',
+  left: 0, top: 0, width: 0, height: 0, aspect: .714, mount: 'wall_panel', priority: 'high', hero: 'magnet', extra: true},
+ {id: 210, zone: 'right_tower_finance_column', brand: 'au', category: 'consumer_finance',
+  left: 0, top: 0, width: 0, height: 0, aspect: .714, mount: 'wall_panel', priority: 'high', hero: 'magnet', extra: true},
+ {id: 211, zone: 'right_tower_finance_column', brand: 'PayPay銀行', category: 'consumer_finance',
+  left: 0, top: 0, width: 0, height: 0, aspect: .714, mount: 'wall_panel', priority: 'high', hero: 'magnet', extra: true},
  {id: 203, zone: 'right_tower_vision', brand: 'MAGNET ビジョン', category: 'culture_key_visual',
   left: 0, top: 0, width: 0, height: 0, aspect: 2, mount: 'large_led_vision', priority: 'high',
   hero: 'magnet', textless: true, extra: true}
@@ -162,7 +172,9 @@ export const MIN_ANCHOR_FIT = .12;
 // inventory stays a complete transcription of the reference frame.
 export const EXCLUDED_ADS = Object.freeze({12: 'out-of-scope-for-this-scene',
  201: 'carried-by-the-hero-facade', 202: 'carried-by-the-hero-facade', 203: 'carried-by-the-hero-facade',
- 204: 'carried-by-the-hero-facade', 205: 'carried-by-the-hero-facade', 206: 'carried-by-the-hero-facade'});
+ 204: 'carried-by-the-hero-facade', 205: 'carried-by-the-hero-facade', 206: 'carried-by-the-hero-facade',
+ 207: 'carried-by-the-hero-facade', 208: 'carried-by-the-hero-facade', 209: 'carried-by-the-hero-facade',
+ 210: 'carried-by-the-hero-facade', 211: 'carried-by-the-hero-facade'});
 
 // Mount types describe how the advertisement is carried, which decides both the sign
 // category used for placement auditing and how brightly the face is driven at night.

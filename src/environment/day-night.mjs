@@ -23,11 +23,14 @@ s12Pane.z=step(.62,fract(floorLit*13.7+seed*.21));
 s12Window*=mix(1.0,0.18,smoothstep(90.0,210.0,length(instanceMatrix[3].xz)));\ns12WindowTint=seed<1.0?vec3(1.0,0.48,0.16):(seed<2.0?vec3(1.0,0.72,0.34):(seed<3.0?vec3(1.0,0.88,0.66):vec3(0.82,0.90,1.0)));
 #endif`;
    if(mode==='curtainWindow')body+='\n#ifdef USE_INSTANCING\ns12Window=0.65*mix(1.0,0.12,smoothstep(70.0,170.0,length(instanceMatrix[3].xz)));s12WindowTint=vec3(0.58,0.78,1.0);\n#endif';
-   if(mode==='heroStorefront')body+='\n#ifdef USE_INSTANCING\nif(instanceMatrix[3].y<14.0&&length(instanceMatrix[3].xz)<95.0)s12Window=max(s12Window,1.48);\n#endif';
+   // Cityscape: above the shops a landmark's facade is dark glass with the odd lit floor, not a grid of lamps.
+   if(mode==='heroStorefront')body+='\n#ifdef USE_INSTANCING\nif(instanceMatrix[3].y>=14.0)s12Window*=0.5*step(0.62,fract(seed*0.37+floorLit*3.1));\nif(instanceMatrix[3].y<14.0&&length(instanceMatrix[3].xz)<95.0)s12Window=max(s12Window,1.48);\n#endif';
    if(mode==='storefront')body+='\n#ifdef USE_INSTANCING\nif(instanceMatrix[3].y<14.0)s12Window=max(s12Window,1.48);\n#endif';
    // Inside the pane: ceiling lights (brighter at the top), the centre mullion, and blinds on some.
    const pane=mode==='window'?'float s12Shape=mix(.5,1.15,smoothstep(.05,.95,s12Pane.y))*(1.0-.85*(1.0-step(.035,abs(s12Pane.x-.5))))*mix(1.0,.55+.45*step(.42,fract(s12Pane.y*11.0)),s12Pane.z);':'float s12Shape=1.0;';
-   shader.fragmentShader=shader.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\n'+pane+'\ntotalEmissiveRadiance += s12WindowTint*s12Window*s12Shape*s12Night*(1.0+0.65*s13Nightglow);');
+   // Cityscape: at night unlit glass is dark (it was the day's pale blue-grey, so every window read
+   // as a white tile), and lit ones are warm rooms at a room's brightness, not lamps.
+   shader.fragmentShader=shader.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\n'+pane+'\ndiffuseColor.rgb*=mix(1.0,0.22,s12Night);\ntotalEmissiveRadiance += s12WindowTint*s12Window*s12Shape*s12Night*0.72*(1.0+0.65*s13Nightglow);');
   }else if(mode==='deepGlass'){
    // Cityscape C2: rooms behind opaque glass (deep-glass.mjs).
    vertex=DEEP_GLASS_VERTEX+'\n';fragment+=DEEP_GLASS_GLSL+'\n';body=DEEP_GLASS_VERTEX_BODY;
@@ -43,7 +46,7 @@ s12Window*=mix(1.0,0.18,smoothstep(90.0,210.0,length(instanceMatrix[3].xz)));\ns
     fragment+=ROAD_SPILL_GLSL;
     shader.fragmentShader=shader.fragmentShader.replace('#include <roughnessmap_fragment>',`#include <roughnessmap_fragment>
 float roadWetMask=smoothstep(.23,.76,roadNoise(s161Position.xz*.42));
-roughnessFactor=mix(roughnessFactor,mix(.82,.5,roadWetMask),s12Night*s13Nightglow);`);
+roughnessFactor=mix(roughnessFactor,mix(.82,.5,roadWetMask),s12Night*s13Nightglow*smoothstep(22.,34.,length(s161Position.xz-vec2(6.5,2.))));`);
    }
    if(mode==='groundPoolWalk')fragment+=FRONTAGE_SPILL_GLSL;
    vertex='varying vec3 s161Position;\n';fragment+='varying vec3 s161Position;\n';body='s161Position=(modelMatrix*vec4(transformed,1.0)).xyz;';
@@ -58,7 +61,9 @@ totalEmissiveRadiance+=vec3(.24,.13,.065)*alley*s12Night*(.25+.75*pow(.5+.5*cos(
 ${mode==='groundPoolRoad'?'totalEmissiveRadiance+=billboardRoadSpill(q)*s12Night*(1.0-.55*s13ReflectStrength)*(1.0-.6*(1.0-smoothstep(22.,34.,length(q-vec2(6.5,2.)))));totalEmissiveRadiance+=roadMirror(q,smoothstep(.23,.76,roadNoise(q*.42)))*s12Night;':''}
 ${mode==='groundPoolWalk'?'totalEmissiveRadiance+=frontageSpill(q)*s12Night;':''}
 float pool=0.0;
-for(int i=0;i<4;i++){vec2 c=vec2(i<2?-22.0:22.0,mod(float(i),2.0)<0.5?-19.0:19.0);pool+=(0.20+0.018*float(i))*pow(max(0.0,1.0-length(q-c)/16.0),2.4);}
+for(int i=0;i<4;i++){vec2 c=vec2(i<2?-22.0:22.0,mod(float(i),2.0)<0.5?-19.0:19.0);pool+=(0.26+0.018*float(i))*pow(max(0.0,1.0-length(q-c)/24.0),2.0);}
+// Cityscape: the scramble sits in the light of everything round it -- signs, screens, shopfronts.
+pool+=0.16*pow(max(0.0,1.0-length(q-vec2(4.0,-2.0))/42.0),1.4);
 totalEmissiveRadiance+=vec3(1.0,0.69,0.38)*pool*s12Night;`);
   }else if(mode==='sign'){vertex='attribute float s13GlowWeight;\nvarying float s13Sign;\n';fragment+='varying float s13Sign;\n';body='s13Sign=s13GlowWeight;';shader.fragmentShader=shader.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\ntotalEmissiveRadiance *= 1.0+s13Nightglow*(max(s13Sign,0.8)-1.0);');
   }else if(mode==='train'){vertex='attribute vec3 s12Emission;\nattribute float s12LampEnd;\nattribute vec2 s12Cab;\nvarying vec3 s12Train;\n';fragment+='varying vec3 s12Train;\n';body=`s12Train=s12Emission;

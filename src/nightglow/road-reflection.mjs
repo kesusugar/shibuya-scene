@@ -23,7 +23,7 @@ export const ROAD_REFLECTION = Object.freeze({
  slowInterval: 4,      // ...on a machine already below `slowFrame`, where every render hurts most
  slowFrame: 1 / 25,
  far: 320,             // metres; the mirror has no use for the horizon
- strength: .5,         // how much of the mirror the wet road returns at full wetness (C3: was .9)
+ strength: .32,        // how much of the mirror the wet road returns at full wetness (C3: was .9)
  fadeSeconds: .6
 });
 
@@ -61,7 +61,7 @@ vec3 roadMirror(vec2 q, float wet) {
   + texture2D(s13Reflection, clamp(uv - spread, vec2(.002), vec2(.998))).rgb * .32;
  // Cityscape C3: Shibuya on a dry night. The scramble itself (about 30 m round its centre) keeps
  // only a sheen, so its zebra reads crisp; the streets round it keep their damp glints.
- float scramble = 1. - .78 * (1. - smoothstep(22., 34., length(q - vec2(6.5, 2.))));
+ float scramble = 1. - .9 * (1. - smoothstep(22., 34., length(q - vec2(6.5, 2.))));
  return c * fresnel * mix(.2, 1., wet) * edge * s13ReflectStrength * scramble;
 }
 `;   // the trailing newline matters: this is prepended to a shader that opens with #define

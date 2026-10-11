@@ -40,8 +40,9 @@ vec4 deepRoom(vec3 eye){
  vec3 h=p+r*tHit;
  float id=deepHash(vec3(cell,floor(dot(vDeepWorld.xz,n.xz)*.5)));
  float id2=deepHash(vec3(cell.yx*1.7,id*13.0));
- vec3 wall=mix(vec3(.62,.58,.52),vec3(.52,.58,.62),step(.6,id2));
- vec3 col;float lit=step(.32,id);
+ float lit=step(.45,id);
+ vec3 wall=mix(vec3(.5,.45,.4),vec3(.4,.45,.5),step(.6,id2))*mix(.35,1.0,lit);
+ vec3 col;
  if(tHit==tz){
   // Back wall: a darker band of furniture and partitions, the odd lit monitor.
   col=wall*.85;
@@ -77,4 +78,4 @@ float deepSeen=mix(.25,.85,deepFacing);   // more reflection at grazing angles
 // Day: the rooms are dim behind tinted glass. Night: lit rooms glow, dark ones stay dark.
 diffuseColor.rgb=mix(diffuseColor.rgb,deep.rgb*.42,deepSeen*(1.0-s12Night));
 diffuseColor.rgb*=mix(1.0,.35,s12Night);
-totalEmissiveRadiance+=deep.rgb*deep.a*deepSeen*s12Night*.95;`;
+totalEmissiveRadiance+=deep.rgb*deep.a*deepSeen*s12Night*1.35;`;

@@ -418,6 +418,12 @@ export const REFERENCE_ART = Object.freeze({
    text('アイフル', Math.min(.26, wide * .22), .5, .46, {weight: '900', max: wide * .86});
    text('AIFUL', Math.min(.1, wide * .12), .5, .72, {family: 'Arial,sans-serif', weight: '800', max: wide * .6});});},
 
+ // A board in a brand's own colour: the name big, a second line small (lettering only, no logo file).
+ 207(c, aspect) {boardArt(c, aspect, '#0e3b8c', '#ffffff', 'プロミス', 'PROMISE');},
+ 208(c, aspect) {boardArt(c, aspect, '#00a040', '#ffffff', 'SMBC', 'モビット');},
+ 209(c, aspect) {boardArt(c, aspect, '#bf0000', '#ffffff', '楽天カード', 'Rakuten Card');},
+ 210(c, aspect) {boardArt(c, aspect, '#eb5505', '#ffffff', 'au', 'KDDI');},
+ 211(c, aspect) {boardArt(c, aspect, '#ff0033', '#ffffff', 'PayPay', '銀行');},
  203(c, aspect) {const {box, disc} = tools(c);
   // The vision runs a culture spot, so it carries a key visual and no wording. Flat washes
   // only: this sheet is painted through contexts where canvas gradients are unavailable.
@@ -436,6 +442,12 @@ export const REFERENCE_ART = Object.freeze({
    box(.5 - wide * .42, .955, wide * .15, .03, '#ff2d6f');
   });},
 });
+
+function boardArt(c, aspect, bg, fg, name, sub) {const {text, box} = tools(c);
+ box(0, 0, 1, 1, bg);
+ trueShape(c, aspect, wide => {c.fillStyle = fg;
+  text(name, Math.min(.3, wide * .24), .5, .42, {weight: '900', max: wide * .88});
+  text(sub, Math.min(.12, wide * .13), .5, .7, {weight: '800', max: wide * .7});});}
 
 /** Ids the inventory carries that this sheet can draw. */
 export const PAINTED_IDS = Object.freeze(Object.keys(REFERENCE_ART).map(Number).sort((a, b) => a - b));

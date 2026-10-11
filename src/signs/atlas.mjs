@@ -44,17 +44,33 @@ export function paintCity(ctx,size,count){
   ctx.restore();
  }return entries;
 }
+/**
+ * The big screens (QFRONT's vision and the other large visions). Cityscape: a vivid music spot --
+ * a night-sky gradient, a lit figure, big type -- because the screens are the brightest, most
+ * looked-at thing in a picture of the crossing, and a pale placeholder read as a hole there.
+ * Flat fills first, gradients only where the context has them (tests paint through a stub).
+ */
 export function paintScreen(ctx,w,h){
- ctx.fillStyle='#14275b';ctx.fillRect(0,0,w,h);
- for(let y=0;y<h;y+=3){ctx.fillStyle=y%6===0?'#253c79':'#101f52';ctx.fillRect(0,y,w,1);}
- ctx.textAlign='center';ctx.textBaseline='middle';
- ctx.fillStyle='#385edb';ctx.fillRect(0,h*.08,w,h*.2);
- ctx.fillStyle='#fff5cf';ctx.font=`bold ${h*.075}px sans-serif`;ctx.fillText('アオゾラねっと',w*.46,h*.16,w*.8);
- ctx.font=`bold ${h*.032}px sans-serif`;ctx.fillText('AOZORA NET — 渋谷をつなぐ',w*.5,h*.235,w*.9);
- ctx.fillStyle='#65d6f5';ctx.fillRect(0,h*.4,w,h*.42);
- ctx.fillStyle='#163b52';ctx.font=`bold ${h*.105}px sans-serif`;ctx.fillText('fenn.chat',w*.53,h*.59,w*.8);
- ctx.fillStyle='#efffff';ctx.fillRect(w*.39,h*.7,w*.25,h*.035);
- ctx.fillStyle='#b9edff';ctx.font=`bold ${h*.026}px sans-serif`;ctx.fillText('SHIBUYA  •  HARAJUKU  •  TOKYO  •  SHIBUYA',w*.5,h*.88,w*.95);
+ const grad=(x0,y0,x1,y1,stops)=>{const g=ctx.createLinearGradient?.(x0,y0,x1,y1);if(!g?.addColorStop)return stops[0][1];for(const [o,c] of stops)g.addColorStop(o,c);return g;};
+ ctx.fillStyle='#1b0b3a';ctx.fillRect(0,0,w,h);
+ ctx.fillStyle=grad(0,0,w,h,[[0,'#2a0a5e'],[.45,'#b0127a'],[.8,'#ff6a2b'],[1,'#ffd34d']]);ctx.fillRect(0,0,w,h);
+ // Light rays from behind the figure.
+ for(let i=0;i<14;i++){const a=-Math.PI/2+(i-6.5)*.16;ctx.fillStyle=i%2?'rgba(255,240,200,.10)':'rgba(255,255,255,.05)';ctx.beginPath();ctx.moveTo(w*.66,h*.62);ctx.lineTo(w*.66+Math.cos(a-.05)*w,h*.62+Math.sin(a-.05)*w);ctx.lineTo(w*.66+Math.cos(a+.05)*w,h*.62+Math.sin(a+.05)*w);ctx.closePath();ctx.fill();}
+ // A lit sun disc and the singer's silhouette in front of it.
+ ctx.fillStyle='#fff1c4';ctx.beginPath();ctx.arc(w*.66,h*.5,h*.3,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle='#ffb347';ctx.beginPath();ctx.arc(w*.66,h*.5,h*.24,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle='#160826';
+ ctx.beginPath();ctx.ellipse(w*.66,h*.36,h*.075,h*.095,0,0,Math.PI*2);ctx.fill();          // head
+ ctx.beginPath();ctx.moveTo(w*.66-h*.2,h*1.02);ctx.quadraticCurveTo?.(w*.66-h*.17,h*.5,w*.66,h*.46);ctx.quadraticCurveTo?.(w*.66+h*.17,h*.5,w*.66+h*.2,h*1.02);ctx.closePath();ctx.fill();
+ ctx.fillRect(w*.66+h*.12,h*.42,h*.035,h*.2);                                                // mic arm
+ // Type: the release, big; the artist; the date.
+ ctx.textAlign='left';ctx.textBaseline='middle';
+ ctx.fillStyle='#ffffff';ctx.font=`900 ${h*.2}px sans-serif`;ctx.fillText('NEW SINGLE',w*.05,h*.3,w*.5);
+ ctx.fillStyle='#ffe066';ctx.font=`900 ${h*.13}px sans-serif`;ctx.fillText('「夜明けの交差点」',w*.05,h*.53,w*.52);
+ ctx.fillStyle='#ffffff';ctx.font=`700 ${h*.075}px sans-serif`;ctx.fillText('10.25 RELEASE  /  LIVE TOUR 2026',w*.05,h*.72,w*.52);
+ ctx.fillStyle='rgba(0,0,0,.35)';ctx.fillRect(0,h*.86,w,h*.14);
+ ctx.fillStyle='#ffffff';ctx.font=`700 ${h*.05}px sans-serif`;ctx.textAlign='center';ctx.fillText('SHIBUYA',w*.12,h*.93,w*.2);
+ ctx.fillText('STREAMING NOW  •  渋谷から、世界へ',w*.58,h*.93,w*.7);
 }
 export function createSignAtlases({tier='medium',maxTextureSize=4096,canvasFactory}={}){const q=QUALITY[tier];if(!q)throw Error('Unknown signs tier');if(!(maxTextureSize>=128))throw Error('GPU texture limit too small');const cap=2**Math.floor(Math.log2(maxTextureSize)),size=Math.min(q.atlas,cap),screenWidth=Math.min(q.screen,cap),count=q.variants;
  const make=(w,h,paint)=>{const canvas=canvasFactory?canvasFactory():typeof document!=='undefined'?document.createElement('canvas'):null;let texture,mode;if(canvas){canvas.width=w;canvas.height=h;const ctx=canvas.getContext('2d');if(!ctx)throw Error('Sign Canvas 2D unavailable');paint(ctx,w,h);texture=new CanvasTexture(canvas);mode='canvas';}else{texture=new DataTexture(new Uint8Array([255,255,255,255]),1,1,RGBAFormat);mode='cpu-placeholder';}texture.colorSpace=SRGBColorSpace;texture.minFilter=LinearFilter;texture.magFilter=LinearFilter;texture.generateMipmaps=false;texture.needsUpdate=true;return {texture,mode};};

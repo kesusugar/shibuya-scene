@@ -46,13 +46,13 @@ const until=async(expr,seconds,label)=>{for(let i=0;i<seconds*4;i++){if(await js
  console.log(`  timed out: ${label}`);return false;};
 /** Let the game run `seconds` of its own time, drawing nothing. */
 const run=async(seconds,{each=null}={})=>{await js('window.__SHIBUYA_QA__.render(false)');
- const t0=await js('window.__SHIBUYA_LIFE__?.sim?.time??0');
+ const t0=await js('(window.__SHIBUYA_LIFE__??window.__SHIBUYA_QA__?.life)?.sim?.time??0');
  // By game time, not by polls: headless Chrome can stall for seconds with no frame at all (§9ay).
  const wall=Date.now()+90000;
- while(Date.now()<wall){if(each)await js(each);const t=await js('window.__SHIBUYA_LIFE__?.sim?.time??0');if(t-t0>=seconds)break;await sleep(25);}};
+ while(Date.now()<wall){if(each)await js(each);const t=await js('(window.__SHIBUYA_LIFE__??window.__SHIBUYA_QA__?.life)?.sim?.time??0');if(t-t0>=seconds)break;await sleep(25);}};
 /** Run the game, drawing nothing, until `expr` holds or `seconds` of game time pass. */
-const runUntil=async(expr,seconds,label)=>{await js('window.__SHIBUYA_QA__.render(false)');const t0=await js('window.__SHIBUYA_LIFE__?.sim?.time??0');
- for(let i=0;i<seconds*80;i++){if(await js(`(()=>{try{return !!(${expr})}catch{return false}})()`))return true;const t=await js('window.__SHIBUYA_LIFE__?.sim?.time??0');if(t-t0>seconds)break;await sleep(25);}
+const runUntil=async(expr,seconds,label)=>{await js('window.__SHIBUYA_QA__.render(false)');const t0=await js('(window.__SHIBUYA_LIFE__??window.__SHIBUYA_QA__?.life)?.sim?.time??0');
+ for(let i=0;i<seconds*80;i++){if(await js(`(()=>{try{return !!(${expr})}catch{return false}})()`))return true;const t=await js('(window.__SHIBUYA_LIFE__??window.__SHIBUYA_QA__?.life)?.sim?.time??0');if(t-t0>seconds)break;await sleep(25);}
  console.log(`  not reached: ${label}`);return false;};
 const steps=[];
 /** Draw two frames and keep the second (the first after a state change can be a frame behind). */
@@ -91,7 +91,10 @@ for(const phase of (process.env.PHASES??'day,dusk,night').split(',')){
  await js(`window.__SHIBUYA_QA__.phase('${phase}')`);await run(.5);
  // CAMS=label:id,... picks the views (default: the three fixed ones).
  const cams=process.env.CAMS?process.env.CAMS.split(',').map(x=>x.split(':')):[['Scramble High','overview'],['Scramble Street','street'],['QFRONT','qfront']];
- for(const [label,id] of cams){if(!want(`${phase}-${id}`))continue;await cam(label);await pair(`${phase}-${id}`,null);}
+ // WALK=1: catch the scramble mid-crossing (the walk phase, ~9 s in), as photographs of it do.
+ for(const [label,id] of cams){if(!want(`${phase}-${id}`))continue;await cam(label);
+  if(process.env.WALK==='1'){await runUntil("(window.__SHIBUYA_LIFE__??window.__SHIBUYA_QA__?.life)?.sim?.signals?.getPedestrianPhase('scramble')==='WALK'",150,'scramble walk');await run(9);}
+  await pair(`${phase}-${id}`,null);}
 }
 // The player on the pavement by the crossing, the camera behind, at the end of the day.
 if(process.env.PLAYER!=='0'){

@@ -87,3 +87,34 @@ test('signs: a hero\'s own panels are not re-gridded into copies of the first on
  assert.deepEqual(out.map(s=>s.brandArt).sort(),[201,204,205,206]);
  assert.ok(out.every(s=>!String(s.id).includes(':commercial:')));
 });
+
+import {SoftBloomPass,FIDELITY} from '../src/fidelity/pipeline.mjs';
+import {DEEP_GLASS_GLSL} from '../src/heroes/deep-glass.mjs';
+import {CAMERAS} from '../src/app/foundation.mjs';
+import {paintScreen} from '../src/signs/atlas.mjs';
+import {CENTER_ADS} from '../src/signs/center-gai.mjs';
+test('night look: a wide three-level bloom with its own night threshold; the day bloom is unchanged',()=>{
+ const bloom=new SoftBloomPass();
+ assert.equal(bloom.levels.length,3);
+ bloom.setSize(1280,720);
+ assert.deepEqual(bloom.levels.map(l=>l.a.width),[320,160,80]);
+ assert.ok(FIDELITY.bloomNight.threshold<FIDELITY.bloomThreshold&&FIDELITY.bloomNight.strength>FIDELITY.bloomStrength);
+ bloom.dispose();
+});
+test('deep glass: every name is declared before the shader uses it (a use-before-declare broke QFRONT once)',()=>{
+ const at=s=>DEEP_GLASS_GLSL.indexOf(s);
+ assert.ok(at('float lit=')>0&&at('float lit=')<at('mix(.35,1.0,lit)'));
+ assert.ok(at('vec3 wall=')<at('col=wall'));
+});
+test('CAM-09 is a long lens from high south of the crossing, like the reference photograph',()=>{
+ const ref=CAMERAS.find(c=>c.id==='ref');
+ assert.ok(ref.fov<40&&ref.position[1]>60&&ref.position[2]>100);
+});
+test('the big screen runs a vivid spot, and the Center-gai panels are real brands in saturated colours',()=>{
+ const calls=[],ctx=new Proxy({},{get(o,k){return o[k]??=(...a)=>calls.push([k,...a]);}});
+ paintScreen(ctx,2048,1024);
+ assert.ok(calls.some(c=>c[0]==='fillText'&&c[1]==='NEW SINGLE'));
+ assert.ok(!calls.some(c=>c[0]==='fillText'&&/fenn\.chat/.test(String(c[1]))));
+ for(const name of ['GABA','docomo','BOOKOFF','JINS','PayPay','LINE','SUUMO'])assert.ok(CENTER_ADS.some(a=>a[0]===name),name);
+ assert.ok(!CENTER_ADS.some(a=>/ネコ|ニャン|にゃん|ねこ/.test(a[0])),'an invented cat brand is left');
+});
