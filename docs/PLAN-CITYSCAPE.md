@@ -324,3 +324,32 @@ The 7.1 fps in the screenshot is one moment, not an average. Plan:
 - Owner-PC performance numbers (Gate D).
 - MAGNET and the left block in the QFRONT manner (Gate E).
 - Street-level frontage detail.
+
+## 10. Round 2: closing the gap to the reference image (owner: "not much changed")
+
+Each change below was compared against the reference image, side by side, from CAM-09.
+
+- **Composition.** CAM-09 is now a long lens from high and far south of the crossing: position [12, 86, 136], target [-4, 14, -28], FOV 32. Presets may carry `fov`; the default stays 50.
+  - The frame now matches the reference: skyline over QFRONT, QFRONT in the centre, UC to the left, MAGNET to the right, the whole scramble below.
+  - The first CAM-09 was close, and a near building filled a third of the frame.
+- **Light. This was the biggest difference.**
+  - **Night bloom** (`fidelity/pipeline.mjs`). It was one 3×3 tap at a quarter of the frame, with threshold 4.2, so signs barely glowed. It is now extracted at a quarter, blurred at 1/4, 1/8 and 1/16 of the frame with a separable 9-tap Gaussian, and added back. At night it uses its own threshold (1.15) and strength (0.55); day is unchanged (4.2 / 0.35).
+  - **Blue-hour night** (GTA look): deep blue sky 0x0a1532, horizon 0x3b3f5e (the fog takes it), cool fill 0.5. Buildings read as navy masses instead of black holes.
+  - **Lit crossing**: wider, brighter lamp pools, plus a broad warm pool over the scramble from the signs and shops round it.
+- **Windows.**
+  - Unlit glass is dark at night; it was the day's pale blue-grey, so every window read as a white tile.
+  - Lit windows are dimmer and warmer.
+  - On landmark facades above the shops, only about a third of floors are lit.
+  - QFRONT's deep glass has fewer lit rooms, but brighter ones; dark rooms are darker.
+- **Screens and signs.**
+  - **QFRONT's vision** runs a vivid music spot (`paintScreen`) in place of the pale "fenn.chat" placeholder.
+  - **The Center-gai block's panels**, which face the crossing, are now real brands in saturated colours, in place of the invented pastel cat brands. Examples: GABA, docomo, BOOKOFF, JINS, PayPay, LINE, SUUMO, MEGAドン・キホーテ, 三井住友銀行.
+  - **MAGNET's vision** is flanked by two columns of four boards each:
+    - left: アコム / レイク / アイフル / プロミス;
+    - right: SMBCモビット / 楽天カード / au / PayPay銀行.
+- **Crossing.**
+  - The mirror is weaker again (0.5 → 0.32, and at the centre 0.22 → 0.1 of that).
+  - Wet roughness is off on the scramble, which removes the dark puddle blotches.
+- **Crowd.** Stills can wait for the scramble's walk phase (`WALK=1` in `look-stills.mjs`), so the crossing is full of people, as in a photograph of it.
+  - The QA API now exposes `life`. In observe mode the stills script never saw game time move, so every capture waited out its 90 s timeouts.
+- **Evidence:** `evidence/city/look2/` (CAM-09 and CAM-02, night and day).
