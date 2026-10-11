@@ -316,7 +316,7 @@ export function createNearCharacters(tier='high',{ctx=null}={}){
      if(slot.human){
       slot.figure.recolour(paletteOf(look));
       slot.figure.setBuild(look.width);
-      slot.figure.setMoves?.({idle:look.idle});
+      slot.figure.setMoves?.({idle:look.idle,walk:look.walk});
       if(slot.variant?.id===look.archetype.id)stats.matched++;
      }else slot.figure.recolour({top:look.top});
      slot.figure.setHeight(look.height);

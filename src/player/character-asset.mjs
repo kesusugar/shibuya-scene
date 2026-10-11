@@ -17,12 +17,12 @@
 //
 // Replacing the body later means producing this shape. It does not mean editing the player
 // controller, the camera, combat, or the crowd.
-import {Color,MeshStandardMaterial,ObjectLoader,Vector2,Vector3,Vector4,BufferGeometry,BufferAttribute,SkinnedMesh,Skeleton} from 'three';
+import {Color,MeshStandardMaterial,ObjectLoader,Vector2,Vector3,Vector4,BufferGeometry,BufferAttribute,SkinnedMesh,Skeleton,Bone} from 'three';
 import {clone} from 'three/addons/utils/SkeletonUtils.js';
 import {GARMENT_PATTERN_GLSL,GARMENT_UNPACK_GLSL,packGarment} from '../life/garment-pattern.mjs';
 import {CITIZEN_FRAGMENT,CITIZEN_ROUGHNESS,citizenSkin} from '../life/hq-crowd.mjs';
 import {CITIZEN_PACK} from '../life/citizen-pack.mjs';
-import {citizenClips} from '../life/citizen-pose.mjs';
+import {citizenClips,PHONE_BONE} from '../life/citizen-pose.mjs';
 import {MOVES} from '../life/appearance.mjs';
 
 /**
@@ -167,9 +167,9 @@ function nearClips(pack,citizen,node,animations){
  const key=`${citizen.id}|${pack.moves?.length??0}`;let c=nearClipCache.get(key);if(c)return c;
  const rig=clone(node),byName=new Map();rig.traverse(o=>{if(o.isBone)byName.set(o.name,o);});
  restCitizen(pack,citizen,byName);rig.updateMatrixWorld(true);
- const all=citizenClips([...animations,...(pack.moves??[])],rig,{pelvisScale:citizen.pelvisScale??1,female:!!citizen.female});
- // Look 2c: up close a citizen walks in their kind's usual walk (the gait blend is built per
- // body, so the walk is fixed per archetype); their own idle is set per person (figure.setMoves).
+ const all=citizenClips([...animations,...(pack.moves??[])],rig,{pelvisScale:citizen.pelvisScale??1,female:!!citizen.female,weight:citizen.macro?.weight??.5});
+ // Look 2c: a citizen's body starts in their kind's usual walk; Look 2d: each person's own idle
+ // and walk are then set per person (figure.setMoves), the gait ladder rebuilt on that walk.
  const walkName=MOVES[citizen.id]?.walks?.[0],walk=walkName&&all.find(x=>x.name===walkName);
  let clips=all,walkStride=null;
  if(walk){const w=walk.clone();w.name='Walk';w.userData={...walk.userData};walkStride=w.userData.stride;clips=all.map(x=>x.name==='Walk'?w:x);}
@@ -375,20 +375,26 @@ export function humanoidCitizen(gltf,report,base=WARDROBE){
      copy.traverse(o=>{if(o.isSkinnedMesh){if(!body)body=o;shed.push(o);}});
      const byName=new Map();copy.traverse(o=>{if(o.isBone)byName.set(o.name,o);});
      const names=pack.manifest.boneNames;
+     // Look 2d: the texter's phone is skinned to a fingertip bone the crowd does not use; up close
+     // that slot is a bone of its own on the right hand, sized to nothing unless the phone is out
+     // (figure.mjs).
+     const phone=new Bone();phone.name='phone';byName.get('hand_r')?.add(phone);
+     const boneOf=n=>n===PHONE_BONE&&phone.parent?phone:byName.get(n);
      let skeleton;
      if(citizen.rest){
       // Look 2b: the citizen's own skeleton -- the crowd skeleton's bones at this person's joints.
       restCitizen(pack,citizen,byName);copy.updateMatrixWorld(true);
-      skeleton=new Skeleton(names.map(n=>byName.get(n)));
+      skeleton=new Skeleton(names.map(boneOf));
      }else{
       const inverse=new Map(body.skeleton.bones.map((b,i)=>[b.name,body.skeleton.boneInverses[i]]));
-      skeleton=new Skeleton(names.map(n=>byName.get(n)),names.map(n=>inverse.get(n).clone()));
+      skeleton=new Skeleton(names.map(boneOf),names.map(n=>inverse.get(n===PHONE_BONE?'hand_r':n).clone()));
      }
      const mesh=new SkinnedMesh(citizenGeometry(pack,citizen));
      mesh.name='citizen-'+citizen.id;
      body.parent.add(mesh);
      if(citizen.rest){mesh.updateMatrixWorld(true);mesh.bind(skeleton);}else mesh.bind(skeleton,body.bindMatrix.clone());
      for(const o of shed){o.removeFromParent();if(o.skeleton!==skeleton)o.skeleton?.dispose?.();}
+     if(phone.parent){phone.scale.setScalar(0);copy.userData.phoneBone=phone;}
      // Look 2c: where the RUN 6.8 body's carrying bones were, so a holster or a scabbard placed
      // for that body (weapon-mesh.mjs CARRY) can be moved onto this one's hip and spine.
      node.updateMatrixWorld(true);const ref={};

@@ -20,7 +20,7 @@ test('citizens: one per appearance archetype, four levels, a texture, on the cro
  for(const a of manifest.archetypes){
   assert.deepEqual(a.levels.map(l=>l.name),['L0','L1','L2','L3']);
   const t=a.levels.map(l=>l.triangles);
-  assert.ok(t[0]<=16000&&t[0]>t[1]&&t[1]>t[2]&&t[2]>t[3],`${a.id}: ${t}`);
+  assert.ok(t[0]<=16000+12&&t[0]>t[1]&&t[1]>t[2]&&t[2]>t[3],`${a.id}: ${t}`);
   assert.ok(existsSync('public'+a.texture),`${a.id}: no ${a.texture}`);
   for(const k of ['skin','top','bottom','hair','shoe'])assert.equal(a.means[k]?.length,3,`${a.id}: no ${k} mean`);
   for(const k of ['skin','top','bottom','shoe'])assert.ok(a.regions[k]>0,`${a.id}: no ${k} vertices`);
@@ -133,8 +133,13 @@ test('citizens: their own shoulders, and an upright stance at the lights',async(
     const d=P('neck_01').sub(P('pelvis')),lean=Math.atan2(d.z,d.y)*180/Math.PI;
     const arm=P('lowerarm_l').sub(P('upperarm_l')),out=Math.atan2(Math.abs(arm.x),-arm.y)*180/Math.PI;
     const knee=P('thigh_l').sub(P('calf_l')).angleTo(P('foot_l').sub(P('calf_l')))*180/Math.PI;
-    assert.ok(lean<4,`${c.id} leans ${lean.toFixed(1)} deg forward at the lights`);
-    assert.ok(out<10,`${c.id} holds the arm ${out.toFixed(1)} deg out`);
+    // Look 2d: the straightened spine carries the neck a little ahead of the hips, as a person's
+    // does (a few centimetres), so up to 5 degrees.
+    assert.ok(lean<5,`${c.id} leans ${lean.toFixed(1)} deg forward at the lights`);
+    // Look 2d: hands are kept clear of the hips (clearFor), so a broader or a woman's body holds
+    // them a little further out.
+    const a=manifest.archetypes.find(x=>x.id===c.id);
+    assert.ok(out<10+Math.max(0,a.macro.weight-.4)*20+(a.female?5:0),`${c.id} holds the arm ${out.toFixed(1)} deg out`);
     assert.ok(knee>163,`${c.id} stands with the knee at ${knee.toFixed(1)} deg`);
    }
    inst.dispose();
@@ -189,5 +194,87 @@ test('moves: looking at a phone, the hands are in front of the chest and the hea
    assert.ok(h.z-neck.z>.12,`hand_${s} not in front (${(h.z-neck.z).toFixed(2)})`);
    assert.ok(h.y<neck.y&&h.y>pelvis.y,`hand_${s} at ${h.y.toFixed(2)}`);}
   inst.dispose();
+ }finally{CITIZEN_PACK.current=null;}
+});
+
+// Look 2d, the owner's next two complaints: "leaning back, is the spine that curved?" (the crowd
+// skeleton's rest spine, sway-backed, under every clip) and "the hands are hidden too much".
+import {createPlayerFigure} from '../src/player/figure.mjs';
+import {PHONE_BONE} from '../src/life/citizen-pose.mjs';
+import {DataUtils} from 'three';
+const nearAsset=async()=>{
+ const report=JSON.parse(readFileSync('public/data/character/citizen.json','utf8'));
+ const bytes=readFileSync('public/data/character/citizen.glb');
+ const gltf=await new Promise((res,rej)=>new GLTFLoader().parse(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),'',res,rej));
+ return humanoidCitizen(gltf,report);
+};
+test('posture: shoulders over the hips, the neck a little ahead, hands out from the hips and not behind them',async()=>{
+ const asset=await nearAsset();
+ CITIZEN_PACK.current={manifest,bin,texture:null,skins:new Map(),moves:movesClips(JSON.parse(readFileSync('public/data/character/citizen-moves.json','utf8')),decodeBase64)};
+ try{
+  for(const c of CITIZENS){
+   const inst=asset.instance(undefined,c),root=inst.root;root.scale.set(1,1,1);
+   const P=n=>{let f=null;root.traverse(o=>{if(!f&&o.isBone&&o.name===n)f=o;});return f.getWorldPosition(new Vector3());};
+   const mixer=new AnimationMixer(root);
+   for(const [name,standing] of [['Idle.stand',true],[MOVES[c.id].walks[0],false]]){
+    const clip=inst.clips.find(x=>x.name===name),a=mixer.clipAction(clip);a.reset().play();
+    for(const t of [0,.25,.5,.75]){
+     mixer.setTime(t*clip.duration);root.updateMatrixWorld(true);const pel=P('pelvis');
+     const sh=P('upperarm_l').add(P('upperarm_r')).multiplyScalar(.5).z-pel.z,nk=P('neck_01').z-pel.z;
+     const at=`${c.id} ${name} @${t}`;
+     assert.ok(sh>(standing?-.06:-.04)&&sh<(standing?.05:.09),`${at}: shoulders ${sh.toFixed(3)} m from over the hips`);
+     assert.ok(nk>(standing?-.02:0)&&nk<(standing?.08:.17),`${at}: neck ${nk.toFixed(3)} m ahead of the hips`);
+     for(const [s,k] of [['l',1],['r',-1]]){const out=(P('hand_'+s).x-P('thigh_'+s).x)*k;assert.ok(out>.09,`${at}: hand_${s} ${out.toFixed(3)} m out from the hip`);}
+     if(standing)for(const s of ['l','r']){const z=P('hand_'+s).z-P('thigh_'+s).z;assert.ok(z>-.03,`${at}: hand_${s} ${z.toFixed(3)} m behind the hip`);}
+    }
+    a.stop();
+   }
+   inst.dispose();
+  }
+ }finally{CITIZEN_PACK.current=null;}
+});
+test('moves: few people hide their hands -- pockets, behind the back and folded are a minority',()=>{
+ let hidden=0;const n=2000;
+ for(let id=0;id<n;id++)if(/^Idle\.(pockets|behind|folded)$/.test(appearanceOf(id).idle))hidden++;
+ assert.ok(hidden/n<.2,`${(100*hidden/n).toFixed(0)}% hide their hands`);
+ let texting=0;for(let id=0;id<n;id++)if(appearanceOf(id).walk==='Walk.text')texting++;
+ assert.ok(texting>n*.08,'nobody walks looking at a phone');
+});
+test('phone: baked only into the clips that hold one -- the hand\'s matrix there, nothing elsewhere',()=>{
+ const phone=manifest.boneNames.indexOf(PHONE_BONE),hand=manifest.boneNames.indexOf('hand_r');
+ for(const a of manifest.archetypes){
+  const holds=MOVES[a.id].idles.includes('Idle.text');
+  assert.equal(a.regions.phone>0,holds,`${a.id}: phone vertices`);
+  if(!holds)continue;
+  assert.ok(a.regions.screen>0&&level(a,'L0').triangles>level(a,'L1').triangles);
+  const half=new Uint16Array(bin,a.boneAtlas.byteOffset,a.boneAtlas.count),bones=manifest.boneNames.length;
+  const read=(row,b)=>[...half.slice((row*bones+b)*12,(row*bones+b)*12+12)].map(DataUtils.fromHalfFloat);
+  for(const [name,on] of [['Idle.stand',false],['Idle.text',true],['Walk.text',true],['Walk',false]]){
+   const spec=a.clips.find(c=>c.name===name);if(!spec)continue;
+   const row=spec.row+1,m=read(row,phone);
+   if(on)assert.deepEqual(m,read(row,hand),`${a.id} ${name}: the phone leaves the hand`);
+   else assert.ok(m.every(v=>v===0),`${a.id} ${name}: a phone where none is held`);
+  }
+ }
+});
+test('near: each person walks their own walk, gait rebuilt on its stride, and the texter\'s phone shows',async()=>{
+ const asset=await nearAsset();
+ CITIZEN_PACK.current={manifest,bin,texture:null,skins:new Map(),moves:movesClips(JSON.parse(readFileSync('public/data/character/citizen-moves.json','utf8')),decodeBase64)};
+ try{
+  const figure=createPlayerFigure(asset,undefined,{variant:CITIZENS.find(c=>c.id==='student-m')});
+  const phone=figure.root.userData.phoneBone;assert.ok(phone,'no phone bone up close');
+  const stride=n=>figure.gait.ladder?.find?.(x=>x.name==='Walk')?.stride;
+  figure.setMoves({idle:'Idle.text',walk:'Walk.pockets'});
+  const pockets=manifest.archetypes.find(a=>a.id==='student-m').clips.find(c=>c.name==='Walk.pockets').stride;
+  for(let k=0;k<60;k++)figure.update({x:0,y:0,z:k*.04,speed:1.2,heading:0},1/30);
+  assert.equal(phone.scale.x,0,'a phone out while walking with hands in pockets');
+  if(stride())assert.ok(Math.abs(stride()-pockets)<.1,`stride ${stride()} vs ${pockets}`);
+  figure.reset();figure.setMoves({idle:'Idle.text',walk:'Walk.text'});
+  for(let k=0;k<30;k++)figure.update({x:0,y:0,z:0,speed:0,heading:0},1/30);
+  assert.equal(phone.scale.x,1,'no phone in a texter\'s hands');
+  figure.reset();figure.setMoves({idle:'Idle.stand'});
+  for(let k=0;k<30;k++)figure.update({x:0,y:0,z:0,speed:0,heading:0},1/30);
+  assert.equal(phone.scale.x,0);
+  figure.dispose();
  }finally{CITIZEN_PACK.current=null;}
 });

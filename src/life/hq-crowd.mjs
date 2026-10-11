@@ -313,12 +313,13 @@ ${GARMENT_UNPACK_GLSL}${GARMENT_PATTERN_GLSL}vec3 unpackRGB(float v){
  * so folds, seams and the face survive the recolour. Within a region only texels near its
  * dominant colour are recoloured (the atlas alpha, from build-citizens.py): a suit changes colour,
  * its white collar and its tie do not. Hair, brows, lashes and eyes use alpha as a cut-out.
- * Regions: 0 skin, 1 top, 2 bottom, 3 hair, 4 shoe, 5 keep.
+ * Regions: 0 skin, 1 top, 2 bottom, 3 hair, 4 shoe, 5 keep; Look 2d: 6 a phone's case, 7 its screen,
+ * untextured (the phone is only drawn while it is held; see PHONE_BONE in citizen-pose.mjs).
  */
 export const CITIZEN_FRAGMENT=`
  vec4 crowdTex=texture2D(crowdMap,vCrowdUV);
  float crowdR=floor(vRegion+0.5);
- bool crowdCut=(crowdR>2.5&&crowdR<3.5)||crowdR>4.5;
+ bool crowdCut=(crowdR>2.5&&crowdR<3.5)||(crowdR>4.5&&crowdR<5.5);
  if(crowdCut&&crowdTex.a<0.5)discard;
  // The texture carries the cloth -- weave, seams, folds, a tie -- so the procedural patterns of the
  // untextured crowd (Step A) are not drawn over it: a plaid over denim read as neither.
@@ -331,9 +332,11 @@ export const CITIZEN_FRAGMENT=`
  if(crowdR>3.5){crowdPal=unpackRGB(vShoe);crowdMean=crowdMeans[4];}
  float crowdW=crowdR>4.5?0.0:(crowdR>2.5&&crowdR<3.5?1.0:crowdTex.a);
  vec3 crowdTint=min(crowdTex.rgb*crowdPal/max(crowdMean,vec3(0.004)),vec3(1.0));
- diffuseColor.rgb=mix(crowdTex.rgb,crowdTint,crowdW);`;
+ diffuseColor.rgb=mix(crowdTex.rgb,crowdTint,crowdW);
+ if(crowdR>5.5){diffuseColor.rgb=crowdR>6.5?vec3(0.012,0.014,0.018):vec3(0.02,0.021,0.024);
+  if(crowdR>6.5)totalEmissiveRadiance+=vec3(0.30,0.40,0.52);}`;
 export const CITIZEN_ROUGHNESS=`#include <roughnessmap_fragment>
- roughnessFactor=crowdR<0.5?0.6:crowdR<1.5?0.86:crowdR<2.5?0.8:crowdR<3.5?0.5:crowdR<4.5?0.45:0.4;`;
+ roughnessFactor=crowdR<0.5?0.6:crowdR<1.5?0.86:crowdR<2.5?0.8:crowdR<3.5?0.5:crowdR<4.5?0.45:crowdR<5.5?0.4:crowdR<6.5?0.35:0.15;`;
 let WHITE=null;
 /** The texture and tint means of a textured archetype. `texture(archetype)` loads its atlas. */
 /** A bone atlas (RGBA32F, three texels per bone, a row per baked frame) from the pack. */

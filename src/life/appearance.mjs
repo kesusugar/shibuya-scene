@@ -71,16 +71,16 @@ export const CITIZENS=Object.freeze([
  * one. `hurry` is the walk for when they are going fast.
  */
 export const MOVES=Object.freeze({
- 'salaryman':   {idles:['Idle.stand','Idle.text','Idle.phone','Idle.behind','Idle.folded'],  walks:['Walk.neutral','Walk.neutral','Walk.phone'],hurry:'Walk.rushed'},
- 'salaryman-50':{idles:['Idle.stand','Idle.behind','Idle.folded','Idle.pockets'],walks:['Walk.heavy','Walk.neutral'],hurry:'Walk.rushed'},
- 'student-m':   {idles:['Idle.text','Idle.text','Idle.phoneL','Idle.pockets','Idle.restless'],walks:['Walk.neutral','Walk.phone','Walk.pockets'],hurry:'Walk.rushed'},
- 'jacket-m':    {idles:['Idle.stand','Idle.text','Idle.pockets','Idle.folded','Idle.akimbo'],walks:['Walk.neutral','Walk.pockets'],hurry:'Walk.rushed'},
- 'elder-m':     {idles:['Idle.old','Idle.behind','Idle.stand'],walks:['Walk.elder'],hurry:null},
- 'office-f':    {idles:['Idle.stand','Idle.text','Idle.phone','Idle.folded'],walks:['Walk.female','Walk.female','Walk.phone'],hurry:'Walk.rushed'},
- 'student-f':   {idles:['Idle.text','Idle.text','Idle.phoneL','Idle.stand','Idle.restless'],walks:['Walk.female','Walk.phone'],hurry:'Walk.rushed'},
- 'casual-f':    {idles:['Idle.stand','Idle.text','Idle.phone','Idle.akimbo'],walks:['Walk.female','Walk.heavy'],hurry:null},
- 'sport-f':     {idles:['Idle.restless','Idle.stand','Idle.akimbo'],walks:['Walk.female','Walk.neutral'],hurry:'Walk.rushed'},
- 'elder-f':     {idles:['Idle.old','Idle.behind'],walks:['Walk.elder'],hurry:null}
+ 'salaryman':   {idles:['Idle.stand','Idle.stand','Idle.text','Idle.text','Idle.phone','Idle.restless','Idle.behind'],walks:['Walk.neutral','Walk.neutral','Walk.text','Walk.phone'],hurry:'Walk.rushed'},
+ 'salaryman-50':{idles:['Idle.stand','Idle.stand','Idle.text','Idle.phone','Idle.behind'],walks:['Walk.heavy','Walk.neutral'],hurry:'Walk.rushed'},
+ 'student-m':   {idles:['Idle.text','Idle.text','Idle.phoneL','Idle.restless','Idle.stand','Idle.pockets'],walks:['Walk.neutral','Walk.text','Walk.text','Walk.phone','Walk.pockets'],hurry:'Walk.rushed'},
+ 'jacket-m':    {idles:['Idle.stand','Idle.stand','Idle.text','Idle.akimbo','Idle.restless','Idle.folded'],walks:['Walk.neutral','Walk.neutral','Walk.text','Walk.pockets'],hurry:'Walk.rushed'},
+ 'elder-m':     {idles:['Idle.old','Idle.stand','Idle.stand','Idle.behind'],walks:['Walk.elder'],hurry:null},
+ 'office-f':    {idles:['Idle.stand','Idle.stand','Idle.text','Idle.text','Idle.phone','Idle.folded'],walks:['Walk.female','Walk.female','Walk.text','Walk.phone'],hurry:'Walk.rushed'},
+ 'student-f':   {idles:['Idle.text','Idle.text','Idle.phoneL','Idle.stand','Idle.restless'],walks:['Walk.female','Walk.text','Walk.text','Walk.phone'],hurry:'Walk.rushed'},
+ 'casual-f':    {idles:['Idle.stand','Idle.stand','Idle.text','Idle.phone','Idle.akimbo'],walks:['Walk.female','Walk.female','Walk.text','Walk.heavy'],hurry:null},
+ 'sport-f':     {idles:['Idle.restless','Idle.stand','Idle.text','Idle.akimbo'],walks:['Walk.female','Walk.neutral'],hurry:'Walk.rushed'},
+ 'elder-f':     {idles:['Idle.old','Idle.old','Idle.stand','Idle.behind'],walks:['Walk.elder'],hurry:null}
 });
 /**
  * Which citizens a life archetype (the simulation's: an office worker, a student, an elderly

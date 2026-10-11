@@ -31,7 +31,7 @@ export const STANCE=Object.freeze({
  Run:    {lean:14, knees:0,  arms:10,ground:'mean'},
  Startle:{lean:6,  knees:0,  arms:6, ground:'frame'},
  // Wary but standing: from the Idle, not the crouch.
- Guard:  {from:'Idle',lean:3,knees:.6,arms:8,ground:'frame'}
+ Guard:  {from:'Idle',lean:3,knees:.6,arms:8,ground:'frame',calm:'Idle.stand'}
 });
 /**
  * The motion-captured idles and walks (src/life/citizen-moves.mjs) are already a person standing
@@ -46,8 +46,20 @@ export const MOCAP_STANCE=Object.freeze({lean:90,knees:0,arms:0,ground:'frame',m
  * broader than the performer's, folded forearms otherwise pass into the chest.
  */
 export const DERIVED=Object.freeze({
- 'Idle.text':  {from:'Idle.stand',overlay:'text'}
+ 'Idle.text':  {from:'Idle.stand',overlay:'text'},
+ // Walking while reading it: the neutral walk from the chest down, the texting idle's arms,
+ // neck and head on top (their local rotations, so the phone rides with the chest).
+ 'Walk.text':  {from:'Walk.neutral',layer:'Idle.text'}
 });
+/**
+ * Look 2d: the phone in a texter's hands. The crowd's skinning folds the finger bones into the
+ * hand, so a fingertip bone is free: the phone's vertices are skinned to it, and the bake gives it
+ * the right hand's matrix in the clips that hold a phone and a zero matrix (the phone collapsed to
+ * a point, not drawn) in every other. The near pool puts a bone of its own there (figure.mjs).
+ */
+export const PHONE_BONE='index_04_leaf_r';
+export const PHONE_CLIPS=Object.freeze(['Idle.text','Walk.text']);
+const LAYERED=/^(clavicle|upperarm|lowerarm|hand|index|middle|pinky|ring|thumb)_|^(neck_01|Head)$/;
 /**
  * The performer walked looking a little down (at the floor markers, most likely); a person in a
  * street looks ahead. These walks get the head brought up to `headUp` degrees off the body's own
@@ -77,6 +89,57 @@ export function retargetClip(clip,pelvisScale=1){
  return out;
 }
 
+/**
+ * Look 2d: the spine a person stands with. The crowd skeleton's rest is a superhero's -- the
+ * lumbar tipped 16 degrees forward, the chest thrown 13 back -- and every clip, the captured ones
+ * included, is a turn from that rest, so every citizen stood and walked sway-backed: belly out,
+ * chest back, the "leaning back" the owner saw. Each spine bone's rest is turned, in the side
+ * plane only, so its segment (joint to the next joint up) leans the way a person's does: the
+ * lumbar about upright, the chest a little forward, the neck more. Degrees forward of vertical.
+ */
+export const SPINE_REST=Object.freeze({pelvis:2,spine_01:2,spine_02:3,spine_03:3,neck_01:6});
+const SPINE_CHILD=Object.freeze({pelvis:'spine_01',spine_01:'spine_02',spine_02:'spine_03',spine_03:'neck_01',neck_01:'Head'});
+/**
+ * The per-bone corrections for a skeleton in its rest pose: C_b = Wrest^-1 * D * Wrest, where D
+ * turns the segment to SPINE_REST about the body's lateral axis. A clip's local rotation becomes
+ * C_parent^-1 * q * C_b, so the bone's world turn is its own, rest-corrected; the bones hanging off
+ * the spine (legs, clavicles, head) keep the world turn the clip gives them.
+ */
+function spineCorrections(root,bones){
+ root.updateMatrixWorld(true);
+ const lateral=bones.thigh_l.getWorldPosition(new Vector3()).sub(bones.thigh_r.getWorldPosition(new Vector3())).setY(0).normalize();
+ const forward=new Vector3().crossVectors(lateral,new Vector3(0,1,0)).normalize();
+ const C={};
+ for(const [b,target] of Object.entries(SPINE_REST)){
+  const bone=bones[b],child=bones[SPINE_CHILD[b]];if(!bone||!child)continue;
+  const d=child.getWorldPosition(new Vector3()).sub(bone.getWorldPosition(new Vector3()));
+  const now=Math.atan2(d.dot(forward),d.dot(new Vector3(0,1,0)));
+  // Positive about `lateral` tips +Y towards `forward` or away; take the sign that adds forward lean.
+  const probe=new Vector3(0,1,0).applyAxisAngle(lateral,.1).dot(forward)>0?1:-1;
+  const D=new Quaternion().setFromAxisAngle(lateral,probe*(target*Math.PI/180-now));
+  const W=bone.getWorldQuaternion(new Quaternion());
+  C[b]=W.clone().invert().multiply(D).multiply(W);
+ }
+ return C;
+}
+/** Apply spine corrections to a clip's tracks (see spineCorrections). */
+function straighten(clip,C,bones){
+ const I=new Quaternion(),tracks=[];
+ for(const t of clip.tracks){
+  const [name,prop]=t.name.split('.');
+  if(prop!=='quaternion'){tracks.push(t);continue;}
+  const bone=bones[name],parent=bone?.parent?.name,own=C[name],up=C[parent];
+  // Legs, arms and the head stay turned the way the clip turns them: their parent's correction
+  // is undone. (Turned with the chest, a hanging arm swings back as the chest tips forward.)
+  const keepWorld=!own&&!!up;
+  if(!own&&!(keepWorld&&up)){tracks.push(t);continue;}
+  const c=t.clone(),q=new Quaternion(),pre=(own||keepWorld)&&up?up.clone().invert():I,post=own??I;
+  for(let i=0;i<c.values.length;i+=4){q.fromArray(c.values,i);q.premultiply(pre).multiply(post);q.toArray(c.values,i);}
+  tracks.push(c);
+ }
+ const out=new AnimationClip(clip.name,clip.duration,tracks);out.userData={...(clip.userData??{})};return out;
+}
+
 const qa=new Quaternion(),qb=new Quaternion(),va=new Vector3(),vb=new Vector3(),vc=new Vector3();
 /** Turn `bone` by `angle` about a WORLD axis, keeping its parent where it is. */
 function turnWorld(bone,axis,angle){
@@ -97,7 +160,29 @@ const lowest=bones=>{let y=Infinity;for(const n of FEET){const b=bones[n];if(b){
 
 /** Apply one STANCE rule to the pose a mixer has just set. `rest` holds the rest quaternions. */
 const leanOf=(bones,forward)=>{const n=bones.neck_01.getWorldPosition(new Vector3()),p=bones.pelvis.getWorldPosition(new Vector3()),d=n.sub(p);return Math.atan2(d.dot(forward),d.y);};
-export function applyStance(root,bones,rest,rule,{female=false,restLean=0,restHead=null}={}){
+/**
+ * Look 2d: hands that show. The performer is slimmer than most citizens, so a hand that swung
+ * past his hip passes INTO theirs, and a heavy man or a woman's hips swallowed both hands. Arms
+ * hanging or swinging are kept at least `clear` metres out from the hip joint, sideways (more for
+ * a heavier body); the forward-and-back swing is untouched. Not for the poses that put the hands
+ * somewhere on purpose (pockets, behind the back, folded, akimbo, a phone).
+ */
+const CLEAR_ARMS=/^(Idle|Walk|Run|Startle|Guard|Idle\.(stand|restless|old)|Walk\.(neutral|heavy|female|elder|rushed))$/;
+export const clearFor=({female=false,weight=.5}={})=>.11+Math.max(0,weight-.4)*.14+(female?.025:0);
+function clearArms(bones,lateral,forward,clear){
+ for(const [side,s] of [['l',1],['r',-1]]){
+  const up=bones['upperarm_'+side],hand=bones['hand_'+side],hip=bones['thigh_'+side];if(!up||!hand||!hip)continue;
+  const out=hand.getWorldPosition(new Vector3()).sub(hip.getWorldPosition(new Vector3())).dot(lateral)*s;
+  if(out>=clear)continue;
+  const shoulder=up.getWorldPosition(new Vector3()),reach=hand.getWorldPosition(new Vector3()).distanceTo(shoulder);
+  const angle=Math.asin(Math.min(.9,(clear-out)/Math.max(.2,reach)));
+  // About `forward`, the sign that moves this hand outwards.
+  const before=hand.getWorldPosition(new Vector3()).dot(lateral)*s;
+  turnWorld(up,forward,angle);
+  if(hand.getWorldPosition(new Vector3()).dot(lateral)*s<before)turnWorld(up,forward,-2*angle);
+ }
+}
+export function applyStance(root,bones,rest,rule,{female=false,restLean=0,restHead=null,clear=0,name=''}={}){
  root.updateMatrixWorld(true);
  // The body's axes, from its own hips and pelvis: lateral (towards its left) and forward.
  const lateral=bones.thigh_l.getWorldPosition(va).sub(bones.thigh_r.getWorldPosition(vb)).setY(0).normalize().clone();
@@ -137,6 +222,7 @@ export function applyStance(root,bones,rest,rule,{female=false,restLean=0,restHe
   const probe=new Vector3(0,-1,0).applyAxisAngle(forward,.1).dot(lateral);
   turnWorld(up,forward,towards*(probe>0?1:-1)*by);
  }
+ if(clear&&CLEAR_ARMS.test(name))clearArms(bones,lateral,forward,clear);
  if(rule.overlay)overlay(root,bones,rule.overlay,lateral,forward);
  // 4. The head level: neck -> head no further forward than the pelvis -> neck line plus a little.
  if(rule.headUp&&bones.Head&&bones.neck_01&&restHead){
@@ -173,7 +259,7 @@ function overlay(root,bones,kind,lateral,forward){
   const chest=bones.neck_01.getWorldPosition(new Vector3()).addScaledVector(down,.12);
   for(const [side,s] of [['l',1],['r',-1]]){
    const up=bones['upperarm_'+side],low=bones['lowerarm_'+side],hand=bones['hand_'+side];if(!up||!low||!hand)continue;
-   const target=chest.clone().addScaledVector(forward,.26).addScaledVector(lateral,s*.045).addScaledVector(down,.2);
+   const target=chest.clone().addScaledVector(forward,.22).addScaledVector(lateral,s*.04).addScaledVector(down,.17);
    const shoulder=up.getWorldPosition(new Vector3());
    const pole=shoulder.clone().addScaledVector(down,.6).addScaledVector(lateral,s*.1).addScaledVector(forward,-.12);
    twoBone(up,low,hand,target,pole);
@@ -197,18 +283,20 @@ function overlay(root,bones,kind,lateral,forward){
  * pose (it is posed while sampling and put back after); `pelvisScale` its pelvis height over the
  * crowd skeleton's.
  */
-export function citizenClips(clips,root,{pelvisScale=1,female=false}={}){
+export function citizenClips(clips,root,{pelvisScale=1,female=false,weight=.5}={}){
+ const clear=clearFor({female,weight});
  const bones={};root.traverse(o=>{if(o.isBone)bones[o.name]=o;});
  const rest={},restPos={};for(const [n,b] of Object.entries(bones)){rest[n]=b.quaternion.clone();restPos[n]=b.position.clone();}
  const reset=()=>{for(const [n,b] of Object.entries(bones)){b.quaternion.copy(rest[n]);b.position.copy(restPos[n]);}root.updateMatrixWorld(true);};
- const byName=new Map(clips.map(c=>[c.name,retargetClip(c,pelvisScale)]));
+ const spine=spineCorrections(root,bones);
+ const byName=new Map(clips.map(c=>[c.name,straighten(retargetClip(c,pelvisScale),spine,bones)]));
  // Derived poses ride on a clip that is there.
  for(const [name,d] of Object.entries(DERIVED))if(byName.has(d.from)&&!byName.has(name)){const c=byName.get(d.from).clone();c.name=name;c.userData={...(byName.get(d.from).userData??{})};byName.set(name,c);}
  const out=[];
  for(const [name,clip] of byName){
   const rule=stanceFor(name);
   if(!rule){out.push(clip);continue;}
-  const source=byName.get(rule.from??name)??clip;
+  const source=(rule.calm&&byName.get(rule.calm))||byName.get(rule.from??name)||clip;
   const mixer=new AnimationMixer(root),action=mixer.clipAction(source);action.play();
   const frames=Math.max(2,Math.round(source.duration*FPS)),times=new Float32Array(frames+1);
   const q={},p=[];for(const n of Object.keys(bones))q[n]=new Float32Array((frames+1)*4);
@@ -218,7 +306,7 @@ export function citizenClips(clips,root,{pelvisScale=1,female=false}={}){
   const drops=[];
   for(let f=0;f<=frames;f++){
    reset();action.time=f/frames*source.duration;mixer.update(0);
-   applyStance(root,bones,rest,rule,{female,restLean,restHead});
+   applyStance(root,bones,rest,rule,{female,restLean,restHead,clear,name});
    root.updateMatrixWorld(true);const drop=lowest(bones)-restFoot;drops.push(drop);
    if(rule.ground==='frame')raise(bones.pelvis,-drop);
    times[f]=f/frames*source.duration;
@@ -236,5 +324,11 @@ export function citizenClips(clips,root,{pelvisScale=1,female=false}={}){
   tracks.push(new VectorKeyframeTrack('pelvis.position',times,p));
   const made=new AnimationClip(name,source.duration,tracks);made.userData={...(source.userData??{})};out.push(made);
  }
+ // Layers: the upper body of one clip over another, sampled at the same time (looped).
+ for(const clip of out){const layer=DERIVED[clip.name]?.layer,top=layer&&out.find(c=>c.name===layer);if(!top)continue;
+  for(const track of clip.tracks){const bone=track.name.split('.')[0];if(!LAYERED.test(bone)||!track.name.endsWith('.quaternion'))continue;
+   const from=top.tracks.find(t=>t.name===track.name);if(!from)continue;
+   const sample=from.createInterpolant();
+   for(let i=0;i<track.times.length;i++)track.values.set(sample.evaluate(track.times[i]%top.duration),i*4);}}
  return out;
 }
