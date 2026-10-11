@@ -64,6 +64,36 @@ export const CITIZENS=Object.freeze([
  Object.freeze({id:'sport-f',     rig:'f',hair:'Hair_Long',        name:'sporty',         height:.950,width:1}),
  Object.freeze({id:'elder-f',     rig:'f',hair:'Hair_SimpleParted',name:'older woman',    height:.895,width:1,skins:SKINS_EA,hairs:GREYS})
 ]);
+/**
+ * Look 2c: what each citizen does with their hands while waiting, and how they walk -- the
+ * motion-captured clips of src/life/citizen-moves.mjs. A person keeps theirs for good (it is
+ * part of who they are, a pure function of the id like the rest); the first walk is the common
+ * one. `hurry` is the walk for when they are going fast.
+ */
+export const MOVES=Object.freeze({
+ 'salaryman':   {idles:['Idle.stand','Idle.text','Idle.phone','Idle.behind','Idle.folded'],  walks:['Walk.neutral','Walk.neutral','Walk.phone'],hurry:'Walk.rushed'},
+ 'salaryman-50':{idles:['Idle.stand','Idle.behind','Idle.folded','Idle.pockets'],walks:['Walk.heavy','Walk.neutral'],hurry:'Walk.rushed'},
+ 'student-m':   {idles:['Idle.text','Idle.text','Idle.phoneL','Idle.pockets','Idle.restless'],walks:['Walk.neutral','Walk.phone','Walk.pockets'],hurry:'Walk.rushed'},
+ 'jacket-m':    {idles:['Idle.stand','Idle.text','Idle.pockets','Idle.folded','Idle.akimbo'],walks:['Walk.neutral','Walk.pockets'],hurry:'Walk.rushed'},
+ 'elder-m':     {idles:['Idle.old','Idle.behind','Idle.stand'],walks:['Walk.elder'],hurry:null},
+ 'office-f':    {idles:['Idle.stand','Idle.text','Idle.phone','Idle.folded'],walks:['Walk.female','Walk.female','Walk.phone'],hurry:'Walk.rushed'},
+ 'student-f':   {idles:['Idle.text','Idle.text','Idle.phoneL','Idle.stand','Idle.restless'],walks:['Walk.female','Walk.phone'],hurry:'Walk.rushed'},
+ 'casual-f':    {idles:['Idle.stand','Idle.text','Idle.phone','Idle.akimbo'],walks:['Walk.female','Walk.heavy'],hurry:null},
+ 'sport-f':     {idles:['Idle.restless','Idle.stand','Idle.akimbo'],walks:['Walk.female','Walk.neutral'],hurry:'Walk.rushed'},
+ 'elder-f':     {idles:['Idle.old','Idle.behind'],walks:['Walk.elder'],hurry:null}
+});
+/**
+ * Which citizens a life archetype (the simulation's: an office worker, a student, an elderly
+ * person...) is drawn as, so the body matches the behaviour -- an elderly walker at 0.9 m/s is
+ * an older person, an office worker is in office clothes.
+ */
+export const CITIZENS_FOR_STYLE=Object.freeze({
+ office:['salaryman','salaryman','salaryman-50','office-f','office-f'],
+ student:['student-m','student-f'],
+ elderly:['elder-m','elder-f'],
+ jogger:['sport-f','student-m','jacket-m'],
+ default:['student-m','jacket-m','student-f','casual-f','sport-f','office-f','salaryman','salaryman-50']
+});
 /** Which people the city is drawn with: 'citizens' (Look 2) or 'classic' (RUN 6.8). */
 export const PEOPLE={mode:'citizens'};
 /** The archetype list `appearanceOf` draws from, for the current PEOPLE.mode. */
@@ -153,6 +183,12 @@ function hash3(id){
  h^=h>>>15;h=Math.imul(h,0x68e31da4|1);h^=h>>>14;h=Math.imul(h,0xb5297a4d);h^=h>>>16;
  return h>>>0;
 }
+/** A fourth decorrelated hash, for the moves (Look 2c). */
+function hash4(id){
+ let h=Math.imul((id|0)^0x5bd1e995,0x1b873593);
+ h^=h>>>16;h=Math.imul(h,0x85ebca6b);h^=h>>>13;h=Math.imul(h,0xc2b2ae35);h^=h>>>16;
+ return h>>>0;
+}
 /** The top and bottom pattern of citizen `id`. Pure. */
 export function patternOf(id){
  const w=PATTERN_WEIGHTS[styleOf(id)],h=hash3(id);
@@ -204,7 +240,11 @@ export function appearanceOf(id,baseHeight=1.76){
   return {...look,id,top:UNIFORM.top,bottom:UNIFORM.bottom,shoe:UNIFORM.shoe,topPattern:0,bottomPattern:0,uniform:true};
  }
  const h=hash(id),g=hash2(id);
- const list=activeArchetypes(),archetype=list[h%list.length];
+ const list=activeArchetypes();
+ let archetype=list[h%list.length];
+ if(list===CITIZENS){const ids=CITIZENS_FOR_STYLE[styleOf(id)]??CITIZENS_FOR_STYLE.default;
+  const want=ids[(h>>>4)%ids.length];archetype=CITIZENS.find(c=>c.id===want)??archetype;}
+ const moves=MOVES[archetype.id],m4=hash4(id);
  const height=Math.min(APPEARANCE.maxHeight,Math.max(APPEARANCE.minHeight,
   baseHeight*archetype.height*(1+spread(h,8)*APPEARANCE.heightJitter)));
  const width=archetype.width*(1+spread(g,8)*APPEARANCE.widthJitter);
@@ -218,7 +258,11 @@ export function appearanceOf(id,baseHeight=1.76){
   bottom:pick(g,16,archetype.bottoms??BOTTOMS),
   shoe:pick(g,24,SHOES),
   topPattern:pattern.top,bottomPattern:pattern.bottom,
-  height,width
+  height,width,
+  // Look 2c: their idle and their walk (null for the RUN 6.8 bodies, which have one of each).
+  idle:moves?moves.idles[m4%moves.idles.length]:null,
+  walk:moves?moves.walks[(m4>>>8)%moves.walks.length]:null,
+  hurry:moves?.hurry??null
  };
 }
 

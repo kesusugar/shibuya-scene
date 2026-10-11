@@ -21,8 +21,10 @@ import {createHash} from 'node:crypto';
 import {join} from 'node:path';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {MeshoptSimplifier} from 'three/examples/jsm/libs/meshopt_simplifier.module.js';
-import {AnimationMixer,Matrix4,Vector3} from 'three';
-import {citizenClips} from '../src/life/citizen-pose.mjs';
+import {AnimationMixer,Matrix4,Vector3,DataUtils} from 'three';
+import {citizenClips,DERIVED} from '../src/life/citizen-pose.mjs';
+import {movesClips,decodeBase64} from '../src/life/citizen-moves.mjs';
+import {MOVES} from '../src/life/appearance.mjs';
 globalThis.ProgressEvent??=class{constructor(type,init={}){Object.assign(this,{type},init);}};
 
 const SRC=process.argv[2];
@@ -56,14 +58,26 @@ for(const [name,i] of boneIndex)if(/^(index|middle|pinky|ring|thumb)_/.test(name
 const Q=await load('public/data/character/citizen.glb');
 let qPelvis=0;{let rig=null;Q.scene.traverse(o=>{if(!rig&&o.userData?.rig==='m')rig=o;});rig.updateMatrixWorld(true);
  rig.traverse(o=>{if(o.isBone&&o.name==='pelvis')qPelvis=o.getWorldPosition(new Vector3()).y;});}
-function boneAtlas(scene,mesh,female){
+// Look 2c: the motion-captured idles and walks (scripts/mocap/style-clips.mjs). Each citizen
+// bakes only its own (MOVES), after the shared table's rows: idles at 10 fps, walks at 24.
+const MOVE_CLIPS=movesClips(JSON.parse(readFileSync('public/data/character/citizen-moves.json','utf8')),decodeBase64);
+function clipTable(id){
+ const m=MOVES[id],names=m?[...new Set([...m.idles,...m.walks,m.hurry].filter(Boolean))]:[];
+ const table=hq.clips.map(c=>({...c}));let row=hq.atlas.rows;
+ for(const n of names){const c=MOVE_CLIPS.find(x=>x.name===(DERIVED[n]?.from??n));if(!c)throw new Error(`no move ${n}`);
+  const fps=c.userData.kind==='idle'?10:24,frames=Math.max(2,Math.round(c.duration*fps));
+  table.push({name:n,source:n,row,frames,duration:+c.duration.toFixed(4),fps,loop:true,...(c.userData.stride?{stride:c.userData.stride}:{})});row+=frames;}
+ return {table,rows:row};
+}
+function boneAtlas(scene,mesh,female,id){
  const bones=hq.boneNames.map(n=>mesh.skeleton.bones.find(b=>b.name===n));
  const inverse=hq.boneNames.map(n=>mesh.skeleton.boneInverses[mesh.skeleton.bones.findIndex(b=>b.name===n)]);
  scene.updateMatrixWorld(true);
  const pelvisY=bones[hq.boneNames.indexOf('pelvis')].getWorldPosition(new Vector3()).y;
- const clips=citizenClips(Q.animations,scene,{pelvisScale:pelvisY/qPelvis,female});
- const out=new Float32Array(hq.atlas.rows*hq.bones*12),m=new Matrix4(),mixer=new AnimationMixer(scene);
- for(const spec of hq.clips){
+ const clips=citizenClips([...Q.animations,...MOVE_CLIPS],scene,{pelvisScale:pelvisY/qPelvis,female});
+ const {table,rows}=clipTable(id);
+ const out=new Float32Array(rows*hq.bones*12),m=new Matrix4(),mixer=new AnimationMixer(scene);
+ for(const spec of table){
   const clip=clips.find(c=>c.name===spec.source);if(!clip)throw new Error(`no clip ${spec.source}`);
   const action=mixer.clipAction(clip);action.reset().play();
   for(let f=0;f<spec.frames;f++){
@@ -78,7 +92,9 @@ function boneAtlas(scene,mesh,female){
  mixer.uncacheRoot(scene);
  // The rest pose, for the near pool: each bone's local position in the atlas order.
  const rest=new Float32Array(bones.length*3);bones.forEach((b,i)=>rest.set([b.position.x,b.position.y,b.position.z],i*3));
- return {atlas:out,rest,pelvisScale:pelvisY/qPelvis};
+ // Strides on this citizen's legs (citizenClips scaled them).
+ for(const spec of table)if(spec.stride){const c=clips.find(x=>x.name===spec.source);spec.stride=+(c.userData.stride??spec.stride).toFixed(4);}
+ return {atlas:out,rest,pelvisScale:pelvisY/qPelvis,table,rows};
 }
 
 mkdirSync(`${OUT}/citizens`,{recursive:true});
@@ -123,13 +139,17 @@ for(const c of SPEC.citizens){
   const typed=n>65535?new Uint32Array(idx):new Uint16Array(idx);
   levels.push({name:lod.name,vertices:n,triangles:idx.length/3,indexType:typed.BYTES_PER_ELEMENT===4?'u32':'u16',...entries,index:push(typed)});
  }
- const baked=boneAtlas(gltf.scene,mesh,c.macro.gender<.5);
- const boneAtlasEntry=push(baked.atlas),restEntry=push(baked.rest);
+ const baked=boneAtlas(gltf.scene,mesh,c.macro.gender<.5,c.id);
+ // Half floats: a bone matrix entry is a rotation (|v| <= 1) or a translation of a metre or two,
+ // and 16 bits keep those to about a millimetre -- for half the download.
+ const half=new Uint16Array(baked.atlas.length);for(let i=0;i<half.length;i++)half[i]=DataUtils.toHalfFloat(baked.atlas[i]);
+ const boneAtlasEntry=push(half),restEntry=push(baked.rest);
  copyFileSync(join(SRC,c.id+'.webp'),`${OUT}/citizens/${c.id}.webp`);
  archetypes.push({id:c.id,texture:`/data/crowd/citizens/${c.id}.webp`,means:meta.means,macro:c.macro,outfit:c.outfit,shoes:c.shoes,hair:c.hair,
   skin:c.skin,naturalHeight:+(bbox[4]-bbox[1]).toFixed(4),scaleToGame:hq.archetypes[0].scaleToGame,meshHeight:+(bbox[4]-bbox[1]).toFixed(4),
   female:c.macro.gender<.5,pelvisScale:+baked.pelvisScale.toFixed(4),
-  boneAtlas:{...boneAtlasEntry,rows:hq.atlas.rows,width:hq.atlas.width,height:hq.atlas.height,format:'RGBA32F'},rest:restEntry,
+  boneAtlas:{...boneAtlasEntry,rows:baked.rows,width:hq.atlas.width,height:baked.rows,format:'RGBA16F'},rest:restEntry,
+  clips:baked.table,
   regions:Object.fromEntries(['skin','top','bottom','hair','shoe','keep'].map((k,i)=>[k,regions[i]])),levels});
  console.log(`  ${c.id.padEnd(13)} ${n}v  `+levels.map(l=>`${l.name} ${l.triangles}t`).join('  ')+`  h ${(bbox[4]-bbox[1]).toFixed(3)}`);
 }

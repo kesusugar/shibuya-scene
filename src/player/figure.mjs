@@ -151,15 +151,16 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
  const instance=asset.instance(palette,variant),root=instance.root;
  const mixer=new AnimationMixer(root),actions={};
  for(const clip of instance.clips){
-  const action=mixer.clipAction(clip),loop=looping.has(clip.name);
+  const action=mixer.clipAction(clip),loop=looping.has(clip.name)||/^(Idle|Walk)\./.test(clip.name);
   action.setLoop(loop?LoopRepeat:LoopOnce,loop?Infinity:1);
   action.clampWhenFinished=!loop;actions[clip.name]=action;
  }
+ const baseIdle=actions.Idle;
  const head=root.getObjectByName(asset.bones.head);
  // RUN 11.2: what a punch leans on. Present on the humanoid rig, absent on the baked figure,
  // which simply goes without the emphasis.
  const spine=root.getObjectByName('spine_02');
- const gait=createGaitBlend(buildGaitSpace(instance.clips,asset.gait,asset.gaitDetail));
+ const gait=createGaitBlend(buildGaitSpace(instance.clips,instance.gait??asset.gait,instance.gaitDetail??asset.gaitDetail));
  const facing=createBodyFacing(0);
  // Foot IK only exists where the skeleton names the joints it needs; the offline-baked figure
  // has eleven bones and none of these names, so it simply goes without.
@@ -478,6 +479,17 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
   setHeight(metres){instance.setHeight(metres);},
   /** RUN 6.8: how broad this body is. A no-op on an asset that has one build. */
   setBuild(width){instance.setBuild?.(width);},
+  /**
+   * Look 2c: this person's own idle (a motion-captured `Idle.<style>` the body carries), or the
+   * body's default with none. Swaps the action the gait blend drives as Idle, keeping its weight.
+   */
+  setMoves({idle=null}={}){
+   const want=(idle&&actions[idle])||baseIdle;
+   if(!want||actions.Idle===want)return;
+   const prev=actions.Idle;
+   want.play();want.paused=prev.paused;want.setEffectiveWeight(prev.getEffectiveWeight());
+   prev.setEffectiveWeight(0);actions.Idle=want;
+  },
   /** What the body is mostly doing, for diagnostics and for the capture harness. */
   get action(){return overlay??dominant;},
   hide(){root.visible=false;},

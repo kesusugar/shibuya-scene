@@ -14,8 +14,9 @@ import {buildCrowd} from '../src/life/render.mjs';
 import {L0_CAP_DEFAULT} from '../src/life/hq-layer.mjs';
 import {withL3} from '../src/life/hq-crowd.mjs';
 import {LOOK} from '../src/environment/look-profile.mjs';
-import {PEOPLE} from '../src/life/appearance.mjs';
+import {PEOPLE,CITIZENS} from '../src/life/appearance.mjs';
 import {loadCitizenPack,citizenTextures,CITIZEN_PACK} from '../src/life/citizen-pack.mjs';
+import {movesClips,decodeBase64} from '../src/life/citizen-moves.mjs';
 import {createHQRequester} from '../src/app/hq-request.mjs';
 import {buildPedestrianNetworkAsync} from '../src/life/network.mjs';
 import {buildTraffic} from '../src/traffic/render.mjs';
@@ -424,6 +425,22 @@ export default function Home(){
  // rollback). Its prebuilt pack is fetched once, AFTER the city is standing, and every crowd the
  // life module builds gets its own layer: a single page-wide "already asked" flag left a rebuilt
  // crowd on the legacy bodies for good. See src/app/hq-request.mjs.
+ // Look 2c: the player on the citizens' own pipeline once both the humanoid rig and the citizens
+ // pack are in -- the young man in a T-shirt and jeans, 1.76 m, keeping the red top that makes
+ // the player findable in the crowd. ?people=classic keeps the RUN 6.8 body.
+ const PLAYER_CITIZEN='student-m';
+ const upgradePlayerCitizen=()=>{
+  const asset=deferredCharacter?.asset,pack=CITIZEN_PACK.current;
+  if(!asset||!pack||!playerFigure||playerFigure.citizen||PEOPLE.mode==='classic')return;
+  const variant=CITIZENS.find((c:any)=>c.id===PLAYER_CITIZEN);if(!variant)return;
+  const next=createPlayerFigure(asset,undefined,{ctx:playerCtx??lifeEntry.hooks.current?.network?.ctx??null,variant,weapons:PLAYER_WEAPONS});
+  (next as any).citizen=true;next.setHeight?.(1.76);
+  groups.dynamic.add(next.root);
+  if(player)next.update(player.state,0);
+  playerFigure.dispose();playerFigure=next;
+  if(config.qa&&(window as any).__SHIBUYA_FIGURE__)(window as any).__SHIBUYA_FIGURE__=next;
+  if(!playerMode||driving)next.hide();
+ };
  const loadClassicHQ=(base:string):Promise<[any,any]>=>Promise.all([
    fetch(`${base}data/crowd/hq-crowd.json`).then(r=>{if(!r.ok)throw new Error(`hq manifest ${r.status}`);return r.json();}),
    fetch(`${base}data/crowd/hq-crowd.bin`).then(r=>{if(!r.ok)throw new Error(`hq pack ${r.status}`);return r.arrayBuffer();}),
@@ -436,7 +453,10 @@ export default function Home(){
   // Look 2: the MakeHuman citizens (src/life/citizen-pack.mjs) unless ?people=classic; if their
   // pack cannot be had, the RUN 6.8 bodies below, and the appearance falls back with them.
   load:():Promise<[any,any]>=>{const base=(import.meta as any).env?.BASE_URL??'/';
-   if(PEOPLE.mode!=='classic')return (loadCitizenPack(base) as Promise<[any,any]>).then(([manifest,bin])=>{CITIZEN_PACK.current={manifest,bin,texture:citizenTexture,skins:new Map()};return [manifest,bin] as [any,any];}).catch((e:any)=>{console.warn('[HQ crowd] citizens unavailable, classic people',String(e));PEOPLE.mode='classic';return loadClassicHQ(base);});
+   if(PEOPLE.mode!=='classic')return (loadCitizenPack(base) as Promise<[any,any]>).then(async([manifest,bin])=>{
+    // Look 2c: the motion-captured idles and walks, for the near pool (the crowd has them baked).
+    const moves=await fetch(`${base}data/character/citizen-moves.json`).then(r=>r.ok?r.json():null).catch(()=>null);
+    CITIZEN_PACK.current={manifest,bin,texture:citizenTexture,skins:new Map(),moves:movesClips(moves,decodeBase64)};upgradePlayerCitizen();return [manifest,bin] as [any,any];}).catch((e:any)=>{console.warn('[HQ crowd] citizens unavailable, classic people',String(e));PEOPLE.mode='classic';return loadClassicHQ(base);});
    return loadClassicHQ(base);},
   current:()=>lifeEntry.hooks.current,
   // A pedestrian the reaction system has thrown must stop being walked along a route by the
@@ -496,7 +516,7 @@ export default function Home(){
   if(!deferredCharacter){deferredCharacter=createDeferredCharacter();(window as any).__SHIBUYA_CHARACTER__=deferredCharacter;}
   deferredCharacter.request();
   deferredCharacter.onReady((asset:any)=>{
-   if(!playerFigure||playerFigure.asset===asset)return;
+   if(!playerFigure||playerFigure.asset===asset){upgradePlayerCitizen();return;}
    // The same asset the player just took also upgrades the nearest NPCs, so the crowd beside
    // the player stops being a different order of fidelity from the player.
    lifeEntry.hooks.current?.setNearCharacterAsset?.(asset);
@@ -506,6 +526,7 @@ export default function Home(){
    playerFigure.dispose();playerFigure=next;
    if(config.qa&&(window as any).__SHIBUYA_FIGURE__)(window as any).__SHIBUYA_FIGURE__=next;
    if(!playerMode||driving)next.hide();
+   upgradePlayerCitizen();
   });
   if(!vehicleVisual){vehicleVisual=createVehicleVisual();groups.dynamic.add(vehicleVisual.root);
    // The player's car was never registered, which is why it alone had no headlights at dusk and

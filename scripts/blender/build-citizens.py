@@ -253,13 +253,16 @@ def build(c,Q):
  means={}
  NAMES=['skin','top','bottom','hair','shoe']
  CUT=('hair','eyebrows','eyelashes','eyes')
- samples={k:[] for k in range(5)};tiles_of={k:set() for k in range(5)}
+ samples={k:[] for k in range(5)};tiles_of={k:set() for k in range(5)};tris={k:[] for k in range(5)}
  for n,role in parts:
   me=n.data;reg=me.color_attributes['region'].data;uv=me.uv_layers.active.data
   for poly in me.polygons:
    for li in poly.loop_indices:
     r=int(round(reg[li].color[0]*8))
     if r<5:samples[r].append(uv[li].uv[:]);tiles_of[r].add(role)
+   li=list(poly.loop_indices);r=int(round(reg[li[0]].color[0]*8))
+   if r<5:
+    for k in range(1,len(li)-1):tris[r].append([uv[li[0]].uv[:],uv[li[k]].uv[:],uv[li[k+1]].uv[:]])
  mask={}
  for r,uvs in samples.items():
   if not uvs:continue
@@ -273,6 +276,32 @@ def build(c,Q):
    if role in CUT:continue
    x,y,s=TILES[role];px=int(s*ATLAS);y0=int(y*ATLAS);x0=int(x*ATLAS);tile=atlas[y0:y0+px,x0:x0+px]
    d=np.linalg.norm(tile[...,:3]-dom,axis=-1);t=np.clip((d-.16)/(.38-.16),0,1);m=1-t*t*(3-2*t)
+   # A plain garment (spec "plain": ["top"]): whatever is printed on it -- MakeHuman's logo on
+   # its T-shirts -- is painted out in the garment's own colour, only inside this region's own
+   # triangles (a shirt and its jeans share one texture).
+   if NAMES[r] in c.get('plain',[]):
+    cover=np.zeros(m.shape,bool)
+    for tri in tris[r]:
+     t=(np.array(tri)-[x,y])/s*px
+     if t[:,0].min()<0 or t[:,1].min()<0 or t[:,0].max()>px or t[:,1].max()>px:continue
+     j0,j1=int(t[:,0].min()),int(np.ceil(t[:,0].max()));i0,i1=int(t[:,1].min()),int(np.ceil(t[:,1].max()))
+     jj,ii=np.meshgrid(np.arange(j0,j1+1),np.arange(i0,i1+1));P=np.stack([jj+.5,ii+.5],-1)
+     a0,b0,c0=t;v0=c0-a0;v1=b0-a0;v2=P-a0
+     d00=v0@v0;d01=v0@v1;d11=v1@v1;d20=v2@v0;d21=v2@v1;den=d00*d11-d01*d01
+     if abs(den)<1e-9:continue
+     u=(d11*d20-d01*d21)/den;v=(d00*d21-d01*d20)/den;inside=(u>=-.02)&(v>=-.02)&(u+v<=1.04)
+     cover[np.clip(ii[inside],0,px-1),np.clip(jj[inside],0,px-1)]=True
+    # Inside the garment: its own colour, keeping only the shading (luminance relative to the
+    # dominant colour, held within 0.93-1.03; anything further off is print and takes the plain colour).
+    lum=lambda a:a[...,0]*.2126+a[...,1]*.7152+a[...,2]*.0722
+    ratio=lum(tile[...,:3])/max(1e-4,float(lum(dom)));k=np.where((ratio<.88)|(ratio>1.12),1.0,np.clip(ratio,.93,1.03))
+    # Broad folds only: the shading blurred over a few texels inside the garment, so the edges of
+    # what was printed do not survive as a ghost.
+    def box(a,rad):
+     c=np.cumsum(np.cumsum(np.pad(a,((rad+1,rad),(rad+1,rad))),0),1)
+     return c[2*rad+1:,2*rad+1:]-c[:-2*rad-1,2*rad+1:]-c[2*rad+1:,:-2*rad-1]+c[:-2*rad-1,:-2*rad-1]
+    w=cover.astype(np.float64);k=(box(k*w,6)/np.maximum(box(w,6),1e-6)).astype(np.float32)
+    tile[cover,:3]=(dom[None,:]*k[cover][:,None]);m=np.maximum(m,cover.astype(np.float32))
    key=role;mask[key]=np.maximum(mask.get(key,np.zeros_like(m)),m)
  for role,m in mask.items():
   x,y,s=TILES[role];px=int(s*ATLAS);y0=int(y*ATLAS);x0=int(x*ATLAS);atlas[y0:y0+px,x0:x0+px,3]=m

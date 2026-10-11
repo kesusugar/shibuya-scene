@@ -96,7 +96,9 @@ if(process.env.PLAYER!=='0'){
 await js(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='プレイヤー')?.click()`);
 await until('window.__SHIBUYA_PLAYER__&&window.__SHIBUYA_LIFE__',120,'player mode');
 await run(1);
-for(const phase of ['day','dusk']){await js(`window.__SHIBUYA_QA__.phase('${phase}')`);await run(.5);await pair(`${phase}-player`,{yaw:3.14,dist:5,height:2.1,target:1.5});}
+// PLAYER_VIEW=yaw,dist,height,target for a closer look at the player.
+const pv=(process.env.PLAYER_VIEW??'3.14,5,2.1,1.5').split(',').map(Number);
+for(const phase of (process.env.PLAYER_PHASES??'day,dusk').split(',')){await js(`window.__SHIBUYA_QA__.phase('${phase}')`);await run(.5);await pair(`${phase}-player`,{yaw:pv[0],dist:pv[1],height:pv[2],target:pv[3]});}
 }
 writeFileSync(join(out,'look.json'),JSON.stringify({query,steps},null,1)+'\n');
 ws.close();chrome.kill();process.exit(0);

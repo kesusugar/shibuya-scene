@@ -17,12 +17,13 @@
 //
 // Replacing the body later means producing this shape. It does not mean editing the player
 // controller, the camera, combat, or the crowd.
-import {Color,MeshStandardMaterial,ObjectLoader,Vector2,Vector4,BufferGeometry,BufferAttribute,SkinnedMesh,Skeleton} from 'three';
+import {Color,MeshStandardMaterial,ObjectLoader,Vector2,Vector3,Vector4,BufferGeometry,BufferAttribute,SkinnedMesh,Skeleton} from 'three';
 import {clone} from 'three/addons/utils/SkeletonUtils.js';
 import {GARMENT_PATTERN_GLSL,GARMENT_UNPACK_GLSL,packGarment} from '../life/garment-pattern.mjs';
 import {CITIZEN_FRAGMENT,CITIZEN_ROUGHNESS,citizenSkin} from '../life/hq-crowd.mjs';
 import {CITIZEN_PACK} from '../life/citizen-pack.mjs';
 import {citizenClips} from '../life/citizen-pose.mjs';
+import {MOVES} from '../life/appearance.mjs';
 
 /**
  * A citizen's five surfaces. Everything on the humanoid body is a mix of these. The patterns
@@ -163,11 +164,17 @@ function restCitizen(pack,citizen,byName){
 /** A citizen's clips: the crowd's, as rotations, with the natural stance; once per archetype. */
 const nearClipCache=new Map();
 function nearClips(pack,citizen,node,animations){
- let c=nearClipCache.get(citizen.id);if(c)return c;
+ const key=`${citizen.id}|${pack.moves?.length??0}`;let c=nearClipCache.get(key);if(c)return c;
  const rig=clone(node),byName=new Map();rig.traverse(o=>{if(o.isBone)byName.set(o.name,o);});
  restCitizen(pack,citizen,byName);rig.updateMatrixWorld(true);
- c=citizenClips(animations,rig,{pelvisScale:citizen.pelvisScale??1,female:!!citizen.female});
- nearClipCache.set(citizen.id,c);return c;
+ const all=citizenClips([...animations,...(pack.moves??[])],rig,{pelvisScale:citizen.pelvisScale??1,female:!!citizen.female});
+ // Look 2c: up close a citizen walks in their kind's usual walk (the gait blend is built per
+ // body, so the walk is fixed per archetype); their own idle is set per person (figure.setMoves).
+ const walkName=MOVES[citizen.id]?.walks?.[0],walk=walkName&&all.find(x=>x.name===walkName);
+ let clips=all,walkStride=null;
+ if(walk){const w=walk.clone();w.name='Walk';w.userData={...walk.userData};walkStride=w.userData.stride;clips=all.map(x=>x.name==='Walk'?w:x);}
+ c={clips,walkStride,walkDuration:walk?.duration??null};
+ nearClipCache.set(key,c);return c;
 }
 /** The near body of a citizen archetype: its L0 mesh from the citizens pack, shared by every instance. */
 const nearGeometry=new Map();
@@ -243,7 +250,7 @@ function asset({id,template,clips,gait,gaitDetail,height,scale,dress,bones,legBo
     }
     skeletons.add(shared);
    }
-   return {root,clips:chosen?.clips??clips,
+   return {root,clips:chosen?.clips??clips,gait:chosen?.gait??null,gaitDetail:chosen?.gaitDetail??null,
     recolour:clothes.recolour,
     /**
      * How broad this body is, as a factor on the two horizontal axes.
@@ -357,7 +364,12 @@ export function humanoidCitizen(gltf,report,base=WARDROBE){
    let node=null;root.traverse(o=>{if(!node&&o.userData?.rig===rigs[0].id)node=o;});
    if(!node)throw new Error(`character asset has no rig ${rigs[0].id}`);
    return {node,scale:rigs[0].scaleToGame,height:citizen.rest?citizen.naturalHeight:rigs[0].height,
-    clips:citizen.rest?nearClips(pack,citizen,node,gltf.animations):clips,
+    ...(()=>{if(!citizen.rest)return {clips};const n=nearClips(pack,citizen,node,gltf.animations);
+     if(!n.walkStride)return {clips:n.clips};
+     // The gait ladder for this body: its walk's own speed, stride and left contact at 0.
+     const speed=n.walkStride/n.walkDuration;
+     return {clips:n.clips,gait:{...report.gait,Walk:speed},gaitDetail:{...(report.gaitDetail??{}),clips:{...(report.gaitDetail?.clips??{}),
+      Walk:{stride:n.walkStride,leftContact:0,duty:.4,contactOffset:.5}}}};})(),
     prepare(copy){
      let body=null;const shed=[];
      copy.traverse(o=>{if(o.isSkinnedMesh){if(!body)body=o;shed.push(o);}});
@@ -377,6 +389,11 @@ export function humanoidCitizen(gltf,report,base=WARDROBE){
      body.parent.add(mesh);
      if(citizen.rest){mesh.updateMatrixWorld(true);mesh.bind(skeleton);}else mesh.bind(skeleton,body.bindMatrix.clone());
      for(const o of shed){o.removeFromParent();if(o.skeleton!==skeleton)o.skeleton?.dispose?.();}
+     // Look 2c: where the RUN 6.8 body's carrying bones were, so a holster or a scabbard placed
+     // for that body (weapon-mesh.mjs CARRY) can be moved onto this one's hip and spine.
+     node.updateMatrixWorld(true);const ref={};
+     for(const n of ['pelvis','spine_03']){let b=null;node.traverse(o=>{if(!b&&o.isBone&&o.name===n)b=o;});if(b)ref[n]=node.worldToLocal(b.getWorldPosition(new Vector3())).toArray();}
+     copy.userData.carryRef=ref;
      copy.userData.citizen={id:citizen.id,skin:pack.skins.get(citizen.id)??pack.skins.set(citizen.id,citizenSkin(citizen,pack.texture)).get(citizen.id)};
     }};
   }

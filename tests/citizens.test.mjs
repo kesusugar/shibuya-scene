@@ -144,3 +144,50 @@ test('citizens: their own shoulders, and an upright stance at the lights',async(
   assert.ok(span['office-f']<span['salaryman']*.92,'a woman as broad as a man');
  }finally{CITIZEN_PACK.current=null;}
 });
+
+// Look 2c: everyday idles and walks from 100STYLE (CC BY 4.0), per person.
+import {MOVES} from '../src/life/appearance.mjs';
+import {movesClips,decodeBase64,HURRY} from '../src/life/citizen-moves.mjs';
+test('moves: each citizen carries its own idles and walks, baked after the shared rows',()=>{
+ const moves=JSON.parse(readFileSync('public/data/character/citizen-moves.json','utf8'));
+ assert.match(moves.license,/CC BY 4\.0/);
+ for(const a of manifest.archetypes){
+  const want=[...new Set([...MOVES[a.id].idles,...MOVES[a.id].walks,MOVES[a.id].hurry].filter(Boolean))];
+  for(const n of want){const c=a.clips.find(x=>x.name===n);assert.ok(c,`${a.id} lacks ${n}`);
+   assert.ok(c.row+c.frames<=a.boneAtlas.height,`${a.id} ${n} runs off its atlas`);
+   if(n.startsWith('Walk.'))assert.ok(c.stride>.5&&c.stride<2.2,`${a.id} ${n} stride ${c.stride}`);}
+  // The shared rows are where they were, so every reaction clip still plays.
+  assert.deepEqual(a.clips.slice(0,manifest.clips.length).map(c=>[c.name,c.row]),manifest.clips.map(c=>[c.name,c.row]));
+ }
+});
+test('moves: standing they play their own idle, walking their own walk, and the hurried walk when fast',()=>{
+ const crowd=createHQCrowd(manifest,bin,{capacity:8,lods:['L0']});
+ const a=manifest.archetypes.find(x=>x.id==='salaryman'),lane=crowd.laneFor(a.id,'L0');
+ const row=n=>a.clips.find(c=>c.name===n).row,playing=i=>crowd.state.clipRow[i];
+ const look={...appearanceOf(3),archetype:CITIZENS[0],idle:'Idle.phone',walk:'Walk.neutral',hurry:'Walk.rushed'};
+ const i=crowd.spawn(77,look,lane,{speed:0});crowd.update(1/60,{time:0});
+ assert.equal(playing(i),row('Idle.phone'));
+ for(let k=0;k<40;k++)crowd.pace(i,1.2/30,0,1/30);
+ assert.equal(playing(i),row('Walk.neutral'));
+ for(let k=0;k<60;k++)crowd.pace(i,(HURRY+.4)/30,0,1/30);
+ assert.equal(playing(i),row('Walk.rushed'));
+});
+test('moves: looking at a phone, the hands are in front of the chest and the head is down',async()=>{
+ const report=JSON.parse(readFileSync('public/data/character/citizen.json','utf8'));
+ const bytes=readFileSync('public/data/character/citizen.glb');
+ const gltf=await new Promise((res,rej)=>new GLTFLoader().parse(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),'',res,rej));
+ const asset=humanoidCitizen(gltf,report);
+ const moves=movesClips(JSON.parse(readFileSync('public/data/character/citizen-moves.json','utf8')),decodeBase64);
+ CITIZEN_PACK.current={manifest,bin,texture:null,skins:new Map(),moves};
+ try{
+  const inst=asset.instance(undefined,CITIZENS.find(c=>c.id==='student-m')),root=inst.root;root.scale.set(1,1,1);
+  const P=n=>{let f=null;root.traverse(o=>{if(!f&&o.isBone&&o.name===n)f=o;});return f.getWorldPosition(new Vector3());};
+  const mixer=new AnimationMixer(root),clip=inst.clips.find(c=>c.name==='Idle.text');assert.ok(clip,'no Idle.text up close');
+  mixer.clipAction(clip).play();mixer.setTime(.3*clip.duration);root.updateMatrixWorld(true);
+  const neck=P('neck_01'),pelvis=P('pelvis');
+  for(const s of ['l','r']){const h=P('hand_'+s);
+   assert.ok(h.z-neck.z>.12,`hand_${s} not in front (${(h.z-neck.z).toFixed(2)})`);
+   assert.ok(h.y<neck.y&&h.y>pelvis.y,`hand_${s} at ${h.y.toFixed(2)}`);}
+  inst.dispose();
+ }finally{CITIZEN_PACK.current=null;}
+});

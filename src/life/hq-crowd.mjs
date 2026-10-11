@@ -19,9 +19,10 @@
  * two thousand people.
  */
 import {InstancedMesh,InstancedBufferAttribute,BufferGeometry,BufferAttribute,
-        MeshStandardMaterial,DataTexture,RGBAFormat,FloatType,NearestFilter,
+        MeshStandardMaterial,DataTexture,RGBAFormat,FloatType,HalfFloatType,NearestFilter,
         Object3D,Group,DynamicDrawUsage,Frustum,Matrix4,Sphere,Vector3} from 'three';
 import {PACE,paceStep,cadence} from './pace.mjs';
+import {styledClip,HURRY} from './citizen-moves.mjs';
 import {GARMENT_PATTERN_GLSL,GARMENT_UNPACK_GLSL,packGarment} from './garment-pattern.mjs';
 
 /** The states a citizen can be in. Index into CLIP_FOR, and what the CPU writes. */
@@ -337,7 +338,10 @@ let WHITE=null;
 /** The texture and tint means of a textured archetype. `texture(archetype)` loads its atlas. */
 /** A bone atlas (RGBA32F, three texels per bone, a row per baked frame) from the pack. */
 function boneTexture(bin,entry){
- const t=new DataTexture(new Float32Array(bin,entry.byteOffset,entry.count),entry.width,entry.height,RGBAFormat,FloatType);
+ // Look 2c: a citizen's own atlas is half floats (RGBA16F), the shared one full.
+ const half=entry.format==='RGBA16F';
+ const t=new DataTexture(half?new Uint16Array(bin,entry.byteOffset,entry.count):new Float32Array(bin,entry.byteOffset,entry.count),
+  entry.width,entry.height,RGBAFormat,half?HalfFloatType:FloatType);
  t.minFilter=t.magFilter=NearestFilter;t.generateMipmaps=false;t.needsUpdate=true;
  return t;
 }
@@ -416,7 +420,8 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
   const skin=textured?(skins.get(archetype.id)??skins.set(archetype.id,citizenSkin(archetype,texture)).get(archetype.id)):null;
   // Look 2b: a citizen on its own skeleton has its own bone atlas (same rows, same clips).
   const own=archetype.boneAtlas?(atlases.get(archetype.id)??atlases.set(archetype.id,boneTexture(bin,archetype.boneAtlas)).get(archetype.id)):atlas;
-  installCrowdSkinning(material,own,atlasSize,{interpolate,neck:[low+tall*HEAD_TURN.neck,tall*HEAD_TURN.band],skin,headBones});
+  const ownSize=archetype.boneAtlas?{x:archetype.boneAtlas.width,y:archetype.boneAtlas.height}:atlasSize;
+  installCrowdSkinning(material,own,ownSize,{interpolate,neck:[low+tall*HEAD_TURN.neck,tall*HEAD_TURN.band],skin,headBones});
   const mesh=new InstancedMesh(geometry,material,capacity);
   mesh.instanceMatrix.setUsage(DynamicDrawUsage);
   mesh.frustumCulled=false;mesh.count=0;
@@ -489,8 +494,14 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
   prevPhase:new Float32Array(max),prevRate:new Float32Array(max),
   blendStart:new Float32Array(max),blendDur:new Float32Array(max),
   look:new Float32Array(max),       // extra turn towards what a standing citizen noticed, rad
-  head:new Float32Array(max)        // RUN 12.4: head yaw on top of it, rad
+  head:new Float32Array(max),       // RUN 12.4: head yaw on top of it, rad
+  // Look 2c: this person's own idle, walk and hurried walk (indices into styleNames; 0: none),
+  // and hysteresis on hurrying.
+  idleStyle:new Int16Array(max),walkStyle:new Int16Array(max),hurryStyle:new Int16Array(max),
+  hurrying:new Uint8Array(max)
  };
+ const styleNames=[null],styleIndex=new Map();
+ const styleOf=name=>{if(!name)return 0;let k=styleIndex.get(name);if(k===undefined){k=styleNames.length;styleNames.push(name);styleIndex.set(name,k);}return k;};
  // The palette also lives here, not only in the instanced attribute, because moving a citizen
  // between LOD lanes has to rewrite it into the new lane and an attribute is write-mostly.
  const palette=new Float32Array(max*4),shoe=new Float32Array(max);
@@ -504,7 +515,20 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
 
  const clipOf=name=>clips.get(name)??clips.values().next().value;
  const byRow=new Map(manifest.clips.map(c=>[c.row,c]));
- const clipOfRow=row=>byRow.get(row)??null;
+ // Look 2c: a citizen archetype with its own clip table (its own atlas rows: the shared clips,
+ // then its motion-captured idles and walks).
+ const tables=new Map(manifest.archetypes.filter(a=>a.clips).map(a=>[a.id,{byName:new Map(a.clips.map(c=>[c.name,c])),byRow:new Map(a.clips.map(c=>[c.row,c]))}]));
+ const tableOf=i=>tables.get(lanes[state.lane[i]].archetype.id);
+ const clipOfRow=(row,i)=>(i!==undefined?tableOf(i)?.byRow.get(row):null)??byRow.get(row)??null;
+ /** The clip citizen `i` plays now: the crowd's choice, in this person's own style. */
+ function pick(i){
+  const base=nameOf(i),table=tableOf(i);
+  if(!table)return {name:base,clip:clipOf(base)};
+  const styled=styledClip(base,{idle:styleNames[state.idleStyle[i]],walk:styleNames[state.walkStyle[i]],
+   hurry:state.hurrying[i]?styleNames[state.hurryStyle[i]]:null},HURRY+1);
+  const clip=table.byName.get(styled)??table.byName.get(base)??clipOf(base);
+  return {name:clip.name,clip};
+ }
  const nameOf=i=>clipFor(state.behaviour[i],state.waiting[i],!!state.moving[i],!!state.fast[i]);
  /** Cycles per second citizen `i` should play `clip` at. */
  function rateOf(i,name,clip){
@@ -512,6 +536,8 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
   // Walk and Run: stride / measured ground speed, so the planted foot stays planted. Everything
   // else plays at its authored rate with the citizen's own small offset, so a row of idlers is
   // not a chorus line.
+  // A motion-captured walk carries its own stride (Look 2c), on this citizen's legs.
+  if(clip.stride){const natural=1/clip.duration;return Math.max(natural*PACE.minScale,Math.min(natural*PACE.maxScale,state.pace[i]/clip.stride));}
   return cadence(name,clip.duration,state.pace[i])??state.rate[i]/Math.max(.01,clip.duration);
  }
 
@@ -529,11 +555,11 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
 
  function writeClip(i,{continuous=true}={}){
   const lane=lanes[state.lane[i]],slot=state.slot[i];
-  const name=nameOf(i),clip=clipOf(name);
+  const {name,clip}=pick(i);
   const old=state.clipRow[i],changed=continuous&&old>=0&&old!==clip.row;
   if(changed){
    // Keep the outgoing clip playing exactly as it was, and fade it out from now.
-   state.prevRow[i]=old;state.prevFrames[i]=clipOfRow(old)?.frames??clip.frames;
+   state.prevRow[i]=old;state.prevFrames[i]=clipOfRow(old,i)?.frames??clip.frames;
    state.prevPhase[i]=state.phase[i];state.prevRate[i]=state.animRate[i];
    state.blendStart[i]=clock;state.blendDur[i]=blendFor(old,name);
   }else if(!continuous){state.blendDur[i]=0;}
@@ -616,6 +642,8 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
    state.pace[i]=Math.max(0,speed);state.paceX[i]=Math.sin(heading)*state.pace[i];state.paceZ[i]=Math.cos(heading)*state.pace[i];state.moving[i]=speed>PACE.stopBelow?1:0;
    state.fast[i]=speed>PACE.strollTop?1:0;state.animRate[i]=0;
    state.clipRow[i]=-1;state.blendDur[i]=0;state.look[i]=0;state.head[i]=0;state.prevRow[i]=0;state.prevFrames[i]=1;state.prevPhase[i]=0;state.prevRate[i]=0;
+   state.idleStyle[i]=styleOf(look.idle);state.walkStyle[i]=styleOf(look.walk);state.hurryStyle[i]=styleOf(look.hurry);
+   state.hurrying[i]=state.hurryStyle[i]&&speed>HURRY?1:0;
    state.behaviour[i]=STATE.NORMAL;state.timer[i]=0;
    state.noticed[i]=0;state.ready[i]=0;state.attention[i]=0;state.calmed[i]=0;state.waiting[i]=0;state.light[i]=0;state.after[i]=0;
    state.health[i]=100;state.fallen[i]=0;
@@ -764,8 +792,10 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
    const moving=got.moving?1:0;
    const b=state.behaviour[i],top=b===STATE.NORMAL||b===STATE.LOOK?PACE.strollTop:PACE.walkTop;
    const fast=state.fast[i]?(got.speed>top-.25?1:0):(got.speed>top+.25?1:0);
-   if(moving!==state.moving[i]||fast!==state.fast[i]){state.moving[i]=moving;state.fast[i]=fast;writeClip(i);return true;}
-   const name=nameOf(i),clip=clipOf(name);
+   // Look 2c: hurrying, with hysteresis, for a walker who has a hurried walk.
+   const hurrying=state.hurryStyle[i]?(state.hurrying[i]?(got.speed>HURRY-.12?1:0):(got.speed>HURRY+.12?1:0)):0;
+   if(moving!==state.moving[i]||fast!==state.fast[i]||hurrying!==state.hurrying[i]){state.moving[i]=moving;state.fast[i]=fast;state.hurrying[i]=hurrying;writeClip(i);return true;}
+   const {name,clip}=pick(i);
    if(clip.loop===false||state.behaviour[i]===STATE.DOWNED)return false;
    const rate=rateOf(i,name,clip),old=state.animRate[i];
    if(Math.abs(rate-old)>Math.max(.02,old*.05)){writeClip(i);return true;}
