@@ -265,8 +265,8 @@ styles of locomotion at 60 fps, each style with an idle and walks.
 
 **On the citizens.** In `src/life/citizen-pose.mjs`:
 
-- **Grounding only.** The captured clips are grounded on each body's own legs, never
-  straightened.
+- **Grounding.** The captured clips are grounded on each body's own legs. (Look 2d adds a spine
+  correction under every clip; see below.)
 - **Head level.** Walks whose performer looked at the floor have the head raised, judged by where
   the face points, to at most 6° down.
 - **`Idle.text`.** This is the standing idle with both hands brought to a phone at the lower chest
@@ -292,7 +292,8 @@ styles of locomotion at 60 fps, each style with an idle and walks.
 **Near pool and player.**
 
 - **Near pool.** It walks each kind's usual walk, with a gait ladder built from that walk's stride
-  and contact. Its idle is set per person (`figure.setMoves`).
+  and contact. Its idle is set per person (`figure.setMoves`). Look 2d sets the walk per person
+  too.
 - **Player.** Once the citizens pack is in, the player is rebuilt as the young man in a T-shirt
   and jeans, at 1.76 m, keeping the red top.
   - The T-shirt's printed MakeHuman logo is painted out at build time (spec `plain`).
@@ -300,21 +301,119 @@ styles of locomotion at 60 fps, each style with an idle and walks.
     (`weapon-mesh.mjs`, `carryRef`).
   - `?people=classic` keeps the RUN 6.8 player.
 
+### Look 2d: posture, hands, and the phone
+
+The owner's feedback on the 2c lineups: 「姿勢がのけぞりすぎる、そんなに曲線だっけ？あと手も隠れすぎ」
+(leaning back too much, is the spine that curved? and the hands are hidden too much).
+
+**The cause of the lean, measured.** The crowd skeleton's rest spine is sway-backed: the lumbar
+segment (pelvis to spine_02) is tipped 16° forward and the chest (spine_03 to the neck) 13° back.
+Every clip, captured or not, is a turn from that rest, so every citizen inherited it: belly out,
+chest back, the shoulders 7 cm behind the hips.
+
+**The fix: `SPINE_REST` (`src/life/citizen-pose.mjs`).**
+
+- Each spine bone's rest is turned, in the side plane only, so its segment leans as a person's
+  does. In degrees forward of vertical:
+
+  | Bone     | Target |
+  |----------|-------:|
+  | pelvis   | 2      |
+  | spine_01 | 2      |
+  | spine_02 | 3      |
+  | spine_03 | 3      |
+  | neck_01  | 6      |
+
+- A clip's local rotation q becomes C_parent⁻¹ · q · C_bone, so each spine bone's world turn is
+  the clip's own on the corrected rest.
+- Bones hanging off the spine keep the world turn the clip gives them: the legs, the clavicles
+  and the head. The first version let the arms turn with the chest, and a hanging arm swings
+  back as the chest tips forward, so the hands went 13 cm behind the hips and the head dropped.
+- Measured standing (Idle.stand) on all ten citizens:
+  - shoulders 1–4 cm behind the hips, which was 7 cm;
+  - the neck 2–4 cm ahead of the hips;
+  - the hands 3 cm in front of the hips, which was 13 cm behind on the first try.
+
+**Hands that show.**
+
+- **`clearArms`.** Hanging or swinging arms are kept clear of the hip, sideways. The performer is
+  slimmer than most citizens, so a hand that swung past his hip went into theirs, and a heavy
+  man's or a woman's hips swallowed both hands.
+  - `clearFor({female, weight})`: 11 cm out from the hip joint, plus 14 cm per unit of
+    `macro.weight` above 0.4, plus 2.5 cm for a woman.
+  - Only the side-to-side angle changes; the forward and back swing of a walk is untouched.
+  - Not applied to poses that put the hands somewhere on purpose: pockets, behind the back,
+    folded, akimbo, a phone.
+- **Fewer hidden hands.** `MOVES` was rebalanced. Pockets, hands behind the back and arms folded
+  are now about one person in eight (12.4% of 2,000 people; the test bound is 20%).
+  More people stand plainly, text, or call.
+- **No `Idle.old`.** The performer's "old" idle is bent nearly double at the waist, arms reaching
+  forward. Capping its lean still left a caricature, so the older citizens now stand, shift their
+  weight, call, or (one in four) hold their hands behind the back.
+
+**The phone (`Idle.text`, `Walk.text`).**
+
+- **Crowd.** The crowd's skinning folds the finger bones into the hand, so a fingertip bone
+  (`index_04_leaf_r`, `PHONE_BONE`) is free.
+  - Each texting citizen gets a 24-vertex phone (7 × 14.5 × 0.9 cm), skinned to that bone, at L0
+    and L1. That is 12 more triangles.
+  - The bake gives the bone the right hand's matrix in the clips that hold a phone, and a zero
+    matrix in every other clip. The phone collapses to a point there and draws nothing, so the
+    shader needs no visibility logic.
+  - The phone sits between the hands, a little past the wrists, with the screen tipped up towards
+    the face. It is placed from the texting pose and carried by the hand.
+  - Regions 6 (case) and 7 (screen, slightly emissive) are shaded in `CITIZEN_FRAGMENT`.
+- **Near pool.** That bone slot is a bone of its own on the right hand. Its scale is 1 while a
+  phone clip leads the mix and 0 otherwise, and it hides during a reaction, hands-up or the
+  onlookers' filming phone.
+- **`Walk.text`.** This is the neutral walk with the texting idle's arms, neck and head layered on
+  (their local rotations, sampled at the same time), so the phone rides with the chest. It is in
+  `MOVES` for students, office workers and most others.
+- **IK target.** The texting target moved closer, from 26 cm to 22 cm forward and from 20 cm to
+  17 cm down from the chest point, so the elbows bend rather than reaching.
+
+**Near pool: each person's own walk.** `figure.setMoves({idle, walk})` swaps the Walk action to
+the person's walk and rebuilds the gait ladder on its stride. The left contact is at phase 0,
+because every 100STYLE walk starts there. `near-characters` passes `look.walk`.
+
+**Evidence.** The lineups are in `evidence/look/people/posture/`:
+
+- `idle-front`, `idle-side`: Idle.stand on a salaryman, the heavy man, an office worker and an
+  older citizen.
+- `text-front`, `text-side`: Idle.text with the phone.
+- `walk-side`: the usual walks; `walk-text`: Walk.text on three citizens, beside the older walk.
+- `crossing-day`, `street-day`: in game, the GTA look by day; the crowd stays at 1,978.
+
+**Known.** Short MakeHuman hair is thin at the crown. With more people looking down at a phone, a
+camera above and behind them now shows the scalp through it.
+
+**Tests (`tests/citizens.test.mjs`).**
+
+- **Posture.** For every citizen, in Idle.stand and their usual walk:
+  - the shoulders over the hips;
+  - the neck a little ahead;
+  - the hands at least 9 cm out from the hip;
+  - standing, the hands not behind the hip.
+- **Few hidden hands.**
+- **The phone baked only where it is held.** The phone bone's matrix equals the hand's in
+  Idle.text and Walk.text and is zero in Idle.stand and Walk.
+- **Near pool.** Per-person walks rebuild the stride, and the phone shows only for a texter.
+
 ### Cost
 
 - **Triangles.** L0 is 16k triangles against the old body's 13.9k, and only the nearest 48 are
   drawn at L0. L1 to L3 match the old budgets.
 - **Draw calls.** Ten archetypes × four levels is 40 lanes against 16, so up to 24 more draw calls.
   Each draws only its visible slots.
-- **Download.** The pack is 9 MiB plus ten atlases of 170–320 KB each.
+- **Download.** The pack is 16.7 MiB with each citizen's own half-float bone atlas (Look 2c), plus
+  ten texture atlases of 170–320 KB each.
 
 ## Next
 
 - **Look 2, next.**
-  - A phone prop in hand for `Idle.text`.
-  - A texting walk.
   - More citizens: kids, tourists, uniforms and hats.
-  - The player as a citizen.
+  - Women's walks for texting (`Walk.text` is layered on the neutral walk for everyone).
+  - A denser crown for short hair, or a hair-coloured scalp under it, for heads seen from above.
   - A normal-map atlas for the near pool.
 - **Look 3: grime, decals and material detail.** It also includes a Blender pilot building.
   Brand signs stay as they are.
