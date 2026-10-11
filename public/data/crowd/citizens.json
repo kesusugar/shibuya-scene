@@ -1619,15 +1619,15 @@
    "pelvisScale": 0.9828,
    "boneAtlas": {
     "byteOffset": 8559716,
-    "byteLength": 611520,
-    "count": 305760,
-    "rows": 392,
+    "byteLength": 577200,
+    "count": 288600,
+    "rows": 370,
     "width": 195,
-    "height": 392,
+    "height": 370,
     "format": "RGBA16F"
    },
    "rest": {
-    "byteOffset": 9171236,
+    "byteOffset": 9136916,
     "byteLength": 780,
     "count": 195
    },
@@ -1687,27 +1687,27 @@
      "loop": false
     },
     {
-     "name": "Idle.old",
-     "source": "Idle.old",
-     "row": 203,
-     "frames": 53,
-     "duration": 5.3001,
-     "fps": 10,
-     "loop": true
-    },
-    {
      "name": "Idle.stand",
      "source": "Idle.stand",
-     "row": 256,
+     "row": 203,
      "frames": 51,
      "duration": 5.1001,
      "fps": 10,
      "loop": true
     },
     {
+     "name": "Idle.restless",
+     "source": "Idle.restless",
+     "row": 254,
+     "frames": 31,
+     "duration": 3.1001,
+     "fps": 10,
+     "loop": true
+    },
+    {
      "name": "Idle.behind",
      "source": "Idle.behind",
-     "row": 307,
+     "row": 285,
      "frames": 50,
      "duration": 5.0001,
      "fps": 10,
@@ -1716,7 +1716,7 @@
     {
      "name": "Walk.elder",
      "source": "Walk.elder",
-     "row": 357,
+     "row": 335,
      "frames": 35,
      "duration": 1.4584,
      "fps": 24,
@@ -1929,7 +1929,7 @@
    "female": true,
    "pelvisScale": 0.8917,
    "boneAtlas": {
-    "byteOffset": 10100160,
+    "byteOffset": 10065864,
     "byteLength": 882960,
     "count": 441480,
     "rows": 566,
@@ -1938,7 +1938,7 @@
     "format": "RGBA16F"
    },
    "rest": {
-    "byteOffset": 10983120,
+    "byteOffset": 10948824,
     "byteLength": 780,
     "count": 195
    },
@@ -2091,32 +2091,32 @@
      "triangles": 16011,
      "indexType": "u16",
      "position": {
-      "byteOffset": 9172016,
+      "byteOffset": 9137696,
       "byteLength": 235236,
       "count": 58809
      },
      "normal": {
-      "byteOffset": 9407252,
+      "byteOffset": 9372932,
       "byteLength": 235236,
       "count": 58809
      },
      "skinIndex": {
-      "byteOffset": 9642488,
+      "byteOffset": 9608168,
       "byteLength": 78412,
       "count": 78412
      },
      "skinWeight": {
-      "byteOffset": 9720900,
+      "byteOffset": 9686580,
       "byteLength": 78412,
       "count": 78412
      },
      "crowdUV": {
-      "byteOffset": 9799312,
+      "byteOffset": 9764992,
       "byteLength": 156824,
       "count": 78412
      },
      "index": {
-      "byteOffset": 9956136,
+      "byteOffset": 9921816,
       "byteLength": 96066,
       "count": 48033
      }
@@ -2124,37 +2124,37 @@
     {
      "name": "L1",
      "vertices": 19603,
-     "triangles": 5212,
+     "triangles": 5211,
      "indexType": "u16",
      "position": {
-      "byteOffset": 9172016,
+      "byteOffset": 9137696,
       "byteLength": 235236,
       "count": 58809
      },
      "normal": {
-      "byteOffset": 9407252,
+      "byteOffset": 9372932,
       "byteLength": 235236,
       "count": 58809
      },
      "skinIndex": {
-      "byteOffset": 9642488,
+      "byteOffset": 9608168,
       "byteLength": 78412,
       "count": 78412
      },
      "skinWeight": {
-      "byteOffset": 9720900,
+      "byteOffset": 9686580,
       "byteLength": 78412,
       "count": 78412
      },
      "crowdUV": {
-      "byteOffset": 9799312,
+      "byteOffset": 9764992,
       "byteLength": 156824,
       "count": 78412
      },
      "index": {
-      "byteOffset": 10052204,
-      "byteLength": 31272,
-      "count": 15636
+      "byteOffset": 10017884,
+      "byteLength": 31266,
+      "count": 15633
      }
     },
     {
@@ -2163,32 +2163,32 @@
      "triangles": 1899,
      "indexType": "u16",
      "position": {
-      "byteOffset": 9172016,
+      "byteOffset": 9137696,
       "byteLength": 235236,
       "count": 58809
      },
      "normal": {
-      "byteOffset": 9407252,
+      "byteOffset": 9372932,
       "byteLength": 235236,
       "count": 58809
      },
      "skinIndex": {
-      "byteOffset": 9642488,
+      "byteOffset": 9608168,
       "byteLength": 78412,
       "count": 78412
      },
      "skinWeight": {
-      "byteOffset": 9720900,
+      "byteOffset": 9686580,
       "byteLength": 78412,
       "count": 78412
      },
      "crowdUV": {
-      "byteOffset": 9799312,
+      "byteOffset": 9764992,
       "byteLength": 156824,
       "count": 78412
      },
      "index": {
-      "byteOffset": 10083476,
+      "byteOffset": 10049152,
       "byteLength": 11394,
       "count": 5697
      }
@@ -2196,37 +2196,37 @@
     {
      "name": "L3",
      "vertices": 19603,
-     "triangles": 881,
+     "triangles": 886,
      "indexType": "u16",
      "position": {
-      "byteOffset": 9172016,
+      "byteOffset": 9137696,
       "byteLength": 235236,
       "count": 58809
      },
      "normal": {
-      "byteOffset": 9407252,
+      "byteOffset": 9372932,
       "byteLength": 235236,
       "count": 58809
      },
      "skinIndex": {
-      "byteOffset": 9642488,
+      "byteOffset": 9608168,
       "byteLength": 78412,
       "count": 78412
      },
      "skinWeight": {
-      "byteOffset": 9720900,
+      "byteOffset": 9686580,
       "byteLength": 78412,
       "count": 78412
      },
      "crowdUV": {
-      "byteOffset": 9799312,
+      "byteOffset": 9764992,
       "byteLength": 156824,
       "count": 78412
      },
      "index": {
-      "byteOffset": 10094872,
-      "byteLength": 5286,
-      "count": 2643
+      "byteOffset": 10060548,
+      "byteLength": 5316,
+      "count": 2658
      }
     }
    ]
@@ -2279,7 +2279,7 @@
    "female": true,
    "pelvisScale": 0.8476,
    "boneAtlas": {
-    "byteOffset": 12041076,
+    "byteOffset": 12006804,
     "byteLength": 809640,
     "count": 404820,
     "rows": 519,
@@ -2288,7 +2288,7 @@
     "format": "RGBA16F"
    },
    "rest": {
-    "byteOffset": 12850716,
+    "byteOffset": 12816444,
     "byteLength": 780,
     "count": 195
    },
@@ -2441,32 +2441,32 @@
      "triangles": 16012,
      "indexType": "u16",
      "position": {
-      "byteOffset": 10983900,
+      "byteOffset": 10949604,
       "byteLength": 274368,
       "count": 68592
      },
      "normal": {
-      "byteOffset": 11258268,
+      "byteOffset": 11223972,
       "byteLength": 274368,
       "count": 68592
      },
      "skinIndex": {
-      "byteOffset": 11532636,
+      "byteOffset": 11498340,
       "byteLength": 91456,
       "count": 91456
      },
      "skinWeight": {
-      "byteOffset": 11624092,
+      "byteOffset": 11589796,
       "byteLength": 91456,
       "count": 91456
      },
      "crowdUV": {
-      "byteOffset": 11715548,
+      "byteOffset": 11681252,
       "byteLength": 182912,
       "count": 91456
      },
      "index": {
-      "byteOffset": 11898460,
+      "byteOffset": 11864164,
       "byteLength": 96072,
       "count": 48036
      }
@@ -2477,32 +2477,32 @@
      "triangles": 5212,
      "indexType": "u16",
      "position": {
-      "byteOffset": 10983900,
+      "byteOffset": 10949604,
       "byteLength": 274368,
       "count": 68592
      },
      "normal": {
-      "byteOffset": 11258268,
+      "byteOffset": 11223972,
       "byteLength": 274368,
       "count": 68592
      },
      "skinIndex": {
-      "byteOffset": 11532636,
+      "byteOffset": 11498340,
       "byteLength": 91456,
       "count": 91456
      },
      "skinWeight": {
-      "byteOffset": 11624092,
+      "byteOffset": 11589796,
       "byteLength": 91456,
       "count": 91456
      },
      "crowdUV": {
-      "byteOffset": 11715548,
+      "byteOffset": 11681252,
       "byteLength": 182912,
       "count": 91456
      },
      "index": {
-      "byteOffset": 11994532,
+      "byteOffset": 11960236,
       "byteLength": 31272,
       "count": 15636
      }
@@ -2513,32 +2513,32 @@
      "triangles": 1899,
      "indexType": "u16",
      "position": {
-      "byteOffset": 10983900,
+      "byteOffset": 10949604,
       "byteLength": 274368,
       "count": 68592
      },
      "normal": {
-      "byteOffset": 11258268,
+      "byteOffset": 11223972,
       "byteLength": 274368,
       "count": 68592
      },
      "skinIndex": {
-      "byteOffset": 11532636,
+      "byteOffset": 11498340,
       "byteLength": 91456,
       "count": 91456
      },
      "skinWeight": {
-      "byteOffset": 11624092,
+      "byteOffset": 11589796,
       "byteLength": 91456,
       "count": 91456
      },
      "crowdUV": {
-      "byteOffset": 11715548,
+      "byteOffset": 11681252,
       "byteLength": 182912,
       "count": 91456
      },
      "index": {
-      "byteOffset": 12025804,
+      "byteOffset": 11991508,
       "byteLength": 11394,
       "count": 5697
      }
@@ -2546,37 +2546,37 @@
     {
      "name": "L3",
      "vertices": 22864,
-     "triangles": 646,
+     "triangles": 650,
      "indexType": "u16",
      "position": {
-      "byteOffset": 10983900,
+      "byteOffset": 10949604,
       "byteLength": 274368,
       "count": 68592
      },
      "normal": {
-      "byteOffset": 11258268,
+      "byteOffset": 11223972,
       "byteLength": 274368,
       "count": 68592
      },
      "skinIndex": {
-      "byteOffset": 11532636,
+      "byteOffset": 11498340,
       "byteLength": 91456,
       "count": 91456
      },
      "skinWeight": {
-      "byteOffset": 11624092,
+      "byteOffset": 11589796,
       "byteLength": 91456,
       "count": 91456
      },
      "crowdUV": {
-      "byteOffset": 11715548,
+      "byteOffset": 11681252,
       "byteLength": 182912,
       "count": 91456
      },
      "index": {
-      "byteOffset": 12037200,
-      "byteLength": 3876,
-      "count": 1938
+      "byteOffset": 12002904,
+      "byteLength": 3900,
+      "count": 1950
      }
     }
    ]
@@ -2629,7 +2629,7 @@
    "female": true,
    "pelvisScale": 0.9102,
    "boneAtlas": {
-    "byteOffset": 13642064,
+    "byteOffset": 13607816,
     "byteLength": 833040,
     "count": 416520,
     "rows": 534,
@@ -2638,7 +2638,7 @@
     "format": "RGBA16F"
    },
    "rest": {
-    "byteOffset": 14475104,
+    "byteOffset": 14440856,
     "byteLength": 780,
     "count": 195
    },
@@ -2781,32 +2781,32 @@
      "triangles": 16011,
      "indexType": "u16",
      "position": {
-      "byteOffset": 12851496,
+      "byteOffset": 12817224,
       "byteLength": 194388,
       "count": 48597
      },
      "normal": {
-      "byteOffset": 13045884,
+      "byteOffset": 13011612,
       "byteLength": 194388,
       "count": 48597
      },
      "skinIndex": {
-      "byteOffset": 13240272,
+      "byteOffset": 13206000,
       "byteLength": 64796,
       "count": 64796
      },
      "skinWeight": {
-      "byteOffset": 13305068,
+      "byteOffset": 13270796,
       "byteLength": 64796,
       "count": 64796
      },
      "crowdUV": {
-      "byteOffset": 13369864,
+      "byteOffset": 13335592,
       "byteLength": 129592,
       "count": 64796
      },
      "index": {
-      "byteOffset": 13499456,
+      "byteOffset": 13465184,
       "byteLength": 96066,
       "count": 48033
      }
@@ -2817,32 +2817,32 @@
      "triangles": 5211,
      "indexType": "u16",
      "position": {
-      "byteOffset": 12851496,
+      "byteOffset": 12817224,
       "byteLength": 194388,
       "count": 48597
      },
      "normal": {
-      "byteOffset": 13045884,
+      "byteOffset": 13011612,
       "byteLength": 194388,
       "count": 48597
      },
      "skinIndex": {
-      "byteOffset": 13240272,
+      "byteOffset": 13206000,
       "byteLength": 64796,
       "count": 64796
      },
      "skinWeight": {
-      "byteOffset": 13305068,
+      "byteOffset": 13270796,
       "byteLength": 64796,
       "count": 64796
      },
      "crowdUV": {
-      "byteOffset": 13369864,
+      "byteOffset": 13335592,
       "byteLength": 129592,
       "count": 64796
      },
      "index": {
-      "byteOffset": 13595524,
+      "byteOffset": 13561252,
       "byteLength": 31266,
       "count": 15633
      }
@@ -2850,73 +2850,73 @@
     {
      "name": "L2",
      "vertices": 16199,
-     "triangles": 1900,
+     "triangles": 1899,
      "indexType": "u16",
      "position": {
-      "byteOffset": 12851496,
+      "byteOffset": 12817224,
       "byteLength": 194388,
       "count": 48597
      },
      "normal": {
-      "byteOffset": 13045884,
+      "byteOffset": 13011612,
       "byteLength": 194388,
       "count": 48597
      },
      "skinIndex": {
-      "byteOffset": 13240272,
+      "byteOffset": 13206000,
       "byteLength": 64796,
       "count": 64796
      },
      "skinWeight": {
-      "byteOffset": 13305068,
+      "byteOffset": 13270796,
       "byteLength": 64796,
       "count": 64796
      },
      "crowdUV": {
-      "byteOffset": 13369864,
+      "byteOffset": 13335592,
       "byteLength": 129592,
       "count": 64796
      },
      "index": {
-      "byteOffset": 13626792,
-      "byteLength": 11400,
-      "count": 5700
+      "byteOffset": 13592520,
+      "byteLength": 11394,
+      "count": 5697
      }
     },
     {
      "name": "L3",
      "vertices": 16199,
-     "triangles": 645,
+     "triangles": 650,
      "indexType": "u16",
      "position": {
-      "byteOffset": 12851496,
+      "byteOffset": 12817224,
       "byteLength": 194388,
       "count": 48597
      },
      "normal": {
-      "byteOffset": 13045884,
+      "byteOffset": 13011612,
       "byteLength": 194388,
       "count": 48597
      },
      "skinIndex": {
-      "byteOffset": 13240272,
+      "byteOffset": 13206000,
       "byteLength": 64796,
       "count": 64796
      },
      "skinWeight": {
-      "byteOffset": 13305068,
+      "byteOffset": 13270796,
       "byteLength": 64796,
       "count": 64796
      },
      "crowdUV": {
-      "byteOffset": 13369864,
+      "byteOffset": 13335592,
       "byteLength": 129592,
       "count": 64796
      },
      "index": {
-      "byteOffset": 13638192,
-      "byteLength": 3870,
-      "count": 1935
+      "byteOffset": 13603916,
+      "byteLength": 3900,
+      "count": 1950
      }
     }
    ]
@@ -2974,7 +2974,7 @@
    "female": true,
    "pelvisScale": 0.9809,
    "boneAtlas": {
-    "byteOffset": 15397908,
+    "byteOffset": 15363660,
     "byteLength": 739440,
     "count": 369720,
     "rows": 474,
@@ -2983,7 +2983,7 @@
     "format": "RGBA16F"
    },
    "rest": {
-    "byteOffset": 16137348,
+    "byteOffset": 16103100,
     "byteLength": 780,
     "count": 195
    },
@@ -3126,32 +3126,32 @@
      "triangles": 16012,
      "indexType": "u16",
      "position": {
-      "byteOffset": 14475884,
+      "byteOffset": 14441636,
       "byteLength": 233820,
       "count": 58455
      },
      "normal": {
-      "byteOffset": 14709704,
+      "byteOffset": 14675456,
       "byteLength": 233820,
       "count": 58455
      },
      "skinIndex": {
-      "byteOffset": 14943524,
+      "byteOffset": 14909276,
       "byteLength": 77940,
       "count": 77940
      },
      "skinWeight": {
-      "byteOffset": 15021464,
+      "byteOffset": 14987216,
       "byteLength": 77940,
       "count": 77940
      },
      "crowdUV": {
-      "byteOffset": 15099404,
+      "byteOffset": 15065156,
       "byteLength": 155880,
       "count": 77940
      },
      "index": {
-      "byteOffset": 15255284,
+      "byteOffset": 15221036,
       "byteLength": 96072,
       "count": 48036
      }
@@ -3162,32 +3162,32 @@
      "triangles": 5212,
      "indexType": "u16",
      "position": {
-      "byteOffset": 14475884,
+      "byteOffset": 14441636,
       "byteLength": 233820,
       "count": 58455
      },
      "normal": {
-      "byteOffset": 14709704,
+      "byteOffset": 14675456,
       "byteLength": 233820,
       "count": 58455
      },
      "skinIndex": {
-      "byteOffset": 14943524,
+      "byteOffset": 14909276,
       "byteLength": 77940,
       "count": 77940
      },
      "skinWeight": {
-      "byteOffset": 15021464,
+      "byteOffset": 14987216,
       "byteLength": 77940,
       "count": 77940
      },
      "crowdUV": {
-      "byteOffset": 15099404,
+      "byteOffset": 15065156,
       "byteLength": 155880,
       "count": 77940
      },
      "index": {
-      "byteOffset": 15351356,
+      "byteOffset": 15317108,
       "byteLength": 31272,
       "count": 15636
      }
@@ -3198,32 +3198,32 @@
      "triangles": 1899,
      "indexType": "u16",
      "position": {
-      "byteOffset": 14475884,
+      "byteOffset": 14441636,
       "byteLength": 233820,
       "count": 58455
      },
      "normal": {
-      "byteOffset": 14709704,
+      "byteOffset": 14675456,
       "byteLength": 233820,
       "count": 58455
      },
      "skinIndex": {
-      "byteOffset": 14943524,
+      "byteOffset": 14909276,
       "byteLength": 77940,
       "count": 77940
      },
      "skinWeight": {
-      "byteOffset": 15021464,
+      "byteOffset": 14987216,
       "byteLength": 77940,
       "count": 77940
      },
      "crowdUV": {
-      "byteOffset": 15099404,
+      "byteOffset": 15065156,
       "byteLength": 155880,
       "count": 77940
      },
      "index": {
-      "byteOffset": 15382628,
+      "byteOffset": 15348380,
       "byteLength": 11394,
       "count": 5697
      }
@@ -3234,32 +3234,32 @@
      "triangles": 647,
      "indexType": "u16",
      "position": {
-      "byteOffset": 14475884,
+      "byteOffset": 14441636,
       "byteLength": 233820,
       "count": 58455
      },
      "normal": {
-      "byteOffset": 14709704,
+      "byteOffset": 14675456,
       "byteLength": 233820,
       "count": 58455
      },
      "skinIndex": {
-      "byteOffset": 14943524,
+      "byteOffset": 14909276,
       "byteLength": 77940,
       "count": 77940
      },
      "skinWeight": {
-      "byteOffset": 15021464,
+      "byteOffset": 14987216,
       "byteLength": 77940,
       "count": 77940
      },
      "crowdUV": {
-      "byteOffset": 15099404,
+      "byteOffset": 15065156,
       "byteLength": 155880,
       "count": 77940
      },
      "index": {
-      "byteOffset": 15394024,
+      "byteOffset": 15359776,
       "byteLength": 3882,
       "count": 1941
      }
@@ -3314,16 +3314,16 @@
    "female": true,
    "pelvisScale": 0.9126,
    "boneAtlas": {
-    "byteOffset": 16914420,
-    "byteLength": 611520,
-    "count": 305760,
-    "rows": 392,
+    "byteOffset": 16880172,
+    "byteLength": 656760,
+    "count": 328380,
+    "rows": 421,
     "width": 195,
-    "height": 392,
+    "height": 421,
     "format": "RGBA16F"
    },
    "rest": {
-    "byteOffset": 17525940,
+    "byteOffset": 17536932,
     "byteLength": 780,
     "count": 195
    },
@@ -3383,27 +3383,27 @@
      "loop": false
     },
     {
-     "name": "Idle.old",
-     "source": "Idle.old",
-     "row": 203,
-     "frames": 53,
-     "duration": 5.3001,
-     "fps": 10,
-     "loop": true
-    },
-    {
      "name": "Idle.stand",
      "source": "Idle.stand",
-     "row": 256,
+     "row": 203,
      "frames": 51,
      "duration": 5.1001,
      "fps": 10,
      "loop": true
     },
     {
+     "name": "Idle.phone",
+     "source": "Idle.phone",
+     "row": 254,
+     "frames": 82,
+     "duration": 8.2002,
+     "fps": 10,
+     "loop": true
+    },
+    {
      "name": "Idle.behind",
      "source": "Idle.behind",
-     "row": 307,
+     "row": 336,
      "frames": 50,
      "duration": 5.0001,
      "fps": 10,
@@ -3412,7 +3412,7 @@
     {
      "name": "Walk.elder",
      "source": "Walk.elder",
-     "row": 357,
+     "row": 386,
      "frames": 35,
      "duration": 1.4584,
      "fps": 24,
@@ -3437,32 +3437,32 @@
      "triangles": 15999,
      "indexType": "u16",
      "position": {
-      "byteOffset": 16138128,
+      "byteOffset": 16103880,
       "byteLength": 190140,
       "count": 47535
      },
      "normal": {
-      "byteOffset": 16328268,
+      "byteOffset": 16294020,
       "byteLength": 190140,
       "count": 47535
      },
      "skinIndex": {
-      "byteOffset": 16518408,
+      "byteOffset": 16484160,
       "byteLength": 63380,
       "count": 63380
      },
      "skinWeight": {
-      "byteOffset": 16581788,
+      "byteOffset": 16547540,
       "byteLength": 63380,
       "count": 63380
      },
      "crowdUV": {
-      "byteOffset": 16645168,
+      "byteOffset": 16610920,
       "byteLength": 126760,
       "count": 63380
      },
      "index": {
-      "byteOffset": 16771928,
+      "byteOffset": 16737680,
       "byteLength": 95994,
       "count": 47997
      }
@@ -3473,32 +3473,32 @@
      "triangles": 5199,
      "indexType": "u16",
      "position": {
-      "byteOffset": 16138128,
+      "byteOffset": 16103880,
       "byteLength": 190140,
       "count": 47535
      },
      "normal": {
-      "byteOffset": 16328268,
+      "byteOffset": 16294020,
       "byteLength": 190140,
       "count": 47535
      },
      "skinIndex": {
-      "byteOffset": 16518408,
+      "byteOffset": 16484160,
       "byteLength": 63380,
       "count": 63380
      },
      "skinWeight": {
-      "byteOffset": 16581788,
+      "byteOffset": 16547540,
       "byteLength": 63380,
       "count": 63380
      },
      "crowdUV": {
-      "byteOffset": 16645168,
+      "byteOffset": 16610920,
       "byteLength": 126760,
       "count": 63380
      },
      "index": {
-      "byteOffset": 16867924,
+      "byteOffset": 16833676,
       "byteLength": 31194,
       "count": 15597
      }
@@ -3509,32 +3509,32 @@
      "triangles": 1900,
      "indexType": "u16",
      "position": {
-      "byteOffset": 16138128,
+      "byteOffset": 16103880,
       "byteLength": 190140,
       "count": 47535
      },
      "normal": {
-      "byteOffset": 16328268,
+      "byteOffset": 16294020,
       "byteLength": 190140,
       "count": 47535
      },
      "skinIndex": {
-      "byteOffset": 16518408,
+      "byteOffset": 16484160,
       "byteLength": 63380,
       "count": 63380
      },
      "skinWeight": {
-      "byteOffset": 16581788,
+      "byteOffset": 16547540,
       "byteLength": 63380,
       "count": 63380
      },
      "crowdUV": {
-      "byteOffset": 16645168,
+      "byteOffset": 16610920,
       "byteLength": 126760,
       "count": 63380
      },
      "index": {
-      "byteOffset": 16899120,
+      "byteOffset": 16864872,
       "byteLength": 11400,
       "count": 5700
      }
@@ -3545,32 +3545,32 @@
      "triangles": 650,
      "indexType": "u16",
      "position": {
-      "byteOffset": 16138128,
+      "byteOffset": 16103880,
       "byteLength": 190140,
       "count": 47535
      },
      "normal": {
-      "byteOffset": 16328268,
+      "byteOffset": 16294020,
       "byteLength": 190140,
       "count": 47535
      },
      "skinIndex": {
-      "byteOffset": 16518408,
+      "byteOffset": 16484160,
       "byteLength": 63380,
       "count": 63380
      },
      "skinWeight": {
-      "byteOffset": 16581788,
+      "byteOffset": 16547540,
       "byteLength": 63380,
       "count": 63380
      },
      "crowdUV": {
-      "byteOffset": 16645168,
+      "byteOffset": 16610920,
       "byteLength": 126760,
       "count": 63380
      },
      "index": {
-      "byteOffset": 16910520,
+      "byteOffset": 16876272,
       "byteLength": 3900,
       "count": 1950
      }
@@ -3580,7 +3580,7 @@
  ],
  "output": {
   "file": "public/data/crowd/citizens.bin",
-  "bytes": 17526720,
-  "sha256": "045ee9d1664e645b4a573acd981ddf9f8b22d3dbfd18c361dfb224688b388499"
+  "bytes": 17537712,
+  "sha256": "66d014715e83e8d6d65d987f1486ba2b5d70ef62d872f54e2595afb142440a34"
  }
 }
