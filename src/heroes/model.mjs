@@ -26,10 +26,24 @@ export function footprintUnion(h){return union(...h.masses.map(m=>multi(m.polygo
 // commercial heroes -- plant rooms, rooftop pavilions, sign frames -- which give them their skyline.
 // QFRONT's crown is modelled by its builder; the towers keep their own crowns.
 export const ROOF_STEP_HEROES=Object.freeze(['magnet','seibuA','seibuB','109']);
+// Roof steps are clipped to the OSM footprint, so two steps can share a footprint corner and leave
+// almost-coincident edges from it (Seibu B, 44 m and 46 m: both run from [-24.55,-160.37] eastwards
+// a few millimetres apart). polygon-clipping's sweep fails on that sliver ("Unable to complete
+// output ring") and, because one hero's failure aborted the whole hero module, every landmark
+// vanished. Each step is therefore snapped to a 1 cm grid, which closes such slivers, and then
+// proven against the steps already accepted by the same union the renderer runs; a step that
+// still fails is skipped and recorded in h.roofStepReport rather than taking the building down.
+export const ROOF_STEP_SNAP=.01;
+const snap=p=>{const q=v=>Math.round(v/ROOF_STEP_SNAP)*ROOF_STEP_SNAP,ring=r=>r.map(v=>[q(v[0]),q(v[1])]).filter((v,i,a)=>i===0||v[0]!==a[i-1][0]||v[1]!==a[i-1][1]);const outer=ring(p.outer);if(outer.length>1&&outer[0][0]===outer.at(-1)[0]&&outer[0][1]===outer.at(-1)[1])outer.pop();return {outer,holes:(p.holes??[]).map(ring)};};
 export function plateauRoofMasses(h){
- if(!ROOF_STEP_HEROES.includes(h.key))return 0;let added=0;
+ const report=h.roofStepReport={accepted:0,snapped:0,skipped:[]};
+ if(!ROOF_STEP_HEROES.includes(h.key))return 0;const accepted=[];
  for(const s of h.plateauRoofSteps){if(!(s.y>h.height+.8&&s.y<h.height+20))continue;let pieces;
-  try{pieces=polygons(intersection(multi({outer:s.poly,holes:[]}),multi(h.footprint)));}catch{continue;}
-  for(const p of pieces){const v=validateFootprint(p);if(!v.ok||v.area<6)continue;h.masses.push({label:'plateau-roof',polygon:v.polygon,bottom:C.base+h.height,top:C.base+s.y,material:'concreteLight'});added++;}}
- return added;
+  try{pieces=polygons(intersection(multi({outer:s.poly,holes:[]}),multi(h.footprint)));}catch(e){report.skipped.push({y:s.y,reason:'footprint-clip-failed',error:String(e.message??e).slice(0,120)});continue;}
+  for(const p of pieces){const raw=validateFootprint(p);if(!raw.ok||raw.area<6)continue;
+   const v=validateFootprint(snap(raw.polygon));if(!v.ok||v.area<6){report.skipped.push({y:s.y,reason:'invalid-after-snap',area:raw.area});continue;}
+   try{union(...[...accepted,v.polygon].map(multi));}catch(e){report.skipped.push({y:s.y,reason:'union-failed-after-snap',area:v.area,error:String(e.message??e).slice(0,120)});continue;}
+   accepted.push(v.polygon);report.snapped++;report.accepted++;
+   h.masses.push({label:'plateau-roof',polygon:v.polygon,bottom:C.base+h.height,top:C.base+s.y,material:'concreteLight'});}}
+ return report.accepted;
 }
