@@ -32,6 +32,8 @@ bundle.
 | What | Source | Licence | Where |
 | --- | --- | --- | --- |
 | Base characters and animation library | Quaternius — Universal Base Characters, Universal Animation Library (Standard) | CC0-1.0 | `assets/character/upstream.lock.json`; baked into `public/data/character/citizen.glb` |
+| Citizens (bodies, skins, clothes, hair, eyes) | MakeHuman system assets and skins, built with MPFB 2 (a GPL tool; its outputs are not GPL) | CC0-1.0 | `scripts/blender/build-citizens.py`; `public/data/crowd/citizens.*` |
+| Motion capture: idles and walks of 11 styles (retargeted) | 100STYLE dataset, Ian Mason, Sebastian Starke, Taku Komura (2022), ianxmason.com/100style | CC BY 4.0 | `LICENSES/100style.txt`, `public/licenses/100style.txt`; `public/data/character/citizen-moves.json` |
 | Motion capture: trials 02_07, 80_03, 16_45 (retargeted) | CMU Graphics Lab Motion Capture Database (mocap.cs.cmu.edu), BVH conversion by Bruce Hahne | No restrictions; acknowledgment requested | `LICENSES/cmu-mocap.txt`, `public/licenses/cmu-mocap.txt` |
 
 > The data used in this project was obtained from mocap.cs.cmu.edu.

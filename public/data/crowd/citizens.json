@@ -1,5 +1,5 @@
 {
- "generated": "2026-10-10",
+ "generated": "2026-10-11",
  "source": "MakeHuman CC0 assets via MPFB 2 (scripts/blender/build-citizens.py, scripts/blender/citizens.json), skinned to public/data/character/citizen.glb",
  "architecture": "shared GPU bone animation atlas + per-archetype instanced skinned geometry; textured atlas per archetype, crowdUV (u, v, region) in place of the colour mask",
  "bones": 65,
@@ -186,18 +186,149 @@
    "pelvisScale": 0.9845,
    "boneAtlas": {
     "byteOffset": 1609772,
-    "byteLength": 633360,
-    "count": 158340,
-    "rows": 203,
+    "byteLength": 906360,
+    "count": 453180,
+    "rows": 581,
     "width": 195,
-    "height": 203,
-    "format": "RGBA32F"
+    "height": 581,
+    "format": "RGBA16F"
    },
    "rest": {
-    "byteOffset": 2243132,
+    "byteOffset": 2516132,
     "byteLength": 780,
     "count": 195
    },
+   "clips": [
+    {
+     "name": "Idle",
+     "source": "Idle",
+     "row": 0,
+     "frames": 38,
+     "duration": 2.5,
+     "fps": 15,
+     "loop": true
+    },
+    {
+     "name": "Walk",
+     "source": "Walk",
+     "row": 38,
+     "frames": 32,
+     "duration": 1.3333,
+     "fps": 24,
+     "loop": true
+    },
+    {
+     "name": "Run",
+     "source": "Run",
+     "row": 70,
+     "frames": 21,
+     "duration": 0.7083,
+     "fps": 30,
+     "loop": true
+    },
+    {
+     "name": "Startle",
+     "source": "Startle",
+     "row": 91,
+     "frames": 10,
+     "duration": 0.4333,
+     "fps": 24,
+     "loop": false
+    },
+    {
+     "name": "Guard",
+     "source": "Guard",
+     "row": 101,
+     "frames": 44,
+     "duration": 2.9333,
+     "fps": 15,
+     "loop": true
+    },
+    {
+     "name": "Fall",
+     "source": "Fall",
+     "row": 145,
+     "frames": 58,
+     "duration": 2.4,
+     "fps": 24,
+     "loop": false
+    },
+    {
+     "name": "Idle.stand",
+     "source": "Idle.stand",
+     "row": 203,
+     "frames": 51,
+     "duration": 5.1001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Idle.text",
+     "source": "Idle.text",
+     "row": 254,
+     "frames": 51,
+     "duration": 5.1001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Idle.phone",
+     "source": "Idle.phone",
+     "row": 305,
+     "frames": 82,
+     "duration": 8.2002,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Idle.behind",
+     "source": "Idle.behind",
+     "row": 387,
+     "frames": 50,
+     "duration": 5.0001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Idle.folded",
+     "source": "Idle.folded",
+     "row": 437,
+     "frames": 57,
+     "duration": 5.7001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Walk.neutral",
+     "source": "Walk.neutral",
+     "row": 494,
+     "frames": 33,
+     "duration": 1.3834,
+     "fps": 24,
+     "loop": true,
+     "stride": 1.1037
+    },
+    {
+     "name": "Walk.phone",
+     "source": "Walk.phone",
+     "row": 527,
+     "frames": 34,
+     "duration": 1.4334,
+     "fps": 24,
+     "loop": true,
+     "stride": 1.1357
+    },
+    {
+     "name": "Walk.rushed",
+     "source": "Walk.rushed",
+     "row": 561,
+     "frames": 20,
+     "duration": 0.8167,
+     "fps": 24,
+     "loop": true,
+     "stride": 1.732
+    }
+   ],
    "regions": {
     "skin": 8488,
     "top": 6816,
@@ -401,19 +532,141 @@
    "female": false,
    "pelvisScale": 0.9797,
    "boneAtlas": {
-    "byteOffset": 3214444,
-    "byteLength": 633360,
-    "count": 158340,
-    "rows": 203,
+    "byteOffset": 3487444,
+    "byteLength": 826800,
+    "count": 413400,
+    "rows": 530,
     "width": 195,
-    "height": 203,
-    "format": "RGBA32F"
+    "height": 530,
+    "format": "RGBA16F"
    },
    "rest": {
-    "byteOffset": 3847804,
+    "byteOffset": 4314244,
     "byteLength": 780,
     "count": 195
    },
+   "clips": [
+    {
+     "name": "Idle",
+     "source": "Idle",
+     "row": 0,
+     "frames": 38,
+     "duration": 2.5,
+     "fps": 15,
+     "loop": true
+    },
+    {
+     "name": "Walk",
+     "source": "Walk",
+     "row": 38,
+     "frames": 32,
+     "duration": 1.3333,
+     "fps": 24,
+     "loop": true
+    },
+    {
+     "name": "Run",
+     "source": "Run",
+     "row": 70,
+     "frames": 21,
+     "duration": 0.7083,
+     "fps": 30,
+     "loop": true
+    },
+    {
+     "name": "Startle",
+     "source": "Startle",
+     "row": 91,
+     "frames": 10,
+     "duration": 0.4333,
+     "fps": 24,
+     "loop": false
+    },
+    {
+     "name": "Guard",
+     "source": "Guard",
+     "row": 101,
+     "frames": 44,
+     "duration": 2.9333,
+     "fps": 15,
+     "loop": true
+    },
+    {
+     "name": "Fall",
+     "source": "Fall",
+     "row": 145,
+     "frames": 58,
+     "duration": 2.4,
+     "fps": 24,
+     "loop": false
+    },
+    {
+     "name": "Idle.stand",
+     "source": "Idle.stand",
+     "row": 203,
+     "frames": 51,
+     "duration": 5.1001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Idle.behind",
+     "source": "Idle.behind",
+     "row": 254,
+     "frames": 50,
+     "duration": 5.0001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Idle.folded",
+     "source": "Idle.folded",
+     "row": 304,
+     "frames": 57,
+     "duration": 5.7001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Idle.pockets",
+     "source": "Idle.pockets",
+     "row": 361,
+     "frames": 87,
+     "duration": 8.7002,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Walk.heavy",
+     "source": "Walk.heavy",
+     "row": 448,
+     "frames": 29,
+     "duration": 1.2167,
+     "fps": 24,
+     "loop": true,
+     "stride": 1.127
+    },
+    {
+     "name": "Walk.neutral",
+     "source": "Walk.neutral",
+     "row": 477,
+     "frames": 33,
+     "duration": 1.3834,
+     "fps": 24,
+     "loop": true,
+     "stride": 1.0983
+    },
+    {
+     "name": "Walk.rushed",
+     "source": "Walk.rushed",
+     "row": 510,
+     "frames": 20,
+     "duration": 0.8167,
+     "fps": 24,
+     "loop": true,
+     "stride": 1.7237
+    }
+   ],
    "regions": {
     "skin": 8488,
     "top": 6816,
@@ -429,32 +682,32 @@
      "triangles": 16000,
      "indexType": "u16",
      "position": {
-      "byteOffset": 2243912,
+      "byteOffset": 2516912,
       "byteLength": 248412,
       "count": 62103
      },
      "normal": {
-      "byteOffset": 2492324,
+      "byteOffset": 2765324,
       "byteLength": 248412,
       "count": 62103
      },
      "skinIndex": {
-      "byteOffset": 2740736,
+      "byteOffset": 3013736,
       "byteLength": 82804,
       "count": 82804
      },
      "skinWeight": {
-      "byteOffset": 2823540,
+      "byteOffset": 3096540,
       "byteLength": 82804,
       "count": 82804
      },
      "crowdUV": {
-      "byteOffset": 2906344,
+      "byteOffset": 3179344,
       "byteLength": 165608,
       "count": 82804
      },
      "index": {
-      "byteOffset": 3071952,
+      "byteOffset": 3344952,
       "byteLength": 96000,
       "count": 48000
      }
@@ -465,32 +718,32 @@
      "triangles": 5199,
      "indexType": "u16",
      "position": {
-      "byteOffset": 2243912,
+      "byteOffset": 2516912,
       "byteLength": 248412,
       "count": 62103
      },
      "normal": {
-      "byteOffset": 2492324,
+      "byteOffset": 2765324,
       "byteLength": 248412,
       "count": 62103
      },
      "skinIndex": {
-      "byteOffset": 2740736,
+      "byteOffset": 3013736,
       "byteLength": 82804,
       "count": 82804
      },
      "skinWeight": {
-      "byteOffset": 2823540,
+      "byteOffset": 3096540,
       "byteLength": 82804,
       "count": 82804
      },
      "crowdUV": {
-      "byteOffset": 2906344,
+      "byteOffset": 3179344,
       "byteLength": 165608,
       "count": 82804
      },
      "index": {
-      "byteOffset": 3167952,
+      "byteOffset": 3440952,
       "byteLength": 31194,
       "count": 15597
      }
@@ -501,32 +754,32 @@
      "triangles": 1900,
      "indexType": "u16",
      "position": {
-      "byteOffset": 2243912,
+      "byteOffset": 2516912,
       "byteLength": 248412,
       "count": 62103
      },
      "normal": {
-      "byteOffset": 2492324,
+      "byteOffset": 2765324,
       "byteLength": 248412,
       "count": 62103
      },
      "skinIndex": {
-      "byteOffset": 2740736,
+      "byteOffset": 3013736,
       "byteLength": 82804,
       "count": 82804
      },
      "skinWeight": {
-      "byteOffset": 2823540,
+      "byteOffset": 3096540,
       "byteLength": 82804,
       "count": 82804
      },
      "crowdUV": {
-      "byteOffset": 2906344,
+      "byteOffset": 3179344,
       "byteLength": 165608,
       "count": 82804
      },
      "index": {
-      "byteOffset": 3199148,
+      "byteOffset": 3472148,
       "byteLength": 11400,
       "count": 5700
      }
@@ -537,32 +790,32 @@
      "triangles": 649,
      "indexType": "u16",
      "position": {
-      "byteOffset": 2243912,
+      "byteOffset": 2516912,
       "byteLength": 248412,
       "count": 62103
      },
      "normal": {
-      "byteOffset": 2492324,
+      "byteOffset": 2765324,
       "byteLength": 248412,
       "count": 62103
      },
      "skinIndex": {
-      "byteOffset": 2740736,
+      "byteOffset": 3013736,
       "byteLength": 82804,
       "count": 82804
      },
      "skinWeight": {
-      "byteOffset": 2823540,
+      "byteOffset": 3096540,
       "byteLength": 82804,
       "count": 82804
      },
      "crowdUV": {
-      "byteOffset": 2906344,
+      "byteOffset": 3179344,
       "byteLength": 165608,
       "count": 82804
      },
      "index": {
-      "byteOffset": 3210548,
+      "byteOffset": 3483548,
       "byteLength": 3894,
       "count": 1947
      }
@@ -618,19 +871,151 @@
    "female": false,
    "pelvisScale": 0.9093,
    "boneAtlas": {
-    "byteOffset": 4654800,
-    "byteLength": 633360,
-    "count": 158340,
-    "rows": 203,
+    "byteOffset": 5121240,
+    "byteLength": 861120,
+    "count": 430560,
+    "rows": 552,
     "width": 195,
-    "height": 203,
-    "format": "RGBA32F"
+    "height": 552,
+    "format": "RGBA16F"
    },
    "rest": {
-    "byteOffset": 5288160,
+    "byteOffset": 5982360,
     "byteLength": 780,
     "count": 195
    },
+   "clips": [
+    {
+     "name": "Idle",
+     "source": "Idle",
+     "row": 0,
+     "frames": 38,
+     "duration": 2.5,
+     "fps": 15,
+     "loop": true
+    },
+    {
+     "name": "Walk",
+     "source": "Walk",
+     "row": 38,
+     "frames": 32,
+     "duration": 1.3333,
+     "fps": 24,
+     "loop": true
+    },
+    {
+     "name": "Run",
+     "source": "Run",
+     "row": 70,
+     "frames": 21,
+     "duration": 0.7083,
+     "fps": 30,
+     "loop": true
+    },
+    {
+     "name": "Startle",
+     "source": "Startle",
+     "row": 91,
+     "frames": 10,
+     "duration": 0.4333,
+     "fps": 24,
+     "loop": false
+    },
+    {
+     "name": "Guard",
+     "source": "Guard",
+     "row": 101,
+     "frames": 44,
+     "duration": 2.9333,
+     "fps": 15,
+     "loop": true
+    },
+    {
+     "name": "Fall",
+     "source": "Fall",
+     "row": 145,
+     "frames": 58,
+     "duration": 2.4,
+     "fps": 24,
+     "loop": false
+    },
+    {
+     "name": "Idle.text",
+     "source": "Idle.text",
+     "row": 203,
+     "frames": 51,
+     "duration": 5.1001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Idle.phoneL",
+     "source": "Idle.phoneL",
+     "row": 254,
+     "frames": 61,
+     "duration": 6.1001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Idle.pockets",
+     "source": "Idle.pockets",
+     "row": 315,
+     "frames": 87,
+     "duration": 8.7002,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Idle.restless",
+     "source": "Idle.restless",
+     "row": 402,
+     "frames": 31,
+     "duration": 3.1001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Walk.neutral",
+     "source": "Walk.neutral",
+     "row": 433,
+     "frames": 33,
+     "duration": 1.3834,
+     "fps": 24,
+     "loop": true,
+     "stride": 1.0194
+    },
+    {
+     "name": "Walk.phone",
+     "source": "Walk.phone",
+     "row": 466,
+     "frames": 34,
+     "duration": 1.4334,
+     "fps": 24,
+     "loop": true,
+     "stride": 1.049
+    },
+    {
+     "name": "Walk.pockets",
+     "source": "Walk.pockets",
+     "row": 500,
+     "frames": 32,
+     "duration": 1.35,
+     "fps": 24,
+     "loop": true,
+     "stride": 1.097
+    },
+    {
+     "name": "Walk.rushed",
+     "source": "Walk.rushed",
+     "row": 532,
+     "frames": 20,
+     "duration": 0.8167,
+     "fps": 24,
+     "loop": true,
+     "stride": 1.5998
+    }
+   ],
    "regions": {
     "skin": 9416,
     "top": 2985,
@@ -646,32 +1031,32 @@
      "triangles": 16000,
      "indexType": "u16",
      "position": {
-      "byteOffset": 3848584,
+      "byteOffset": 4315024,
       "byteLength": 199116,
       "count": 49779
      },
      "normal": {
-      "byteOffset": 4047700,
+      "byteOffset": 4514140,
       "byteLength": 199116,
       "count": 49779
      },
      "skinIndex": {
-      "byteOffset": 4246816,
+      "byteOffset": 4713256,
       "byteLength": 66372,
       "count": 66372
      },
      "skinWeight": {
-      "byteOffset": 4313188,
+      "byteOffset": 4779628,
       "byteLength": 66372,
       "count": 66372
      },
      "crowdUV": {
-      "byteOffset": 4379560,
+      "byteOffset": 4846000,
       "byteLength": 132744,
       "count": 66372
      },
      "index": {
-      "byteOffset": 4512304,
+      "byteOffset": 4978744,
       "byteLength": 96000,
       "count": 48000
      }
@@ -682,32 +1067,32 @@
      "triangles": 5200,
      "indexType": "u16",
      "position": {
-      "byteOffset": 3848584,
+      "byteOffset": 4315024,
       "byteLength": 199116,
       "count": 49779
      },
      "normal": {
-      "byteOffset": 4047700,
+      "byteOffset": 4514140,
       "byteLength": 199116,
       "count": 49779
      },
      "skinIndex": {
-      "byteOffset": 4246816,
+      "byteOffset": 4713256,
       "byteLength": 66372,
       "count": 66372
      },
      "skinWeight": {
-      "byteOffset": 4313188,
+      "byteOffset": 4779628,
       "byteLength": 66372,
       "count": 66372
      },
      "crowdUV": {
-      "byteOffset": 4379560,
+      "byteOffset": 4846000,
       "byteLength": 132744,
       "count": 66372
      },
      "index": {
-      "byteOffset": 4608304,
+      "byteOffset": 5074744,
       "byteLength": 31200,
       "count": 15600
      }
@@ -718,32 +1103,32 @@
      "triangles": 1899,
      "indexType": "u16",
      "position": {
-      "byteOffset": 3848584,
+      "byteOffset": 4315024,
       "byteLength": 199116,
       "count": 49779
      },
      "normal": {
-      "byteOffset": 4047700,
+      "byteOffset": 4514140,
       "byteLength": 199116,
       "count": 49779
      },
      "skinIndex": {
-      "byteOffset": 4246816,
+      "byteOffset": 4713256,
       "byteLength": 66372,
       "count": 66372
      },
      "skinWeight": {
-      "byteOffset": 4313188,
+      "byteOffset": 4779628,
       "byteLength": 66372,
       "count": 66372
      },
      "crowdUV": {
-      "byteOffset": 4379560,
+      "byteOffset": 4846000,
       "byteLength": 132744,
       "count": 66372
      },
      "index": {
-      "byteOffset": 4639504,
+      "byteOffset": 5105944,
       "byteLength": 11394,
       "count": 5697
      }
@@ -754,32 +1139,32 @@
      "triangles": 650,
      "indexType": "u16",
      "position": {
-      "byteOffset": 3848584,
+      "byteOffset": 4315024,
       "byteLength": 199116,
       "count": 49779
      },
      "normal": {
-      "byteOffset": 4047700,
+      "byteOffset": 4514140,
       "byteLength": 199116,
       "count": 49779
      },
      "skinIndex": {
-      "byteOffset": 4246816,
+      "byteOffset": 4713256,
       "byteLength": 66372,
       "count": 66372
      },
      "skinWeight": {
-      "byteOffset": 4313188,
+      "byteOffset": 4779628,
       "byteLength": 66372,
       "count": 66372
      },
      "crowdUV": {
-      "byteOffset": 4379560,
+      "byteOffset": 4846000,
       "byteLength": 132744,
       "count": 66372
      },
      "index": {
-      "byteOffset": 4650900,
+      "byteOffset": 5117340,
       "byteLength": 3900,
       "count": 1950
      }
@@ -839,19 +1224,150 @@
    "female": false,
    "pelvisScale": 1.0215,
    "boneAtlas": {
-    "byteOffset": 6128592,
-    "byteLength": 633360,
-    "count": 158340,
-    "rows": 203,
+    "byteOffset": 6822792,
+    "byteLength": 911040,
+    "count": 455520,
+    "rows": 584,
     "width": 195,
-    "height": 203,
-    "format": "RGBA32F"
+    "height": 584,
+    "format": "RGBA16F"
    },
    "rest": {
-    "byteOffset": 6761952,
+    "byteOffset": 7733832,
     "byteLength": 780,
     "count": 195
    },
+   "clips": [
+    {
+     "name": "Idle",
+     "source": "Idle",
+     "row": 0,
+     "frames": 38,
+     "duration": 2.5,
+     "fps": 15,
+     "loop": true
+    },
+    {
+     "name": "Walk",
+     "source": "Walk",
+     "row": 38,
+     "frames": 32,
+     "duration": 1.3333,
+     "fps": 24,
+     "loop": true
+    },
+    {
+     "name": "Run",
+     "source": "Run",
+     "row": 70,
+     "frames": 21,
+     "duration": 0.7083,
+     "fps": 30,
+     "loop": true
+    },
+    {
+     "name": "Startle",
+     "source": "Startle",
+     "row": 91,
+     "frames": 10,
+     "duration": 0.4333,
+     "fps": 24,
+     "loop": false
+    },
+    {
+     "name": "Guard",
+     "source": "Guard",
+     "row": 101,
+     "frames": 44,
+     "duration": 2.9333,
+     "fps": 15,
+     "loop": true
+    },
+    {
+     "name": "Fall",
+     "source": "Fall",
+     "row": 145,
+     "frames": 58,
+     "duration": 2.4,
+     "fps": 24,
+     "loop": false
+    },
+    {
+     "name": "Idle.stand",
+     "source": "Idle.stand",
+     "row": 203,
+     "frames": 51,
+     "duration": 5.1001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Idle.text",
+     "source": "Idle.text",
+     "row": 254,
+     "frames": 51,
+     "duration": 5.1001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Idle.pockets",
+     "source": "Idle.pockets",
+     "row": 305,
+     "frames": 87,
+     "duration": 8.7002,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Idle.folded",
+     "source": "Idle.folded",
+     "row": 392,
+     "frames": 57,
+     "duration": 5.7001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Idle.akimbo",
+     "source": "Idle.akimbo",
+     "row": 449,
+     "frames": 50,
+     "duration": 5.0001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Walk.neutral",
+     "source": "Walk.neutral",
+     "row": 499,
+     "frames": 33,
+     "duration": 1.3834,
+     "fps": 24,
+     "loop": true,
+     "stride": 1.1452
+    },
+    {
+     "name": "Walk.pockets",
+     "source": "Walk.pockets",
+     "row": 532,
+     "frames": 32,
+     "duration": 1.35,
+     "fps": 24,
+     "loop": true,
+     "stride": 1.2323
+    },
+    {
+     "name": "Walk.rushed",
+     "source": "Walk.rushed",
+     "row": 564,
+     "frames": 20,
+     "duration": 0.8167,
+     "fps": 24,
+     "loop": true,
+     "stride": 1.7972
+    }
+   ],
    "regions": {
     "skin": 8660,
     "top": 2561,
@@ -867,32 +1383,32 @@
      "triangles": 15999,
      "indexType": "u16",
      "position": {
-      "byteOffset": 5288940,
+      "byteOffset": 5983140,
       "byteLength": 209148,
       "count": 52287
      },
      "normal": {
-      "byteOffset": 5498088,
+      "byteOffset": 6192288,
       "byteLength": 209148,
       "count": 52287
      },
      "skinIndex": {
-      "byteOffset": 5707236,
+      "byteOffset": 6401436,
       "byteLength": 69716,
       "count": 69716
      },
      "skinWeight": {
-      "byteOffset": 5776952,
+      "byteOffset": 6471152,
       "byteLength": 69716,
       "count": 69716
      },
      "crowdUV": {
-      "byteOffset": 5846668,
+      "byteOffset": 6540868,
       "byteLength": 139432,
       "count": 69716
      },
      "index": {
-      "byteOffset": 5986100,
+      "byteOffset": 6680300,
       "byteLength": 95994,
       "count": 47997
      }
@@ -903,32 +1419,32 @@
      "triangles": 5200,
      "indexType": "u16",
      "position": {
-      "byteOffset": 5288940,
+      "byteOffset": 5983140,
       "byteLength": 209148,
       "count": 52287
      },
      "normal": {
-      "byteOffset": 5498088,
+      "byteOffset": 6192288,
       "byteLength": 209148,
       "count": 52287
      },
      "skinIndex": {
-      "byteOffset": 5707236,
+      "byteOffset": 6401436,
       "byteLength": 69716,
       "count": 69716
      },
      "skinWeight": {
-      "byteOffset": 5776952,
+      "byteOffset": 6471152,
       "byteLength": 69716,
       "count": 69716
      },
      "crowdUV": {
-      "byteOffset": 5846668,
+      "byteOffset": 6540868,
       "byteLength": 139432,
       "count": 69716
      },
      "index": {
-      "byteOffset": 6082096,
+      "byteOffset": 6776296,
       "byteLength": 31200,
       "count": 15600
      }
@@ -939,32 +1455,32 @@
      "triangles": 1899,
      "indexType": "u16",
      "position": {
-      "byteOffset": 5288940,
+      "byteOffset": 5983140,
       "byteLength": 209148,
       "count": 52287
      },
      "normal": {
-      "byteOffset": 5498088,
+      "byteOffset": 6192288,
       "byteLength": 209148,
       "count": 52287
      },
      "skinIndex": {
-      "byteOffset": 5707236,
+      "byteOffset": 6401436,
       "byteLength": 69716,
       "count": 69716
      },
      "skinWeight": {
-      "byteOffset": 5776952,
+      "byteOffset": 6471152,
       "byteLength": 69716,
       "count": 69716
      },
      "crowdUV": {
-      "byteOffset": 5846668,
+      "byteOffset": 6540868,
       "byteLength": 139432,
       "count": 69716
      },
      "index": {
-      "byteOffset": 6113296,
+      "byteOffset": 6807496,
       "byteLength": 11394,
       "count": 5697
      }
@@ -975,32 +1491,32 @@
      "triangles": 650,
      "indexType": "u16",
      "position": {
-      "byteOffset": 5288940,
+      "byteOffset": 5983140,
       "byteLength": 209148,
       "count": 52287
      },
      "normal": {
-      "byteOffset": 5498088,
+      "byteOffset": 6192288,
       "byteLength": 209148,
       "count": 52287
      },
      "skinIndex": {
-      "byteOffset": 5707236,
+      "byteOffset": 6401436,
       "byteLength": 69716,
       "count": 69716
      },
      "skinWeight": {
-      "byteOffset": 5776952,
+      "byteOffset": 6471152,
       "byteLength": 69716,
       "count": 69716
      },
      "crowdUV": {
-      "byteOffset": 5846668,
+      "byteOffset": 6540868,
       "byteLength": 139432,
       "count": 69716
      },
      "index": {
-      "byteOffset": 6124692,
+      "byteOffset": 6818892,
       "byteLength": 3900,
       "count": 1950
      }
@@ -1055,19 +1571,112 @@
    "female": false,
    "pelvisScale": 0.9828,
    "boneAtlas": {
-    "byteOffset": 7494500,
-    "byteLength": 633360,
-    "count": 158340,
-    "rows": 203,
+    "byteOffset": 8466380,
+    "byteLength": 611520,
+    "count": 305760,
+    "rows": 392,
     "width": 195,
-    "height": 203,
-    "format": "RGBA32F"
+    "height": 392,
+    "format": "RGBA16F"
    },
    "rest": {
-    "byteOffset": 8127860,
+    "byteOffset": 9077900,
     "byteLength": 780,
     "count": 195
    },
+   "clips": [
+    {
+     "name": "Idle",
+     "source": "Idle",
+     "row": 0,
+     "frames": 38,
+     "duration": 2.5,
+     "fps": 15,
+     "loop": true
+    },
+    {
+     "name": "Walk",
+     "source": "Walk",
+     "row": 38,
+     "frames": 32,
+     "duration": 1.3333,
+     "fps": 24,
+     "loop": true
+    },
+    {
+     "name": "Run",
+     "source": "Run",
+     "row": 70,
+     "frames": 21,
+     "duration": 0.7083,
+     "fps": 30,
+     "loop": true
+    },
+    {
+     "name": "Startle",
+     "source": "Startle",
+     "row": 91,
+     "frames": 10,
+     "duration": 0.4333,
+     "fps": 24,
+     "loop": false
+    },
+    {
+     "name": "Guard",
+     "source": "Guard",
+     "row": 101,
+     "frames": 44,
+     "duration": 2.9333,
+     "fps": 15,
+     "loop": true
+    },
+    {
+     "name": "Fall",
+     "source": "Fall",
+     "row": 145,
+     "frames": 58,
+     "duration": 2.4,
+     "fps": 24,
+     "loop": false
+    },
+    {
+     "name": "Idle.old",
+     "source": "Idle.old",
+     "row": 203,
+     "frames": 53,
+     "duration": 5.3001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Idle.behind",
+     "source": "Idle.behind",
+     "row": 256,
+     "frames": 50,
+     "duration": 5.0001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Idle.stand",
+     "source": "Idle.stand",
+     "row": 306,
+     "frames": 51,
+     "duration": 5.1001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Walk.elder",
+     "source": "Walk.elder",
+     "row": 357,
+     "frames": 35,
+     "duration": 1.4584,
+     "fps": 24,
+     "loop": true,
+     "stride": 0.8871
+    }
+   ],
    "regions": {
     "skin": 8660,
     "top": 1823,
@@ -1083,32 +1692,32 @@
      "triangles": 15999,
      "indexType": "u16",
      "position": {
-      "byteOffset": 6762732,
+      "byteOffset": 7734612,
       "byteLength": 176784,
       "count": 44196
      },
      "normal": {
-      "byteOffset": 6939516,
+      "byteOffset": 7911396,
       "byteLength": 176784,
       "count": 44196
      },
      "skinIndex": {
-      "byteOffset": 7116300,
+      "byteOffset": 8088180,
       "byteLength": 58928,
       "count": 58928
      },
      "skinWeight": {
-      "byteOffset": 7175228,
+      "byteOffset": 8147108,
       "byteLength": 58928,
       "count": 58928
      },
      "crowdUV": {
-      "byteOffset": 7234156,
+      "byteOffset": 8206036,
       "byteLength": 117856,
       "count": 58928
      },
      "index": {
-      "byteOffset": 7352012,
+      "byteOffset": 8323892,
       "byteLength": 95994,
       "count": 47997
      }
@@ -1119,32 +1728,32 @@
      "triangles": 5199,
      "indexType": "u16",
      "position": {
-      "byteOffset": 6762732,
+      "byteOffset": 7734612,
       "byteLength": 176784,
       "count": 44196
      },
      "normal": {
-      "byteOffset": 6939516,
+      "byteOffset": 7911396,
       "byteLength": 176784,
       "count": 44196
      },
      "skinIndex": {
-      "byteOffset": 7116300,
+      "byteOffset": 8088180,
       "byteLength": 58928,
       "count": 58928
      },
      "skinWeight": {
-      "byteOffset": 7175228,
+      "byteOffset": 8147108,
       "byteLength": 58928,
       "count": 58928
      },
      "crowdUV": {
-      "byteOffset": 7234156,
+      "byteOffset": 8206036,
       "byteLength": 117856,
       "count": 58928
      },
      "index": {
-      "byteOffset": 7448008,
+      "byteOffset": 8419888,
       "byteLength": 31194,
       "count": 15597
      }
@@ -1155,32 +1764,32 @@
      "triangles": 1899,
      "indexType": "u16",
      "position": {
-      "byteOffset": 6762732,
+      "byteOffset": 7734612,
       "byteLength": 176784,
       "count": 44196
      },
      "normal": {
-      "byteOffset": 6939516,
+      "byteOffset": 7911396,
       "byteLength": 176784,
       "count": 44196
      },
      "skinIndex": {
-      "byteOffset": 7116300,
+      "byteOffset": 8088180,
       "byteLength": 58928,
       "count": 58928
      },
      "skinWeight": {
-      "byteOffset": 7175228,
+      "byteOffset": 8147108,
       "byteLength": 58928,
       "count": 58928
      },
      "crowdUV": {
-      "byteOffset": 7234156,
+      "byteOffset": 8206036,
       "byteLength": 117856,
       "count": 58928
      },
      "index": {
-      "byteOffset": 7479204,
+      "byteOffset": 8451084,
       "byteLength": 11394,
       "count": 5697
      }
@@ -1191,32 +1800,32 @@
      "triangles": 650,
      "indexType": "u16",
      "position": {
-      "byteOffset": 6762732,
+      "byteOffset": 7734612,
       "byteLength": 176784,
       "count": 44196
      },
      "normal": {
-      "byteOffset": 6939516,
+      "byteOffset": 7911396,
       "byteLength": 176784,
       "count": 44196
      },
      "skinIndex": {
-      "byteOffset": 7116300,
+      "byteOffset": 8088180,
       "byteLength": 58928,
       "count": 58928
      },
      "skinWeight": {
-      "byteOffset": 7175228,
+      "byteOffset": 8147108,
       "byteLength": 58928,
       "count": 58928
      },
      "crowdUV": {
-      "byteOffset": 7234156,
+      "byteOffset": 8206036,
       "byteLength": 117856,
       "count": 58928
      },
      "index": {
-      "byteOffset": 7490600,
+      "byteOffset": 8462480,
       "byteLength": 3900,
       "count": 1950
      }
@@ -1271,19 +1880,141 @@
    "female": true,
    "pelvisScale": 0.8917,
    "boneAtlas": {
-    "byteOffset": 9055680,
-    "byteLength": 633360,
-    "count": 158340,
-    "rows": 203,
+    "byteOffset": 10005720,
+    "byteLength": 831480,
+    "count": 415740,
+    "rows": 533,
     "width": 195,
-    "height": 203,
-    "format": "RGBA32F"
+    "height": 533,
+    "format": "RGBA16F"
    },
    "rest": {
-    "byteOffset": 9689040,
+    "byteOffset": 10837200,
     "byteLength": 780,
     "count": 195
    },
+   "clips": [
+    {
+     "name": "Idle",
+     "source": "Idle",
+     "row": 0,
+     "frames": 38,
+     "duration": 2.5,
+     "fps": 15,
+     "loop": true
+    },
+    {
+     "name": "Walk",
+     "source": "Walk",
+     "row": 38,
+     "frames": 32,
+     "duration": 1.3333,
+     "fps": 24,
+     "loop": true
+    },
+    {
+     "name": "Run",
+     "source": "Run",
+     "row": 70,
+     "frames": 21,
+     "duration": 0.7083,
+     "fps": 30,
+     "loop": true
+    },
+    {
+     "name": "Startle",
+     "source": "Startle",
+     "row": 91,
+     "frames": 10,
+     "duration": 0.4333,
+     "fps": 24,
+     "loop": false
+    },
+    {
+     "name": "Guard",
+     "source": "Guard",
+     "row": 101,
+     "frames": 44,
+     "duration": 2.9333,
+     "fps": 15,
+     "loop": true
+    },
+    {
+     "name": "Fall",
+     "source": "Fall",
+     "row": 145,
+     "frames": 58,
+     "duration": 2.4,
+     "fps": 24,
+     "loop": false
+    },
+    {
+     "name": "Idle.stand",
+     "source": "Idle.stand",
+     "row": 203,
+     "frames": 51,
+     "duration": 5.1001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Idle.text",
+     "source": "Idle.text",
+     "row": 254,
+     "frames": 51,
+     "duration": 5.1001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Idle.phone",
+     "source": "Idle.phone",
+     "row": 305,
+     "frames": 82,
+     "duration": 8.2002,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Idle.folded",
+     "source": "Idle.folded",
+     "row": 387,
+     "frames": 57,
+     "duration": 5.7001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Walk.female",
+     "source": "Walk.female",
+     "row": 444,
+     "frames": 35,
+     "duration": 1.4375,
+     "fps": 24,
+     "loop": true,
+     "stride": 0.9316
+    },
+    {
+     "name": "Walk.phone",
+     "source": "Walk.phone",
+     "row": 479,
+     "frames": 34,
+     "duration": 1.4334,
+     "fps": 24,
+     "loop": true,
+     "stride": 1.0287
+    },
+    {
+     "name": "Walk.rushed",
+     "source": "Walk.rushed",
+     "row": 513,
+     "frames": 20,
+     "duration": 0.8167,
+     "fps": 24,
+     "loop": true,
+     "stride": 1.5689
+    }
+   ],
    "regions": {
     "skin": 9407,
     "top": 2016,
@@ -1299,32 +2030,32 @@
      "triangles": 15999,
      "indexType": "u16",
      "position": {
-      "byteOffset": 8128640,
+      "byteOffset": 9078680,
       "byteLength": 234948,
       "count": 58737
      },
      "normal": {
-      "byteOffset": 8363588,
+      "byteOffset": 9313628,
       "byteLength": 234948,
       "count": 58737
      },
      "skinIndex": {
-      "byteOffset": 8598536,
+      "byteOffset": 9548576,
       "byteLength": 78316,
       "count": 78316
      },
      "skinWeight": {
-      "byteOffset": 8676852,
+      "byteOffset": 9626892,
       "byteLength": 78316,
       "count": 78316
      },
      "crowdUV": {
-      "byteOffset": 8755168,
+      "byteOffset": 9705208,
       "byteLength": 156632,
       "count": 78316
      },
      "index": {
-      "byteOffset": 8911800,
+      "byteOffset": 9861840,
       "byteLength": 95994,
       "count": 47997
      }
@@ -1335,32 +2066,32 @@
      "triangles": 5200,
      "indexType": "u16",
      "position": {
-      "byteOffset": 8128640,
+      "byteOffset": 9078680,
       "byteLength": 234948,
       "count": 58737
      },
      "normal": {
-      "byteOffset": 8363588,
+      "byteOffset": 9313628,
       "byteLength": 234948,
       "count": 58737
      },
      "skinIndex": {
-      "byteOffset": 8598536,
+      "byteOffset": 9548576,
       "byteLength": 78316,
       "count": 78316
      },
      "skinWeight": {
-      "byteOffset": 8676852,
+      "byteOffset": 9626892,
       "byteLength": 78316,
       "count": 78316
      },
      "crowdUV": {
-      "byteOffset": 8755168,
+      "byteOffset": 9705208,
       "byteLength": 156632,
       "count": 78316
      },
      "index": {
-      "byteOffset": 9007796,
+      "byteOffset": 9957836,
       "byteLength": 31200,
       "count": 15600
      }
@@ -1371,32 +2102,32 @@
      "triangles": 1899,
      "indexType": "u16",
      "position": {
-      "byteOffset": 8128640,
+      "byteOffset": 9078680,
       "byteLength": 234948,
       "count": 58737
      },
      "normal": {
-      "byteOffset": 8363588,
+      "byteOffset": 9313628,
       "byteLength": 234948,
       "count": 58737
      },
      "skinIndex": {
-      "byteOffset": 8598536,
+      "byteOffset": 9548576,
       "byteLength": 78316,
       "count": 78316
      },
      "skinWeight": {
-      "byteOffset": 8676852,
+      "byteOffset": 9626892,
       "byteLength": 78316,
       "count": 78316
      },
      "crowdUV": {
-      "byteOffset": 8755168,
+      "byteOffset": 9705208,
       "byteLength": 156632,
       "count": 78316
      },
      "index": {
-      "byteOffset": 9038996,
+      "byteOffset": 9989036,
       "byteLength": 11394,
       "count": 5697
      }
@@ -1407,32 +2138,32 @@
      "triangles": 881,
      "indexType": "u16",
      "position": {
-      "byteOffset": 8128640,
+      "byteOffset": 9078680,
       "byteLength": 234948,
       "count": 58737
      },
      "normal": {
-      "byteOffset": 8363588,
+      "byteOffset": 9313628,
       "byteLength": 234948,
       "count": 58737
      },
      "skinIndex": {
-      "byteOffset": 8598536,
+      "byteOffset": 9548576,
       "byteLength": 78316,
       "count": 78316
      },
      "skinWeight": {
-      "byteOffset": 8676852,
+      "byteOffset": 9626892,
       "byteLength": 78316,
       "count": 78316
      },
      "crowdUV": {
-      "byteOffset": 8755168,
+      "byteOffset": 9705208,
       "byteLength": 156632,
       "count": 78316
      },
      "index": {
-      "byteOffset": 9050392,
+      "byteOffset": 10000432,
       "byteLength": 5286,
       "count": 2643
      }
@@ -1487,19 +2218,141 @@
    "female": true,
    "pelvisScale": 0.8476,
    "boneAtlas": {
-    "byteOffset": 10745892,
-    "byteLength": 633360,
-    "count": 158340,
-    "rows": 203,
+    "byteOffset": 11894052,
+    "byteLength": 758160,
+    "count": 379080,
+    "rows": 486,
     "width": 195,
-    "height": 203,
-    "format": "RGBA32F"
+    "height": 486,
+    "format": "RGBA16F"
    },
    "rest": {
-    "byteOffset": 11379252,
+    "byteOffset": 12652212,
     "byteLength": 780,
     "count": 195
    },
+   "clips": [
+    {
+     "name": "Idle",
+     "source": "Idle",
+     "row": 0,
+     "frames": 38,
+     "duration": 2.5,
+     "fps": 15,
+     "loop": true
+    },
+    {
+     "name": "Walk",
+     "source": "Walk",
+     "row": 38,
+     "frames": 32,
+     "duration": 1.3333,
+     "fps": 24,
+     "loop": true
+    },
+    {
+     "name": "Run",
+     "source": "Run",
+     "row": 70,
+     "frames": 21,
+     "duration": 0.7083,
+     "fps": 30,
+     "loop": true
+    },
+    {
+     "name": "Startle",
+     "source": "Startle",
+     "row": 91,
+     "frames": 10,
+     "duration": 0.4333,
+     "fps": 24,
+     "loop": false
+    },
+    {
+     "name": "Guard",
+     "source": "Guard",
+     "row": 101,
+     "frames": 44,
+     "duration": 2.9333,
+     "fps": 15,
+     "loop": true
+    },
+    {
+     "name": "Fall",
+     "source": "Fall",
+     "row": 145,
+     "frames": 58,
+     "duration": 2.4,
+     "fps": 24,
+     "loop": false
+    },
+    {
+     "name": "Idle.text",
+     "source": "Idle.text",
+     "row": 203,
+     "frames": 51,
+     "duration": 5.1001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Idle.phoneL",
+     "source": "Idle.phoneL",
+     "row": 254,
+     "frames": 61,
+     "duration": 6.1001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Idle.stand",
+     "source": "Idle.stand",
+     "row": 315,
+     "frames": 51,
+     "duration": 5.1001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Idle.restless",
+     "source": "Idle.restless",
+     "row": 366,
+     "frames": 31,
+     "duration": 3.1001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Walk.female",
+     "source": "Walk.female",
+     "row": 397,
+     "frames": 35,
+     "duration": 1.4375,
+     "fps": 24,
+     "loop": true,
+     "stride": 0.8854
+    },
+    {
+     "name": "Walk.phone",
+     "source": "Walk.phone",
+     "row": 432,
+     "frames": 34,
+     "duration": 1.4334,
+     "fps": 24,
+     "loop": true,
+     "stride": 0.9777
+    },
+    {
+     "name": "Walk.rushed",
+     "source": "Walk.rushed",
+     "row": 466,
+     "frames": 20,
+     "duration": 0.8167,
+     "fps": 24,
+     "loop": true,
+     "stride": 1.4912
+    }
+   ],
    "regions": {
     "skin": 8456,
     "top": 4338,
@@ -1515,32 +2368,32 @@
      "triangles": 16000,
      "indexType": "u16",
      "position": {
-      "byteOffset": 9689820,
+      "byteOffset": 10837980,
       "byteLength": 274080,
       "count": 68520
      },
      "normal": {
-      "byteOffset": 9963900,
+      "byteOffset": 11112060,
       "byteLength": 274080,
       "count": 68520
      },
      "skinIndex": {
-      "byteOffset": 10237980,
+      "byteOffset": 11386140,
       "byteLength": 91360,
       "count": 91360
      },
      "skinWeight": {
-      "byteOffset": 10329340,
+      "byteOffset": 11477500,
       "byteLength": 91360,
       "count": 91360
      },
      "crowdUV": {
-      "byteOffset": 10420700,
+      "byteOffset": 11568860,
       "byteLength": 182720,
       "count": 91360
      },
      "index": {
-      "byteOffset": 10603420,
+      "byteOffset": 11751580,
       "byteLength": 96000,
       "count": 48000
      }
@@ -1551,32 +2404,32 @@
      "triangles": 5200,
      "indexType": "u16",
      "position": {
-      "byteOffset": 9689820,
+      "byteOffset": 10837980,
       "byteLength": 274080,
       "count": 68520
      },
      "normal": {
-      "byteOffset": 9963900,
+      "byteOffset": 11112060,
       "byteLength": 274080,
       "count": 68520
      },
      "skinIndex": {
-      "byteOffset": 10237980,
+      "byteOffset": 11386140,
       "byteLength": 91360,
       "count": 91360
      },
      "skinWeight": {
-      "byteOffset": 10329340,
+      "byteOffset": 11477500,
       "byteLength": 91360,
       "count": 91360
      },
      "crowdUV": {
-      "byteOffset": 10420700,
+      "byteOffset": 11568860,
       "byteLength": 182720,
       "count": 91360
      },
      "index": {
-      "byteOffset": 10699420,
+      "byteOffset": 11847580,
       "byteLength": 31200,
       "count": 15600
      }
@@ -1587,32 +2440,32 @@
      "triangles": 1899,
      "indexType": "u16",
      "position": {
-      "byteOffset": 9689820,
+      "byteOffset": 10837980,
       "byteLength": 274080,
       "count": 68520
      },
      "normal": {
-      "byteOffset": 9963900,
+      "byteOffset": 11112060,
       "byteLength": 274080,
       "count": 68520
      },
      "skinIndex": {
-      "byteOffset": 10237980,
+      "byteOffset": 11386140,
       "byteLength": 91360,
       "count": 91360
      },
      "skinWeight": {
-      "byteOffset": 10329340,
+      "byteOffset": 11477500,
       "byteLength": 91360,
       "count": 91360
      },
      "crowdUV": {
-      "byteOffset": 10420700,
+      "byteOffset": 11568860,
       "byteLength": 182720,
       "count": 91360
      },
      "index": {
-      "byteOffset": 10730620,
+      "byteOffset": 11878780,
       "byteLength": 11394,
       "count": 5697
      }
@@ -1623,32 +2476,32 @@
      "triangles": 646,
      "indexType": "u16",
      "position": {
-      "byteOffset": 9689820,
+      "byteOffset": 10837980,
       "byteLength": 274080,
       "count": 68520
      },
      "normal": {
-      "byteOffset": 9963900,
+      "byteOffset": 11112060,
       "byteLength": 274080,
       "count": 68520
      },
      "skinIndex": {
-      "byteOffset": 10237980,
+      "byteOffset": 11386140,
       "byteLength": 91360,
       "count": 91360
      },
      "skinWeight": {
-      "byteOffset": 10329340,
+      "byteOffset": 11477500,
       "byteLength": 91360,
       "count": 91360
      },
      "crowdUV": {
-      "byteOffset": 10420700,
+      "byteOffset": 11568860,
       "byteLength": 182720,
       "count": 91360
      },
      "index": {
-      "byteOffset": 10742016,
+      "byteOffset": 11890176,
       "byteLength": 3876,
       "count": 1938
      }
@@ -1703,19 +2556,131 @@
    "female": true,
    "pelvisScale": 0.9102,
    "boneAtlas": {
-    "byteOffset": 12169496,
-    "byteLength": 633360,
-    "count": 158340,
-    "rows": 203,
+    "byteOffset": 13442456,
+    "byteLength": 781560,
+    "count": 390780,
+    "rows": 501,
     "width": 195,
-    "height": 203,
-    "format": "RGBA32F"
+    "height": 501,
+    "format": "RGBA16F"
    },
    "rest": {
-    "byteOffset": 12802856,
+    "byteOffset": 14224016,
     "byteLength": 780,
     "count": 195
    },
+   "clips": [
+    {
+     "name": "Idle",
+     "source": "Idle",
+     "row": 0,
+     "frames": 38,
+     "duration": 2.5,
+     "fps": 15,
+     "loop": true
+    },
+    {
+     "name": "Walk",
+     "source": "Walk",
+     "row": 38,
+     "frames": 32,
+     "duration": 1.3333,
+     "fps": 24,
+     "loop": true
+    },
+    {
+     "name": "Run",
+     "source": "Run",
+     "row": 70,
+     "frames": 21,
+     "duration": 0.7083,
+     "fps": 30,
+     "loop": true
+    },
+    {
+     "name": "Startle",
+     "source": "Startle",
+     "row": 91,
+     "frames": 10,
+     "duration": 0.4333,
+     "fps": 24,
+     "loop": false
+    },
+    {
+     "name": "Guard",
+     "source": "Guard",
+     "row": 101,
+     "frames": 44,
+     "duration": 2.9333,
+     "fps": 15,
+     "loop": true
+    },
+    {
+     "name": "Fall",
+     "source": "Fall",
+     "row": 145,
+     "frames": 58,
+     "duration": 2.4,
+     "fps": 24,
+     "loop": false
+    },
+    {
+     "name": "Idle.stand",
+     "source": "Idle.stand",
+     "row": 203,
+     "frames": 51,
+     "duration": 5.1001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Idle.text",
+     "source": "Idle.text",
+     "row": 254,
+     "frames": 51,
+     "duration": 5.1001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Idle.phone",
+     "source": "Idle.phone",
+     "row": 305,
+     "frames": 82,
+     "duration": 8.2002,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Idle.akimbo",
+     "source": "Idle.akimbo",
+     "row": 387,
+     "frames": 50,
+     "duration": 5.0001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Walk.female",
+     "source": "Walk.female",
+     "row": 437,
+     "frames": 35,
+     "duration": 1.4375,
+     "fps": 24,
+     "loop": true,
+     "stride": 0.9509
+    },
+    {
+     "name": "Walk.heavy",
+     "source": "Walk.heavy",
+     "row": 472,
+     "frames": 29,
+     "duration": 1.2167,
+     "fps": 24,
+     "loop": true,
+     "stride": 1.0471
+    }
+   ],
    "regions": {
     "skin": 8660,
     "top": 2561,
@@ -1731,32 +2696,32 @@
      "triangles": 15999,
      "indexType": "u16",
      "position": {
-      "byteOffset": 11380032,
+      "byteOffset": 12652992,
       "byteLength": 194100,
       "count": 48525
      },
      "normal": {
-      "byteOffset": 11574132,
+      "byteOffset": 12847092,
       "byteLength": 194100,
       "count": 48525
      },
      "skinIndex": {
-      "byteOffset": 11768232,
+      "byteOffset": 13041192,
       "byteLength": 64700,
       "count": 64700
      },
      "skinWeight": {
-      "byteOffset": 11832932,
+      "byteOffset": 13105892,
       "byteLength": 64700,
       "count": 64700
      },
      "crowdUV": {
-      "byteOffset": 11897632,
+      "byteOffset": 13170592,
       "byteLength": 129400,
       "count": 64700
      },
      "index": {
-      "byteOffset": 12027032,
+      "byteOffset": 13299992,
       "byteLength": 95994,
       "count": 47997
      }
@@ -1767,32 +2732,32 @@
      "triangles": 5199,
      "indexType": "u16",
      "position": {
-      "byteOffset": 11380032,
+      "byteOffset": 12652992,
       "byteLength": 194100,
       "count": 48525
      },
      "normal": {
-      "byteOffset": 11574132,
+      "byteOffset": 12847092,
       "byteLength": 194100,
       "count": 48525
      },
      "skinIndex": {
-      "byteOffset": 11768232,
+      "byteOffset": 13041192,
       "byteLength": 64700,
       "count": 64700
      },
      "skinWeight": {
-      "byteOffset": 11832932,
+      "byteOffset": 13105892,
       "byteLength": 64700,
       "count": 64700
      },
      "crowdUV": {
-      "byteOffset": 11897632,
+      "byteOffset": 13170592,
       "byteLength": 129400,
       "count": 64700
      },
      "index": {
-      "byteOffset": 12123028,
+      "byteOffset": 13395988,
       "byteLength": 31194,
       "count": 15597
      }
@@ -1803,32 +2768,32 @@
      "triangles": 1900,
      "indexType": "u16",
      "position": {
-      "byteOffset": 11380032,
+      "byteOffset": 12652992,
       "byteLength": 194100,
       "count": 48525
      },
      "normal": {
-      "byteOffset": 11574132,
+      "byteOffset": 12847092,
       "byteLength": 194100,
       "count": 48525
      },
      "skinIndex": {
-      "byteOffset": 11768232,
+      "byteOffset": 13041192,
       "byteLength": 64700,
       "count": 64700
      },
      "skinWeight": {
-      "byteOffset": 11832932,
+      "byteOffset": 13105892,
       "byteLength": 64700,
       "count": 64700
      },
      "crowdUV": {
-      "byteOffset": 11897632,
+      "byteOffset": 13170592,
       "byteLength": 129400,
       "count": 64700
      },
      "index": {
-      "byteOffset": 12154224,
+      "byteOffset": 13427184,
       "byteLength": 11400,
       "count": 5700
      }
@@ -1839,32 +2804,32 @@
      "triangles": 645,
      "indexType": "u16",
      "position": {
-      "byteOffset": 11380032,
+      "byteOffset": 12652992,
       "byteLength": 194100,
       "count": 48525
      },
      "normal": {
-      "byteOffset": 11574132,
+      "byteOffset": 12847092,
       "byteLength": 194100,
       "count": 48525
      },
      "skinIndex": {
-      "byteOffset": 11768232,
+      "byteOffset": 13041192,
       "byteLength": 64700,
       "count": 64700
      },
      "skinWeight": {
-      "byteOffset": 11832932,
+      "byteOffset": 13105892,
       "byteLength": 64700,
       "count": 64700
      },
      "crowdUV": {
-      "byteOffset": 11897632,
+      "byteOffset": 13170592,
       "byteLength": 129400,
       "count": 64700
      },
      "index": {
-      "byteOffset": 12165624,
+      "byteOffset": 13438584,
       "byteLength": 3870,
       "count": 1935
      }
@@ -1924,19 +2889,132 @@
    "female": true,
    "pelvisScale": 0.9809,
    "boneAtlas": {
-    "byteOffset": 13724556,
-    "byteLength": 633360,
-    "count": 158340,
-    "rows": 203,
+    "byteOffset": 15145716,
+    "byteLength": 659880,
+    "count": 329940,
+    "rows": 423,
     "width": 195,
-    "height": 203,
-    "format": "RGBA32F"
+    "height": 423,
+    "format": "RGBA16F"
    },
    "rest": {
-    "byteOffset": 14357916,
+    "byteOffset": 15805596,
     "byteLength": 780,
     "count": 195
    },
+   "clips": [
+    {
+     "name": "Idle",
+     "source": "Idle",
+     "row": 0,
+     "frames": 38,
+     "duration": 2.5,
+     "fps": 15,
+     "loop": true
+    },
+    {
+     "name": "Walk",
+     "source": "Walk",
+     "row": 38,
+     "frames": 32,
+     "duration": 1.3333,
+     "fps": 24,
+     "loop": true
+    },
+    {
+     "name": "Run",
+     "source": "Run",
+     "row": 70,
+     "frames": 21,
+     "duration": 0.7083,
+     "fps": 30,
+     "loop": true
+    },
+    {
+     "name": "Startle",
+     "source": "Startle",
+     "row": 91,
+     "frames": 10,
+     "duration": 0.4333,
+     "fps": 24,
+     "loop": false
+    },
+    {
+     "name": "Guard",
+     "source": "Guard",
+     "row": 101,
+     "frames": 44,
+     "duration": 2.9333,
+     "fps": 15,
+     "loop": true
+    },
+    {
+     "name": "Fall",
+     "source": "Fall",
+     "row": 145,
+     "frames": 58,
+     "duration": 2.4,
+     "fps": 24,
+     "loop": false
+    },
+    {
+     "name": "Idle.restless",
+     "source": "Idle.restless",
+     "row": 203,
+     "frames": 31,
+     "duration": 3.1001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Idle.stand",
+     "source": "Idle.stand",
+     "row": 234,
+     "frames": 51,
+     "duration": 5.1001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Idle.akimbo",
+     "source": "Idle.akimbo",
+     "row": 285,
+     "frames": 50,
+     "duration": 5.0001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Walk.female",
+     "source": "Walk.female",
+     "row": 335,
+     "frames": 35,
+     "duration": 1.4375,
+     "fps": 24,
+     "loop": true,
+     "stride": 1.0248
+    },
+    {
+     "name": "Walk.neutral",
+     "source": "Walk.neutral",
+     "row": 370,
+     "frames": 33,
+     "duration": 1.3834,
+     "fps": 24,
+     "loop": true,
+     "stride": 1.0997
+    },
+    {
+     "name": "Walk.rushed",
+     "source": "Walk.rushed",
+     "row": 403,
+     "frames": 20,
+     "duration": 0.8167,
+     "fps": 24,
+     "loop": true,
+     "stride": 1.7258
+    }
+   ],
    "regions": {
     "skin": 9416,
     "top": 2985,
@@ -1952,32 +3030,32 @@
      "triangles": 16000,
      "indexType": "u16",
      "position": {
-      "byteOffset": 12803636,
+      "byteOffset": 14224796,
       "byteLength": 233532,
       "count": 58383
      },
      "normal": {
-      "byteOffset": 13037168,
+      "byteOffset": 14458328,
       "byteLength": 233532,
       "count": 58383
      },
      "skinIndex": {
-      "byteOffset": 13270700,
+      "byteOffset": 14691860,
       "byteLength": 77844,
       "count": 77844
      },
      "skinWeight": {
-      "byteOffset": 13348544,
+      "byteOffset": 14769704,
       "byteLength": 77844,
       "count": 77844
      },
      "crowdUV": {
-      "byteOffset": 13426388,
+      "byteOffset": 14847548,
       "byteLength": 155688,
       "count": 77844
      },
      "index": {
-      "byteOffset": 13582076,
+      "byteOffset": 15003236,
       "byteLength": 96000,
       "count": 48000
      }
@@ -1988,32 +3066,32 @@
      "triangles": 5200,
      "indexType": "u16",
      "position": {
-      "byteOffset": 12803636,
+      "byteOffset": 14224796,
       "byteLength": 233532,
       "count": 58383
      },
      "normal": {
-      "byteOffset": 13037168,
+      "byteOffset": 14458328,
       "byteLength": 233532,
       "count": 58383
      },
      "skinIndex": {
-      "byteOffset": 13270700,
+      "byteOffset": 14691860,
       "byteLength": 77844,
       "count": 77844
      },
      "skinWeight": {
-      "byteOffset": 13348544,
+      "byteOffset": 14769704,
       "byteLength": 77844,
       "count": 77844
      },
      "crowdUV": {
-      "byteOffset": 13426388,
+      "byteOffset": 14847548,
       "byteLength": 155688,
       "count": 77844
      },
      "index": {
-      "byteOffset": 13678076,
+      "byteOffset": 15099236,
       "byteLength": 31200,
       "count": 15600
      }
@@ -2024,32 +3102,32 @@
      "triangles": 1899,
      "indexType": "u16",
      "position": {
-      "byteOffset": 12803636,
+      "byteOffset": 14224796,
       "byteLength": 233532,
       "count": 58383
      },
      "normal": {
-      "byteOffset": 13037168,
+      "byteOffset": 14458328,
       "byteLength": 233532,
       "count": 58383
      },
      "skinIndex": {
-      "byteOffset": 13270700,
+      "byteOffset": 14691860,
       "byteLength": 77844,
       "count": 77844
      },
      "skinWeight": {
-      "byteOffset": 13348544,
+      "byteOffset": 14769704,
       "byteLength": 77844,
       "count": 77844
      },
      "crowdUV": {
-      "byteOffset": 13426388,
+      "byteOffset": 14847548,
       "byteLength": 155688,
       "count": 77844
      },
      "index": {
-      "byteOffset": 13709276,
+      "byteOffset": 15130436,
       "byteLength": 11394,
       "count": 5697
      }
@@ -2060,32 +3138,32 @@
      "triangles": 647,
      "indexType": "u16",
      "position": {
-      "byteOffset": 12803636,
+      "byteOffset": 14224796,
       "byteLength": 233532,
       "count": 58383
      },
      "normal": {
-      "byteOffset": 13037168,
+      "byteOffset": 14458328,
       "byteLength": 233532,
       "count": 58383
      },
      "skinIndex": {
-      "byteOffset": 13270700,
+      "byteOffset": 14691860,
       "byteLength": 77844,
       "count": 77844
      },
      "skinWeight": {
-      "byteOffset": 13348544,
+      "byteOffset": 14769704,
       "byteLength": 77844,
       "count": 77844
      },
      "crowdUV": {
-      "byteOffset": 13426388,
+      "byteOffset": 14847548,
       "byteLength": 155688,
       "count": 77844
      },
      "index": {
-      "byteOffset": 13720672,
+      "byteOffset": 15141832,
       "byteLength": 3882,
       "count": 1941
      }
@@ -2140,19 +3218,103 @@
    "female": true,
    "pelvisScale": 0.9126,
    "boneAtlas": {
-    "byteOffset": 15134988,
-    "byteLength": 633360,
-    "count": 158340,
-    "rows": 203,
+    "byteOffset": 16582668,
+    "byteLength": 531960,
+    "count": 265980,
+    "rows": 341,
     "width": 195,
-    "height": 203,
-    "format": "RGBA32F"
+    "height": 341,
+    "format": "RGBA16F"
    },
    "rest": {
-    "byteOffset": 15768348,
+    "byteOffset": 17114628,
     "byteLength": 780,
     "count": 195
    },
+   "clips": [
+    {
+     "name": "Idle",
+     "source": "Idle",
+     "row": 0,
+     "frames": 38,
+     "duration": 2.5,
+     "fps": 15,
+     "loop": true
+    },
+    {
+     "name": "Walk",
+     "source": "Walk",
+     "row": 38,
+     "frames": 32,
+     "duration": 1.3333,
+     "fps": 24,
+     "loop": true
+    },
+    {
+     "name": "Run",
+     "source": "Run",
+     "row": 70,
+     "frames": 21,
+     "duration": 0.7083,
+     "fps": 30,
+     "loop": true
+    },
+    {
+     "name": "Startle",
+     "source": "Startle",
+     "row": 91,
+     "frames": 10,
+     "duration": 0.4333,
+     "fps": 24,
+     "loop": false
+    },
+    {
+     "name": "Guard",
+     "source": "Guard",
+     "row": 101,
+     "frames": 44,
+     "duration": 2.9333,
+     "fps": 15,
+     "loop": true
+    },
+    {
+     "name": "Fall",
+     "source": "Fall",
+     "row": 145,
+     "frames": 58,
+     "duration": 2.4,
+     "fps": 24,
+     "loop": false
+    },
+    {
+     "name": "Idle.old",
+     "source": "Idle.old",
+     "row": 203,
+     "frames": 53,
+     "duration": 5.3001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Idle.behind",
+     "source": "Idle.behind",
+     "row": 256,
+     "frames": 50,
+     "duration": 5.0001,
+     "fps": 10,
+     "loop": true
+    },
+    {
+     "name": "Walk.elder",
+     "source": "Walk.elder",
+     "row": 306,
+     "frames": 35,
+     "duration": 1.4584,
+     "fps": 24,
+     "loop": true,
+     "stride": 0.8237
+    }
+   ],
    "regions": {
     "skin": 9407,
     "top": 2016,
@@ -2168,32 +3330,32 @@
      "triangles": 15999,
      "indexType": "u16",
      "position": {
-      "byteOffset": 14358696,
+      "byteOffset": 15806376,
       "byteLength": 190140,
       "count": 47535
      },
      "normal": {
-      "byteOffset": 14548836,
+      "byteOffset": 15996516,
       "byteLength": 190140,
       "count": 47535
      },
      "skinIndex": {
-      "byteOffset": 14738976,
+      "byteOffset": 16186656,
       "byteLength": 63380,
       "count": 63380
      },
      "skinWeight": {
-      "byteOffset": 14802356,
+      "byteOffset": 16250036,
       "byteLength": 63380,
       "count": 63380
      },
      "crowdUV": {
-      "byteOffset": 14865736,
+      "byteOffset": 16313416,
       "byteLength": 126760,
       "count": 63380
      },
      "index": {
-      "byteOffset": 14992496,
+      "byteOffset": 16440176,
       "byteLength": 95994,
       "count": 47997
      }
@@ -2204,32 +3366,32 @@
      "triangles": 5199,
      "indexType": "u16",
      "position": {
-      "byteOffset": 14358696,
+      "byteOffset": 15806376,
       "byteLength": 190140,
       "count": 47535
      },
      "normal": {
-      "byteOffset": 14548836,
+      "byteOffset": 15996516,
       "byteLength": 190140,
       "count": 47535
      },
      "skinIndex": {
-      "byteOffset": 14738976,
+      "byteOffset": 16186656,
       "byteLength": 63380,
       "count": 63380
      },
      "skinWeight": {
-      "byteOffset": 14802356,
+      "byteOffset": 16250036,
       "byteLength": 63380,
       "count": 63380
      },
      "crowdUV": {
-      "byteOffset": 14865736,
+      "byteOffset": 16313416,
       "byteLength": 126760,
       "count": 63380
      },
      "index": {
-      "byteOffset": 15088492,
+      "byteOffset": 16536172,
       "byteLength": 31194,
       "count": 15597
      }
@@ -2240,32 +3402,32 @@
      "triangles": 1900,
      "indexType": "u16",
      "position": {
-      "byteOffset": 14358696,
+      "byteOffset": 15806376,
       "byteLength": 190140,
       "count": 47535
      },
      "normal": {
-      "byteOffset": 14548836,
+      "byteOffset": 15996516,
       "byteLength": 190140,
       "count": 47535
      },
      "skinIndex": {
-      "byteOffset": 14738976,
+      "byteOffset": 16186656,
       "byteLength": 63380,
       "count": 63380
      },
      "skinWeight": {
-      "byteOffset": 14802356,
+      "byteOffset": 16250036,
       "byteLength": 63380,
       "count": 63380
      },
      "crowdUV": {
-      "byteOffset": 14865736,
+      "byteOffset": 16313416,
       "byteLength": 126760,
       "count": 63380
      },
      "index": {
-      "byteOffset": 15119688,
+      "byteOffset": 16567368,
       "byteLength": 11400,
       "count": 5700
      }
@@ -2276,32 +3438,32 @@
      "triangles": 650,
      "indexType": "u16",
      "position": {
-      "byteOffset": 14358696,
+      "byteOffset": 15806376,
       "byteLength": 190140,
       "count": 47535
      },
      "normal": {
-      "byteOffset": 14548836,
+      "byteOffset": 15996516,
       "byteLength": 190140,
       "count": 47535
      },
      "skinIndex": {
-      "byteOffset": 14738976,
+      "byteOffset": 16186656,
       "byteLength": 63380,
       "count": 63380
      },
      "skinWeight": {
-      "byteOffset": 14802356,
+      "byteOffset": 16250036,
       "byteLength": 63380,
       "count": 63380
      },
      "crowdUV": {
-      "byteOffset": 14865736,
+      "byteOffset": 16313416,
       "byteLength": 126760,
       "count": 63380
      },
      "index": {
-      "byteOffset": 15131088,
+      "byteOffset": 16578768,
       "byteLength": 3900,
       "count": 1950
      }
@@ -2311,7 +3473,7 @@
  ],
  "output": {
   "file": "public/data/crowd/citizens.bin",
-  "bytes": 15769128,
-  "sha256": "cc74b257c282afb14d2d6b9d3b6e5c2d78db41f7567c10524790e243df949722"
+  "bytes": 17115408,
+  "sha256": "f25d3c058012408a3cf0eaffded0889cd6738abae08b64875d07b4c543bd10fc"
  }
 }
