@@ -353,3 +353,16 @@ Each change below was compared against the reference image, side by side, from C
 - **Crowd.** Stills can wait for the scramble's walk phase (`WALK=1` in `look-stills.mjs`), so the crossing is full of people, as in a photograph of it.
   - The QA API now exposes `life`. In observe mode the stills script never saw game time move, so every capture waited out its 90 s timeouts.
 - **Evidence:** `evidence/city/look2/` (CAM-09 and CAM-02, night and day).
+
+## 11. Round 3: detail (owner: "work it in finer detail")
+
+- **Tenant boards** (`signs/model.mjs`). Near the crossing (frontage, scramble and Center-gai, within 170 m), a building taller than 11 m no longer carries one blade. It carries a column of small vertical tenant boards, one per floor, from 4.4 m up at a 2.35 m pitch. A long face (over 9 m) often carries a second column at its other end. This is the stack of bar, clinic and karaoke boards that lines every Shibuya side street. About 120 survive the placement audit.
+- **Rooftop boards** are more common near the crossing: `density × 0.85` within 170 m, against 0.4 further out.
+- **Street trees at night** (`day-night.mjs`, mode `treeGlow`). Canopies take warm light from the lamps and shopfronts below. The underside is brightest, so a zelkova reads as a lit mass, not a black blot.
+- **Hisamitsu / Salonpas** (`reference-layer.mjs`, `STACKED`). On the real building these are one stacked pair. The inventory's own Hisamitsu slot resolves wider than its mount, so it was never placed. It now shares the tall Salonpas slot: Hisamitsu on top, Salonpas below.
+- **Evidence:** `evidence/city/detail1/` (CAM-09 and CAM-02, night and day, walk phase).
+- **Next candidates:**
+  - more brand variety on the vertical boards (the atlas has 4 blade slots);
+  - denser storefront fascias at street level;
+  - queued traffic at the red phase;
+  - QFRONT's side LED strips.
