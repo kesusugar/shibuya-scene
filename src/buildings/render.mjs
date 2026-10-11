@@ -20,6 +20,8 @@ export function buildBuildings(data,options={}){
  for(const b of model.buildings){
   const rng=seededRandom(b.key+':facade'),tint=new Color(ARCHETYPE_COLORS[b.archetype]).multiplyScalar(.9+rng()*.18),top=b.height+C.base;
   const body=extrude(b.polygon,top-b.base,b.base),wall=sides(body);body.dispose();walls.push(colorize(wall,tint));roofs.push(colorize(polygonGeometry(b.polygon,top),new Color(0x686b69).multiplyScalar(.85+rng()*.3)));
+  // Reality alignment G2-1: the surveyed roof steps (PLATEAU LOD2) stand on the main roof.
+  for(const step of b.roofSteps??[]){const y=step.y+C.base,g=extrude(step.polygon,y-top,top),side=sides(g);g.dispose();walls.push(colorize(side,tint.clone().multiplyScalar(.82)));roofs.push(colorize(polygonGeometry(step.polygon,y),new Color(0x5d605f)));}
   let windowCount=0;
   for(let edge=0;edge<b.polygon.outer.length;edge++){
    const a=b.polygon.outer[edge],end=b.polygon.outer[(edge+1)%b.polygon.outer.length],l=distance(a,end);if(l<1.6)continue;

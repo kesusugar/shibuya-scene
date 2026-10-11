@@ -10,7 +10,14 @@ export const CAMERAS = Object.freeze([
 {id:'center-gai',label:'CAM-07 Center-gai',position:[-25,2,-30],target:[-100,8,-70]},
 {id:'photo',label:'CAM-08 Night Photo',position:[42,8,45],target:[-25,20,-35],time:'night'},
 {id:'ref',label:'CAM-09 Crossing North',position:[12,86,136],target:[-4,14,-28],fov:32},
-{id:'station',label:'Station inspection',position:[100,65,130],target:[45,15,70]}]);
+{id:'station',label:'Station inspection',position:[100,65,130],target:[45,15,70]},
+// Reality alignment (docs/PLAN-REALITY.md): cameras solved from real photographs by ground anchors
+// (crosswalk ends, building corners), so a still from them can sit beside the photograph. `frame`
+// is the photograph's aspect; `source` the Commons file it was solved from.
+{id:'ref-a',label:'REF-A Station Walkway',position:[-12.6,10.2,68.2],target:[0.8,16.2,-30.7],fov:52.2,reference:true,frame:[1280,960],source:'File:In_Front_of_Shibuya_Station.jpg'},
+{id:'ref-b',label:'REF-B Stream Night',position:[161.9,159.6,201.8],target:[-5,12,18.7],fov:15.8,reference:true,frame:[1280,964],time:'night',source:'File:Shibuya_scramble_av_night_from_Stream.jpg'},
+// Estimated from the owner's target image, which is not geometrically consistent: mood only.
+{id:'ref-c',label:'REF-C Target Frame',position:[8,46,100],target:[-8,14,-35],fov:45,reference:true,frame:[1160,1000],time:'night',source:'owner target image (estimate)'}]);
 export const MODULES = ['geo','data','ground','buildings','station','signs','streetscape','traffic','life','trains','construction','environment','nightglow','postprocess','perf','camera','debug'];
 export function parseConfig(search='') {const q=new URLSearchParams(search),qa=q.get('qa')==='1',requestedCamera=q.get('camera'),camera=requestedCamera==='scramble-street'?'street':requestedCamera;const selectedTier=q.get('tier')??'medium';const list=k=>q.has(k)?q.get(k).split(',').map(s=>s.trim()).filter(Boolean):null;return {qa,tier:qa?'high':Object.hasOwn(PROFILES,selectedTier)?selectedTier:'medium',camera:CAMERAS.some(c=>c.id===camera)?(camera??'scramble'):'scramble',time:q.get('time')==='night'?'night':'day',explicitTime:q.has('time'),only:list('only'),skip:list('skip')??[],debug:q.get('debug')==='1'};}
 export class TimeState {constructor(value='day'){this.value=value;this.listeners=new Set();}isDark(){return this.value==='night';}get emissiveScale(){return this.isDark()?1:.15;}get grade(){return this.value;}set(value){if(!['day','night'].includes(value))throw new Error('Invalid time');if(this.value===value)return;this.value=value;for(const f of this.listeners)f(this);}subscribe(f){this.listeners.add(f);return()=>this.listeners.delete(f);}}

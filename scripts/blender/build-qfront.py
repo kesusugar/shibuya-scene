@@ -1,4 +1,5 @@
-# Cityscape C2 (docs/PLAN-CITYSCAPE.md): QFRONT's built detail, as a GLB.
+# Cityscape C2 (docs/PLAN-CITYSCAPE.md), reality alignment G2-2 (docs/PLAN-REALITY.md): QFRONT's
+# built detail, as a GLB.
 #
 #   node scripts/qfront-spec.mjs <spec.json>
 #   blender -b -P scripts/blender/build-qfront.py -- <spec.json> <out.glb>
@@ -70,7 +71,7 @@ def material(name, colour, rough=.5, metal=0., emit=None, strength=0.):
     return m
 
 MAT = dict(frame=material('qf_frame', (.16, .18, .2), .35, .85),
-           louvre=material('qf_louvre', (.42, .45, .47), .45, .7),
+           louvre=material('qf_louvre', (.78, .8, .81), .38, .6),
            logo=material('qf_logo', (.95, .95, .95), .3, 0, (1, 1, 1), 1.0),
            light=material('qf_light', (1, .9, .75), .5, 0, (1, .82, .6), 1.0),
            plant=material('qf_plant', (.5, .52, .5), .7, .3))
@@ -87,17 +88,19 @@ pdir = spec['primary']['direction']
 facing = lambda e: e['n'][0] * pdir[0] + e['n'][1] * pdir[1]
 
 def crown_louvres(bm):
-    ring = crown['polygon']; top = crown['top']
+    """Reality alignment G2-2: the crown is a full-height lattice screen round the whole perimeter,
+    from the top storey (44.0 m) to the parapet (52.1 m), PLATEAU LOD2 -- not a set-back box."""
+    ring = crown['polygon']; lo, hi = crown['bottom'], crown['top']
     for e in edges(ring):
-        count = max(2, int(e['L'] / .55))
+        count = max(2, int(e['L'] / .62))
         for i in range(count + 1):
             u = e['L'] * i / count
-            x = e['a'][0] + e['t'][0] * u + e['n'][0] * .12
-            z = e['a'][1] + e['t'][1] * u + e['n'][1] * .12
-            box(bm, (x, top + .7, z), (.06, 1.4, .28), edge_yaw(e))
-        # top and bottom rails
-        for y in (top + .05, top + 1.38):
-            box(bm, (e['mid'][0] + e['n'][0] * .12, y, e['mid'][1] + e['n'][1] * .12), (e['L'], .08, .3), edge_yaw(e))
+            x = e['a'][0] + e['t'][0] * u + e['n'][0] * .16
+            z = e['a'][1] + e['t'][1] * u + e['n'][1] * .16
+            box(bm, (x, (lo + hi) / 2, z), (.07, hi - lo, .3), edge_yaw(e))
+        # rails: base, three intermediate, coping
+        for y in (lo + .1, lo + 2.7, lo + 5.4, hi - .12):
+            box(bm, (e['mid'][0] + e['n'][0] * .18, y, e['mid'][1] + e['n'][1] * .18), (e['L'] + .1, .16, .36), edge_yaw(e))
 
 def fins(bm):
     ring = media['polygon']
@@ -113,7 +116,7 @@ def fins(bm):
 
 def slabs(bm):
     sb, sh = spec['screen']['bottom'], spec['screen']['height']
-    for y in [8.2 + 5.4 * k for k in range(6)] + [38.65]:
+    for y in [media['bottom'] + 5.4 * k for k in range(7)] + [upper['top']]:
         for e in edges(media['polygon']):
             if facing(e) > .85 and sb + .15 - 1 < y < sb + .15 + sh + 1: continue
             box(bm, (e['mid'][0] + e['n'][0] * .16, y, e['mid'][1] + e['n'][1] * .16), (e['L'] + .1, .3, .34), edge_yaw(e))
@@ -129,10 +132,11 @@ def canopy_light(bm):
         box(bm, (e['mid'][0] + e['n'][0] * 1.2, 7.17, e['mid'][1] + e['n'][1] * 1.2), (e['L'] - .4, .04, .18), edge_yaw(e))
 
 def roof_plant(bm):
+    """Plant on the recessed roof deck (48.4 m, inside the crown screen); only its tops show."""
     ring = crown['polygon']; cx = sum(p[0] for p in ring) / len(ring); cz = sum(p[1] for p in ring) / len(ring)
-    top = crown['top']
-    for dx, dz, w, h, d in ((-4, -2, 5, 2.2, 3), (3, 1, 4, 1.6, 4), (0, 4, 2.5, 3.2, 2.5)):
-        if inside((cx + dx, cz + dz), ring): box(bm, (cx + dx, top + h / 2, cz + dz), (w, h, d), 0)
+    deck = spec.get('deck', crown['top'] - 3.7)
+    for dx, dz, w, h, d in ((-4, -2, 5, 4.4, 3), (3, 1, 4, 4.0, 4)):
+        if inside((cx + dx, cz + dz), ring): box(bm, (cx + dx, deck + h / 2, cz + dz), (w, h, d), 0)
 
 mesh_object('QFRONT_CROWN_LOUVRES', crown_louvres, 'louvre')
 mesh_object('QFRONT_FINS', fins, 'frame')
@@ -143,21 +147,21 @@ mesh_object('QFRONT_ROOF_PLANT', roof_plant, 'louvre')
 
 # The lettering: across the curved front that faces the crossing, on the upper storeys -- flat,
 # square to the crossing, just proud of the curve's furthest point.
-ring = upper['polygon']
+ring = crown['polygon']
 reach = max(p[0] * pdir[0] + p[1] * pdir[1] for p in ring)
 fr = [e for e in edges(ring) if facing(e) > .85]
 mid = [sum(e['mid'][0] for e in fr) / len(fr), sum(e['mid'][1] for e in fr) / len(fr)]
 along = mid[0] * pdir[0] + mid[1] * pdir[1]
-mid = [mid[0] + pdir[0] * (reach - along + .35), mid[1] + pdir[1] * (reach - along + .35)]
+mid = [mid[0] + pdir[0] * (reach - along + .6), mid[1] + pdir[1] * (reach - along + .6)]
 cu = bpy.data.curves.new('QFRONT_LOGO', 'FONT'); cu.body = 'QFRONT'
-cu.align_x = 'CENTER'; cu.align_y = 'CENTER'; cu.extrude = .09; cu.size = 1.9; cu.space_character = 1.12
+cu.align_x = 'CENTER'; cu.align_y = 'CENTER'; cu.extrude = .12; cu.size = 2.6; cu.space_character = 1.12
 logo = bpy.data.objects.new('QFRONT_LOGO', cu); scene.collection.objects.link(logo)
 bpy.context.view_layer.objects.active = logo; logo.select_set(True)
 bpy.ops.object.convert(target='MESH')
 logo = bpy.context.view_layer.objects.active; logo.name = 'QFRONT_LOGO'
 # Text lies in Blender XY facing +Z: stand it up (face -Y), then turn it to face the crossing.
 logo.rotation_euler = (math.pi / 2, 0, math.atan2(-pdir[1], pdir[0]) + math.pi / 2)
-logo.location = B(mid[0], (upper['bottom'] + upper['top']) / 2, mid[1])
+logo.location = B(mid[0], (crown['bottom'] + crown['top']) / 2 + .6, mid[1])
 logo.data.materials.clear(); logo.data.materials.append(MAT['logo'])
 
 # One mesh per material, so the asset costs four draw calls, not seven.

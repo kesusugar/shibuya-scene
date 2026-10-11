@@ -6,7 +6,7 @@ import {MeshStandardMaterial,Color} from 'three';
 export const QFRONT_ASSET_URL='/data/heroes/qfront.glb';
 const LOOK=Object.freeze({
  qf_frame:{name:'qfront-asset-frame',color:0x2b3136,roughness:.32,metalness:.85},
- qf_louvre:{name:'qfront-asset-crown',color:0x5d666c,roughness:.45,metalness:.7},
+ qf_louvre:{name:'qfront-asset-crown',color:0xc9cdcf,roughness:.38,metalness:.55},
  qf_logo:{name:'qfront-asset-logo',color:0xf4f4f2,roughness:.3,metalness:0,emissive:0xffffff,emissiveIntensity:.08},
  qf_light:{name:'qfront-asset-light',color:0xfff0d8,roughness:.5,metalness:0,emissive:0xffd9a8,emissiveIntensity:.1}
 });

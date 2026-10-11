@@ -80,13 +80,15 @@ export function centerGaiLayout(){const signs=[];for(const [bi,f] of CENTER_FACA
  ];
  for(const f of rearFaces){const width=Math.hypot(f.b[0]-f.a[0],f.b[1]-f.a[1])/f.columns-.6,variants=[13,24,3,1,20,0,17,4,21,22,10,23,6,14,7];for(let row=0;row<5;row++)for(let col=0;col<f.columns;col++)signs.push({building:'way/114755219',surface:f.surface,kind:'advert',variant:variants[row*f.columns+col],position:wallAt(f,(col+.5)/f.columns,6.5+row*6.8),heading:Math.atan2(...f.normal),width,height:5.8});}
  for(const s of [{p:[-47,27.4,-34],variant:15,width:9},{p:[-53,28,-44],variant:26,width:8.4},{p:[-60.5,27.2,-35],variant:21,width:7}])signs.push({building:'way/136690966',surface:'roof-rear',kind:'roof',variant:s.variant,position:s.p,heading:.107,width:s.width,height:3.8});
- signs.push({building:'way/136691386',surface:'crown',kind:'advert',variant:27,position:[-8,40.2,-29.3],heading:.1589,width:9.5,height:2.2});
+ // Reality alignment G2-2: QFRONT's lettering is on its crown screen (the Blender asset), not a board on the glass.
  // The rooftop drink brand is owned by the reference advertisement layer, which stands it
  // on a real roof instead of floating it at a fixed height above QFRONT.
  // First reference-brand pass reuses two existing rooftop supports. Host positions
  // are provisional and deliberately identified for the next placement audit.
- const roofSlots=signs.filter(s=>s.surface==='roof-rear'),brandSlots=[roofSlots[2],roofSlots[0]];
- for(const [i,variant] of [29,30].entries()){const s=brandSlots[i];s.variant=variant;s.width=6.4;s.height=6.4;s.position[1]+=1.3;s.referencePlacement='provisional-existing-slot';}
+ // Reality alignment G2-1: Hisamitsu / サロンパス stand on their own frame (sign-structures.mjs), so only UC
+ // keeps a provisional roof slot here.
+ const roofSlots=signs.filter(s=>s.surface==='roof-rear'),brandSlots=[roofSlots[2]];
+ for(const [i,variant] of [29].entries()){const s=brandSlots[i];s.variant=variant;s.width=6.4;s.height=6.4;s.position[1]+=1.3;s.referencePlacement='provisional-existing-slot';}
  return signs;}
 
 function atlas(factory){const canvas=factory?factory():typeof document!=='undefined'?document.createElement('canvas'):null;

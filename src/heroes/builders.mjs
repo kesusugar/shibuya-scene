@@ -1,18 +1,24 @@
-import {mass,setback,bands,grid,roofMass,placeholder,anchor,edges,primaryFacade,roundFront} from './model.mjs';
+import {mass,setback,bands,grid,roofMass,placeholder,anchor,edges,primaryFacade,roundFront,plateauRoofMasses} from './model.mjs';
 const sequence=(start,end,step)=>{const a=[];for(let y=start;y<end;y+=step)a.push(y);return a;};
 export function buildQFront(h){
- const base=h.footprint,upper=setback(h,.985),roof=setback(h,.76,.73);
- mass(h,'commercial-base',base,0,7.5,'concreteDark');mass(h,'media-block',base,7.5,38.5);mass(h,'upper-storeys',upper,38.5,42.5,'glassDark');mass(h,'roof-crown',roof,42.5,h.height);
+ // Reality alignment G2-2 (docs/PLAN-REALITY.md), from PLATEAU 2025 LOD2 and photographs: one glass
+ // block on the whole footprint up to the top storey (44.0 m), then the crown -- a lattice screen
+ // round the full perimeter to 52.1 m with the roof deck recessed inside it at 48.4 m. It used to be
+ // a set-back box stopping at 45.9 m, which made the building read short and squat.
+ const base=h.footprint,upper=setback(h,.995),inner=setback(h,.9,.86);
+ mass(h,'commercial-base',base,0,7.5,'concreteDark');mass(h,'media-block',base,7.5,39.9);mass(h,'upper-storeys',upper,39.9,44,'glassDark');
+ mass(h,'roof-crown',{outer:base.outer,holes:[[...inner.outer].reverse()]},44,h.height,'metal');mass(h,'roof-deck',inner,44,48.4,'glassDark');
  // Segmented screen follows the real curved south frontage instead of cutting through it.
  const front=edges(base).filter(e=>e.length>3&&e.normal[0]*h.primaryFacade.direction[0]+e.normal[1]*h.primaryFacade.direction[1]>.85);
  for(const e of front)placeholder(h,e,'largeScreen',e.length-.25,h.screenHeight,h.screenBottom+h.screenHeight/2,{logicalId:'qfront-main-screen'});
- const frontIndices=new Set(front.map(e=>e.index));grid(h,base,1,38.5,{pitch:2.8,width:2.3,height:2.7,skip:(e,y)=>frontIndices.has(e.index)&&y>h.screenBottom-2&&y<h.screenBottom+h.screenHeight+2});grid(h,upper,38.5,42.5,{floor:3,width:1.5,height:1.8});
- bands(h,base,[3.8,7.5,33,36.5,38.4],{thickness:.22});bands(h,upper,[42.4],{thickness:.35});
- anchor(h,h.primaryFacade,'facadeSign',Math.min(12,h.primaryFacade.length-.5),1.2,35,2);anchor(h,h.primaryFacade,'emissiveFacade',Math.min(15,h.primaryFacade.length-.5),3,39,1);
+ const frontIndices=new Set(front.map(e=>e.index));grid(h,base,1,39.9,{pitch:2.8,width:2.3,height:2.7,skip:(e,y)=>frontIndices.has(e.index)&&y>h.screenBottom-2&&y<h.screenBottom+h.screenHeight+2});grid(h,upper,39.9,44,{floor:3,width:1.5,height:1.8});
+ bands(h,base,[3.8,7.5,...QFRONT_STOREYS,44],{thickness:.22});
+ anchor(h,h.primaryFacade,'facadeSign',Math.min(12,h.primaryFacade.length-.5),1.2,41.5,2);anchor(h,h.primaryFacade,'emissiveFacade',Math.min(15,h.primaryFacade.length-.5),3,47,1);
  const entrance=h.primaryFacade;
  placeholder(h,entrance,'entranceRecess',Math.min(6,entrance.length-.5),2.7,1.6);
- roofMass(h,roof,h.height,{width:4,depth:2,height:1.2});
 }
+/** QFRONT's storey lines above the podium: six 5.4 m office/retail storeys to the top storey. */
+export const QFRONT_STOREYS=Object.freeze([12.9,18.3,23.7,29.1,34.5,39.9]);
 export function buildShibuya109(h){
  const base=h.footprint,rear=setback(h,.84,.88,-2,0),round=roundFront(h);
  mass(h,'retail-podium',base,0,6,'concreteDark');mass(h,'rear-commercial-shoulder',rear,6,26.5);mass(h,'rounded-front-tower',round,6,30.8,'metal');
@@ -69,4 +75,5 @@ export function buildShibuyaStream(h){
  const p=h.footprint,podium=setback(h,.97,.95),tower=setback(h,.72,.73),top=setback(h,.66,.67);mass(h,'stream-public-podium',p,0,18,'concreteDark');mass(h,'hotel-transition',podium,18,54,'concreteLight');mass(h,'offset-panel-office-tower',tower,54,171,'glass');mass(h,'asymmetric-roof-step',top,171,h.height,'metal');
  grid(h,podium,20,54,{pitch:3.4,floor:3.8,width:2.8,height:2.6});grid(h,tower,55,170,{pitch:3.1,floor:4,width:2.45,height:3.6});bands(h,podium,[18.2,36,53.8],{thickness:.5});bands(h,tower,sequence(62,170,12),{thickness:.2});anchor(h,primaryFacade(tower,[0,0]),'emissiveFacade',Math.min(20,h.primaryFacade.length*.6),35,130);roofMass(h,top,h.height,{width:4,depth:3,height:2});
 }
-export const BUILDERS={qfront:buildQFront,'109':buildShibuya109,magnet:buildMagnet,scrambleSquare:buildScrambleSquare,seibuA:buildSeibuA,seibuB:buildSeibuB,markCity:buildMarkCity,stream:buildShibuyaStream};
+const withRoof=build=>h=>{build(h);plateauRoofMasses(h);};
+export const BUILDERS={qfront:buildQFront,'109':withRoof(buildShibuya109),magnet:withRoof(buildMagnet),scrambleSquare:buildScrambleSquare,seibuA:withRoof(buildSeibuA),seibuB:withRoof(buildSeibuB),markCity:buildMarkCity,stream:buildShibuyaStream};

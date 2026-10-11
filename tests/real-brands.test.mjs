@@ -7,6 +7,7 @@ test('reference brands have distinctive text and reuse atlas capacity',()=>{
  assert.equal(paintRealBrand({},'unrecognised'),false);
  assert.equal(Math.ceil(CENTER_ADS.length/4),8);
  const signs=centerGaiLayout().filter(s=>s.referencePlacement);
- assert.equal(signs.length,2);assert.deepEqual(signs.map(s=>s.variant).sort(),[29,30]);
+ // Hisamitsu / サロンパス moved to the Taiseido roof frame (sign-structures.mjs).
+ assert.equal(signs.length,1);assert.deepEqual(signs.map(s=>s.variant),[29]);
  for(const s of signs){assert.equal(s.kind,'roof');assert.ok(s.position.every(Number.isFinite));assert.ok(s.position[1]-s.height/2>24);}
 });

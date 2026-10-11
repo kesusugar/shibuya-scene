@@ -47,15 +47,15 @@ test('QFRONT asset: four meshes on QFRONT\'s own footprint, lettering facing the
  assert.equal(asset.meshes,4);assert.ok(asset.triangles<20000,`${asset.triangles} triangles`);
  gltf.scene.updateMatrixWorld(true);
  const box=new Box3().setFromObject(gltf.scene);
- // QFRONT's footprint: X -30.2..5.1, Z -56.5..-29.0, 45.9 m with its crown; detail stands proud by under 3 m.
+ // QFRONT's footprint: X -30.2..5.1, Z -56.5..-29.0, 52.1 m to the crown's parapet (PLATEAU LOD2); detail stands proud by under 3 m.
  assert.ok(box.min.x>-33&&box.max.x<8&&box.min.z>-59&&box.max.z<-25,`bounds ${box.min.toArray()} ${box.max.toArray()}`);
- assert.ok(box.min.y>7&&box.max.y<52,`heights ${box.min.y}..${box.max.y}`);
+ assert.ok(box.min.y>7&&box.max.y<53.5,`heights ${box.min.y}..${box.max.y}`);
  const names=[];gltf.scene.traverse(o=>{if(o.isMesh)names.push(o.name);});
  assert.deepEqual(names.sort(),['qfront-asset-crown','qfront-asset-frame','qfront-asset-light','qfront-asset-logo']);
  const logo=gltf.scene.getObjectByName('qfront-asset-logo');logo.geometry.computeBoundingBox();
  const c=new Box3().setFromObject(logo).getCenter(new (box.min.constructor)());
- // In front of the curved south face, on the upper storeys.
- assert.ok(c.z>-32&&c.y>38&&c.y<43,`logo at ${c.toArray()}`);
+ // In front of the curved south face, on the crown screen (44-52.1 m).
+ assert.ok(c.z>-32&&c.y>44&&c.y<52,`logo at ${c.toArray()}`);
  asset.dispose();
 });
 

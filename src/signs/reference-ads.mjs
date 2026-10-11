@@ -171,6 +171,7 @@ export const MIN_ANCHOR_FIT = .12;
 // Advertisements deliberately left out of this scene. Recorded rather than deleted so the
 // inventory stays a complete transcription of the reference frame.
 export const EXCLUDED_ADS = Object.freeze({12: 'out-of-scope-for-this-scene',
+ 15: 'carried-by-sign-structure', 16: 'carried-by-sign-structure',
  201: 'carried-by-the-hero-facade', 202: 'carried-by-the-hero-facade', 203: 'carried-by-the-hero-facade',
  204: 'carried-by-the-hero-facade', 205: 'carried-by-the-hero-facade', 206: 'carried-by-the-hero-facade',
  207: 'carried-by-the-hero-facade', 208: 'carried-by-the-hero-facade', 209: 'carried-by-the-hero-facade',

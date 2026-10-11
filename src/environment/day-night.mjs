@@ -65,9 +65,11 @@ totalEmissiveRadiance+=vec3(.24,.13,.065)*alley*s12Night*(.25+.75*pow(.5+.5*cos(
 ${mode==='groundPoolRoad'?'totalEmissiveRadiance+=billboardRoadSpill(q)*s12Night*(1.0-.55*s13ReflectStrength)*(1.0-.6*(1.0-smoothstep(22.,34.,length(q-vec2(6.5,2.)))));totalEmissiveRadiance+=roadMirror(q,smoothstep(.23,.76,roadNoise(q*.42)))*s12Night;':''}
 ${mode==='groundPoolWalk'?'totalEmissiveRadiance+=frontageSpill(q)*s12Night;':''}
 float pool=0.0;
-for(int i=0;i<4;i++){vec2 c=vec2(i<2?-22.0:22.0,mod(float(i),2.0)<0.5?-19.0:19.0);pool+=(0.26+0.018*float(i))*pow(max(0.0,1.0-length(q-c)/24.0),2.0);}
+for(int i=0;i<4;i++){vec2 c=vec2(i<2?-22.0:22.0,mod(float(i),2.0)<0.5?-19.0:19.0);pool+=(0.20+0.018*float(i))*pow(max(0.0,1.0-length(q-c)/20.0),2.0);}
 // Cityscape: the scramble sits in the light of everything round it -- signs, screens, shopfronts.
-pool+=0.16*pow(max(0.0,1.0-length(q-vec2(4.0,-2.0))/42.0),1.4);
+// Reality alignment G2-3: a third of what it was; at 0.16 the asphalt read as one lit warm plane,
+// where photographs show dark road, bright zebra paint and colour from the screens.
+pool+=0.06*pow(max(0.0,1.0-length(q-vec2(4.0,-2.0))/42.0),1.4);
 totalEmissiveRadiance+=vec3(1.0,0.69,0.38)*pool*s12Night;`);
   }else if(mode==='sign'){vertex='attribute float s13GlowWeight;\nvarying float s13Sign;\n';fragment+='varying float s13Sign;\n';body='s13Sign=s13GlowWeight;';shader.fragmentShader=shader.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\ntotalEmissiveRadiance *= 1.0+s13Nightglow*(max(s13Sign,0.8)-1.0);');
   }else if(mode==='train'){vertex='attribute vec3 s12Emission;\nattribute float s12LampEnd;\nattribute vec2 s12Cab;\nvarying vec3 s12Train;\n';fragment+='varying vec3 s12Train;\n';body=`s12Train=s12Emission;
@@ -101,6 +103,7 @@ export class DayNightSystem{
    // Keep printed colors below the display peak; bulbs and rims remain separate.
    if(/^signs-(print|led|heroScreen|reference)$/.test(o.name)){night=o.name==='signs-print'?1.15:o.name==='signs-led'?1.8:o.name==='signs-reference'?1.6:1.6;mode='sign';}
    if(o.name==='center-gai-advertisements')night=1.2;
+   if(o.name==='sign-structure-board')night=1.25;
    if(o.name==='center-gai-light')night=7;
    if(o.name==='center-gai-rim')night=7;
    if(o.name==='sign-accent-bulbs')night=18;
