@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createHQLayer,selectNearest} from '../src/life/hq-layer.mjs';
+// These tests pin the RUN 6.8 bodies and the classic hq-crowd pack (?people=classic); Look 2's
+// MakeHuman citizens are covered by tests/citizens.test.mjs.
+import {PEOPLE as PEOPLE_MODE} from '../src/life/appearance.mjs';PEOPLE_MODE.mode='classic';
 
 const manifest=JSON.parse(readFileSync('public/data/crowd/hq-crowd.json','utf8'));
 const raw=readFileSync('public/data/crowd/hq-crowd.bin');

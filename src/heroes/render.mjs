@@ -11,17 +11,29 @@ import {createQfrontInterior} from './qfront-interior.mjs';
 import {refineQfrontGlass} from './qfront-glass.mjs';
 import {finish109} from './finish-109.mjs';
 import {createCentralPolish} from './polish.mjs';
+import {QFRONT_MODE} from './qfront-mode.mjs';
 function sideGeometry(g){const group=g.groups.find(x=>x.materialIndex===1),result=new BufferGeometry();for(const name of ['position','normal'])result.setAttribute(name,new Float32BufferAttribute(g.attributes[name].array.slice(group.start*3,(group.start+group.count)*3),3));return result;}
 export function buildHeroScene(data){const started=performance.now(),audit=auditReservations(data),root=new Group();root.name='s4-hero-landmarks';const heroes=[],missing=[],failures=[];
  const materials={qfrontGlass:new MeshStandardMaterial({color:0x68818e,roughness:.17,metalness:.28,envMapIntensity:1.1,transparent:true,opacity:.38,depthWrite:false}),concreteLight:new MeshStandardMaterial({color:0xd0d1c9,roughness:.55,metalness:.05,envMapIntensity:.45}),concreteDark:new MeshStandardMaterial({color:0x5a6064,roughness:.9}),glass:new MeshStandardMaterial({color:0x688595,roughness:.24,metalness:.55,envMapIntensity:1.3}),glassDark:new MeshStandardMaterial({color:0x354b59,roughness:.24,metalness:.45,envMapIntensity:1.25}),metal:new MeshStandardMaterial({color:0xa6afb5,roughness:.38,metalness:.7,envMapIntensity:1}),trim:new MeshStandardMaterial({color:0xffffff,roughness:.75}),screenPlaceholder:new MeshStandardMaterial({color:0x202c35,roughness:.78,emissive:0x000000}),roof:new MeshStandardMaterial({color:0x767d7e,roughness:.94})};
+ // Cityscape C2: deep glass is opaque; the rooms are in its shader, not in boxes behind it.
+ const deep=QFRONT_MODE.current!=='classic';
+ if(deep)Object.assign(materials.qfrontGlass,{color:new materials.qfrontGlass.color.constructor(0x2a3640),roughness:.07,metalness:.62,envMapIntensity:1.25,transparent:false,opacity:1,depthWrite:true});
  const statics=Object.fromEntries(Object.keys(materials).map(k=>[k,[]])),panelRecords={glass:[],glassDark:[],screenPlaceholder:[]},detailRecords=[],builders=[],staticGeometries=[];const plane=new PlaneGeometry(1,1),box=new BoxGeometry(1,1);
  for(const def of HERO_DEFINITIONS){if(!data.buildings.some(s=>s.id===def.id)){missing.push(def.key);continue;}
   if(!audit.some(r=>r.id===def.id&&r.phase==='S4')){failures.push({id:def.id,reason:'source-not-reserved'});continue;}
-  const h=prepareHero(data,def);BUILDERS[def.builder](h);refineQfrontGlass(h);h.triangles=0;
-  for(const m of h.masses){const full=extrude(m.polygon,m.top-m.bottom,m.bottom),sides=sideGeometry(full);full.dispose();statics[m.material].push(sides);h.triangles+=triangleCount(sides);
-   const above=union(...h.masses.filter(n=>n!==m&&n.bottom<=m.top+.001&&n.top>m.top+.001).map(n=>multi(n.polygon)));
-   for(const p of polygons(difference(multi(m.polygon),above))){if(area(multi(p))<1e-6)continue;const g=polygonGeometry(p,m.top);statics.roof.push(g);h.triangles+=triangleCount(g);}
-  }
+  // Recovery R1: each landmark is built on its own. Its geometry goes to a local list and joins the
+  // shared batches only once the whole landmark has built, so an exception in one (a bad footprint,
+  // a polygon the clipper cannot union) is recorded in `failures` and the other eight still stand.
+  let h;const local=Object.fromEntries(Object.keys(statics).map(k=>[k,[]]));
+  try{
+   h=prepareHero(data,def);BUILDERS[def.builder](h);refineQfrontGlass(h);h.triangles=0;
+   for(const m of h.masses){const full=extrude(m.polygon,m.top-m.bottom,m.bottom),sides=sideGeometry(full);full.dispose();local[m.material].push(sides);h.triangles+=triangleCount(sides);
+    const above=union(...h.masses.filter(n=>n!==m&&n.bottom<=m.top+.001&&n.top>m.top+.001).map(n=>multi(n.polygon)));
+    for(const p of polygons(difference(multi(m.polygon),above))){if(area(multi(p))<1e-6)continue;const g=polygonGeometry(p,m.top);local.roof.push(g);h.triangles+=triangleCount(g);}
+   }
+  }catch(error){for(const list of Object.values(local))list.forEach(g=>g.dispose());failures.push({id:def.id,key:def.key,reason:'build-error',error:String(error?.message??error).slice(0,200)});
+   if(typeof console!=='undefined')console.error('[S4 Hero Landmarks] '+def.key+' failed; the other landmarks are kept',error);continue;}
+  for(const [k,list] of Object.entries(local))statics[k].push(...list);
   // Selected central concrete faces: shallow bands reuse the existing trim batch.
   if(['magnet','seibuA','seibuB'].includes(h.key))for(const m of h.masses){
    if(!m.material.startsWith('concrete'))continue;
@@ -42,7 +54,7 @@ export function buildHeroScene(data){const started=performance.now(),audit=audit
  for(const [name,list] of Object.entries(panelRecords)){if(!list.length)continue;const b=new InstancedBuilder(plane,materials[name],list.length);for(const p of list)b.add(...p.position,p.heading,p.scale,0xffffff);const mesh=b.build();mesh.name='hero-panels-'+name;root.add(mesh);builders.push(b);batches['panels-'+name]={type:'instanced',triangles:2*list.length,instances:list.length};}
  if(detailRecords.length){const b=new InstancedBuilder(box,materials.trim,detailRecords.length);for(const d of detailRecords)b.add(...d.position,d.heading,d.scale,d.color);const mesh=b.build();mesh.name='hero-repeated-detail';root.add(mesh);builders.push(b);batches.detail={type:'instanced',triangles:12*detailRecords.length,instances:detailRecords.length};}
  const cafes=heroes.filter(h=>h.key==='qfront').map(h=>{const cafe=createQfrontCafe(h);root.add(cafe.mesh);h.triangles+=cafe.triangles;batches.cafe={type:'merged',triangles:cafe.triangles};return cafe;});
- const interior=createQfrontInterior(heroes.find(h=>h.key==='qfront'));root.add(interior.root);
+ const interior=createQfrontInterior(deep?null:heroes.find(h=>h.key==='qfront'));root.add(interior.root);
  const landmark109=finish109(heroes.find(h=>h.key==='109'));root.add(landmark109.root);
  const polish=createCentralPolish(heroes);root.add(polish.root);batches.centralPolish={type:'merged',triangles:polish.triangles,fronts:polish.fronts,drawCalls:polish.drawCalls};
  const light=new HemisphereLight(0xeaf2ff,0x686b65,1);light.name='hero-inspection-light';root.add(light);root.updateMatrixWorld(true);
@@ -51,5 +63,9 @@ export function buildHeroScene(data){const started=performance.now(),audit=audit
  stats.textures=cafes.length+2;stats.materials+=cafes.length*2+4;stats.geometries+=cafes.length*2+polish.drawCalls;stats.mergedBatches+=cafes.length*2+polish.drawCalls;stats.approximateDrawCalls+=cafes.length+Math.max(0,polish.drawCalls-1);stats.heroTriangles+=polish.triangles;
  if(landmark109.root.children.length){const mesh=landmark109.root.children[0],triangles=triangleCount(mesh.geometry);stats.textures++;stats.materials++;stats.geometries++;stats.mergedBatches++;stats.approximateDrawCalls++;stats.heroTriangles+=triangles;stats.batches.finish109={type:'merged',triangles};stats.checks.finish109=inspectGeometry(mesh.geometry);}
  stats.heroTriangles+=interior.triangles;stats.materials+=interior.batches;stats.geometries+=interior.batches;stats.mergedBatches+=interior.batches;stats.approximateDrawCalls+=interior.batches;stats.batches.qfrontInterior={triangles:interior.triangles,drawCalls:interior.batches};
- return {root,heroes,audit,stats,panelRecords,detailRecords,dispose(){root.removeFromParent();interior.dispose();landmark109.dispose();polish.dispose();cafes.forEach(c=>c.dispose());builders.forEach(b=>b.dispose());staticGeometries.forEach(g=>g.dispose());plane.dispose();box.dispose();Object.values(materials).forEach(m=>m.dispose());root.clear();}};
+ const attached=[];
+ return {root,heroes,audit,stats,panelRecords,detailRecords,
+  /** Cityscape C2: an asset that arrives later (the QFRONT GLB), disposed with the landmarks. */
+  attach(asset){if(!asset)return false;root.add(asset.root);attached.push(asset);stats.qfrontAsset={meshes:asset.meshes,triangles:asset.triangles};return true;},
+  dispose(){attached.forEach(a=>a.dispose());root.removeFromParent();interior.dispose();landmark109.dispose();polish.dispose();cafes.forEach(c=>c.dispose());builders.forEach(b=>b.dispose());staticGeometries.forEach(g=>g.dispose());plane.dispose();box.dispose();Object.values(materials).forEach(m=>m.dispose());root.clear();}};
 }

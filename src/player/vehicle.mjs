@@ -19,6 +19,7 @@ import {bounds, inPolygon} from '../geo/core.mjs';
 import {worldAnchor} from '../traffic/vehicle-anchors.mjs';
 import {vehicleImpact, slowBy} from './vehicle-impact.mjs';
 import {crash, personStrike, wearOf} from './car-damage.mjs';
+import {gridKey} from '../life/grid-key.mjs';
 
 /**
  * PLAN-POLICE-AND-OWN-CAR Step H: the player's own car. It is lost when it is gone from the
@@ -541,7 +542,7 @@ export function createPlayerVehicle(sim, ctx) {
    const now = crowd.time ?? 0;
    let hit = 0;
    for (let i = x0; i <= x1; i++) for (let j = z0; j <= z1; j++) {
-    for (const p of crowd.grid.get(i + ',' + j) ?? []) {
+    for (const p of crowd.grid.get(gridKey(crowd.grid, i, j)) ?? []) {
      if (!p.active || p.controlled || !boxOverlap(state, def, p, body, 0)) continue;
      // RUN 11.1: someone already down in front of the car is shoved along the road for a
      // moment and the car feels them, instead of the car passing through. Bounded: a body is

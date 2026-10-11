@@ -1,0 +1,277 @@
+{
+ "query": "qa=1&tier=high&time=day&camera=scramble",
+ "steps": [
+  {
+   "name": "day-overview-classic",
+   "note": "classic",
+   "state": {
+    "radio": null,
+    "fps": 0.2,
+    "drawCalls": 321,
+    "triangles": 5597241
+   }
+  },
+  {
+   "name": "day-overview-gta",
+   "note": "gta",
+   "state": {
+    "radio": null,
+    "fps": 0.2,
+    "drawCalls": 320,
+    "triangles": 5557881
+   }
+  },
+  {
+   "name": "day-street-classic",
+   "note": "classic",
+   "state": {
+    "radio": null,
+    "fps": 0.3,
+    "drawCalls": 305,
+    "triangles": 3446011
+   }
+  },
+  {
+   "name": "day-street-gta",
+   "note": "gta",
+   "state": {
+    "radio": null,
+    "fps": 0.3,
+    "drawCalls": 306,
+    "triangles": 3425929
+   }
+  },
+  {
+   "name": "day-qfront-classic",
+   "note": "classic",
+   "state": {
+    "radio": null,
+    "fps": 0.3,
+    "drawCalls": 307,
+    "triangles": 3371267
+   }
+  },
+  {
+   "name": "day-qfront-gta",
+   "note": "gta",
+   "state": {
+    "radio": null,
+    "fps": 0.3,
+    "drawCalls": 308,
+    "triangles": 3399725
+   }
+  },
+  {
+   "name": "dusk-overview-classic",
+   "note": "classic",
+   "state": {
+    "radio": null,
+    "fps": 0.2,
+    "drawCalls": 339,
+    "triangles": 6203947
+   }
+  },
+  {
+   "name": "dusk-overview-gta",
+   "note": "gta",
+   "state": {
+    "radio": null,
+    "fps": 0.4,
+    "drawCalls": 329,
+    "triangles": 5204085
+   }
+  },
+  {
+   "name": "dusk-street-classic",
+   "note": "classic",
+   "state": {
+    "radio": null,
+    "fps": 0.3,
+    "drawCalls": 311,
+    "triangles": 3232943
+   }
+  },
+  {
+   "name": "dusk-street-gta",
+   "note": "gta",
+   "state": {
+    "radio": null,
+    "fps": 0.3,
+    "drawCalls": 313,
+    "triangles": 3438821
+   }
+  },
+  {
+   "name": "dusk-qfront-classic",
+   "note": "classic",
+   "state": {
+    "radio": null,
+    "fps": 0.2,
+    "drawCalls": 315,
+    "triangles": 3402067
+   }
+  },
+  {
+   "name": "dusk-qfront-gta",
+   "note": "gta",
+   "state": {
+    "radio": null,
+    "fps": 0.3,
+    "drawCalls": 315,
+    "triangles": 3407923
+   }
+  },
+  {
+   "name": "night-overview-classic",
+   "note": "classic",
+   "state": {
+    "radio": null,
+    "fps": 0.2,
+    "drawCalls": 343,
+    "triangles": 6735549
+   }
+  },
+  {
+   "name": "night-overview-gta",
+   "note": "gta",
+   "state": {
+    "radio": null,
+    "fps": 0.2,
+    "drawCalls": 329,
+    "triangles": 5241563
+   }
+  },
+  {
+   "name": "night-street-classic",
+   "note": "classic",
+   "state": {
+    "radio": null,
+    "fps": 0.2,
+    "drawCalls": 313,
+    "triangles": 3146601
+   }
+  },
+  {
+   "name": "night-street-gta",
+   "note": "gta",
+   "state": {
+    "radio": null,
+    "fps": 0.4,
+    "drawCalls": 313,
+    "triangles": 3428593
+   }
+  },
+  {
+   "name": "night-qfront-classic",
+   "note": "classic",
+   "state": {
+    "radio": null,
+    "fps": 0.3,
+    "drawCalls": 315,
+    "triangles": 3395769
+   }
+  },
+  {
+   "name": "night-qfront-gta",
+   "note": "gta",
+   "state": {
+    "radio": null,
+    "fps": 0.3,
+    "drawCalls": 313,
+    "triangles": 3396951
+   }
+  },
+  {
+   "name": "day-player-classic",
+   "note": "classic",
+   "state": {
+    "player": {
+     "x": 12,
+     "z": 23.9,
+     "weapon": "fists",
+     "health": 100
+    },
+    "car": {
+     "active": true,
+     "type": "ownCar",
+     "speed": 0,
+     "damage": 0,
+     "wear": null
+    },
+    "radio": null,
+    "fps": 1,
+    "drawCalls": 425,
+    "triangles": 5158275
+   }
+  },
+  {
+   "name": "day-player-gta",
+   "note": "gta",
+   "state": {
+    "player": {
+     "x": 12,
+     "z": 23.9,
+     "weapon": "fists",
+     "health": 100
+    },
+    "car": {
+     "active": true,
+     "type": "ownCar",
+     "speed": 0,
+     "damage": 0,
+     "wear": null
+    },
+    "radio": null,
+    "fps": 0.2,
+    "drawCalls": 426,
+    "triangles": 5151213
+   }
+  },
+  {
+   "name": "dusk-player-classic",
+   "note": "classic",
+   "state": {
+    "player": {
+     "x": 12,
+     "z": 23.9,
+     "weapon": "fists",
+     "health": 100
+    },
+    "car": {
+     "active": true,
+     "type": "ownCar",
+     "speed": 0,
+     "damage": 0,
+     "wear": null
+    },
+    "radio": null,
+    "fps": 0.1,
+    "drawCalls": 429,
+    "triangles": 5161335
+   }
+  },
+  {
+   "name": "dusk-player-gta",
+   "note": "gta",
+   "state": {
+    "player": {
+     "x": 12,
+     "z": 23.9,
+     "weapon": "fists",
+     "health": 100
+    },
+    "car": {
+     "active": true,
+     "type": "ownCar",
+     "speed": 0,
+     "damage": 0,
+     "wear": null
+    },
+    "radio": null,
+    "fps": 0.1,
+    "drawCalls": 429,
+    "triangles": 5156025
+   }
+  }
+ ]
+}

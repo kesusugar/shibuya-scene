@@ -1,7 +1,7 @@
 import {HERO_IDS} from '../data/normalize.mjs';
 export const HERO_CONFIG=Object.freeze({base:.15,limit:250,panelOffset:.045,screenOffset:.09,curveSegments:24,floorHeight:3.6});
 export const HERO_DEFINITIONS=Object.freeze([
- {key:'qfront',name:'QFRONT',id:HERO_IDS.qfront,builder:'qfront',height:45.9,source:'OSM height; roof included',screenBottom:8,screenHeight:23.5},
+ {key:'qfront',name:'QFRONT',id:HERO_IDS.qfront,builder:'qfront',height:52.1,source:'PLATEAU 2025 LOD2: parapet of the crown screen 52.1 m, roof deck 48.4 m, top storey 44.0 m (measuredHeight 45.9)',screenBottom:14,screenHeight:24},
  {key:'109',name:'SHIBUYA 109',id:HERO_IDS['109'],builder:'109',height:33.6,source:'OSM height'},
  {key:'magnet',name:'MAGNET',id:HERO_IDS.magnet,builder:'magnet',height:34.2,source:'OSM height'},
  {key:'scrambleSquare',name:'Shibuya Scramble Square',id:HERO_IDS.scrambleSquare,builder:'scrambleSquare',height:229.706,source:'OSM height; official description approximately 230m'},

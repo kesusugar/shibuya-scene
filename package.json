@@ -31,7 +31,8 @@
     "fetch:textures": "node scripts/fetch-texture-upstream.mjs",
     "convert:textures": "node scripts/convert-textures.mjs",
     "analyse:gait": "node scripts/analyse-gait.mjs",
-    "bake:crowd-hq": "node scripts/bake-crowd-hq.mjs"
+    "bake:crowd-hq": "node scripts/bake-crowd-hq.mjs",
+    "bake:citizens": "node scripts/bake-crowd-citizens.mjs"
   },
   "dependencies": {
     "@types/three": "^0.185.4",

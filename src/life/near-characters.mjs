@@ -1,6 +1,7 @@
 import {ARCHETYPES} from './config.mjs';
 import {STATE} from './hq-crowd.mjs';
-import {ARCHETYPES as LOOKS,appearanceOf,paletteOf,deduplicate} from './appearance.mjs';
+import {activeArchetypes,appearanceOf,paletteOf,deduplicate} from './appearance.mjs';
+import {CITIZEN_PACK} from './citizen-pack.mjs';
 import {Group} from 'three';
 import {createPlayerFigure,bakedAsset} from '../player/figure.mjs';
 import {paceStep,PACE} from './pace.mjs';
@@ -154,8 +155,10 @@ export function createNearCharacters(tier='high',{ctx=null}={}){
    hqCovered=value;
    // Drop the baked slots now rather than letting them age out; they would otherwise keep
    // drawing their holders for as long as those people stayed near.
+   // Look 2: the HQ crowd arriving is also when the citizens pack has arrived, so humanoid slots
+   // built on the RUN 6.8 bodies before it are dropped too and come back as citizens.
    if(value){
-    for(let k=slots.length-1;k>=0;k--)if(!slots[k].human){
+    for(let k=slots.length-1;k>=0;k--)if(!slots[k].human||(CITIZEN_PACK.current&&!slots[k].citizen)){
      const s=slots[k];if(s.id!==null)selected.delete(s.id);s.figure.dispose();slots.splice(k,1);}
    }
   },
@@ -218,7 +221,7 @@ export function createNearCharacters(tier='high',{ctx=null}={}){
     // four, having spent fifty rebuilds getting there. A fixed spread needs no rebuilds at all
     // and puts every archetype on screen whenever the slots are full, which is the thing this
     // run is judged on.
-    const variant=wantHuman?LOOKS[humanSlotCount%LOOKS.length]:null;
+    const LOOKS=activeArchetypes(),variant=wantHuman?LOOKS[humanSlotCount%LOOKS.length]:null;
     // Foot IK only for humanoid slots inside the budget, and only when a ground query exists.
     // RUN 5's solver is not changed for this; it is given or not given a context.
     const wantsIK=wantHuman&&!!ctx&&slots.filter(s=>s.ik).length<limitFor(NEAR_IK_LIMITS);
@@ -227,7 +230,7 @@ export function createNearCharacters(tier='high',{ctx=null}={}){
     const figure=createPlayerFigure(source,undefined,{...(wantsIK?{ctx}:{}),variant,weapons:wantHuman?['revolver']:null});
     root.add(figure.root);
     if(wantHuman&&!humanTrianglesPerRig)humanTrianglesPerRig=measure(figure.root);
-    slots.push({figure,id:null,elapsed:0,human:wantHuman,ik:wantsIK,variant});
+    slots.push({figure,id:null,elapsed:0,human:wantHuman,ik:wantsIK,variant,citizen:!!(wantHuman&&CITIZEN_PACK.current)});
    }
 
    const wanted=new Set(candidates.map(c=>c.p.id));
@@ -313,6 +316,7 @@ export function createNearCharacters(tier='high',{ctx=null}={}){
      if(slot.human){
       slot.figure.recolour(paletteOf(look));
       slot.figure.setBuild(look.width);
+      slot.figure.setMoves?.({idle:look.idle,walk:look.walk});
       if(slot.variant?.id===look.archetype.id)stats.matched++;
      }else slot.figure.recolour({top:look.top});
      slot.figure.setHeight(look.height);
@@ -388,7 +392,7 @@ export function createNearCharacters(tier='high',{ctx=null}={}){
     // archetype rather than borrowing one; `rebuilds` is how often a slot has had to change
     // body, which should settle to a small total rather than climbing every frame.
     archetypes:new Set(slots.filter(x=>x.human&&x.id!==null).map(x=>x.variant?.id)).size,
-    archetypeSlots:Object.fromEntries(LOOKS.map(a=>
+    archetypeSlots:Object.fromEntries(activeArchetypes().map(a=>
      [a.name,slots.filter(x=>x.human&&x.variant?.id===a.id).length])),
     matched:stats.matched,rebuilds,
     sharedGeometry:true,

@@ -1,0 +1,154 @@
+{
+ "query": "qa=1&tier=high&time=day&camera=scramble",
+ "spot": {
+  "x": -9,
+  "z": 21,
+  "k": 263
+ },
+ "result": [
+  {
+   "cap": 0,
+   "crowd": {
+    "byLod": {
+     "L0": 387,
+     "L1": 737,
+     "L2": 845
+    },
+    "visible": {
+     "citizens": 308,
+     "triangles": 3605017,
+     "swaps": 2
+    },
+    "population": 1969,
+    "l0Cap": 0
+   },
+   "state": {
+    "player": {
+     "x": -9,
+     "z": 21,
+     "weapon": "fists",
+     "health": 100
+    },
+    "car": {
+     "active": true,
+     "type": "ownCar",
+     "speed": 0,
+     "damage": 0,
+     "wear": null
+    },
+    "radio": null,
+    "fps": 0.1,
+    "drawCalls": 419,
+    "triangles": 8589819
+   }
+  },
+  {
+   "cap": 48,
+   "crowd": {
+    "byLod": {
+     "L0": 48,
+     "L1": 1057,
+     "L2": 864
+    },
+    "visible": {
+     "citizens": 284,
+     "triangles": 1801058,
+     "swaps": 1
+    },
+    "population": 1969,
+    "l0Cap": 48
+   },
+   "state": {
+    "player": {
+     "x": -9,
+     "z": 21,
+     "weapon": "fists",
+     "health": 100
+    },
+    "car": {
+     "active": true,
+     "type": "ownCar",
+     "speed": 0,
+     "damage": 0,
+     "wear": null
+    },
+    "radio": null,
+    "fps": 0.2,
+    "drawCalls": 419,
+    "triangles": 5189191
+   }
+  },
+  {
+   "cap": 24,
+   "crowd": {
+    "byLod": {
+     "L0": 24,
+     "L1": 1070,
+     "L2": 875
+    },
+    "visible": {
+     "citizens": 257,
+     "triangles": 1437005,
+     "swaps": 3
+    },
+    "population": 1969,
+    "l0Cap": 24
+   },
+   "state": {
+    "player": {
+     "x": -9,
+     "z": 21,
+     "weapon": "fists",
+     "health": 100
+    },
+    "car": {
+     "active": true,
+     "type": "ownCar",
+     "speed": 0,
+     "damage": 0,
+     "wear": null
+    },
+    "radio": null,
+    "fps": 0.2,
+    "drawCalls": 419,
+    "triangles": 4466177
+   }
+  },
+  {
+   "cap": 0,
+   "crowd": {
+    "byLod": {
+     "L0": 24,
+     "L1": 1070,
+     "L2": 875
+    },
+    "visible": {
+     "citizens": 257,
+     "triangles": 1437005,
+     "swaps": 3
+    },
+    "population": 1969,
+    "l0Cap": 0
+   },
+   "state": {
+    "player": {
+     "x": -9,
+     "z": 21,
+     "weapon": "fists",
+     "health": 100
+    },
+    "car": {
+     "active": true,
+     "type": "ownCar",
+     "speed": 0,
+     "damage": 0,
+     "wear": null
+    },
+    "radio": null,
+    "fps": 0.2,
+    "drawCalls": 419,
+    "triangles": 6402319
+   }
+  }
+ ]
+}

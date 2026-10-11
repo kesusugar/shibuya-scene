@@ -14,6 +14,7 @@
 // Low street furniture -- fences, planters, bollards -- is not in the solid grid at the right
 // height and does not stop a bullet (R8).
 
+import {gridKey} from '../life/grid-key.mjs';
 export const BALLISTICS = Object.freeze({
  step: .25,          // m between solid samples along the ray
  refine: 6,          // bisection steps once a solid is found (to ~4 mm)
@@ -153,7 +154,7 @@ export function peopleAlong(grid, from, dir, range, cell = 2) {
  for (let t = 0; t <= reach + cell; t += cell * .75) {
   const ix = Math.floor((from.x + dx * t) / cell), iz = Math.floor((from.z + dz * t) / cell);
   for (let i = ix - 1; i <= ix + 1; i++) for (let j = iz - 1; j <= iz + 1; j++)
-   for (const p of grid?.get(i + ',' + j) ?? []) out.add(p);
+   for (const p of grid?.get(gridKey(grid, i, j)) ?? []) out.add(p);
  }
  return [...out];
 }

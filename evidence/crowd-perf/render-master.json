@@ -1,0 +1,43 @@
+{
+ "query": "qa=1&perf=1&tier=high&time=day&camera=scramble",
+ "views": [
+  {
+   "view": "player",
+   "frames": 7,
+   "wholeFrames": 6,
+   "draws": 440,
+   "kPrims": 33544,
+   "uploadKB": 2250,
+   "textureUploadKB": 187,
+   "hqPopulation": 1972,
+   "hqVisible": null
+  },
+  {
+   "view": "side",
+   "frames": 7,
+   "wholeFrames": 4,
+   "draws": 437,
+   "kPrims": 41628,
+   "uploadKB": 2233,
+   "textureUploadKB": 199,
+   "hqPopulation": 1969,
+   "hqVisible": null
+  },
+  {
+   "view": "turned",
+   "frames": 7,
+   "wholeFrames": 7,
+   "draws": 0,
+   "kPrims": 0,
+   "uploadKB": 0,
+   "textureUploadKB": 0,
+   "hqPopulation": 1969,
+   "hqVisible": null
+  }
+ ],
+ "memory": {
+  "heapMB": 273,
+  "processMB": 1456
+ },
+ "errors": []
+}

@@ -17,9 +17,13 @@
 //
 // Replacing the body later means producing this shape. It does not mean editing the player
 // controller, the camera, combat, or the crowd.
-import {Color,MeshStandardMaterial,ObjectLoader,Vector2} from 'three';
+import {Color,MeshStandardMaterial,ObjectLoader,Vector2,Vector3,Vector4,BufferGeometry,BufferAttribute,SkinnedMesh,Skeleton,Bone} from 'three';
 import {clone} from 'three/addons/utils/SkeletonUtils.js';
-import {GARMENT_PATTERN_GLSL} from '../life/garment-pattern.mjs';
+import {GARMENT_PATTERN_GLSL,GARMENT_UNPACK_GLSL,packGarment} from '../life/garment-pattern.mjs';
+import {CITIZEN_FRAGMENT,CITIZEN_ROUGHNESS,citizenSkin} from '../life/hq-crowd.mjs';
+import {CITIZEN_PACK} from '../life/citizen-pack.mjs';
+import {citizenClips,PHONE_BONE} from '../life/citizen-pose.mjs';
+import {MOVES} from '../life/appearance.mjs';
 
 /**
  * A citizen's five surfaces. Everything on the humanoid body is a mix of these. The patterns
@@ -112,6 +116,83 @@ export function dressCitizen(root,palette={}){
  };
 }
 
+/**
+ * Look 2: dress a MakeHuman citizen (public/data/crowd/citizens.json) up close with the crowd's own
+ * shading -- the same atlas, the same per-region recolour, the same patterns -- so a person handed
+ * from the crowd to the near pool and back looks the same. The palette is packed exactly as the
+ * crowd packs its instances, and the crowd's fragment code reads it from uniforms instead.
+ */
+const PACK_RGB=c=>((c>>16)&255)*65536+((c>>8)&255)*256+(c&255);
+const CITIZEN_HEAD=`attribute vec4 crowdUV;varying vec2 vCrowdUV;varying float vRegion;varying vec3 vGarm;
+`;
+const CITIZEN_UNIFORMS=`uniform vec4 uNearPal;uniform float uNearShoe;uniform sampler2D crowdMap;uniform vec3 crowdMeans[5];
+varying vec2 vCrowdUV;varying float vRegion;varying vec3 vGarm;
+#define vPal uNearPal
+#define vShoe uNearShoe
+vec3 unpackRGB(float v){vec3 c=vec3(floor(v/65536.0),floor(mod(v,65536.0)/256.0),mod(v,256.0))/255.0;
+ return mix(pow(c*0.9478672986+0.0521327014,vec3(2.4)),c*0.0773993808,step(c,vec3(0.04045)));}
+${GARMENT_UNPACK_GLSL}${GARMENT_PATTERN_GLSL}`;
+export function dressTexturedCitizen(root,palette,skin){
+ const materials=[];
+ const pack=c=>new Vector4(PACK_RGB(c.skin),packGarment(c.top,c.topPattern??0),packGarment(c.bottom,c.bottomPattern??0),PACK_RGB(c.hair));
+ let colours={...WARDROBE,...palette};
+ root.traverse(object=>{
+  if(!object.isMesh||!object.geometry.attributes.crowdUV)return;
+  object.frustumCulled=false;
+  const material=new MeshStandardMaterial({metalness:0,roughness:.8});
+  const uniforms={uNearPal:{value:pack(colours)},uNearShoe:{value:PACK_RGB(colours.shoe)},crowdMap:{value:skin.map},crowdMeans:{value:skin.means}};
+  material.onBeforeCompile=shader=>{
+   Object.assign(shader.uniforms,uniforms);
+   shader.vertexShader=CITIZEN_HEAD+shader.vertexShader
+    .replace('#include <begin_vertex>','#include <begin_vertex>\n vGarm=position;vCrowdUV=crowdUV.xy;vRegion=crowdUV.z*8.0;');
+   shader.fragmentShader=CITIZEN_UNIFORMS+shader.fragmentShader
+    .replace('#include <color_fragment>',CITIZEN_FRAGMENT)
+    .replace('#include <roughnessmap_fragment>',CITIZEN_ROUGHNESS);
+  };
+  material.customProgramCacheKey=()=>'citizen-textured';
+  material.userData.uniforms=uniforms;
+  object.material=material;materials.push(material);
+ });
+ return {materials,
+  recolour(next){colours={...colours,...next};for(const m of materials){m.userData.uniforms.uNearPal.value.copy(pack(colours));m.userData.uniforms.uNearShoe.value=PACK_RGB(colours.shoe);}}};
+}
+/** Put the bones of a cloned crowd rig at a citizen's own joints (Look 2b; rotations untouched). */
+function restCitizen(pack,citizen,byName){
+ const rest=new Float32Array(pack.bin,citizen.rest.byteOffset,citizen.rest.count);
+ pack.manifest.boneNames.forEach((n,i)=>byName.get(n)?.position.set(rest[i*3],rest[i*3+1],rest[i*3+2]));
+}
+/** A citizen's clips: the crowd's, as rotations, with the natural stance; once per archetype. */
+const nearClipCache=new Map();
+function nearClips(pack,citizen,node,animations){
+ const key=`${citizen.id}|${pack.moves?.length??0}`;let c=nearClipCache.get(key);if(c)return c;
+ const rig=clone(node),byName=new Map();rig.traverse(o=>{if(o.isBone)byName.set(o.name,o);});
+ restCitizen(pack,citizen,byName);rig.updateMatrixWorld(true);
+ const all=citizenClips([...animations,...(pack.moves??[])],rig,{pelvisScale:citizen.pelvisScale??1,female:!!citizen.female,weight:citizen.macro?.weight??.5});
+ // Look 2c: a citizen's body starts in their kind's usual walk; Look 2d: each person's own idle
+ // and walk are then set per person (figure.setMoves), the gait ladder rebuilt on that walk.
+ const walkName=MOVES[citizen.id]?.walks?.[0],walk=walkName&&all.find(x=>x.name===walkName);
+ let clips=all,walkStride=null;
+ if(walk){const w=walk.clone();w.name='Walk';w.userData={...walk.userData};walkStride=w.userData.stride;clips=all.map(x=>x.name==='Walk'?w:x);}
+ c={clips,walkStride,walkDuration:walk?.duration??null};
+ nearClipCache.set(key,c);return c;
+}
+/** The near body of a citizen archetype: its L0 mesh from the citizens pack, shared by every instance. */
+const nearGeometry=new Map();
+function citizenGeometry(pack,archetype){
+ let g=nearGeometry.get(archetype.id);if(g)return g;
+ const level=archetype.levels.find(l=>l.name==='L0'),bin=pack.bin;
+ const slice=(e,Ctor,size,norm=false)=>new BufferAttribute(new Ctor(bin,e.byteOffset,e.count),size,norm);
+ g=new BufferGeometry();
+ g.setAttribute('position',slice(level.position,Float32Array,3));
+ g.setAttribute('normal',slice(level.normal,Float32Array,3));
+ g.setAttribute('skinIndex',slice(level.skinIndex,Uint8Array,4));
+ g.setAttribute('skinWeight',slice(level.skinWeight,Uint8Array,4,true));
+ g.setAttribute('crowdUV',slice(level.crowdUV,Uint16Array,4,true));
+ g.setIndex(slice(level.index,level.indexType==='u32'?Uint32Array:Uint16Array,1));
+ g.computeBoundingSphere();
+ nearGeometry.set(archetype.id,g);return g;
+}
+
 /** Shared plumbing: the providers differ only in where their scene, clips and clothes come from. */
 function asset({id,template,clips,gait,gaitDetail,height,scale,dress,bones,legBones=null,
                 variants=null,pick=null}){
@@ -169,7 +250,7 @@ function asset({id,template,clips,gait,gaitDetail,height,scale,dress,bones,legBo
     }
     skeletons.add(shared);
    }
-   return {root,clips,
+   return {root,clips:chosen?.clips??clips,gait:chosen?.gait??null,gaitDetail:chosen?.gaitDetail??null,
     recolour:clothes.recolour,
     /**
      * How broad this body is, as a factor on the two horizontal axes.
@@ -224,7 +305,8 @@ export function bakedCitizen(pack){
 export function humanoidCitizen(gltf,report,base=WARDROBE){
  const template=gltf.scene;
  const dress=(root,palette)=>{
-  const worn=dressCitizen(root,{...base,...palette});
+  const citizen=root.userData.citizen;
+  const worn=citizen?dressTexturedCitizen(root,{...base,...palette},citizen.skin):dressCitizen(root,{...base,...palette});
   return {recolour:worn.recolour,dispose(){worn.materials.forEach(m=>m.dispose());}};
  };
 
@@ -274,7 +356,56 @@ export function humanoidCitizen(gltf,report,base=WARDROBE){
  const fallback=variants?(variants.find(v=>v.rig===rigs[0].id&&v.hair===report.body?.hairstyle)
   ??variants[0]):null;
  const pick=variants?(root,variant)=>{
-  const wanted=variant&&variants.find(v=>v.id===variant.id||v.id===variant);
+  // Look 2: a MakeHuman citizen, once the citizens pack is in (CITIZEN_PACK). Its body is the
+  // pack's L0 mesh, skinned to this file's first rig -- the skeleton it was fitted and baked on --
+  // so the clips, foot IK and every bone name are the ones the rig already has.
+  const pack=CITIZEN_PACK.current,citizen=variant?.id&&pack?.manifest.archetypes.find(a=>a.id===variant.id);
+  if(citizen){
+   let node=null;root.traverse(o=>{if(!node&&o.userData?.rig===rigs[0].id)node=o;});
+   if(!node)throw new Error(`character asset has no rig ${rigs[0].id}`);
+   return {node,scale:rigs[0].scaleToGame,height:citizen.rest?citizen.naturalHeight:rigs[0].height,
+    ...(()=>{if(!citizen.rest)return {clips};const n=nearClips(pack,citizen,node,gltf.animations);
+     if(!n.walkStride)return {clips:n.clips};
+     // The gait ladder for this body: its walk's own speed, stride and left contact at 0.
+     const speed=n.walkStride/n.walkDuration;
+     return {clips:n.clips,gait:{...report.gait,Walk:speed},gaitDetail:{...(report.gaitDetail??{}),clips:{...(report.gaitDetail?.clips??{}),
+      Walk:{stride:n.walkStride,leftContact:0,duty:.4,contactOffset:.5}}}};})(),
+    prepare(copy){
+     let body=null;const shed=[];
+     copy.traverse(o=>{if(o.isSkinnedMesh){if(!body)body=o;shed.push(o);}});
+     const byName=new Map();copy.traverse(o=>{if(o.isBone)byName.set(o.name,o);});
+     const names=pack.manifest.boneNames;
+     // Look 2d: the texter's phone is skinned to a fingertip bone the crowd does not use; up close
+     // that slot is a bone of its own on the right hand, sized to nothing unless the phone is out
+     // (figure.mjs).
+     const phone=new Bone();phone.name='phone';byName.get('hand_r')?.add(phone);
+     const boneOf=n=>n===PHONE_BONE&&phone.parent?phone:byName.get(n);
+     let skeleton;
+     if(citizen.rest){
+      // Look 2b: the citizen's own skeleton -- the crowd skeleton's bones at this person's joints.
+      restCitizen(pack,citizen,byName);copy.updateMatrixWorld(true);
+      skeleton=new Skeleton(names.map(boneOf));
+     }else{
+      const inverse=new Map(body.skeleton.bones.map((b,i)=>[b.name,body.skeleton.boneInverses[i]]));
+      skeleton=new Skeleton(names.map(boneOf),names.map(n=>inverse.get(n===PHONE_BONE?'hand_r':n).clone()));
+     }
+     const mesh=new SkinnedMesh(citizenGeometry(pack,citizen));
+     mesh.name='citizen-'+citizen.id;
+     body.parent.add(mesh);
+     if(citizen.rest){mesh.updateMatrixWorld(true);mesh.bind(skeleton);}else mesh.bind(skeleton,body.bindMatrix.clone());
+     for(const o of shed){o.removeFromParent();if(o.skeleton!==skeleton)o.skeleton?.dispose?.();}
+     if(phone.parent){phone.scale.setScalar(0);copy.userData.phoneBone=phone;}
+     // Look 2c: where the RUN 6.8 body's carrying bones were, so a holster or a scabbard placed
+     // for that body (weapon-mesh.mjs CARRY) can be moved onto this one's hip and spine.
+     node.updateMatrixWorld(true);const ref={};
+     for(const n of ['pelvis','spine_03']){let b=null;node.traverse(o=>{if(!b&&o.isBone&&o.name===n)b=o;});if(b)ref[n]=node.worldToLocal(b.getWorldPosition(new Vector3())).toArray();}
+     copy.userData.carryRef=ref;
+     copy.userData.citizen={id:citizen.id,skin:pack.skins.get(citizen.id)??pack.skins.set(citizen.id,citizenSkin(citizen,pack.texture)).get(citizen.id)};
+    }};
+  }
+  const wanted=(variant&&variants.find(v=>v.id===variant.id||v.id===variant))
+   // A citizen before its pack is in: the RUN 6.8 body it names.
+   ??(variant?.rig?variants.find(v=>v.rig===variant.rig&&v.hair===variant.hair):undefined);
   const chosen=wanted??fallback;
   // Matched on userData, not on name: glTF strips punctuation from node names and suffixes
   // duplicates, so the second rig's hair arrives as `hairHair_Long_1`. `extras` survives.

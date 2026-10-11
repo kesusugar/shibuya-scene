@@ -13,6 +13,7 @@ import {castShot,peopleAlong,BALLISTICS} from './ballistics.mjs';
 import {onRails} from './combat.mjs';
 import {VEHICLES} from '../traffic/config.mjs';
 import {ARCHETYPES} from '../life/config.mjs';
+import {gridKey} from '../life/grid-key.mjs';
 
 export const ARSENAL = Object.freeze({
  // Soft lock-on with a mouse: a person whose chest is this close to the crosshair ray (radians)
@@ -102,7 +103,7 @@ export function gunfirePanic(crowd, x, z, {radius = WEAPONS.pistol.witnessRadius
  const near = [];
  const r = Math.ceil(radius / 2);
  for (let i = Math.floor(x / 2) - r; i <= Math.floor(x / 2) + r; i++) for (let j = Math.floor(z / 2) - r; j <= Math.floor(z / 2) + r; j++)
-  for (const p of crowd.grid.get(i + ',' + j) ?? []) {
+  for (const p of crowd.grid.get(gridKey(crowd.grid, i, j)) ?? []) {
    if (!aliveTarget(p) || p.combatTarget === 'player' || p.officer) continue;
    const d = Math.hypot(p.x - x, p.z - z);
    if (d <= radius) near.push([d, p]);

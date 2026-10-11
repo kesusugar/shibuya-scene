@@ -1,0 +1,127 @@
+{
+ "query": "qa=1&tier=high&time=day&camera=scramble",
+ "result": [
+  {
+   "view": "overview",
+   "l3": false,
+   "crowd": {
+    "byLod": {
+     "L0": 0,
+     "L1": 0,
+     "L2": 1978,
+     "L3": 0
+    },
+    "visible": {
+     "citizens": 1773,
+     "triangles": 3953826,
+     "swaps": 0
+    },
+    "population": 1978
+   },
+   "state": {
+    "radio": null,
+    "fps": 0.2,
+    "drawCalls": 313,
+    "triangles": 9406785
+   }
+  },
+  {
+   "view": "overview",
+   "l3": true,
+   "crowd": {
+    "byLod": {
+     "L0": 0,
+     "L1": 0,
+     "L2": 694,
+     "L3": 1283
+    },
+    "visible": {
+     "citizens": 1785,
+     "triangles": 2016574,
+     "swaps": 0
+    },
+    "population": 1977
+   },
+   "state": {
+    "radio": null,
+    "fps": 0.2,
+    "drawCalls": 323,
+    "triangles": 5570905
+   }
+  },
+  {
+   "view": "kerb",
+   "l3": false,
+   "crowd": {
+    "byLod": {
+     "L0": 48,
+     "L1": 551,
+     "L2": 1370,
+     "L3": 0
+    },
+    "visible": {
+     "citizens": 139,
+     "triangles": 1046115,
+     "swaps": 0
+    },
+    "population": 1969
+   },
+   "state": {
+    "player": {
+     "x": 0,
+     "z": -22,
+     "weapon": "fists",
+     "health": 100
+    },
+    "car": {
+     "active": true,
+     "type": "ownCar",
+     "speed": 0,
+     "damage": 0,
+     "wear": null
+    },
+    "radio": null,
+    "fps": 0.2,
+    "drawCalls": 419,
+    "triangles": 3758723
+   }
+  },
+  {
+   "view": "kerb",
+   "l3": true,
+   "crowd": {
+    "byLod": {
+     "L0": 48,
+     "L1": 552,
+     "L2": 965,
+     "L3": 404
+    },
+    "visible": {
+     "citizens": 138,
+     "triangles": 972255,
+     "swaps": 0
+    },
+    "population": 1969
+   },
+   "state": {
+    "player": {
+     "x": 0,
+     "z": -22,
+     "weapon": "fists",
+     "health": 100
+    },
+    "car": {
+     "active": true,
+     "type": "ownCar",
+     "speed": 0,
+     "damage": 0,
+     "wear": null
+    },
+    "radio": null,
+    "fps": 0.3,
+    "drawCalls": 419,
+    "triangles": 3610999
+   }
+  }
+ ]
+}

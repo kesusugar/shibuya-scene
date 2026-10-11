@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {STACKED} from '../src/signs/reference-layer.mjs';
 import {readFileSync} from 'node:fs';
 import {buildBuildingModel} from '../src/buildings/model.mjs';
 import {buildGroundModel} from '../src/ground/model.mjs';
@@ -100,7 +101,10 @@ test('the render layer clears the panels a reference slot covers', () => {
  const result = applyReferenceAds([...procedural, far], hosts, {camera});
  assert.equal(result.replaced, procedural.length);
  assert.ok(result.signs.includes(far), 'a panel outside every slot must be kept');
- assert.equal(result.signs.length, 1 + resolved.placed.length);
+ // Cityscape: a stacked pair's top (STACKED) may also be hosted, in its base's slot.
+ const extra = result.placed.filter(p => !resolved.placed.some(r => r.ad.id === p.ad.id));
+ assert.ok(extra.every(p => STACKED.some(([top]) => top === p.ad.id)), 'only stacked tops are added');
+ assert.equal(result.signs.length, 1 + resolved.placed.length + extra.length);
  for (const sign of result.signs.filter(s => s.referenceAd)) {
   assert.ok(sign.id.startsWith('ref:'));
   assert.ok(Number.isFinite(sign.heading) && sign.position.every(Number.isFinite));

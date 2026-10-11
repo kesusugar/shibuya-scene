@@ -2,22 +2,47 @@ import {Group,Color,HemisphereLight,DirectionalLight} from 'three';
 import {ROAD_SPILL_GLSL} from '../nightglow/road-spill.mjs';
 import {ROAD_REFLECTION_GLSL,ROAD_REFLECTION_UNIFORMS} from '../nightglow/road-reflection.mjs';
 import {FRONTAGE_SPILL_GLSL} from '../nightglow/frontage-spill.mjs';
+import {DEEP_GLASS_VERTEX,DEEP_GLASS_VERTEX_BODY,DEEP_GLASS_GLSL,DEEP_GLASS_FRAGMENT} from '../heroes/deep-glass.mjs';
+import {FAR_CITY_VERTEX,FAR_CITY_VERTEX_BODY,FAR_CITY_GLSL,FAR_CITY_FRAGMENT} from '../buildings/far-city.mjs';
 export const DAY_NIGHT=Object.freeze({day:{sky:0x9fb5ce,exposure:.9,ambient:.4,key:1.2},night:{sky:0x03060c,exposure:1,ambient:.22,key:.08}});
 // One uniform per existing shared material. No geometry, extra pass, or per-frame allocation.
 export function installNightEmission(material,mode){
  const original=material.onBeforeCompile,key=material.customProgramCacheKey,uniform={value:0},glow={value:0};
  material.onBeforeCompile=shader=>{original.call(material,shader);shader.uniforms.s12Night=uniform;shader.uniforms.s13Nightglow=glow;
   let vertex='',fragment='uniform float s12Night;\nuniform float s13Nightglow;\n',body='';
-  if(mode==='window'||mode==='curtainWindow'||mode==='storefront'||mode==='heroStorefront'){vertex='uniform float s13Nightglow;\nvarying float s12Window;\nvarying vec3 s12WindowTint;\n';fragment+='varying float s12Window;\nvarying vec3 s12WindowTint;\n';body=`s12Window=0.0;s12WindowTint=vec3(1.0,0.72,0.39);
+  if(mode==='window'||mode==='curtainWindow'||mode==='storefront'||mode==='heroStorefront'){vertex='uniform float s13Nightglow;\nvarying float s12Window;\nvarying vec3 s12WindowTint;\nvarying vec3 s12Pane;\n';fragment+='varying float s12Window;\nvarying vec3 s12WindowTint;\nvarying vec3 s12Pane;\n';body=`s12Window=0.0;s12WindowTint=vec3(1.0,0.72,0.39);s12Pane=vec3(uv,0.0);
 #ifdef USE_INSTANCING
 float seed=mod(abs(dot(instanceMatrix[3].xyz,vec3(12.9898,78.233,37.719))),7.0);
-s12Window=seed<4.0?0.38+seed*0.12:0.0;
+// Cityscape C1: a floor of one building is lit or dark together (an office after hours), then
+// window by window; fewer lit than before, and in several levels, not one.
+vec3 cell=floor(vec3(instanceMatrix[3].x/22.0,instanceMatrix[3].y/3.4,instanceMatrix[3].z/22.0));
+float floorLit=fract(sin(dot(cell,vec3(127.1,311.7,74.7)))*43758.5453);
+float winLit=fract(seed*.6180339+floorLit*7.31);
+s12Window=winLit<(floorLit<.42?.78:.16)?0.3+0.75*fract(seed*3.7+floorLit*5.1):0.0;
+s12Pane.z=step(.62,fract(floorLit*13.7+seed*.21));
 s12Window*=mix(1.0,0.18,smoothstep(90.0,210.0,length(instanceMatrix[3].xz)));\ns12WindowTint=seed<1.0?vec3(1.0,0.48,0.16):(seed<2.0?vec3(1.0,0.72,0.34):(seed<3.0?vec3(1.0,0.88,0.66):vec3(0.82,0.90,1.0)));
 #endif`;
    if(mode==='curtainWindow')body+='\n#ifdef USE_INSTANCING\ns12Window=0.65*mix(1.0,0.12,smoothstep(70.0,170.0,length(instanceMatrix[3].xz)));s12WindowTint=vec3(0.58,0.78,1.0);\n#endif';
-   if(mode==='heroStorefront')body+='\n#ifdef USE_INSTANCING\nif(instanceMatrix[3].y<14.0&&length(instanceMatrix[3].xz)<95.0)s12Window=max(s12Window,1.48);\n#endif';
+   // Cityscape: above the shops a landmark's facade is dark glass with the odd lit floor, not a grid of lamps.
+   if(mode==='heroStorefront')body+='\n#ifdef USE_INSTANCING\nif(instanceMatrix[3].y>=14.0)s12Window*=0.5*step(0.62,fract(seed*0.37+floorLit*3.1));\nif(instanceMatrix[3].y<14.0&&length(instanceMatrix[3].xz)<95.0)s12Window=max(s12Window,1.48);\n#endif';
    if(mode==='storefront')body+='\n#ifdef USE_INSTANCING\nif(instanceMatrix[3].y<14.0)s12Window=max(s12Window,1.48);\n#endif';
-   shader.fragmentShader=shader.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\ntotalEmissiveRadiance += s12WindowTint*s12Window*s12Night*(1.0+0.65*s13Nightglow);');
+   // Inside the pane: ceiling lights (brighter at the top), the centre mullion, and blinds on some.
+   const pane=mode==='window'?'float s12Shape=mix(.5,1.15,smoothstep(.05,.95,s12Pane.y))*(1.0-.85*(1.0-step(.035,abs(s12Pane.x-.5))))*mix(1.0,.55+.45*step(.42,fract(s12Pane.y*11.0)),s12Pane.z);':'float s12Shape=1.0;';
+   // Cityscape: at night unlit glass is dark (it was the day's pale blue-grey, so every window read
+   // as a white tile), and lit ones are warm rooms at a room's brightness, not lamps.
+   shader.fragmentShader=shader.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\n'+pane+'\ndiffuseColor.rgb*=mix(1.0,0.22,s12Night);\ntotalEmissiveRadiance += s12WindowTint*s12Window*s12Shape*s12Night*0.72*(1.0+0.65*s13Nightglow);');
+  }else if(mode==='deepGlass'){
+   // Cityscape C2: rooms behind opaque glass (deep-glass.mjs).
+   vertex=DEEP_GLASS_VERTEX+'\n';fragment+=DEEP_GLASS_GLSL+'\n';body=DEEP_GLASS_VERTEX_BODY;
+   shader.fragmentShader=shader.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\n'+DEEP_GLASS_FRAGMENT);
+  }else if(mode==='farCity'){
+   // Cityscape C1: windows drawn per floor and bay on the far blocks (far-city.mjs).
+   vertex=FAR_CITY_VERTEX+'\n';fragment+=FAR_CITY_GLSL+'\n';body=FAR_CITY_VERTEX_BODY;
+   shader.fragmentShader=shader.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\n'+FAR_CITY_FRAGMENT);
+  }else if(mode==='treeGlow'){
+   // Cityscape: street trees at night are lit from below by the shops and lamps round them; a
+   // warm wash on the leaves, stronger on the underside of the crown.
+   shader.fragmentShader=shader.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\ntotalEmissiveRadiance+=vec3(.16,.12,.05)*s12Night*(.55+.45*clamp(-normal.y,0.,1.));');
   }else if(mode==='wall'){
    shader.fragmentShader=shader.fragmentShader.replace('#include <color_fragment>','#include <color_fragment>\ndiffuseColor.rgb *= mix(vec3(0.68,0.70,0.72),vec3(0.32,0.37,0.46),s12Night);');
   }else if(mode==='groundPool'||mode==='groundPoolRoad'||mode==='groundPoolWalk'){
@@ -25,7 +50,7 @@ s12Window*=mix(1.0,0.18,smoothstep(90.0,210.0,length(instanceMatrix[3].xz)));\ns
     fragment+=ROAD_SPILL_GLSL;
     shader.fragmentShader=shader.fragmentShader.replace('#include <roughnessmap_fragment>',`#include <roughnessmap_fragment>
 float roadWetMask=smoothstep(.23,.76,roadNoise(s161Position.xz*.42));
-roughnessFactor=mix(roughnessFactor,mix(.82,.28,roadWetMask),s12Night*s13Nightglow);`);
+roughnessFactor=mix(roughnessFactor,mix(.82,.5,roadWetMask),s12Night*s13Nightglow*smoothstep(22.,34.,length(s161Position.xz-vec2(6.5,2.))));`);
    }
    if(mode==='groundPoolWalk')fragment+=FRONTAGE_SPILL_GLSL;
    vertex='varying vec3 s161Position;\n';fragment+='varying vec3 s161Position;\n';body='s161Position=(modelMatrix*vec4(transformed,1.0)).xyz;';
@@ -37,10 +62,14 @@ float alley=(1.-smoothstep(3.0,3.6,abs(q.x-q.y-4.0)))*smoothstep(-96.,-90.,q.x)*
 float plank=step(.1,fract((q.x+q.y)*1.4));
 diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.24,.115,.07)*mix(.65,1.,plank),alley);
 totalEmissiveRadiance+=vec3(.24,.13,.065)*alley*s12Night*(.25+.75*pow(.5+.5*cos((q.x+q.y)*.32),6.));
-${mode==='groundPoolRoad'?'totalEmissiveRadiance+=billboardRoadSpill(q)*s12Night*(1.0-.55*s13ReflectStrength);totalEmissiveRadiance+=roadMirror(q,smoothstep(.23,.76,roadNoise(q*.42)))*s12Night;':''}
+${mode==='groundPoolRoad'?'totalEmissiveRadiance+=billboardRoadSpill(q)*s12Night*(1.0-.55*s13ReflectStrength)*(1.0-.6*(1.0-smoothstep(22.,34.,length(q-vec2(6.5,2.)))));totalEmissiveRadiance+=roadMirror(q,smoothstep(.23,.76,roadNoise(q*.42)))*s12Night;':''}
 ${mode==='groundPoolWalk'?'totalEmissiveRadiance+=frontageSpill(q)*s12Night;':''}
 float pool=0.0;
-for(int i=0;i<4;i++){vec2 c=vec2(i<2?-22.0:22.0,mod(float(i),2.0)<0.5?-19.0:19.0);pool+=(0.20+0.018*float(i))*pow(max(0.0,1.0-length(q-c)/16.0),2.4);}
+for(int i=0;i<4;i++){vec2 c=vec2(i<2?-22.0:22.0,mod(float(i),2.0)<0.5?-19.0:19.0);pool+=(0.20+0.018*float(i))*pow(max(0.0,1.0-length(q-c)/20.0),2.0);}
+// Cityscape: the scramble sits in the light of everything round it -- signs, screens, shopfronts.
+// Reality alignment G2-3: a third of what it was; at 0.16 the asphalt read as one lit warm plane,
+// where photographs show dark road, bright zebra paint and colour from the screens.
+pool+=0.06*pow(max(0.0,1.0-length(q-vec2(4.0,-2.0))/42.0),1.4);
 totalEmissiveRadiance+=vec3(1.0,0.69,0.38)*pool*s12Night;`);
   }else if(mode==='sign'){vertex='attribute float s13GlowWeight;\nvarying float s13Sign;\n';fragment+='varying float s13Sign;\n';body='s13Sign=s13GlowWeight;';shader.fragmentShader=shader.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\ntotalEmissiveRadiance *= 1.0+s13Nightglow*(max(s13Sign,0.8)-1.0);');
   }else if(mode==='train'){vertex='attribute vec3 s12Emission;\nattribute float s12LampEnd;\nattribute vec2 s12Cab;\nvarying vec3 s12Train;\n';fragment+='varying vec3 s12Train;\n';body=`s12Train=s12Emission;
@@ -62,6 +91,9 @@ export class DayNightSystem{
    if(/^(buildings-wall|hero-(concreteLight|concreteDark|roof)|station-.*(wall|concrete))$/.test(o.name))mode='wall';
    if(/^buildings-(windows|shopWindows)$/.test(o.name)||/^hero-panels-glass/.test(o.name))mode='window';
    if(o.name==='buildings-curtainWindows')mode='curtainWindow';
+   if(o.name==='buildings-far')mode='farCity';
+   if(o.name==='streetscape-sphere-leaf')mode='treeGlow';
+   if(o.name==='hero-qfrontGlass'&&!o.material.transparent)mode='deepGlass';
    if(/^ground-(asphalt|sidewalk|curb|paint|tactile|land)$/.test(o.name))mode='groundPool';
    if(o.name==='ground-asphalt')mode='groundPoolRoad';
    if(o.name==='ground-sidewalk'||o.name==='ground-land')mode='groundPoolWalk';
@@ -71,6 +103,7 @@ export class DayNightSystem{
    // Keep printed colors below the display peak; bulbs and rims remain separate.
    if(/^signs-(print|led|heroScreen|reference)$/.test(o.name)){night=o.name==='signs-print'?1.15:o.name==='signs-led'?1.8:o.name==='signs-reference'?1.6:1.6;mode='sign';}
    if(o.name==='center-gai-advertisements')night=1.2;
+   if(o.name==='sign-structure-board')night=1.25;
    if(o.name==='center-gai-light')night=7;
    if(o.name==='center-gai-rim')night=7;
    if(o.name==='sign-accent-bulbs')night=18;
@@ -86,6 +119,8 @@ export class DayNightSystem{
    if(o.name==='qfront-interior-wood')night=.2;
    if(o.name==='qfront-interior-dim')night=.16;
    if(o.name==='hero-polish-storefront')night=.85;
+   if(o.name==='qfront-asset-logo')night=2.6;
+   if(o.name==='qfront-asset-light')night=3.2;
    if(o.name==='hero-polish-marquee')night=3.8;
    if(o.name==='hero-polish-canopies')night=.5;
    const wet=o.name==='ground-asphalt';if(!mode&&night===null&&!wet)continue;if(materials.has(m))continue;
