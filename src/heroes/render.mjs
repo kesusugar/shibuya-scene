@@ -21,11 +21,19 @@ export function buildHeroScene(data){const started=performance.now(),audit=audit
  const statics=Object.fromEntries(Object.keys(materials).map(k=>[k,[]])),panelRecords={glass:[],glassDark:[],screenPlaceholder:[]},detailRecords=[],builders=[],staticGeometries=[];const plane=new PlaneGeometry(1,1),box=new BoxGeometry(1,1);
  for(const def of HERO_DEFINITIONS){if(!data.buildings.some(s=>s.id===def.id)){missing.push(def.key);continue;}
   if(!audit.some(r=>r.id===def.id&&r.phase==='S4')){failures.push({id:def.id,reason:'source-not-reserved'});continue;}
-  const h=prepareHero(data,def);BUILDERS[def.builder](h);refineQfrontGlass(h);h.triangles=0;
-  for(const m of h.masses){const full=extrude(m.polygon,m.top-m.bottom,m.bottom),sides=sideGeometry(full);full.dispose();statics[m.material].push(sides);h.triangles+=triangleCount(sides);
-   const above=union(...h.masses.filter(n=>n!==m&&n.bottom<=m.top+.001&&n.top>m.top+.001).map(n=>multi(n.polygon)));
-   for(const p of polygons(difference(multi(m.polygon),above))){if(area(multi(p))<1e-6)continue;const g=polygonGeometry(p,m.top);statics.roof.push(g);h.triangles+=triangleCount(g);}
-  }
+  // Recovery R1: each landmark is built on its own. Its geometry goes to a local list and joins the
+  // shared batches only once the whole landmark has built, so an exception in one (a bad footprint,
+  // a polygon the clipper cannot union) is recorded in `failures` and the other eight still stand.
+  let h;const local=Object.fromEntries(Object.keys(statics).map(k=>[k,[]]));
+  try{
+   h=prepareHero(data,def);BUILDERS[def.builder](h);refineQfrontGlass(h);h.triangles=0;
+   for(const m of h.masses){const full=extrude(m.polygon,m.top-m.bottom,m.bottom),sides=sideGeometry(full);full.dispose();local[m.material].push(sides);h.triangles+=triangleCount(sides);
+    const above=union(...h.masses.filter(n=>n!==m&&n.bottom<=m.top+.001&&n.top>m.top+.001).map(n=>multi(n.polygon)));
+    for(const p of polygons(difference(multi(m.polygon),above))){if(area(multi(p))<1e-6)continue;const g=polygonGeometry(p,m.top);local.roof.push(g);h.triangles+=triangleCount(g);}
+   }
+  }catch(error){for(const list of Object.values(local))list.forEach(g=>g.dispose());failures.push({id:def.id,key:def.key,reason:'build-error',error:String(error?.message??error).slice(0,200)});
+   if(typeof console!=='undefined')console.error('[S4 Hero Landmarks] '+def.key+' failed; the other landmarks are kept',error);continue;}
+  for(const [k,list] of Object.entries(local))statics[k].push(...list);
   // Selected central concrete faces: shallow bands reuse the existing trim batch.
   if(['magnet','seibuA','seibuB'].includes(h.key))for(const m of h.masses){
    if(!m.material.startsWith('concrete'))continue;

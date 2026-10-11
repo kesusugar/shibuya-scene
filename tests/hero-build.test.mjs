@@ -71,3 +71,16 @@ for(const [cameraId,frame] of [['ref-a',[1280,960]],['ref-b',[1280,964]],['ref',
    assert.ok(v.inFrame>=6,`${key} in frame from ${cameraId}: ${v.inFrame} sample points`);
    assert.ok(v.share>=.3,`${key} first-hit share from ${cameraId}: ${v.share.toFixed(2)}`);
   });
+
+test('R1: one landmark failing to build does not take the others down',()=>{
+ const broken=structuredClone(data),seibuB=HERO_DEFINITIONS.find(d=>d.key==='seibuB');
+ const rec=broken.buildings.find(b=>b.id===seibuB.id);
+ // A bow-tie footprint: validateFootprint rejects it, so prepareHero throws for Seibu B only.
+ const [a,b,c,d]=rec.polygon.outer;rec.polygon={outer:[a,c,b,d],holes:[]};
+ const errors=console.error;console.error=()=>{};
+ let result;try{result=buildHeroScene(broken);}finally{console.error=errors;}
+ assert.deepEqual(result.stats.failures?.map(f=>f.key),['seibuB']);
+ assert.equal(result.heroes.length,HERO_DEFINITIONS.length-1);
+ for(const key of ['qfront','magnet','109','seibuA'])assert.ok(result.heroes.find(h=>h.key===key)?.triangles>100,key);
+ result.dispose?.();
+});
