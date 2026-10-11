@@ -398,6 +398,26 @@ export const REFERENCE_ART = Object.freeze({
     {family: 'Georgia,"Times New Roman",serif', weight: '400', max: span * .82});
   });},
 
+
+ // Cityscape C3: the finance column beside MAGNET's vision (owner-approved real brands). Lettering
+ // and colour only, drawn here; no logo file.
+ 204(c, aspect) {const {text, box} = tools(c);
+  box(0, 0, 1, 1, '#e60012');
+  trueShape(c, aspect, wide => {c.fillStyle = '#ffffff';
+   text('アコム', Math.min(.3, wide * .28), .5, .42, {weight: '900', max: wide * .9});
+   text('ACOM', Math.min(.13, wide * .14), .5, .7, {family: 'Arial,sans-serif', weight: '900', max: wide * .7});});},
+ 205(c, aspect) {const {text, box} = tools(c);
+  box(0, 0, 1, 1, '#00994d');
+  trueShape(c, aspect, wide => {c.fillStyle = '#ffffff';
+   text('レイク', Math.min(.3, wide * .28), .5, .4, {weight: '900', max: wide * .9});
+   box(.5 - wide * .36, .62, wide * .72, .16, '#ffffff');
+   c.fillStyle = '#00994d'; text('ALSA', Math.min(.12, wide * .13), .5, .7, {family: 'Arial,sans-serif', weight: '900', max: wide * .6});});},
+ 206(c, aspect) {const {text, box} = tools(c);
+  box(0, 0, 1, 1, '#ffffff');
+  trueShape(c, aspect, wide => {box(.5 - wide * .46, .08, wide * .92, .84, '#e8380d'); c.fillStyle = '#ffffff';
+   text('アイフル', Math.min(.26, wide * .22), .5, .46, {weight: '900', max: wide * .86});
+   text('AIFUL', Math.min(.1, wide * .12), .5, .72, {family: 'Arial,sans-serif', weight: '800', max: wide * .6});});},
+
  203(c, aspect) {const {box, disc} = tools(c);
   // The vision runs a culture spot, so it carries a key visual and no wording. Flat washes
   // only: this sheet is painted through contexts where canvas gradients are unavailable.

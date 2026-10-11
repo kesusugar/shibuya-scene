@@ -39,6 +39,10 @@ export function buildMagnet(h){
  anchor(h,face,'facadeSign',Math.min(9,face.length-1.4),2.4,visionY+visionHeight/2+2.4,2).art=201;
  if(side)anchor(h,side,'facadeSign',Math.min(3,side.length-.5),8,15,1).art=202;
  anchor(h,face,'rooftopSign',face.length*.6,1.8,31);
+ // Cityscape C3: the column of lit consumer-finance boards beside the vision, as the crossing
+ // shows them on this side -- anchored at their own place along the wall (`along`).
+ const column=face.length/2+visionWidth/2+1.75;
+ if(column+1.35<face.length)for(const [art,y] of [[204,9.8],[205,13.7],[206,17.6]]){const a=anchor(h,face,'facadeSign',2.5,3.5,y,1);a.art=art;a.along=column;}
  // Windows stop where the media wall starts, so the vision and wordmark sit on dark glass.
  const clear=[visionY-visionHeight/2-1.5,visionY+visionHeight/2+2.4+1.2+1.5];
  grid(h,p,1,23,{pitch:3.8,width:2.3,height:1.8,material:'glassDark',skip:(e,y)=>e.index===face.index&&y>clear[0]&&y<clear[1]});grid(h,u,24,32,{pitch:2.5,width:1.6,height:2.4});bands(h,p,[7,12,18,23.9],{thickness:.3});bands(h,u,[27.5,31.8],{thickness:.35});

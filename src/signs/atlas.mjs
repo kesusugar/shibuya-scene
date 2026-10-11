@@ -1,34 +1,45 @@
 import {CanvasTexture,DataTexture,SRGBColorSpace,LinearFilter,RGBAFormat} from 'three';
 import {QUALITY,CATEGORIES} from './config.mjs';
-const WORDS=['渋谷書店','スクランブル珈琲','道玄坂薬局','センター街眼科','NEON RECORDS','TOKYO MOBILE','宇田川シネマ','SHIBUYA DINER','ハチ公不動産','宮益坂銀行','Q-BEAUTY','109 VISION','文化村 MUSIC','井の頭カメラ','渋谷横丁','MAGNET SPORTS','TSUTAYA BOOKS','SHIBUYA PARLOR','青山クリニック','MEGA KARAOKE','TOKYU STYLE','夜空ゲームズ','東京ラーメン','渋谷百貨店','SAKURA COSME','LIVE SHIBUYA','HACHI TAXI','CITY DRUG','DOGEN CAFE','CENTER FASHION','SHIBUYA NEWS','TOKYO CULTURE'];
-const COLORS=[['#f8efe8','#db5966'],['#da4031','#fff7df'],['#f4f2dc','#32836c'],['#e8b4d3','#ffffff'],['#25856c','#fff8e8'],['#386dc0','#ffffff'],['#f2d46d','#433e39'],['#f5f4ee','#497dba']];
-export function definitions(count=32){return Array.from({length:count},(_,i)=>({id:i,category:CATEGORIES[i%8],text:WORDS[i%WORDS.length],palette:COLORS[(i+Math.floor(i/8)*3)%8],styleSeed:i,emissiveClass:i%8===6?'screen':'printed',priority:i%8===6?3:1,aspect:[3,2,.3,3,2,.5,2.2,1][i%8],regionAffinity:i%3===0?'centerGai':'any',sizeClass:i%8===4?'large':'small'}));}
+// Cityscape C3 (owner-approved, docs/PLAN-CITYSCAPE.md): the shop signs are the chains a street
+// round the crossing actually carries, in their own colours. Text and colour only -- reconstructed
+// on canvas, no logo artwork copied. Slot i keeps category CATEGORIES[i%8] (geometry depends on
+// it); the blade and directory slots (2, 5 mod 8) hang vertically and carry `vertical`.
+// [text, background, foreground, sub-line, vertical]
+export const CITY_BRANDS=Object.freeze([
+ ['マツモトキヨシ','#ffe600','#0a3d91','薬 化粧品'],['吉野家','#f39800','#ffffff','牛丼'],['カラオケ館','#e60012','#ffffff','','カラオケ館'],['TOWER RECORDS','#ffd400','#e3001b','NO MUSIC, NO LIFE.'],
+ ['UNIQLO','#e60012','#ffffff','SHIBUYA'],['磯丸水産','#0b3a7e','#ffffff','','磯丸水産'],['GiGO','#1a1a8c','#ffffff','GAME'],['LAWSON','#0068b7','#ffffff','ローソン'],
+ ['ドン・キホーテ','#ffe100','#e60012','驚安の殿堂'],['松屋','#ffd800','#003d8f','牛めし'],['牛角','#151515','#f2c200','','焼肉牛角'],['H&M','#ffffff','#e50010',''],
+ ['ABC-MART','#d7000f','#ffffff','SHOES'],['名代富士そば','#f5e9c8','#1b1b1b','','富士そば'],['TAITO STATION','#00a0e9','#ffffff','タイトーステーション'],['FamilyMart','#ffffff','#00a73c','ファミリーマート'],
+ ['無印良品','#7f0019','#ffffff','MUJI'],['一蘭','#b60005','#ffffff','天然とんこつラーメン'],['まねきねこ','#ffd700','#d7000f','','まねきねこ'],['HMV','#c8102e','#ffffff','record shop'],
+ ['GU','#003d8f','#ffffff','SHIBUYA'],['鳥貴族','#fcd000','#c8102e','','鳥貴族'],['PARCO','#141414','#ffffff','SHIBUYA PARCO'],['セブン-イレブン','#ffffff','#ef7f1a','7-ELEVEn'],
+ ['ココカラファイン','#e4007f','#ffffff','ドラッグストア'],['天下一品','#c30d23','#ffffff','こってりラーメン'],['一風堂','#111111','#ffffff','','一風堂'],['ZARA','#000000','#ffffff',''],
+ ['LOFT','#1a1a1a','#ffde00','SHIBUYA'],['ドトール','#002e6e','#f5d200','','ドトール'],['SHIBUYA SKY','#0d1b3e','#ffffff','展望施設'],['みずほ銀行','#00398f','#ffffff','MIZUHO']
+]);
+export function definitions(count=32){return Array.from({length:count},(_,i)=>{const [text,bg,fg,sub,vertical]=CITY_BRANDS[i%CITY_BRANDS.length];return {id:i,category:CATEGORIES[i%8],text,sub,vertical:vertical??null,palette:[bg,fg],styleSeed:i,emissiveClass:i%8===6?'screen':'printed',priority:i%8===6?3:1,aspect:[3,2,.3,3,2,.5,2.2,1][i%8],regionAffinity:i%3===0?'centerGai':'any',sizeClass:i%8===4?'large':'small'};});}
 export function atlasEntries(size,count){const cols=8,rows=4,padding=Math.max(4,size/256);return Array.from({length:count},(_,id)=>{const x=id%cols*size/cols,y=Math.floor(id/cols)*size/rows,w=size/cols,h=size/rows;return {id,x,y,w,h,padding,u0:(x+padding)/size,u1:(x+w-padding)/size,v0:1-(y+h-padding)/size,v1:1-(y+padding)/size};});}
 export function paintCity(ctx,size,count){
  const entries=atlasEntries(size,count),defs=definitions(count);
  ctx.fillStyle='#121721';ctx.fillRect(0,0,size,size);
  for(const e of entries){
-  const d=defs[e.id],i=e.id%16,[bg,fg]=d.palette;
-  ctx.fillStyle='#18212a';ctx.fillRect(e.x,e.y,e.w,e.h);
+  const d=defs[e.id],[bg,fg]=d.palette;
+  // A lightbox: a dark metal frame, the face in the brand's colour, lit a little brighter in the
+  // middle than at the edges (the tubes behind it), so it reads as a lit sign and not paper.
+  ctx.fillStyle='#0d1014';ctx.fillRect(e.x,e.y,e.w,e.h);
   ctx.save();ctx.beginPath();ctx.rect(e.x+e.padding,e.y+e.padding,e.w-2*e.padding,e.h-2*e.padding);ctx.clip();
   ctx.translate(e.x,e.y);ctx.scale(e.w,e.h);ctx.fillStyle=bg;ctx.fillRect(.04,.025,.92,.95);
+  const g=ctx.createLinearGradient?.(0,0,1,0);if(g?.addColorStop){g.addColorStop(0,'rgba(0,0,0,.22)');g.addColorStop(.5,'rgba(255,255,255,.08)');g.addColorStop(1,'rgba(0,0,0,.22)');ctx.fillStyle=g;ctx.fillRect(.04,.025,.92,.95);}
   ctx.fillStyle=fg;ctx.textAlign='center';ctx.textBaseline='middle';
-  const vertical=['blade','directory'].includes(d.category);
-  if(vertical){
-   const text=d.text.replace(/[A-Z ]/g,'').slice(0,5)||'音楽の庭';
-   ctx.font='900 .20px sans-serif';
-   [...text].forEach((letter,j)=>ctx.fillText(letter,.5,.17+j*.15,.78));
-   ctx.fillRect(.18,.91,.64,.018);
+  if(d.vertical){
+   const text=[...d.vertical].slice(0,6);
+   const step=Math.min(.15,.84/text.length);
+   ctx.font=`900 ${Math.min(.2,step*1.3).toFixed(3)}px sans-serif`;
+   text.forEach((letter,j)=>ctx.fillText(letter,.5,.1+step*(j+.5),.78));
   }else{
-   // Large pictogram, short Japanese brand, restrained secondary line.
-   ctx.fillStyle=fg;
-   if(/薬|DRUG|クリニック|眼科/.test(d.text)){ctx.fillRect(.12,.18,.12,.28);ctx.fillRect(.06,.27,.24,.10);}
-   else if(/不動産/.test(d.text)){ctx.beginPath();ctx.moveTo(.07,.40);ctx.lineTo(.18,.17);ctx.lineTo(.30,.40);ctx.fill();ctx.fillRect(.12,.37,.12,.11);}
-   else if(/珈琲|CAFE|ラーメン|DINER/.test(d.text)){ctx.beginPath();ctx.ellipse(.18,.31,.115,.15,0,0,Math.PI*2);ctx.fill();}
-   else {ctx.font='900 .34px sans-serif';ctx.fillText(/銀行/.test(d.text)?'¥':/書店|BOOKS/.test(d.text)?'本':'●',.18,.32,.25);}
-   ctx.font='700 .29px sans-serif';ctx.fillText(d.text,.63,.36,.65);
-   ctx.font='500 .12px sans-serif';ctx.fillText(['渋谷駅前店','暮らしを、もっと。','SHIBUYA TOKYO','毎日を楽しもう'][i%4],.5,.75,.80);
-
+   ctx.font='900 .3px sans-serif';ctx.fillText(d.text,.5,d.sub?.4:.5,.86);
+   if(d.sub){ctx.font='600 .13px sans-serif';ctx.fillText(d.sub,.5,.76,.8);}
+   // 7-Eleven's stripes, FamilyMart's bands: a brand's colour bar under the name.
+   if(/セブン/.test(d.text)){for(const [c,y] of [['#ef7f1a',.6],['#00a73c',.66],['#e60012',.72]]){ctx.fillStyle=c;ctx.fillRect(.08,y,.84,.04);}}
+   if(/FamilyMart/.test(d.text)){ctx.fillStyle='#0064b4';ctx.fillRect(.04,.88,.92,.09);ctx.fillStyle='#00a73c';ctx.fillRect(.04,.025,.92,.07);}
   }
   ctx.restore();
  }return entries;

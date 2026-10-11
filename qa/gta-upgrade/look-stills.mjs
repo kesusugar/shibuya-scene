@@ -89,7 +89,9 @@ async function pair(name,view){
 await run(15);
 for(const phase of (process.env.PHASES??'day,dusk,night').split(',')){
  await js(`window.__SHIBUYA_QA__.phase('${phase}')`);await run(.5);
- for(const [label,id] of [['Scramble High','overview'],['Scramble Street','street'],['QFRONT','qfront']]){if(!want(`${phase}-${id}`))continue;await cam(label);await pair(`${phase}-${id}`,null);}
+ // CAMS=label:id,... picks the views (default: the three fixed ones).
+ const cams=process.env.CAMS?process.env.CAMS.split(',').map(x=>x.split(':')):[['Scramble High','overview'],['Scramble Street','street'],['QFRONT','qfront']];
+ for(const [label,id] of cams){if(!want(`${phase}-${id}`))continue;await cam(label);await pair(`${phase}-${id}`,null);}
 }
 // The player on the pavement by the crossing, the camera behind, at the end of the day.
 if(process.env.PLAYER!=='0'){

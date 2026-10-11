@@ -117,6 +117,7 @@ export function applyReferenceAds(signs, hosts, {camera = CAMERAS.find(c => c.id
  }));
  const kept = signs.filter(s => {
   if (s.screenUV) return true; // hero screens keep their own segmented mapping
+  if (s.brandArt != null) return true; // a hero's own measured panel (cityscape C3); overlaps resolve later
   return !boxes.some(b => {
    const delta = [s.position[0] - b.centre[0], 0, s.position[2] - b.centre[2]];
    if (Math.abs(delta[0] * b.normal[0] + delta[2] * b.normal[2]) > 1.5) return false; // different wall plane
