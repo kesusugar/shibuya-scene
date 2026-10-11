@@ -6,12 +6,18 @@ import {makePath,pose,connector,corners,angleDiff} from './path.mjs';
 import {packContext,restoreContext} from '../quality/static-context.mjs';
 const key=p=>p.map(v=>Math.round(v*100)/100).join(',');
 export function pointIn(p,r){let inside=false;for(let i=0,j=r.length-1;i<r.length;j=i++){const a=r[i],b=r[j];if((a[1]>p[1])!==(b[1]>p[1])&&p[0]<(b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0])inside=!inside;}return inside;}
+// Crowd performance: the road surface is one polygon of ~1,400 edges, and `onRoad` is asked for
+// every corner of every car pose. The same even-odd test over only the edges whose z-range meets
+// the point's 2 m band (edges outside it can never cross the point's row): an identical answer.
+const ringBands=new WeakMap();
+export function pointInBanded(p,r){let bands=ringBands.get(r);if(!bands){bands=new Map();for(let i=0,j=r.length-1;i<r.length;j=i++){const a=r[i],b=r[j];if(a[1]===b[1])continue;for(let z=Math.floor(Math.min(a[1],b[1])/2);z<=Math.floor(Math.max(a[1],b[1])/2);z++){let list=bands.get(z);if(!list)bands.set(z,list=[]);list.push(a,b);}}ringBands.set(r,bands);}
+ const list=bands.get(Math.floor(p[1]/2));if(!list)return false;let inside=false;for(let k=0;k<list.length;k+=2){const a=list[k],b=list[k+1];if((a[1]>p[1])!==(b[1]>p[1])&&p[0]<(b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0])inside=!inside;}return inside;}
 // Every sign in the streetscape index is mounted on a building this context already holds,
 // and a flush one reaches at most .3 m past that wall, so counting it as a separate roadside
 // obstacle double-counts the building plus a skin. That skin is enough to delete lanes: it
 // cost three of them, and with them ten transitions and more than half the crossing's
 // green-phase departures. A blade reaches up to 1.1 m over the pavement and stays counted.
-export function safetyContext(ground,generic,street,core){const roads=polygons(ground.roads),solid=new SpatialIndex(12);let id=0;const add=p=>solid.insert(id++,bounds(p.outer),p);for(const b of generic.buildings)add(b.polygon);for(const s of street?.fixtures??[])add(s.polygon);for(const item of street?.context?.solids?.items?.values()??[])if(item.value.bottom<3.2&&item.value.top>0&&(item.value.kind!=='sign'||item.value.overhang))add(item.value.polygon);for(const m of core?.supports??[])if(m.polygon)add(m.polygon);for(const m of core?.masses??[])if(m.bottom<3.1&&m.top>0)add(m.polygon);const onRoad=p=>roads.some(r=>pointIn(p,r.outer)&&!r.holes.some(h=>pointIn(p,h)));return {roads,solid,onRoad};}
+export function safetyContext(ground,generic,street,core){const roads=polygons(ground.roads),solid=new SpatialIndex(12);let id=0;const add=p=>solid.insert(id++,bounds(p.outer),p);for(const b of generic.buildings)add(b.polygon);for(const s of street?.fixtures??[])add(s.polygon);for(const item of street?.context?.solids?.items?.values()??[])if(item.value.bottom<3.2&&item.value.top>0&&(item.value.kind!=='sign'||item.value.overhang))add(item.value.polygon);for(const m of core?.supports??[])if(m.polygon)add(m.polygon);for(const m of core?.masses??[])if(m.bottom<3.1&&m.top>0)add(m.polygon);const onRoad=p=>roads.some(r=>pointInBanded(p,r.outer)&&!r.holes.some(h=>pointInBanded(p,h)));return {roads,solid,onRoad};}
 function edgesCross(a,b,c,d){const cross=(p,q,r)=>(q[0]-p[0])*(r[1]-p[1])-(q[1]-p[1])*(r[0]-p[0]);return cross(a,b,c)*cross(a,b,d)<0&&cross(c,d,a)*cross(c,d,b)<0;}
 export function safePose(ctx,p,type,padding=.15){const d=VEHICLES[type];const ring=corners(p,d.width,d.length,padding);for(let i=0;i<4;i++)if(!ctx.onRoad(ring[i])||!ctx.onRoad([(ring[i][0]+ring[(i+1)%4][0])/2,(ring[i][1]+ring[(i+1)%4][1])/2]))return false;const bb=bounds(ring);for(const {value:s} of ctx.solid.query(bb))if(ring.some(p=>pointIn(p,s.outer))||s.outer.some(p=>pointIn(p,ring))||ring.some((a,i)=>s.outer.some((c,j)=>edgesCross(a,ring[(i+1)%4],c,s.outer[(j+1)%s.outer.length]))))return false;return true;}
 export function allowedOn(path,ctx,types){const p={};return types.filter(type=>{for(let d=0;d<=path.length;d+=.5)if(!safePose(ctx,pose(path,d,p),type,.3))return false;return safePose(ctx,pose(path,path.length,p),type,.3);});}
@@ -30,7 +36,7 @@ export function packTrafficGraph(graph){
  return {nodes:[...graph.nodes],edges:graph.edges.map(({source,...edge})=>edge),lanes:graph.lanes.map(({edge,path,...lane})=>({...lane,edgeIndex:edgeIndex.get(edge),path:packPath(path)})),transitions:graph.transitions.map(({path,...transition})=>({...transition,path:packPath(path)})),ctx:packContext({roads:graph.ctx.roads,solid:graph.ctx.solid}),stats:graph.stats};
 }
 export function restoreTrafficGraph(model){
- const ctx=restoreContext(model.ctx);ctx.onRoad=point=>ctx.roads.some(road=>pointIn(point,road.outer)&&!road.holes.some(hole=>pointIn(point,hole)));
+ const ctx=restoreContext(model.ctx);ctx.onRoad=point=>ctx.roads.some(road=>pointInBanded(point,road.outer)&&!road.holes.some(hole=>pointInBanded(point,hole)));
  const edges=model.edges,lanes=model.lanes.map(({edgeIndex,path,...lane})=>({...lane,edge:edges[edgeIndex],path:restorePath(path)}));
  return {nodes:new Map(model.nodes),edges,lanes,transitions:model.transitions.map(({path,...transition})=>({...transition,path:restorePath(path)})),ctx,ground:null,data:null,stats:model.stats};
 }

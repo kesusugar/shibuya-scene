@@ -1,4 +1,5 @@
 // Bounded local prediction over existing spatial cells; no new navigation graph or assets.
+import {gridKey} from '../life/grid-key.mjs';
 const HORIZON=1.6,STEP=.1;
 export function vehicleClearance(p,car,def){
  const dx=p.x-car.x,dz=p.z-car.z,s=Math.sin(car.heading),c=Math.cos(car.heading);
@@ -33,7 +34,7 @@ export function createPedestrianWarnings(){
   if(!crowd||!car.active||Math.abs(car.speed)<2)return 0;
   const now=crowd.time??0;if(now>=last&&now-last<.1)return 0;last=now;
   const radius=Math.min(24,Math.abs(car.speed)*HORIZON+def.length/2+2),list=[];
-  for(let x=Math.floor((car.x-radius)/2);x<=Math.floor((car.x+radius)/2);x++)for(let z=Math.floor((car.z-radius)/2);z<=Math.floor((car.z+radius)/2);z++)for(const p of crowd.grid.get(x+','+z)??[]){
+  for(let x=Math.floor((car.x-radius)/2);x<=Math.floor((car.x+radius)/2);x++)for(let z=Math.floor((car.z-radius)/2);z<=Math.floor((car.z+radius)/2);z++)for(const p of crowd.grid.get(gridKey(crowd.grid,x,z))??[]){
    if(p.active&&!p.controlled&&p.struck===undefined&&!p.combatDead&&Math.abs((p.height??car.y??0)-(car.y??0))<2.2&&Math.hypot(p.x-car.x,p.z-car.z)<radius)list.push(p);
   }
   list.sort((a,b)=>Math.hypot(a.x-car.x,a.z-car.z)-Math.hypot(b.x-car.x,b.z-car.z)||a.id-b.id);

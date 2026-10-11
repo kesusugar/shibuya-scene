@@ -1,4 +1,4 @@
-import {ShaderMaterial,ShaderLib,UniformsUtils,WebGLRenderTarget,HalfFloatType,Vector2} from 'three';
+import {ShaderMaterial,ShaderLib,UniformsUtils,WebGLRenderTarget,HalfFloatType,Vector2,Vector3} from 'three';
 import {EffectComposer} from 'three/addons/postprocessing/EffectComposer.js';
 import {RenderPass} from 'three/addons/postprocessing/RenderPass.js';
 import {GTAOPass} from 'three/addons/postprocessing/GTAOPass.js';
@@ -12,6 +12,8 @@ const vertex='varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position.xy,0
 // PLAN-PERFORMANCE P0: single passes switched off for the ?perf=sweep A/B (and ?off=).
 export const PIPELINE_OFF={ao:false,bloom:false,smaa:false};
 export const BLOOM_KICK={value:0,strength:.35,threshold:1.6};
+// The time-of-day colour grade (src/environment/look-profile.mjs), set each frame by SolarCycle.
+export const GRADE={wb:new Vector3(1,1,1),sat:1,contrast:1,vignette:0,shadow:new Vector3(1,1,1),highlight:new Vector3(1,1,1)};
 export const FIDELITY={dpr:1.5,shadow:4096,aoScale:.5,radius:2.5,thickness:1.5,samples:12,blend:.85,denoiseRings:2,denoiseSamples:12,exposureDay:.74,exposureNight:.86,environmentDay:.3,environmentNight:.12,bloomStrength:.35,bloomThreshold:4.2};
 export const noAO=o=>!!o.userData.noAO||/^(signs-(print|led|heroScreen)|s13-|s163-halo|traffic-.*-(front|rear)|s9-signal-lenses)/.test(o.name)||o.material?.isShaderMaterial;
 export function configureAO(ao){
@@ -32,12 +34,15 @@ export class SoftBloomPass extends Pass{
  render(r,write,read){this.extract.uniforms.source.value=read.texture;this.extract.uniforms.threshold.value=this.threshold;this.quad.material=this.extract;r.setRenderTarget(this.soft);this.quad.render(r);this.combine.uniforms.source.value=read.texture;this.combine.uniforms.strength.value=this.strength;this.quad.material=this.combine;r.setRenderTarget(this.renderToScreen?null:write);this.quad.render(r);}
  dispose(){this.soft.dispose();this.extract.dispose();this.combine.dispose();this.quad.dispose();}
 }
-export const NightGrade={uniforms:{tDiffuse:{value:null},night:{value:0}},vertexShader:vertex,fragmentShader:`uniform sampler2D tDiffuse;uniform float night;varying vec2 vUv;void main(){vec3 c=texture2D(tDiffuse,vUv).rgb;float l=dot(c,vec3(.2126,.7152,.0722));vec3 g=mix(vec3(l),c,1.025);g+=vec3(.002,.005,.009)*(1.-smoothstep(.02,.4,l));g*=1.+.025*tanh((l-.18)*2.);g*=1.-.045*smoothstep(.2,.72,length(vUv-.5));gl_FragColor=vec4(mix(c,max(g,vec3(0.)),night),1.);}`};
+export const NightGrade={uniforms:{tDiffuse:{value:null},night:{value:0},gSat:{value:1},gContrast:{value:1},gVignette:{value:0},gWb:{value:new Vector3(1,1,1)},gShadow:{value:new Vector3(1,1,1)},gHighlight:{value:new Vector3(1,1,1)}},vertexShader:vertex,fragmentShader:`uniform sampler2D tDiffuse;uniform float night,gSat,gContrast,gVignette;uniform vec3 gWb,gShadow,gHighlight;varying vec2 vUv;void main(){vec3 c=texture2D(tDiffuse,vUv).rgb;
+// The time-of-day grade (GTA look): white balance, saturation, contrast in log exposure about mid-grey, split toning, vignette. Neutral values leave c as it was.
+{c*=gWb;float l0=dot(c,vec3(.2126,.7152,.0722));c=max(mix(vec3(l0),c,gSat),vec3(0.));c=.18*exp2(log2(max(c,vec3(1e-5))/.18)*gContrast);float l1=dot(c,vec3(.2126,.7152,.0722));c*=mix(gShadow,gHighlight,smoothstep(0.,1.,l1/(l1+.18)));c*=1.-gVignette*smoothstep(.3,.95,length((vUv-.5)*vec2(1.25,1.)));}
+float l=dot(c,vec3(.2126,.7152,.0722));vec3 g=mix(vec3(l),c,1.025);g+=vec3(.002,.005,.009)*(1.-smoothstep(.02,.4,l));g*=1.+.025*tanh((l-.18)*2.);g*=1.-.045*smoothstep(.2,.72,length(vUv-.5));gl_FragColor=vec4(mix(c,max(g,vec3(0.)),night),1.);}`};
 export function createFidelityPipeline(renderer,scene,camera){
  const composer=new EffectComposer(renderer),beauty=new RenderPass(scene,camera),ao=new GTAOPass(scene,camera,1,1);configureAO(ao);
  const resizeAO=ao.setSize.bind(ao);ao.setSize=(w,h)=>resizeAO(Math.max(1,Math.round(w*.5)),Math.max(1,Math.round(h*.5)));
  const bloom=new SoftBloomPass(),grade=new ShaderPass(NightGrade),smaa=new SMAAPass(),output=new OutputPass();
  // Installed Three r185 SMAA expects linear-sRGB; ACES + output conversion happen once, last.
  const passes=[beauty,ao,bloom,grade,smaa,output];for(const p of passes)composer.addPass(p);composer.setPixelRatio(1);const size=new Vector2();let w=0,h=0,disposed=false;
- return {composer,ao,bloom,grade,smaa,passes,render(night){if(disposed)return;renderer.getDrawingBufferSize(size);if(size.x!==w||size.y!==h){w=size.x;h=size.y;composer.setSize(w,h);}ao.enabled=!PIPELINE_OFF.ao;smaa.enabled=!PIPELINE_OFF.smaa;bloom.enabled=!PIPELINE_OFF.bloom;bloom.strength=FIDELITY.bloomStrength+BLOOM_KICK.value*BLOOM_KICK.strength;bloom.threshold=FIDELITY.bloomThreshold-BLOOM_KICK.value*BLOOM_KICK.threshold;grade.uniforms.night.value=night?1:0;const auto=renderer.info.autoReset,target=renderer.getRenderTarget();renderer.info.autoReset=false;if(auto)renderer.info.reset();try{composer.render();}finally{renderer.info.autoReset=auto;renderer.setRenderTarget(target);}},dispose(){if(disposed)return;disposed=true;passes.forEach(p=>p.dispose?.());composer.dispose();}};
+ return {composer,ao,bloom,grade,smaa,passes,render(night){if(disposed)return;renderer.getDrawingBufferSize(size);if(size.x!==w||size.y!==h){w=size.x;h=size.y;composer.setSize(w,h);}ao.enabled=!PIPELINE_OFF.ao;smaa.enabled=!PIPELINE_OFF.smaa;bloom.enabled=!PIPELINE_OFF.bloom;bloom.strength=FIDELITY.bloomStrength+BLOOM_KICK.value*BLOOM_KICK.strength;bloom.threshold=FIDELITY.bloomThreshold-BLOOM_KICK.value*BLOOM_KICK.threshold;grade.uniforms.night.value=night?1:0;grade.uniforms.gWb.value.copy(GRADE.wb);grade.uniforms.gSat.value=GRADE.sat;grade.uniforms.gContrast.value=GRADE.contrast;grade.uniforms.gVignette.value=GRADE.vignette;grade.uniforms.gShadow.value.copy(GRADE.shadow);grade.uniforms.gHighlight.value.copy(GRADE.highlight);const auto=renderer.info.autoReset,target=renderer.getRenderTarget();renderer.info.autoReset=false;if(auto)renderer.info.reset();try{composer.render();}finally{renderer.info.autoReset=auto;renderer.setRenderTarget(target);}},dispose(){if(disposed)return;disposed=true;passes.forEach(p=>p.dispose?.());composer.dispose();}};
 }

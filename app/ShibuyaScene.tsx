@@ -11,6 +11,12 @@ import {SolarCycle} from '../src/environment/solar.mjs';
 import {DayNightSystem} from '../src/environment/day-night.mjs';
 import {buildTrains} from '../src/trains/render.mjs';
 import {buildCrowd} from '../src/life/render.mjs';
+import {L0_CAP_DEFAULT} from '../src/life/hq-layer.mjs';
+import {withL3} from '../src/life/hq-crowd.mjs';
+import {LOOK} from '../src/environment/look-profile.mjs';
+import {PEOPLE,CITIZENS} from '../src/life/appearance.mjs';
+import {loadCitizenPack,citizenTextures,CITIZEN_PACK} from '../src/life/citizen-pack.mjs';
+import {movesClips,decodeBase64} from '../src/life/citizen-moves.mjs';
 import {createHQRequester} from '../src/app/hq-request.mjs';
 import {buildPedestrianNetworkAsync} from '../src/life/network.mjs';
 import {buildTraffic} from '../src/traffic/render.mjs';
@@ -419,15 +425,44 @@ export default function Home(){
  // rollback). Its prebuilt pack is fetched once, AFTER the city is standing, and every crowd the
  // life module builds gets its own layer: a single page-wide "already asked" flag left a rebuilt
  // crowd on the legacy bodies for good. See src/app/hq-request.mjs.
- const hqRequester=createHQRequester({
-  load:()=>{const base=(import.meta as any).env?.BASE_URL??'/';return Promise.all([
+ // Look 2c: the player on the citizens' own pipeline once both the humanoid rig and the citizens
+ // pack are in -- the young man in a T-shirt and jeans, 1.76 m, keeping the red top that makes
+ // the player findable in the crowd. ?people=classic keeps the RUN 6.8 body.
+ const PLAYER_CITIZEN='student-m';
+ const upgradePlayerCitizen=()=>{
+  const asset=deferredCharacter?.asset,pack=CITIZEN_PACK.current;
+  if(!asset||!pack||!playerFigure||playerFigure.citizen||PEOPLE.mode==='classic')return;
+  const variant=CITIZENS.find((c:any)=>c.id===PLAYER_CITIZEN);if(!variant)return;
+  const next=createPlayerFigure(asset,undefined,{ctx:playerCtx??lifeEntry.hooks.current?.network?.ctx??null,variant,weapons:PLAYER_WEAPONS});
+  (next as any).citizen=true;next.setHeight?.(1.76);
+  groups.dynamic.add(next.root);
+  if(player)next.update(player.state,0);
+  playerFigure.dispose();playerFigure=next;
+  if(config.qa&&(window as any).__SHIBUYA_FIGURE__)(window as any).__SHIBUYA_FIGURE__=next;
+  if(!playerMode||driving)next.hide();
+ };
+ const loadClassicHQ=(base:string):Promise<[any,any]>=>Promise.all([
    fetch(`${base}data/crowd/hq-crowd.json`).then(r=>{if(!r.ok)throw new Error(`hq manifest ${r.status}`);return r.json();}),
-   fetch(`${base}data/crowd/hq-crowd.bin`).then(r=>{if(!r.ok)throw new Error(`hq pack ${r.status}`);return r.arrayBuffer();})]);},
+   fetch(`${base}data/crowd/hq-crowd.bin`).then(r=>{if(!r.ok)throw new Error(`hq pack ${r.status}`);return r.arrayBuffer();}),
+   // Crowd performance: the far level L3 (scripts/bake-crowd-l3.mjs). Optional -- without it the
+   // crowd has its three levels as before; ?l3=0 leaves it out.
+   params.get('l3')==='0'?Promise.resolve(null):fetch(`${base}data/crowd/hq-crowd-l3.json`).then(r=>r.ok?r.json():null).catch(()=>null)])
+   .then(([manifest,bin,l3]:any[])=>[l3?withL3(manifest,l3,(b:string)=>Uint8Array.from(atob(b),c=>c.charCodeAt(0))):manifest,bin] as [any,any]);
+ const citizenTexture=citizenTextures((import.meta as any).env?.BASE_URL??'/');
+ const hqRequester=createHQRequester({
+  // Look 2: the MakeHuman citizens (src/life/citizen-pack.mjs) unless ?people=classic; if their
+  // pack cannot be had, the RUN 6.8 bodies below, and the appearance falls back with them.
+  load:():Promise<[any,any]>=>{const base=(import.meta as any).env?.BASE_URL??'/';
+   if(PEOPLE.mode!=='classic')return (loadCitizenPack(base) as Promise<[any,any]>).then(async([manifest,bin])=>{
+    // Look 2c: the motion-captured idles and walks, for the near pool (the crowd has them baked).
+    const moves=await fetch(`${base}data/character/citizen-moves.json`).then(r=>r.ok?r.json():null).catch(()=>null);
+    CITIZEN_PACK.current={manifest,bin,texture:citizenTexture,skins:new Map(),moves:movesClips(moves,decodeBase64)};upgradePlayerCitizen();return [manifest,bin] as [any,any];}).catch((e:any)=>{console.warn('[HQ crowd] citizens unavailable, classic people',String(e));PEOPLE.mode='classic';return loadClassicHQ(base);});
+   return loadClassicHQ(base);},
   current:()=>lifeEntry.hooks.current,
   // A pedestrian the reaction system has thrown must stop being walked along a route by the
   // simulation, or the two fight over the same body. `leave` is the simulation's own path
   // out of a crossing, which is what keeps the signal group released.
-  options:(hooks:any)=>({
+  options:(hooks:any)=>({texture:citizenTexture,
    onDisown:(id:number)=>{const p=hooks.sim?.pool?.[id];if(p&&p.active){hooks.sim.leave(p);p.reactionOwned=true;}},
    onReclaim:(id:number)=>{const p=hooks.sim?.pool?.[id];if(p)p.reactionOwned=false;}}),
   onEnabled:(hooks:any,layer:any,budget:number,[manifest,bin]:any)=>{
@@ -448,7 +483,7 @@ export default function Home(){
  constructionEntry.hooks=buildingLifecycle({timingKey:'construction',timingName:'S15 Construction',parent:groups.world,build:(data:any,record:any)=>{const started=performance.now(),result=buildConstruction(data,{generic:buildingsEntry.hooks.current?.model,time:clock,tier:currentTrafficTier});if(record?.timing)record.timing.computeMs+=performance.now()-started;return result;},onReport:setConstructionReport,onReady(result:any){constructionEntry.status='ready';console.info('[S15 Construction]',result.stats);setModules(system.snapshot());},onError(e:any){constructionEntry.status='failed';console.error('[S15 Construction]',e);setModules(system.snapshot());}});
  system.setEnabled('construction',(config.only===null||config.only.includes('construction'))&&!config.skip.includes('construction'));
  const postEntry=system.entries.get('postprocess');postEntry.hooks={build(){nightglowEntry.hooks.current?.setPostprocess(true);},dispose(){nightglowEntry.hooks.current?.setPostprocess(false);}};if(postEntry.enabled)postEntry.status='ready';
- const solar=new SolarCycle(scene,dayNight,fidelity,clock);
+ if(params.get('look')==='classic')LOOK.mode='classic';if(params.get('people')==='classic')PEOPLE.mode='classic';const solar=new SolarCycle(scene,dayNight,fidelity,clock);
  const unsub=clock.subscribe((v:any)=>{system.timeChanged(v);setTime(v.value);setEnvironmentReport(dayNight.snapshot());});
  // §9aj G3: dynamic resolution holds the frame budget when the GPU is the limit (?dynres=0 turns it off).
  const dynRes=createDynamicResolution({budgetMs:1000/(PROFILES[config.tier]?.fps??60),enabled:params.get('dynres')!=='0'});let dynLast:number|null=null;
@@ -481,7 +516,7 @@ export default function Home(){
   if(!deferredCharacter){deferredCharacter=createDeferredCharacter();(window as any).__SHIBUYA_CHARACTER__=deferredCharacter;}
   deferredCharacter.request();
   deferredCharacter.onReady((asset:any)=>{
-   if(!playerFigure||playerFigure.asset===asset)return;
+   if(!playerFigure||playerFigure.asset===asset){upgradePlayerCitizen();return;}
    // The same asset the player just took also upgrades the nearest NPCs, so the crowd beside
    // the player stops being a different order of fidelity from the player.
    lifeEntry.hooks.current?.setNearCharacterAsset?.(asset);
@@ -491,6 +526,7 @@ export default function Home(){
    playerFigure.dispose();playerFigure=next;
    if(config.qa&&(window as any).__SHIBUYA_FIGURE__)(window as any).__SHIBUYA_FIGURE__=next;
    if(!playerMode||driving)next.hide();
+   upgradePlayerCitizen();
   });
   if(!vehicleVisual){vehicleVisual=createVehicleVisual();groups.dynamic.add(vehicleVisual.root);
    // The player's car was never registered, which is why it alone had no headlights at dusk and
@@ -575,7 +611,7 @@ export default function Home(){
  const observer=new ResizeObserver(resize);observer.observe(mount.current);
  // PLAN-PERFORMANCE P0: ?perf=1 shows where a frame's time goes; ?perf=sweep also switches each
  // feature off in turn and records the difference; ?off=a,b keeps features off for a manual A/B.
- const perfMode=params.get('perf');const perfOff=new Set<string>();let perfProbe:any=null,perfOverlay:any=null,perfSweep:any=null,perfClock=0,perfLast:number|null=null,perfReadyFrames=0,perfSaved:any={};const perfApplied:any={};
+ const perfMode=params.get('perf');let l0CapParam=params.has('l0cap')?Math.max(0,Number(params.get('l0cap'))||0):L0_CAP_DEFAULT;const perfOff=new Set<string>();let perfProbe:any=null,perfOverlay:any=null,perfSweep:any=null,perfClock=0,perfLast:number|null=null,perfReadyFrames=0,perfSaved:any={};const perfApplied:any={};
  const perfModules:any={crowd:'life',traffic:'traffic',trains:'trains',signs:'signs',streetscape:'streetscape',nightglow:'nightglow',buildings:'buildings'};
  const applyPerfOff=(off:Set<string>)=>{perfOff.clear();for(const f of off)perfOff.add(f);
   if(renderer)renderer.shadowMap.autoUpdate=!off.has('shadow');
@@ -607,7 +643,7 @@ export default function Home(){
   const glow=nightglowEntry.hooks.current;
   roadReflection?.update(scene,view,{active:currentTier==='high'&&!!glow?.stats.active,time:performance.now()/1000,
    hide:[ground?.root,lifeEntry.hooks.current?.root,glow?.root,blood?.mesh]});
-  glow?.setMirror?.(ROAD_REFLECTION_UNIFORMS.s13ReflectStrength.value/ROAD_REFLECTION.strength);if(perfOff.has('render'))return;if(!fidelity.render(system.entries.get('postprocess').enabled&&!perfOff.has('post'),!!nightglowEntry.hooks.current?.stats.active)){if(nightglowEntry.hooks.current)nightglowEntry.hooks.current.render(scene,view);else renderer?.render(scene,view);}if(startup&&renderer){const renderedAt=performance.now();startup.milestone('firstRendererFrameMs',renderedAt);const appeared=new Set(startupTrace.appearanceEvents.map((event:any)=>event.name));if(appeared.has('firstGroundVisible')&&appeared.has('firstBuildingVisible')&&appeared.has('firstHeroVisible'))startup.milestone('firstSceneFrameMs',renderedAt);if(completeBeforeRender){startup.milestone('finalSceneFrameMs',renderedAt);startup.milestone('interactiveReadyMs',renderedAt);finalizeStartupTiming();}}};
+  glow?.setMirror?.(ROAD_REFLECTION_UNIFORMS.s13ReflectStrength.value/ROAD_REFLECTION.strength);if(perfOff.has('render'))return;view.updateMatrixWorld();lifeEntry.hooks.current?.setL0Cap?.(l0CapParam);lifeEntry.hooks.current?.cull?.(perfOff.has('cull')?null:view);if(!fidelity.render(system.entries.get('postprocess').enabled&&!perfOff.has('post'),!!nightglowEntry.hooks.current?.stats.active)){if(nightglowEntry.hooks.current)nightglowEntry.hooks.current.render(scene,view);else renderer?.render(scene,view);}if(startup&&renderer){const renderedAt=performance.now();startup.milestone('firstRendererFrameMs',renderedAt);const appeared=new Set(startupTrace.appearanceEvents.map((event:any)=>event.name));if(appeared.has('firstGroundVisible')&&appeared.has('firstBuildingVisible')&&appeared.has('firstHeroVisible'))startup.milestone('firstSceneFrameMs',renderedAt);if(completeBeforeRender){startup.milestone('finalSceneFrameMs',renderedAt);startup.milestone('interactiveReadyMs',renderedAt);finalizeStartupTiming();}}};
  const requiredStages=['data','ground','buildings','heroes','station','stationDetail','signs','streetscape','traffic','life','trains','construction','environment','nightglow','postprocess'];
  const requiredTimingStages=[...requiredStages,'fidelity'];
  const prerequisitesReady=()=>!!renderer&&!renderer.getContext().isContextLost()&&currentTier==='high'&&dayNight.active&&!!fidelity.pipeline&&requiredStages.every(id=>system.entries.get(id)?.status==='ready')&&!!ground&&['buildings','heroes','station','stationDetail','signs','streetscape','traffic','life','trains','construction','nightglow'].every(id=>!!system.entries.get(id)?.hooks.current)&&buildQueue.snapshot().queueLength===0&&!buildQueue.snapshot().activeBuildName;
@@ -624,7 +660,7 @@ export default function Home(){
   render(on:boolean){if(on)perfOff.delete("render");else perfOff.add("render");return !perfOff.has("render");},
   get frames(){return renderedFrames;},
   // {dist, height, yaw (from the player's heading), target (height looked at)} or null for the follow camera.
-  view(v:any){qaView=v?{...v}:null;return !!qaView;}});(window as any).__SHIBUYA_QA__=qaApi;(window as any).__SHIBUYA_MIRROR__=roadReflection;}
+  view(v:any){qaView=v?{...v}:null;return !!qaView;},look(mode:string){LOOK.mode=mode==='classic'?'classic':'gta';solar.select(solar.phase,false);return LOOK.mode;},phase(p:string){solar.select(p,false);return p;},farLod(on:boolean){lifeEntry.hooks.current?.setFarLod?.(on);return on;},l0cap(n:number){l0CapParam=Math.max(0,Number(n)||0);lifeEntry.hooks.current?.setL0Cap?.(l0CapParam);lifeEntry.hooks.current?.relod?.();return l0CapParam;},hqStats(){return lifeEntry.hooks.current?.stats?.hqCrowd??null;}});(window as any).__SHIBUYA_QA__=qaApi;(window as any).__SHIBUYA_MIRROR__=roadReflection;}
  // ?diag=1 (or ?pad=1, which opens straight on the controller tab) -- a panel that can be
  // read and driven with a thumb, because "why will the car not move?" gets asked on a phone
  // where there is no console. Its own controls feed the same axes the keys and the pad do,

@@ -12,6 +12,7 @@ import {createHandsUp,createLimp,createUpperPose,createPhone,createRideGrip,crea
 import {createHitReaction} from './hit-reaction.mjs';
 import {createRagdoll} from './ragdoll.mjs';
 import pack from './generated/character.mjs';
+import {PHONE_CLIPS} from '../life/citizen-pose.mjs';
 
 export const FIGURE=Object.freeze({height:1.76,shirt:0xc94d38,trousers:0x263443,skin:0xdfb994,hair:0x25282a,cycle:1.55});
 
@@ -151,15 +152,20 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
  const instance=asset.instance(palette,variant),root=instance.root;
  const mixer=new AnimationMixer(root),actions={};
  for(const clip of instance.clips){
-  const action=mixer.clipAction(clip),loop=looping.has(clip.name);
+  const action=mixer.clipAction(clip),loop=looping.has(clip.name)||/^(Idle|Walk)\./.test(clip.name);
   action.setLoop(loop?LoopRepeat:LoopOnce,loop?Infinity:1);
   action.clampWhenFinished=!loop;actions[clip.name]=action;
  }
+ const baseIdle=actions.Idle;
  const head=root.getObjectByName(asset.bones.head);
  // RUN 11.2: what a punch leans on. Present on the humanoid rig, absent on the baked figure,
  // which simply goes without the emphasis.
  const spine=root.getObjectByName('spine_02');
- const gait=createGaitBlend(buildGaitSpace(instance.clips,asset.gait,asset.gaitDetail));
+ let gait=createGaitBlend(buildGaitSpace(instance.clips,instance.gait??asset.gait,instance.gaitDetail??asset.gaitDetail));
+ const baseWalk=actions.Walk;
+ // Look 2d: a texter's phone (character-asset.mjs), out while a clip that holds one leads.
+ const phoneBone=root.userData?.phoneBone??null;
+ const phoneActions=phoneBone?Object.values(actions).filter(a=>PHONE_CLIPS.includes(a.getClip().name)):[];
  const facing=createBodyFacing(0);
  // Foot IK only exists where the skeleton names the joints it needs; the offline-baked figure
  // has eleven bones and none of these names, so it simply goes without.
@@ -308,6 +314,8 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
 
    setOverlay(requested&&actions[requested]?requested:null,state);
    mixer.update(dt);
+   if(phoneBone){let held=0;for(const a of phoneActions)if(a.isScheduled())held+=a.getEffectiveWeight();
+    phoneBone.scale.setScalar(held>.5&&!overlay&&!state.handsUp&&!state.phone?1:0);}
 
    // Clips the game scrubs rather than plays: their progress is a game quantity, not a clock.
    if(overlay){
@@ -478,6 +486,32 @@ export function createPlayerFigure(asset=bakedAsset(),palette=undefined,{ctx=nul
   setHeight(metres){instance.setHeight(metres);},
   /** RUN 6.8: how broad this body is. A no-op on an asset that has one build. */
   setBuild(width){instance.setBuild?.(width);},
+  /**
+   * Look 2c: this person's own idle (a motion-captured `Idle.<style>` the body carries), or the
+   * body's default with none. Swaps the action the gait blend drives as Idle, keeping its weight.
+   */
+  setMoves({idle=null,walk=null}={}){
+   const want=(idle&&actions[idle])||baseIdle;
+   if(want&&actions.Idle!==want){
+    const prev=actions.Idle;
+    want.play();want.paused=prev.paused;want.setEffectiveWeight(prev.getEffectiveWeight());
+    prev.setEffectiveWeight(0);actions.Idle=want;
+   }
+   // Look 2d: their own walk too. The gait ladder is rebuilt on its stride (100STYLE walks start
+   // on the left foot's contact, style-clips.mjs), so the feet still match the ground.
+   const step=(walk&&actions[walk])||baseWalk,clip=step?.getClip();
+   if(step&&actions.Walk!==step&&(step===baseWalk||clip.userData?.stride)){
+    const prev=actions.Walk;
+    step.play();step.paused=true;step.setEffectiveWeight(prev.getEffectiveWeight());
+    prev.setEffectiveWeight(0);actions.Walk=step;
+    const base=instance.gait??asset.gait,detail=instance.gaitDetail??asset.gaitDetail??{};
+    const stride=step===baseWalk?null:clip.userData.stride;
+    gait=createGaitBlend(buildGaitSpace(stride?instance.clips.map(c=>c.name==='Walk'?{name:'Walk',duration:clip.duration}:c):instance.clips,
+     stride?{...base,Walk:stride/clip.duration}:base,
+     stride?{...detail,clips:{...(detail.clips??{}),Walk:{stride,leftContact:0,duty:.4,contactOffset:.5}}}:detail));
+    seeded=false;
+   }
+  },
   /** What the body is mostly doing, for diagnostics and for the capture harness. */
   get action(){return overlay??dominant;},
   hide(){root.visible=false;},

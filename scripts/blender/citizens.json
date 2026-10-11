@@ -1,0 +1,16 @@
+{
+ "about": "Look 2: the crowd's citizens, built by scripts/blender/build-citizens.py from MakeHuman CC0 assets. macro.age: 0.1875 = 11 y, 0.5 = 25 y, 1 = 90 y (linear between). height is the crowd's per-person scale, set in src/life/appearance.mjs, not here.",
+ "atlas": 1024,
+ "citizens": [
+  {"id": "salaryman",    "macro": {"gender": 1, "age": 0.58, "weight": 0.45, "muscle": 0.42}, "skin": "young_asian_male",      "outfit": ["male_elegantsuit01"], "shoes": "shoes04", "hair": "short02"},
+  {"id": "salaryman-50", "macro": {"gender": 1, "age": 0.70, "weight": 0.85, "muscle": 0.30}, "skin": "middleage_asian_male",  "outfit": ["male_elegantsuit01"], "shoes": "shoes03", "hair": "short04"},
+  {"id": "student-m",    "macro": {"gender": 1, "age": 0.39, "weight": 0.30, "muscle": 0.40, "proportions": 0.6}, "skin": "young_asian_male", "outfit": ["male_casualsuit06"], "shoes": "shoes05", "hair": "short03", "plain": ["top"]},
+  {"id": "jacket-m",     "macro": {"gender": 1, "age": 0.54, "weight": 0.60, "muscle": 0.60, "race": {"african": 0.0, "asian": 0.5, "caucasian": 0.5}}, "skin": "young_caucasian_male", "outfit": ["male_casualsuit05"], "shoes": "shoes02", "hair": "short01"},
+  {"id": "elder-m",      "macro": {"gender": 1, "age": 0.86, "weight": 0.60, "muscle": 0.20}, "skin": "old_asian_male",        "outfit": ["male_casualsuit03"], "shoes": "shoes01", "hair": "short04"},
+  {"id": "office-f",     "macro": {"gender": 0, "age": 0.54, "weight": 0.40, "muscle": 0.35}, "skin": "young_asian_female",    "outfit": ["female_elegantsuit01"], "shoes": "shoes04", "hair": "bob01"},
+  {"id": "student-f",    "macro": {"gender": 0, "age": 0.39, "weight": 0.30, "muscle": 0.35}, "skin": "young_asian_female",    "outfit": ["male_casualsuit01"], "shoes": "shoes06", "hair": "long01"},
+  {"id": "casual-f",     "macro": {"gender": 0, "age": 0.65, "weight": 0.75, "muscle": 0.30}, "skin": "middleage_asian_female", "outfit": ["male_casualsuit05"], "shoes": "shoes01", "hair": "bob02"},
+  {"id": "sport-f",      "macro": {"gender": 0, "age": 0.50, "weight": 0.45, "muscle": 0.55, "race": {"african": 0.5, "asian": 0.0, "caucasian": 0.5}}, "skin": "young_african_female", "outfit": ["male_casualsuit06"], "shoes": "shoes05", "hair": "ponytail01", "plain": ["top"]},
+  {"id": "elder-f",      "macro": {"gender": 0, "age": 0.85, "weight": 0.60, "muscle": 0.20}, "skin": "old_asian_female",      "outfit": ["female_elegantsuit01"], "shoes": "shoes03", "hair": "short03"}
+ ]
+}

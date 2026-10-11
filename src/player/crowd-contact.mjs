@@ -20,6 +20,7 @@
 import {RADIUS} from '../life/config.mjs';
 import {onRails as railed} from './combat.mjs';
 import {fighter} from '../life/temperament.mjs';
+import {gridKey} from '../life/grid-key.mjs';
 
 export const CONTACT=Object.freeze({
  playerRadius:.35,       // PLAYER.radius (not imported: controller.mjs imports this module)
@@ -55,7 +56,7 @@ export function bodiesNear(crowd,x,z,y,r=1.4,out=[]){
  out.length=0;
  const grid=crowd?.grid;if(!grid)return out;
  const ix=Math.floor(x/2),iz=Math.floor(z/2),r2=r*r;
- for(let i=ix-1;i<=ix+1;i++)for(let j=iz-1;j<=iz+1;j++)for(const p of grid.get(i+','+j)??EMPTY){
+ for(let i=ix-1;i<=ix+1;i++)for(let j=iz-1;j<=iz+1;j++)for(const p of grid.get(gridKey(grid,i,j))??EMPTY){
   // Distance first: it rejects nearly everyone in the nine cells, and the flags after it are
   // reads on large, many-shaped objects, which is where this function's time went.
   const dx=p.x-x,dz=p.z-z;

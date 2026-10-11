@@ -7,6 +7,9 @@ import {createHQCrowd} from '../src/life/hq-crowd.mjs';
 import {appearanceOf,paletteOf,deduplicate,patternOf,styleOf,PATTERN_WEIGHTS,PALETTE} from '../src/life/appearance.mjs';
 import {PATTERN,packGarment,unpackGarment,GARMENT_PATTERN_GLSL} from '../src/life/garment-pattern.mjs';
 import {dressCitizen,WARDROBE} from '../src/player/character-asset.mjs';
+// These tests pin the RUN 6.8 bodies and the classic hq-crowd pack (?people=classic); Look 2's
+// MakeHuman citizens are covered by tests/citizens.test.mjs.
+import {PEOPLE as PEOPLE_MODE} from '../src/life/appearance.mjs';PEOPLE_MODE.mode='classic';
 
 const manifest=JSON.parse(readFileSync('public/data/crowd/hq-crowd.json','utf8'));
 const raw=readFileSync('public/data/crowd/hq-crowd.bin');
