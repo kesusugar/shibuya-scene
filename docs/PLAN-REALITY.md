@@ -99,3 +99,72 @@ Capture with `look-stills.mjs`, passing the camera in the start query (`... look
 - Far city from PLATEAU LOD1 footprints.
 - Per-building facade sheets for the frontage.
 - Night lighting: reduce the broad crossing pool; exposure is effectively owned by `SolarCycle.update` (it writes every frame).
+
+## Recovery R0/R1 (owner's recovery pack, 2026-10-11)
+
+### R0: the regression reproduces and is not a capture artefact [confirmed]
+- At `71c62b9`, the hero module fails, in Node and in a fresh browser with one dev server.
+- The console shows: `[S4 Hero Landmarks] Error: Unable to complete output ring starting at [-30.11, -153.16]`.
+- Draw calls are 285 at REF-A, as the owner read from the board.
+- Every landmark (QFRONT, MAGNET, Seibu, 109, Scramble Square, Mark City, Stream) was missing, because one exception aborted `buildHeroScene`.
+- The signs are a separate module and stayed up, so they appeared to float.
+- My earlier "after" board mixed two working trees. One capture was taken before the hero roof steps were added (QFRONT visible) and one after. A `git stash` taken during an earlier capture also put HMR into play. That comparison is void.
+
+### Why Seibu B's roof steps broke the union [confirmed]
+- Seibu B has four roof steps (PLATEAU LOD2), at 38, 43, 44 and 46 m. Each is valid on its own (shapely `is_valid`), and every pair unions except 44 m with 46 m.
+- Both of those were clipped to the OSM footprint. Both therefore start at the same footprint corner, [-24.5472, -160.3669], and run east along almost the same line:
+  - to [-0.4426, -156.062];
+  - to [-0.1044, -156.0016].
+- The result is a sliver a few millimetres wide. polygon-clipping's sweep line cannot close a ring through it.
+- Snapping both to a 1 mm, 1 cm or 5 cm grid makes the union succeed.
+
+### R1 fix
+- `plateauRoofMasses` (`src/heroes/model.mjs`) now repairs each roof step before keeping it:
+  1. snaps it to a 1 cm grid and drops repeated vertices;
+  2. re-validates it;
+  3. proves it with the same union the renderer will run against the steps already accepted.
+- A step that still fails is skipped and recorded in `h.roofStepReport` (`{accepted, snapped, skipped: [{y, reason, area, error}]}`).
+- With the 2025 data, all steps repair and none are skipped: 109 has 5, MAGNET 7, Seibu A 4, Seibu B 4.
+- `tests/hero-build.test.mjs` (in `test:ci`) builds the module from the real merged data and checks:
+  - all 9 heroes build, with no failures or missing sources;
+  - every hero has valid geometry and finite bounds, and every mesh is visible;
+  - no roof step is skipped;
+  - QFRONT and MAGNET reach the screen from REF-A, REF-B and CAM-09: the first ray hit, with the generic city as occluders, lands on the landmark for at least 30% of the sample points.
+- The test fails at `71c62b9` and passes after the fix.
+
+### Isolation (separate step after R1)
+`buildHeroScene` builds each landmark into local lists. The lists join the shared batches only when that landmark has fully built. An exception is recorded in `failures` with the hero's key and logged, and the other landmarks still render. A test breaks Seibu B's footprint on purpose and checks that the other eight remain.
+
+### R1 image comparison
+Evidence is in `evidence/recovery-r1/`. Before is `71c62b9`; after is `1aee636`.
+
+**Capture conditions (identical on both sides)**
+- `git checkout <sha>` with a clean tree.
+- One dev server, restarted for each SHA.
+- A fresh headless Chrome for each camera, rendering with SwiftShader (no GPU).
+- Tier HIGH, GTA look, captured in the scramble's WALK phase.
+- Start URL `?qa=1&tier=high&time=day&camera=<ref>`, with QA phase day then night.
+- Frames: REF-A 1280×960, REF-B 1280×964, REF-C 1160×1000.
+- No source edits or stashes during capture.
+- `meta.json` records each SHA and static key. `console-*.txt` holds the browser console.
+
+**Results**
+- QFRONT and MAGNET are missing in all six before stills and restored in all six after stills.
+- Draw calls:
+
+  | | before | after |
+  |---|---|---|
+  | REF-A day | 285 | 338 |
+  | REF-A night | 294 | 345 |
+  | REF-B day | 291 | 342 |
+  | REF-B night | 298 | 349 |
+  | REF-C day | 275 | 328 |
+  | REF-C night | 286 | 335 |
+
+- The console shows the S4 error before and no error after.
+
+**Open item [unknown]: black signs in one REF-A night frame**
+- In the first after capture of REF-A night (`after-night-ref-a-ANOMALY-black-signs.jpg`), every sign rendered black and a red notice showed in the UI.
+- Two recaptures at the same SHA with the same procedure were normal. The board uses the first recapture.
+- Cause not established. Hypothesis: the first page load after a fresh dev-server start was reloaded mid-session (dependency optimisation).
+- R2 should add an automatic sign-visibility check to the stills.
