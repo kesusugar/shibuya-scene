@@ -304,8 +304,23 @@ The 7.1 fps in the screenshot is one moment, not an average. Plan:
 - **Night sky** (GTA look): sky 0x060a17 and a warm haze horizon 0x2c2633, which the fog also
   takes. The city's own glow is low in the sky, and the far city sits in it.
 
+### E: street (first pass)
+
+- **Street trees** (`streetscape/render.mjs`). They are now zelkova-sized: a trunk of 3.6–5 m
+  under a broad crown, 7–10 m overall. Before, they were a 2.8 m pole with a ball 3.5 m up.
+  - This is render-time only, so the placement model and the static pack are unchanged.
+  - The legacy S8 envelope test (not in the current suite, and already failing three checks
+    before this change) no longer matches tree width.
+- **Billboard road spill** is damped on the scramble as well (by 60% at its centre), for a dry
+  crossing at street level.
+- **Evidence:** `evidence/city/c1-c3/` (B to C3) and `evidence/city/e/` (trees).
+- **Draw calls (SwiftShader, same views):**
+  - CAM-02 at night: 355 → 356, triangles 5.44 M → 5.29 M;
+  - CAM-04 at night: 339 → 342.
+  - Frame times must come from the owner's PC.
+
 ### Not done yet
 
 - Owner-PC performance numbers (Gate D).
 - MAGNET and the left block in the QFRONT manner (Gate E).
-- Street trees and frontage.
+- Street-level frontage detail.
