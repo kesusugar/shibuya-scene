@@ -73,3 +73,19 @@ GPL tool; the output is not covered by the GPL) from the scene's own OSM-derived
 Its "QFRONT" lettering is extruded from Blender's built-in font, DejaVu Sans (Bitstream Vera
 license, with DejaVu changes in the public domain), which permits this use. The building name is
 the owner's; see the note above.
+
+## MLIT Project PLATEAU (3D city model)
+
+Building heights, LOD2 roof steps (`plateau` on each building in `public/data/shibuya-scene-data.json`)
+and the QFRONT crown dimensions come from the Ministry of Land, Infrastructure, Transport and
+Tourism's Project PLATEAU, 13113 Shibuya-ku 2025 CityGML (bldg tiles 53393596, 53393595, 53393586,
+53393585), merged by `scripts/data/merge-plateau.py`. 出典：国土交通省 Project PLATEAU
+(https://www.mlit.go.jp/plateau/), used under the PLATEAU site policy (CC BY 4.0 compatible).
+The CityGML itself is not redistributed.
+
+## Reference photographs (camera solving only)
+
+The REF-A and REF-B cameras (`src/app/foundation.mjs`) were solved from Wikimedia Commons
+photographs: "In Front of Shibuya Station" by Dick Johnson (CC BY 2.0) and
+"Shibuya scramble av night from Stream" by Syced (CC0). No pixels from them are used in the scene;
+comparison boards under `evidence/reality/` reproduce them with this attribution.
