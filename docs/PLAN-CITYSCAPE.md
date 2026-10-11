@@ -250,3 +250,62 @@ The 7.1 fps in the screenshot is one moment, not an average. Plan:
 1. **Order.** Recommended: B → C1 (far city and windows) → C2 (QFRONT GLB) → C3 (crossing and signs). The package's order is B → QFRONT first.
 2. **Brands.** Should the left cluster and MAGNET side get the real brands from the target (UC, Hisamitsu, DHC, Acom, Aiful, MAGNET), or keep today's signs? Default: keep, as the standing rule says.
 3. **Measurement.** Can you run one URL on your PC after Gate B and send back the JSON it saves?
+
+## 9. Implemented (owner: "your way, real brands allowed, change anything")
+
+### Gate B: the comparison camera and the measurement kit
+
+- **`CAM-09 Crossing North`** (`src/app/foundation.mjs`, button "Crossing North").
+  - Position [4, 50, 66], target [-6, 12, -34].
+  - From high south of the crossing, it frames QFRONT in the centre, the UC block to the left and MAGNET to the right, the target photo's composition.
+  - Existing presets are unchanged.
+- **Measurement kit.** It already existed: the 「パフォーマンス計測（約2分）」 button, or `?perf=sweep`.
+  - It runs a baseline, then each feature off in turn, then the baseline again.
+  - It records frame p50/p95, draw calls, triangles and the GPU timer where available, and saves JSON.
+  - It has not been run on the owner's PC yet.
+- **Stills.** `qa/gta-upgrade/look-stills.mjs` takes `CAMS=label:id,...` to pick views.
+
+### C1: the city past the edge, and windows
+
+- **`src/buildings/far-city.mjs`:** about 800 blocks from 270 m to 1.4 km, outside the scene's ±250 m square, in one InstancedMesh with one material (one draw call, no shadows).
+  - **Landmarks:** 12 real towers outside the scene, at their published coordinates and heights. Shibuya Hikarie, Cerulean Tower, Sakura Stage and Infoss are at full size. NTT Docomo Yoyogi, the Shinjuku towers, Roppongi Hills and Ebisu Garden Place are pulled in to 1.25 km and scaled down by the same ratio, so they keep their angle from the crossing.
+  - **Windows** are drawn by the shader (mode `farCity` in `environment/day-night.mjs`): floors and bays by style; a floor lit or dark together, then window by window; warm, cool or white; red aviation lights on the tall ones.
+  - Yoyogi Park is left open.
+- **Generic buildings' night windows** (mode `window`):
+  - lit by floor, then by window, fewer lit than before and at several levels;
+  - inside the pane: ceiling-light gradient, centre mullion, blinds on some.
+
+### C2: QFRONT
+
+- **Deep glass** (`src/heroes/deep-glass.mjs`, mode `deepGlass`). The 38% transparent glass and its box rooms are replaced by one opaque material that ray-casts, per fragment, into a room the size of a bay (3.2 m) and a storey (5.4 m), 4.2 m deep.
+  - It draws the ceiling with light panels, the floor, the walls and a back wall with furniture and the odd monitor.
+  - Rooms are lit or dark, warm or cool, some with blinds; the slab edges are opaque.
+  - There is no transparency, no sorting and no interior boxes, so it uses 5 fewer meshes than before.
+- **Blender detail** (`scripts/qfront-spec.mjs` → `scripts/blender/build-qfront.py` → `public/data/heroes/qfront.glb`), built from the hero model's own masses and footprint:
+  - crown louvres and roof plant;
+  - corner fins, slab ledges (not across the screen) and the podium canopy;
+  - the canopy downlight;
+  - extruded "QFRONT" lettering, square to the crossing on the upper storeys.
+  - The asset is 4 meshes and 3,972 triangles. AO is baked into vertex colour (Cycles, CPU). The file is 0.3 MB.
+  - It loads after the landmarks; the procedural QFRONT stands alone if it never arrives.
+- **`?qfront=classic`** restores the RUN S4 / QFRONT-GLASS version.
+
+### C3: the street
+
+- **Road mirror.** Strength is lower (0.9 → 0.5), and the scramble itself (about 30 m round its centre) keeps only a sheen, so the zebra reads crisp and the crossing no longer looks like a puddle. Wet roughness is milder (0.28 → 0.5).
+- **Shop-sign atlas** (`src/signs/atlas.mjs`, `CITY_BRANDS`): the 32 invented names are now real chains found round the crossing, in their own colours, as lit boxes. Examples: マツモトキヨシ, TOWER RECORDS, UNIQLO, LAWSON, ドン・キホーテ, 吉野家, FamilyMart, セブン-イレブン, 無印良品, 一蘭, ZARA, LOFT, みずほ銀行. Vertical blade signs carry vertical names.
+- **MAGNET's finance column:** アコム, レイク, アイフル (art 204–206), stacked beside the vision.
+- **Hero anchors** can now set `along` (their place along the wall).
+  - Hero panels that name their own artwork (`brandArt`) are no longer re-gridded by
+    `commercialLayout`. On a wall with four or more signs, that pass used to clone the first
+    panel's art across the wall, which put two "MAGNET" wordmarks on MAGNET.
+  - The reference-ad clearing no longer removes them either. `resolveFaceOverlaps` still settles
+    real clashes.
+- **Night sky** (GTA look): sky 0x060a17 and a warm haze horizon 0x2c2633, which the fog also
+  takes. The city's own glow is low in the sky, and the far city sits in it.
+
+### Not done yet
+
+- Owner-PC performance numbers (Gate D).
+- MAGNET and the left block in the QFRONT manner (Gate E).
+- Street trees and frontage.
