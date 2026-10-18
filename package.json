@@ -36,13 +36,13 @@
   "dependencies": {
     "@types/three": "^0.185.4",
     "clsx": "2.1.1",
-    "next": "16.3.6",
+    "next": "16.4.1",
     "polygon-clipping": "^0.15.7",
-    "radix-ui": "^1.6.7",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
-    "tailwind-merge": "3.6.0",
-    "three": "^0.185.1"
+    "radix-ui": "^1.8.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "tailwind-merge": "3.7.0",
+    "three": "^0.186.1"
   },
   "devDependencies": {
     "@breezystack/lamejs": "^1.2.7",
@@ -50,8 +50,8 @@
     "@cloudflare/workers-types": "5.20260927.1",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
-    "@types/react": "19.2.14",
-    "@types/react-dom": "19.2.3",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.0.2",
     "@vitejs/plugin-rsc": "0.5.26",
     "eslint": "9.39.4",
