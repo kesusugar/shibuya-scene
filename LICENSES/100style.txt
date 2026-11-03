@@ -1,0 +1,13 @@
+100STYLE dataset
+Ian Mason, Sebastian Starke, Taku Komura. "Real-Time Style Modelling of Human Locomotion via
+Feature-Wise Transformations and Local Motion Phases". Proceedings of the ACM on Computer Graphics
+and Interactive Techniques, 2022. https://www.ianxmason.com/100style/  (data: zenodo.org/records/8127870)
+
+Licensed under the Creative Commons Attribution 4.0 International License (CC BY 4.0),
+https://creativecommons.org/licenses/by/4.0/
+
+Used in this project: the idle (ID) and forward-walk (FW) captures of the styles Neutral,
+OnPhoneRight, OnPhoneLeft, ArmsFolded, HandsInPockets, ArmsBehindBack, Akimbo, Old, Rushed,
+Heavyset and WiggleHips. Changes: retargeted onto the crowd skeleton, cut to loops, made in place,
+grounded, blended (Walk.elder, Walk.female) and posed (Idle.text) by scripts/mocap/style-clips.mjs
+and src/life/citizen-pose.mjs; shipped as public/data/character/citizen-moves.json.

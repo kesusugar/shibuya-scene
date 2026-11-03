@@ -1,9 +1,10 @@
 // Bounded local reactions: no scans over the full population or changes to signal ownership.
+import {gridKey} from '../life/grid-key.mjs';
 export function reactToRunner(crowd,state){
  if(!crowd||!state.alive||state.speed<2.5)return 0;
  const sx=Math.sin(state.heading),sz=Math.cos(state.heading);let count=0;
  for(let x=Math.floor((state.x-3)/2);x<=Math.floor((state.x+3)/2);x++)for(let z=Math.floor((state.z-3)/2);z<=Math.floor((state.z+3)/2);z++){
-  for(const p of crowd.grid.get(x+','+z)??[]){
+  for(const p of crowd.grid.get(gridKey(crowd.grid,x,z))??[]){
    if(!p.active||p.controlled||p.struck!==undefined)continue;
    const dx=p.x-state.x,dz=p.z-state.z,along=dx*sx+dz*sz,side=dx*sz-dz*sx;
    if(along<0||along>2.8||Math.abs(side)>.85)continue;
@@ -79,7 +80,7 @@ export function yieldToPlayer(crowd,state,near=null){
  };
  if(near)for(const p of near)consider(p);
  else for(let x=Math.floor((state.x-r)/2);x<=Math.floor((state.x+r)/2);x++)for(let z=Math.floor((state.z-r)/2);z<=Math.floor((state.z+r)/2);z++)
-  for(const p of crowd.grid.get(x+','+z)??[])consider(p);
+  for(const p of crowd.grid.get(gridKey(crowd.grid,x,z))??[])consider(p);
  crowd.stats.yielded=(crowd.stats.yielded??0)+count;
  return count;
 }
@@ -89,7 +90,7 @@ export function yieldToPlayer(crowd,state,near=null){
 export function settleNearbyWaiters(crowd,state,dt){
  if(!crowd||dt<=0)return 0;let moved=0;
  const candidates=[];
- for(let x=Math.floor((state.x-15)/2);x<=Math.floor((state.x+15)/2);x++)for(let z=Math.floor((state.z-15)/2);z<=Math.floor((state.z+15)/2);z++)candidates.push(...(crowd.grid.get(x+','+z)??[]));
+ for(let x=Math.floor((state.x-15)/2);x<=Math.floor((state.x+15)/2);x++)for(let z=Math.floor((state.z-15)/2);z<=Math.floor((state.z+15)/2);z++)candidates.push(...(crowd.grid.get(gridKey(crowd.grid,x,z))??[]));
  for(const p of candidates){
   if(!p.active||p.controlled||p.crossing||p.struck!==undefined||p.state!=='waiting'){p.waitAnchor=null;continue;}
   if(!p.waitAnchor)p.waitAnchor={x:p.x,z:p.z};
@@ -102,7 +103,7 @@ export function settleNearbyWaiters(crowd,state,dt){
   const x=p.x+(tx-p.x)/distance*step,z=p.z+(tz-p.z)/distance*step;
   if(!crowd.network.ctx.safe(x,z,.32)||crowd.vehicleOverlap(x,z,.35))continue;
   let blocked=false;
-  for(let gx=Math.floor((x-.6)/2);gx<=Math.floor((x+.6)/2);gx++)for(let gz=Math.floor((z-.6)/2);gz<=Math.floor((z+.6)/2);gz++)for(const other of crowd.grid.get(gx+','+gz)??[]){if(other!==p&&other.active&&Math.hypot(other.x-x,other.z-z)<.55)blocked=true;}
+  for(let gx=Math.floor((x-.6)/2);gx<=Math.floor((x+.6)/2);gx++)for(let gz=Math.floor((z-.6)/2);gz<=Math.floor((z+.6)/2);gz++)for(const other of crowd.grid.get(gridKey(crowd.grid,gx,gz))??[]){if(other!==p&&other.active&&Math.hypot(other.x-x,other.z-z)<.55)blocked=true;}
   if(blocked)continue;
   const bucket=crowd.grid.get(crowd.cell(p.x,p.z)),index=bucket?.indexOf(p);if(index>=0)bucket.splice(index,1);
   p.previousX=p.x;p.previousZ=p.z;p.x=x;p.z=z;p.height=crowd.network.ctx.height(x,z);crowd.insert(p);moved++;

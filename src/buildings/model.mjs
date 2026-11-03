@@ -25,8 +25,9 @@ export function validateFootprint(input){
 }
 export function resolveHeight(source,features={area:100,roadDistance:10,zone:'west'}){
  const height=metric(source.tags?.height??source.height),levels=metric(source.tags?.['building:levels']??source.levels);let value,method;
- const forced=HEIGHT_OVERRIDES[source.id];
- if(forced>0){value=forced;method='reference-match';}else if(height>0){value=height;method='height';}else if(levels>0){value=levels*C.floorHeight;method='levels';}else{const rng=seededRandom(source.id+':height');const low=features.area<65?2:features.area>500?6:3;const spread=features.roadDistance<15?6:4;value=(low+Math.floor(rng()*spread))*C.floorHeight;method='seeded';}
+ const forced=HEIGHT_OVERRIDES[source.id],measured=Number(source.plateau?.h);
+ // Reality alignment G2-1: PLATEAU's surveyed height (scripts/data/merge-plateau.py) before OSM tags and guesses.
+ if(forced>0){value=forced;method='reference-match';}else if(measured>0){value=measured;method='plateau';}else if(height>0){value=height;method='height';}else if(levels>0){value=levels*C.floorHeight;method='levels';}else{const rng=seededRandom(source.id+':height');const low=features.area<65?2:features.area>500?6:3;const spread=features.roadDistance<15?6:4;value=(low+Math.floor(rng()*spread))*C.floorHeight;method='seeded';}
  const resolved=Math.max(C.minHeight,Math.min(C.maxHeight,value));const min=metric(source.tags?.min_height??source.minHeight)??0;
  return {height:resolved,method,clamped:resolved!==value,base:Math.max(C.base,Math.min(min,resolved-C.floorHeight)),levels:Math.max(1,Math.floor(resolved/C.floorHeight))};
 }
@@ -47,6 +48,16 @@ export function classify(f,source){
 function centroid(p){let sum=0,x=0,z=0;for(const r of [p.outer,...p.holes])for(const [a,b] of edges(r)){const c=a[0]*b[1]-b[0]*a[1];sum+=c;x+=(a[0]+b[0])*c;z+=(a[1]+b[1])*c;}return [x/(3*sum),z/(3*sum)];}
 function frontage(p,roads){let best=null;for(const [a,b] of edges(p.outer)){const l=distance(a,b);if(l<1)continue;const mid=a.map((v,i)=>(v+b[i])/2),near=nearest(mid,roads);const normal=[(b[1]-a[1])/l,-(b[0]-a[0])/l];const facing=near.point?normal[0]*(near.point[0]-mid[0])+normal[1]*(near.point[1]-mid[1]):0;const score=near.distance+(facing<0?20:0)-Math.min(l,30)*.1;if(!best||score<best.score)best={a,b,length:l,mid,normal,distance:near.distance,heading:Math.atan2(normal[0],normal[1]),score};}return best;}
 export function roofFits(polygon,center,width,depth,margin=C.roofMargin){const w=width/2+margin,d=depth/2+margin,r=[[center[0]-w,center[1]-d],[center[0]+w,center[1]-d],[center[0]+w,center[1]+d],[center[0]-w,center[1]+d]];if(!r.every(v=>inPolygon(v,polygon)))return false;const rectangle=edges(r);for(const ring of [polygon.outer,...polygon.holes]){if(edges(ring).some(e=>rectangle.some(f=>intersects(...e,...f))))return false;if(ring===polygon.outer)continue;if(ring.some(p=>p[0]>r[0][0]&&p[0]<r[2][0]&&p[1]>r[0][1]&&p[1]<r[2][1]))return false;}return true;}
+/**
+ * Reality alignment G2-1: PLATEAU LOD2 roof steps (plant rooms, pavilions, sign frames) clipped to
+ * the footprint. Each is {polygon, y}: an extrusion from the main roof up to y metres above ground.
+ */
+export function roofSteps(building,source){
+ const out=[];for(const step of source.plateau?.roofSteps??[]){if(!(step.y>building.height+.8)||step.y>building.height+30)continue;
+  let pieces;try{pieces=polygons(intersection(multi({outer:step.poly,holes:[]}),multi(building.polygon)));}catch{continue;}
+  for(const polygon of pieces){const v=validateFootprint(polygon);if(v.ok&&v.area>=4)out.push({polygon:v.polygon,y:step.y,area:v.area});}}
+ return out.sort((a,b)=>a.y-b.y).slice(0,12);
+}
 export function rooftop(building){const rng=seededRandom(building.key+':rooftop'),result=[],b=building.bounds;const types=[['ac',1.1,.7,1],['vent',.5,.7,.5],['hut',2.4,2,2],['cooling',1.8,1.3,1.4],['tank',1.2,1.6,1.2],['mast',.12,2.5,.12]];
  const count=Math.min(8,Math.max(1,Math.floor(building.area/90)));for(let i=0;i<count;i++){const [type,w,h,d]=types[Math.floor(rng()*types.length)];for(let attempt=0;attempt<24;attempt++){const center=[b.minX+rng()*(b.maxX-b.minX),b.minZ+rng()*(b.maxZ-b.minZ)];if(!roofFits(building.polygon,center,w,d)||result.some(r=>Math.abs(r.center[0]-center[0])<(r.width+w)/2+.4&&Math.abs(r.center[1]-center[1])<(r.depth+d)/2+.4))continue;result.push({type,center,width:w,height:h,depth:d,y:building.height+C.base});break;}}
  return result;
@@ -66,7 +77,7 @@ export function* buildBuildingModelSteps(data){let chunk=0;const started=perform
  const roadConflict=roadLines.some(line=>line.some(p=>inPolygon(p,polygon)))||roadLines.some(line=>edges(polygon.outer).some(e=>line.some((p,i)=>i>0&&intersects(...e,line[i-1],p)))&&area(intersection(multi(polygon),buffer(line,.5)))>1);
  if(crossingConflict||roadConflict){skipped.push({key,reason:crossingConflict?'crossing-conflict':'road-centerline-conflict'});continue;}
  const roadArea=area(intersection(multi(polygon),union(...roadIndex.query(valid.bounds).map(r=>r.value))));if(roadArea>C.roadConflictArea&&roadArea/valid.area>C.roadConflictRatio){skipped.push({key,reason:'road-surface-conflict',overlapArea:roadArea,overlapRatio:roadArea/valid.area});continue;}
- const c=centroid(polygon),front=frontage(polygon,streets);if(!front){skipped.push({key,reason:'no-valid-edge'});continue;}const b=valid.bounds,w=b.maxX-b.minX,d=b.maxZ-b.minZ,zone=c[0]<0?(c[1]<-80?'northwest':'west'):'east';const f={area:valid.area,centroid:c,aspect:Math.max(w,d)/Math.max(.1,Math.min(w,d)),roadDistance:front.distance,frontageLength:front.length,zone};const resolved=resolveHeight(source,f);if(resolved.clamped)stats.heightClamped++;const building={id:source.id,sourceKey:key,key:key+':'+part,polygon,bounds:b,...f,...resolved,frontage:front};building.archetype=classify(building,source);building.rooftop=rooftop(building);buildings.push(building);
+ const c=centroid(polygon),front=frontage(polygon,streets);if(!front){skipped.push({key,reason:'no-valid-edge'});continue;}const b=valid.bounds,w=b.maxX-b.minX,d=b.maxZ-b.minZ,zone=c[0]<0?(c[1]<-80?'northwest':'west'):'east';const f={area:valid.area,centroid:c,aspect:Math.max(w,d)/Math.max(.1,Math.min(w,d)),roadDistance:front.distance,frontageLength:front.length,zone};const resolved=resolveHeight(source,f);if(resolved.clamped)stats.heightClamped++;const building={id:source.id,sourceKey:key,key:key+':'+part,polygon,bounds:b,...f,...resolved,frontage:front};building.archetype=classify(building,source);building.roofSteps=roofSteps(building,source);building.rooftop=building.roofSteps.length?[]:rooftop(building);buildings.push(building);
  }
  }
  const heights=buildings.map(b=>b.height).sort((a,b)=>a-b),byArchetype={},byReason={};for(const b of buildings)byArchetype[b.archetype]=(byArchetype[b.archetype]??0)+1;for(const s of skipped)byReason[s.reason]=(byReason[s.reason]??0)+1;

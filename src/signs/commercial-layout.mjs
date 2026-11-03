@@ -2,7 +2,9 @@
 export function commercialLayout(signs, count=32) {
   const groups=new Map(), result=[];
   for(const s of signs){
-    if(s.screenUV||['blade','directory','rooftop'].includes(s.category)){result.push({...s});continue;}
+    // A hero's own panel (its artwork named, brandArt) hangs where the builder measured it:
+    // re-gridding a wall would clone the first panel's art across it (cityscape C3).
+    if(s.screenUV||s.brandArt!=null||['blade','directory','rooftop'].includes(s.category)){result.push({...s});continue;}
     const key=`${s.hostKey}:${s.edge?.index}:${s.heading.toFixed(4)}`;
     if(!groups.has(key))groups.set(key,[]);groups.get(key).push(s);
   }

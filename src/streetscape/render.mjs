@@ -21,7 +21,8 @@ export function fixtureParts(f){const parts=[],faces=[],h=f.heading,c=Math.cos(h
  case 'pole':pole(7.6,.22,'cream');add('box','steel',0,7.2,0,.6,.09,.12);for(const x of [-.25,.25])add('cylinder','dark',x,7.35,0,.1,.2,.1);add('box','dark',.15,4.1,0,.2,.5,.2);break;
  case 'vending':add('box','cream',0,.925,0,1,1.85,.7);faces.push({position:position(0,.94,.358),width:.94,height:1.73,heading:h,tile:f.variation>.5?1:0});break;
  case 'box':add('box','cream',0,.625,0,.65,1.25,.5);add('box','dark',0,.76,.255,.45,.025,.01);break;
- case 'tree':{const size=.9+.1*f.variation;pole(2.8,.16,'wood');add('sphere','leaf',0,3.55,0,1.65*size,1.8*size,1.65*size);for(const [x,z] of [[-.42,.22],[.4,.27],[0,-.4]])add('sphere','leaf',x,3.1,z,1.1*size,1.4*size,1.1*size);add('box','steel',0,.04,0,1.7,.08,1.7);break;}
+ case 'tree':{// Cityscape E: the zelkovas round the crossing stand 8-10 m, a clear trunk under a broad crown.
+  const size=.85+.3*f.variation;pole(4.2*size,.2,'wood');add('sphere','leaf',0,6.7*size,0,2.7*size,2.1*size,2.7*size);for(const [x,z] of [[-1.5,.5],[1.4,.7],[.2,-1.5],[-.6,-.9]])add('sphere','leaf',x*size,5.6*size,z*size,1.9*size,1.6*size,1.9*size);add('box','steel',0,.04,0,1.7,.08,1.7);break;}
  case 'planter':add('box','cream',0,.22,0,1,.44,.65);add('sphere','leaf',0,.49,0,.94,.42,.58);break;
  case 'bench':for(const x of [-.55,.55])add('box','steel',x,.2,0,.09,.4,.5);add('box','wood',0,.43,0,1.5,.1,.6);add('box','wood',0,.69,-.26,1.5,.32,.1);break;
  case 'information':pole(1.8,.1);add('box','dark',0,1.45,0,.8,1.1,.2);faces.push({position:position(0,1.45,.106),width:.73,height:1,heading:h,tile:2});break;

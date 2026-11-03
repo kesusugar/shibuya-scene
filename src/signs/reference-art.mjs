@@ -398,6 +398,32 @@ export const REFERENCE_ART = Object.freeze({
     {family: 'Georgia,"Times New Roman",serif', weight: '400', max: span * .82});
   });},
 
+
+ // Cityscape C3: the finance column beside MAGNET's vision (owner-approved real brands). Lettering
+ // and colour only, drawn here; no logo file.
+ 204(c, aspect) {const {text, box} = tools(c);
+  box(0, 0, 1, 1, '#e60012');
+  trueShape(c, aspect, wide => {c.fillStyle = '#ffffff';
+   text('アコム', Math.min(.3, wide * .28), .5, .42, {weight: '900', max: wide * .9});
+   text('ACOM', Math.min(.13, wide * .14), .5, .7, {family: 'Arial,sans-serif', weight: '900', max: wide * .7});});},
+ 205(c, aspect) {const {text, box} = tools(c);
+  box(0, 0, 1, 1, '#00994d');
+  trueShape(c, aspect, wide => {c.fillStyle = '#ffffff';
+   text('レイク', Math.min(.3, wide * .28), .5, .4, {weight: '900', max: wide * .9});
+   box(.5 - wide * .36, .62, wide * .72, .16, '#ffffff');
+   c.fillStyle = '#00994d'; text('ALSA', Math.min(.12, wide * .13), .5, .7, {family: 'Arial,sans-serif', weight: '900', max: wide * .6});});},
+ 206(c, aspect) {const {text, box} = tools(c);
+  box(0, 0, 1, 1, '#ffffff');
+  trueShape(c, aspect, wide => {box(.5 - wide * .46, .08, wide * .92, .84, '#e8380d'); c.fillStyle = '#ffffff';
+   text('アイフル', Math.min(.26, wide * .22), .5, .46, {weight: '900', max: wide * .86});
+   text('AIFUL', Math.min(.1, wide * .12), .5, .72, {family: 'Arial,sans-serif', weight: '800', max: wide * .6});});},
+
+ // A board in a brand's own colour: the name big, a second line small (lettering only, no logo file).
+ 207(c, aspect) {boardArt(c, aspect, '#0e3b8c', '#ffffff', 'プロミス', 'PROMISE');},
+ 208(c, aspect) {boardArt(c, aspect, '#00a040', '#ffffff', 'SMBC', 'モビット');},
+ 209(c, aspect) {boardArt(c, aspect, '#bf0000', '#ffffff', '楽天カード', 'Rakuten Card');},
+ 210(c, aspect) {boardArt(c, aspect, '#eb5505', '#ffffff', 'au', 'KDDI');},
+ 211(c, aspect) {boardArt(c, aspect, '#ff0033', '#ffffff', 'PayPay', '銀行');},
  203(c, aspect) {const {box, disc} = tools(c);
   // The vision runs a culture spot, so it carries a key visual and no wording. Flat washes
   // only: this sheet is painted through contexts where canvas gradients are unavailable.
@@ -416,6 +442,12 @@ export const REFERENCE_ART = Object.freeze({
    box(.5 - wide * .42, .955, wide * .15, .03, '#ff2d6f');
   });},
 });
+
+function boardArt(c, aspect, bg, fg, name, sub) {const {text, box} = tools(c);
+ box(0, 0, 1, 1, bg);
+ trueShape(c, aspect, wide => {c.fillStyle = fg;
+  text(name, Math.min(.3, wide * .24), .5, .42, {weight: '900', max: wide * .88});
+  text(sub, Math.min(.12, wide * .13), .5, .7, {weight: '800', max: wide * .7});});}
 
 /** Ids the inventory carries that this sheet can draw. */
 export const PAINTED_IDS = Object.freeze(Object.keys(REFERENCE_ART).map(Number).sort((a, b) => a - b));

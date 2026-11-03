@@ -1,0 +1,6 @@
+  day-ref-a-gta: gta {"radio":null,"fps":0.2,"drawCalls":285,"triangles":5798765}
+  night-ref-a-gta: gta {"radio":null,"fps":0.2,"drawCalls":294,"triangles":5784721}
+  day-ref-b-gta: gta {"radio":null,"fps":0.2,"drawCalls":291,"triangles":3484815}
+  night-ref-b-gta: gta {"radio":null,"fps":0.2,"drawCalls":298,"triangles":3483979}
+  day-ref-c-gta: gta {"radio":null,"fps":0.2,"drawCalls":275,"triangles":3581457}
+  night-ref-c-gta: gta {"radio":null,"fps":0.2,"drawCalls":286,"triangles":3587205}

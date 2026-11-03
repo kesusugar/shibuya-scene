@@ -1,8 +1,8 @@
 {
-  "shopWindows": 1000,
+  "shopWindows": 1015,
   "awnings": 89,
   "dividers": 267,
-  "triangles": 167099,
+  "triangles": 164873,
   "drawCalls": 8,
   "materials": 7
 }

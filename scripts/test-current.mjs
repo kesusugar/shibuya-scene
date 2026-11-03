@@ -68,7 +68,7 @@ const files=[
  'tests/katana-kesa.test.mjs',
  'tests/katana-combo.test.mjs',
  'tests/photo-mode.test.mjs',
- 'tests/tunnel.test.mjs',
+ 'tests/tunnel.test.mjs','tests/crowd-cull.test.mjs','tests/cast-lod.test.mjs','tests/citizens.test.mjs','tests/cityscape.test.mjs','tests/reality.test.mjs','tests/hero-build.test.mjs',
  'tests/pistol.test.mjs',
  'tests/police-guns.test.mjs',
  'tests/roll-crouch.test.mjs',

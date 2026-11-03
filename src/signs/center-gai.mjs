@@ -8,34 +8,37 @@ export const CENTER_FACADES=[
  {id:'way/1233446448',a:[-31.29,-44.25],b:[-37.98,-49.60],normal:[-.625,.781],top:9.35,columns:1},
  {id:'way/136691389',a:[-40.92,-52.03],b:[-57.50,-68.95],normal:[-.714,.700],top:24.35,columns:2}
 ];
+// Cityscape (owner-approved real brands): the Center-gai block's panels name businesses a street in
+// Shibuya actually carries, in their own saturated colours, as lettering only -- no logo artwork.
+// The icon kind (last field) stays a generic pictogram. Variant order is the layout's, unchanged.
 export const CENTER_ADS=[
- ['英会話 NEKON','ネコン英会話 5F','#fffaf5','#456ed9','speech'],
- ['ぴょんモバイル','PYON MOBILE 6G ¥980','#345bec','#fff3b6','phone'],
- ['サクラ美容外科','SAKURA CLINIC 6F','#f9c7de','#fffbed','flower'],
- ['ふわふわ生','FUWA FUWA BEER','#ef493b','#fff0a8','beer'],
- ['ひとみ眼科','EYE CLINIC / 3F','#fffdf5','#73d69d','cross'],
- ['おおもり堂','古書 BOOKS','#fff8ef','#ec716e','book'],
- ['メガネのニャン','GLASSES 2F','#f5f4ff','#6a84d8','glasses'],
- ['ラーメンスター','24H 営業中','#ffe78a','#e98c4c','bowl'],
+ ['GABA','マンツーマン英会話 5F','#e60039','#ffffff','speech'],
+ ['docomo','ドコモショップ 6F','#cc0033','#ffffff','phone'],
+ ['湘南美容クリニック','SBC 6F','#0b2d6b','#ffffff','flower'],
+ ['SUPER DRY','アサヒ 生ジョッキ缶','#1a1a1a','#e9e9e9','beer'],
+ ['品川近視クリニック','EYE CLINIC 3F','#0081cc','#ffffff','cross'],
+ ['BOOKOFF','本・CD・ゲーム','#fcd000','#003d8f','book'],
+ ['JINS','メガネ 2F','#002e5d','#ffffff','glasses'],
+ ['伝説のすた丼屋','24H 営業中','#e60012','#fff200','bowl'],
  ['渋谷センター街','バスケットボールストリート','#f8d25e','#26343c','gate'],
  ['フロア案内','FLOOR GUIDE','#eeeadd','#354352','directory'],
- ['しごとネコ','求人 さがすなら','#5983d7','#fffdf0','paw'],
- ['サウナ極','男・女 24H','#173640','#ffdf8a','steam'],
- ['ひかり薬局','PHARMACY 1F','#f27648','#fff9ed','vertical'],
- ['ピタッとシップ','毎日を、軽やかに。','#77cba7','#fffdf0','split'],
- ['にゃんPay','次世代のおサイフ','#f28e93','#fff9f0','pay'],
- ['LIVE SHIBUYA','LIVE・フェス・配信','#202b41','#fff9ed','live'],
- ['PachiPachi','パチパチ / 2F','#fff1b4','#bd9241','star'],
- ['ぷるぷる','PURU PURU COSME','#efacd4','#fffbed','drop'],
- ['MEOW MART','あなたの街のマーケット','#b9dce8','#fff4b7','market'],
- ['茶房 こもれび','MATCHA & COFFEE / 3F','#267b68','#fff3cf','tea'],
- ['ねこ銀行','NEKO BANK','#fffaf4','#e96e79','bank'],
- ['住みねこ不動産','お部屋さがし 3F','#82d8a4','#fffdec','house'],
- ['NC','NC CARD','#fffdf8','#648be0','card'],
- ['のどスッキリ','のど飴ダイレクト','#ef665b','#fff9ed','pill'],
- ['MOCHI HADA','もち肌スキンケア','#fff6f5','#f7b9d8','mochi'],
- ['fenn.chat','chat with your world','#61d5f4','#17405a','chat'],
- ['にじいろサウンド','MUSIC / LIVE / SHIBUYA','#c845dc','#fff8ed','rainbow'],
+ ['バイトル','アルバイト探し','#ff6600','#ffffff','paw'],
+ ['ROUND1','ボウリング・カラオケ','#e4007f','#ffffff','steam'],
+ ['ツルハドラッグ','PHARMACY 1F','#e60012','#ffffff','vertical'],
+ ['ロキソニンS','痛みに、すばやく。','#003f8e','#ffffff','split'],
+ ['PayPay','キャッシュレス決済','#ff0033','#ffffff','pay'],
+ ['CLUB QUATTRO','LIVE / SHIBUYA','#202b41','#fff9ed','live'],
+ ['マルハン','パチンコ・スロット','#e60012','#ffd400','star'],
+ ['@cosme','TOKYO COSME','#e4007f','#ffffff','drop'],
+ ['MEGAドン・キホーテ','驚安の殿堂','#ffe100','#e60012','market'],
+ ['BLUE BOTTLE','COFFEE / 3F','#0076c0','#ffffff','tea'],
+ ['三井住友銀行','SMBC','#00523b','#ffffff','bank'],
+ ['SUUMO','住まい探し','#6ab42d','#ffffff','house'],
+ ['JCB','JCB CARD','#0e4c92','#ffffff','card'],
+ ['のどぬ〜る','スプレー','#00a0e9','#ffffff','pill'],
+ ['SK-II','PITERA','#c8102e','#ffffff','mochi'],
+ ['LINE','いつでも、つながる','#06c755','#ffffff','chat'],
+ ['Spotify','MUSIC FOR EVERYONE','#191414','#1db954','rainbow'],
  ['Q F R O N T','','#08131e','#ffffff','qfront'],
  ['Coca-Cola','','#d41422','#fff8ee','coca'],
  ...REAL_BRANDS
@@ -77,13 +80,15 @@ export function centerGaiLayout(){const signs=[];for(const [bi,f] of CENTER_FACA
  ];
  for(const f of rearFaces){const width=Math.hypot(f.b[0]-f.a[0],f.b[1]-f.a[1])/f.columns-.6,variants=[13,24,3,1,20,0,17,4,21,22,10,23,6,14,7];for(let row=0;row<5;row++)for(let col=0;col<f.columns;col++)signs.push({building:'way/114755219',surface:f.surface,kind:'advert',variant:variants[row*f.columns+col],position:wallAt(f,(col+.5)/f.columns,6.5+row*6.8),heading:Math.atan2(...f.normal),width,height:5.8});}
  for(const s of [{p:[-47,27.4,-34],variant:15,width:9},{p:[-53,28,-44],variant:26,width:8.4},{p:[-60.5,27.2,-35],variant:21,width:7}])signs.push({building:'way/136690966',surface:'roof-rear',kind:'roof',variant:s.variant,position:s.p,heading:.107,width:s.width,height:3.8});
- signs.push({building:'way/136691386',surface:'crown',kind:'advert',variant:27,position:[-8,40.2,-29.3],heading:.1589,width:9.5,height:2.2});
+ // Reality alignment G2-2: QFRONT's lettering is on its crown screen (the Blender asset), not a board on the glass.
  // The rooftop drink brand is owned by the reference advertisement layer, which stands it
  // on a real roof instead of floating it at a fixed height above QFRONT.
  // First reference-brand pass reuses two existing rooftop supports. Host positions
  // are provisional and deliberately identified for the next placement audit.
- const roofSlots=signs.filter(s=>s.surface==='roof-rear'),brandSlots=[roofSlots[2],roofSlots[0]];
- for(const [i,variant] of [29,30].entries()){const s=brandSlots[i];s.variant=variant;s.width=6.4;s.height=6.4;s.position[1]+=1.3;s.referencePlacement='provisional-existing-slot';}
+ // Reality alignment G2-1: Hisamitsu / サロンパス stand on their own frame (sign-structures.mjs), so only UC
+ // keeps a provisional roof slot here.
+ const roofSlots=signs.filter(s=>s.surface==='roof-rear'),brandSlots=[roofSlots[2]];
+ for(const [i,variant] of [29].entries()){const s=brandSlots[i];s.variant=variant;s.width=6.4;s.height=6.4;s.position[1]+=1.3;s.referencePlacement='provisional-existing-slot';}
  return signs;}
 
 function atlas(factory){const canvas=factory?factory():typeof document!=='undefined'?document.createElement('canvas'):null;

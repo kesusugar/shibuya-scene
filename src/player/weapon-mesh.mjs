@@ -229,6 +229,8 @@ const CARRY=Object.freeze({
  * it, a weapon not in the hand is not shown.
  */
 export const SHOW_SLUNG_SMG=false;
+/** Metres per root unit for the body CARRY was measured on (citizen.json scaleToGame). */
+const CARRY_UNITS=.96725;
 
 /**
  * The weapons on one figure. `carry` lists what the body carries: the player has the pistol and
@@ -259,7 +261,11 @@ export function createWeaponRig(root,{carry=['pistol','katana']}={}){
  const place=(spot,kind)=>{
   const c=CARRY[spot],bone=root.getObjectByName(c.bone);if(!bone)return null;
   const m=make(kind??c.kind,bone);
-  const inWorld=new Matrix4().multiplyMatrices(rootFrame,new Matrix4().compose(new Vector3(...c.at),basis(c.forward,c.up),new Vector3(1,1,1)));
+  // Look 2c: CARRY is for the RUN 6.8 body. On a citizen (its own proportions) the spot moves by
+  // as much as the carrying bone sits away from where that body's did (`carryRef`, root units).
+  const at=new Vector3(...c.at),ref=root.userData?.carryRef?.[c.bone];
+  if(ref){const here=root.worldToLocal(bone.getWorldPosition(new Vector3()));at.addScaledVector(here.sub(new Vector3(...ref)),CARRY_UNITS);}
+  const inWorld=new Matrix4().multiplyMatrices(rootFrame,new Matrix4().compose(at,basis(c.forward,c.up),new Vector3(1,1,1)));
   new Matrix4().copy(bone.matrixWorld).invert().multiply(inWorld).decompose(m.position,m.quaternion,m.scale);
   return m;
  };

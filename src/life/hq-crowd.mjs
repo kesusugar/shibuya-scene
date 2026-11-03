@@ -19,9 +19,10 @@
  * two thousand people.
  */
 import {InstancedMesh,InstancedBufferAttribute,BufferGeometry,BufferAttribute,
-        MeshStandardMaterial,DataTexture,RGBAFormat,FloatType,NearestFilter,
-        Object3D,Group,DynamicDrawUsage} from 'three';
+        MeshStandardMaterial,DataTexture,RGBAFormat,FloatType,HalfFloatType,NearestFilter,
+        Object3D,Group,DynamicDrawUsage,Frustum,Matrix4,Sphere,Vector3} from 'three';
 import {PACE,paceStep,cadence} from './pace.mjs';
+import {styledClip,HURRY} from './citizen-moves.mjs';
 import {GARMENT_PATTERN_GLSL,GARMENT_UNPACK_GLSL,packGarment} from './garment-pattern.mjs';
 
 /** The states a citizen can be in. Index into CLIP_FOR, and what the CPU writes. */
@@ -122,13 +123,14 @@ const PACK=c=>((c>>16)&255)*65536+((c>>8)&255)*256+(c&255);
  * and every instance picks its own row. That is the whole trick, and it is why nothing here
  * needs a Skeleton object.
  */
-function installCrowdSkinning(material,atlas,size,{interpolate=true,neck=[1.5,.06]}={}){
- material.defines={...material.defines,HQ_CROWD:'1',...(interpolate?{HQ_LERP:'1'}:{})};
+function installCrowdSkinning(material,atlas,size,{interpolate=true,neck=[1.5,.06],skin=null,headBones=[0,0]}={}){
+ material.defines={...material.defines,HQ_CROWD:'1',...(interpolate?{HQ_LERP:'1'}:{}),...(skin?{HQ_TEXTURED:'1'}:{})};
  material.onBeforeCompile=shader=>{
   shader.uniforms.boneAtlas={value:atlas};
   shader.uniforms.boneAtlasSize={value:size};
   shader.uniforms.crowdTime={value:0};
   shader.uniforms.crowdNeck={value:neck};
+  if(skin){shader.uniforms.crowdMap={value:skin.map};shader.uniforms.crowdMeans={value:skin.means};shader.uniforms.crowdHeadBones={value:headBones};}
   material.userData.shader=shader;
   shader.vertexShader=shader.vertexShader.replace('#include <common>',`#include <common>
 attribute vec4 skinIndex;
@@ -142,12 +144,20 @@ attribute vec4 aPal;      // skin, top, bottom, hair -- each RGB packed into one
 // crowd shader already fills the 16 vertex attributes WebGL guarantees, and a 17th fails to link.
 attribute vec2 aShoe;
 uniform vec2 crowdNeck;   // bind-pose neck height and fade band, model units
+#ifdef HQ_TEXTURED
+uniform vec2 crowdHeadBones; // Look 2: atlas index of neck_01, Head
+#endif
 uniform sampler2D boneAtlas;
 uniform vec2 boneAtlasSize;
 uniform float crowdTime;
 varying vec4 vPal;
 varying float vShoe;
 varying vec3 vGarm;       // Step A: bind-pose position, where the clothes' patterns are drawn
+#ifdef HQ_TEXTURED
+attribute vec4 crowdUV;   // Look 2: atlas u, v, and region / 8
+varying vec2 vCrowdUV;
+varying float vRegion;
+#endif
 
 vec3 unpackRGB(float v){
  float r=floor(v/65536.0);
@@ -224,11 +234,21 @@ mat4 crowdSkinMatrix(){
  objectNormal=mat3(crowdBone)*objectNormal;
  // RUN 12.4: turn the head. Weighted by bind-pose height, so it follows the neck through any clip.
  float crowdHeadW=aShoe.y==0.0?0.0:smoothstep(crowdNeck.x-crowdNeck.y,crowdNeck.x+crowdNeck.y,position.y);
+#ifdef HQ_TEXTURED
+ // Look 2: the citizens are bound in a T-pose whose sleeves reach neck height, and a height
+ // weight turned their arms about the neck -- spikes, live, wherever people looked at the player.
+ // Their head weight is the skinning's own: all of the head bone, half of the neck.
+ crowdHeadW=aShoe.y==0.0?0.0:dot(skinWeight,vec4(1.0)-step(vec4(0.5),abs(skinIndex-vec4(crowdHeadBones.y))))
+  +0.5*dot(skinWeight,vec4(1.0)-step(vec4(0.5),abs(skinIndex-vec4(crowdHeadBones.x))));
+#endif
  float crowdHa=aShoe.y*crowdHeadW,crowdHc=cos(crowdHa),crowdHs=sin(crowdHa);
  mat3 crowdHeadRot=mat3(crowdHc,0.0,-crowdHs, 0.0,1.0,0.0, crowdHs,0.0,crowdHc);
  vec3 crowdNeckAt=(crowdBone*vec4(0.0,crowdNeck.x,0.0,1.0)).xyz;
  objectNormal=crowdHeadRot*objectNormal;
- vPal=aPal;vShoe=aShoe.x;vGarm=position;`);
+ vPal=aPal;vShoe=aShoe.x;vGarm=position;
+#ifdef HQ_TEXTURED
+ vCrowdUV=crowdUV.xy;vRegion=crowdUV.z*8.0;
+#endif`);
   shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>',
 `#include <begin_vertex>
  transformed=(crowdBone*vec4(transformed,1.0)).xyz;
@@ -240,6 +260,12 @@ mat4 crowdSkinMatrix(){
 varying vec4 vPal;
 varying float vShoe;
 varying vec3 vGarm;
+#ifdef HQ_TEXTURED
+varying vec2 vCrowdUV;
+varying float vRegion;
+uniform sampler2D crowdMap;
+uniform vec3 crowdMeans[5];
+#endif
 ${GARMENT_UNPACK_GLSL}${GARMENT_PATTERN_GLSL}vec3 unpackRGB(float v){
  float r=floor(v/65536.0);
  float g=floor(mod(v,65536.0)/256.0);
@@ -261,7 +287,7 @@ ${GARMENT_UNPACK_GLSL}${GARMENT_PATTERN_GLSL}vec3 unpackRGB(float v){
  // where the eye needs it.
  return mix(pow(c*0.9478672986+0.0521327014,vec3(2.4)),c*0.0773993808,step(c,vec3(0.04045)));
 }`);
-  shader.fragmentShader=shader.fragmentShader.replace('#include <color_fragment>',`
+  shader.fragmentShader=shader.fragmentShader.replace('#include <color_fragment>',skin?CITIZEN_FRAGMENT:`
  float wShoe=max(0.0,1.0-vColor.r-vColor.g-vColor.b-vColor.a);
  // Step A: the top and bottom carry a pattern id in their top three bits (7-bit colour).
  // Evaluated unconditionally: fwidth() inside a branch is undefined.
@@ -273,11 +299,60 @@ ${GARMENT_UNPACK_GLSL}${GARMENT_PATTERN_GLSL}vec3 unpackRGB(float v){
   // surface is one number and skin, cotton, denim, hair and a shoe all read as the same
   // plastic -- which under the scene's tone mapping came out as a washed-out white crowd,
   // visibly different from the RUN 6.8 bodies standing next to them.
-  shader.fragmentShader=shader.fragmentShader.replace('#include <roughnessmap_fragment>',
+  shader.fragmentShader=shader.fragmentShader.replace('#include <roughnessmap_fragment>',skin?CITIZEN_ROUGHNESS:
 `#include <roughnessmap_fragment>
  roughnessFactor=vColor.r*0.62+vColor.g*0.86+vColor.b*0.80+vColor.a*0.52+wShoe*0.44;`);
  };
- material.customProgramCacheKey=()=>'hq-crowd-'+(interpolate?'lerp':'snap');
+ material.customProgramCacheKey=()=>'hq-crowd-'+(interpolate?'lerp':'snap')+(skin?'-tex':'');
+}
+
+/**
+ * Look 2: the textured citizens (public/data/crowd/citizens.json). The atlas is the person as
+ * modelled -- skin, face, clothes with their folds, shoes, hair -- and each region is recoloured
+ * to this citizen's palette: the texel times palette / the region's dominant colour (`means`),
+ * so folds, seams and the face survive the recolour. Within a region only texels near its
+ * dominant colour are recoloured (the atlas alpha, from build-citizens.py): a suit changes colour,
+ * its white collar and its tie do not. Hair, brows, lashes and eyes use alpha as a cut-out.
+ * Regions: 0 skin, 1 top, 2 bottom, 3 hair, 4 shoe, 5 keep; Look 2d: 6 a phone's case, 7 its screen,
+ * untextured (the phone is only drawn while it is held; see PHONE_BONE in citizen-pose.mjs).
+ */
+export const CITIZEN_FRAGMENT=`
+ vec4 crowdTex=texture2D(crowdMap,vCrowdUV);
+ float crowdR=floor(vRegion+0.5);
+ bool crowdCut=(crowdR>2.5&&crowdR<3.5)||(crowdR>4.5&&crowdR<5.5);
+ if(crowdCut&&crowdTex.a<0.5)discard;
+ // The texture carries the cloth -- weave, seams, folds, a tie -- so the procedural patterns of the
+ // untextured crowd (Step A) are not drawn over it: a plaid over denim read as neither.
+ vec3 crowdTop=unpackGarment(vPal.y);
+ vec3 crowdBottom=unpackGarment(vPal.z);
+ vec3 crowdPal=unpackRGB(vPal.x),crowdMean=crowdMeans[0];
+ if(crowdR>0.5){crowdPal=crowdTop;crowdMean=crowdMeans[1];}
+ if(crowdR>1.5){crowdPal=crowdBottom;crowdMean=crowdMeans[2];}
+ if(crowdR>2.5){crowdPal=unpackRGB(vPal.w);crowdMean=crowdMeans[3];}
+ if(crowdR>3.5){crowdPal=unpackRGB(vShoe);crowdMean=crowdMeans[4];}
+ float crowdW=crowdR>4.5?0.0:(crowdR>2.5&&crowdR<3.5?1.0:crowdTex.a);
+ vec3 crowdTint=min(crowdTex.rgb*crowdPal/max(crowdMean,vec3(0.004)),vec3(1.0));
+ diffuseColor.rgb=mix(crowdTex.rgb,crowdTint,crowdW);
+ if(crowdR>5.5){diffuseColor.rgb=crowdR>6.5?vec3(0.012,0.014,0.018):vec3(0.02,0.021,0.024);
+  if(crowdR>6.5)totalEmissiveRadiance+=vec3(0.30,0.40,0.52);}`;
+export const CITIZEN_ROUGHNESS=`#include <roughnessmap_fragment>
+ roughnessFactor=crowdR<0.5?0.6:crowdR<1.5?0.86:crowdR<2.5?0.8:crowdR<3.5?0.5:crowdR<4.5?0.45:crowdR<5.5?0.4:crowdR<6.5?0.35:0.15;`;
+let WHITE=null;
+/** The texture and tint means of a textured archetype. `texture(archetype)` loads its atlas. */
+/** A bone atlas (RGBA32F, three texels per bone, a row per baked frame) from the pack. */
+function boneTexture(bin,entry){
+ // Look 2c: a citizen's own atlas is half floats (RGBA16F), the shared one full.
+ const half=entry.format==='RGBA16F';
+ const t=new DataTexture(half?new Uint16Array(bin,entry.byteOffset,entry.count):new Float32Array(bin,entry.byteOffset,entry.count),
+  entry.width,entry.height,RGBAFormat,half?HalfFloatType:FloatType);
+ t.minFilter=t.magFilter=NearestFilter;t.generateMipmaps=false;t.needsUpdate=true;
+ return t;
+}
+export function citizenSkin(archetype,texture){
+ if(!WHITE){WHITE=new DataTexture(new Uint8Array([255,255,255,255]),1,1,RGBAFormat);WHITE.needsUpdate=true;}
+ const m=archetype.means??{};
+ const means=['skin','top','bottom','hair','shoe'].map(k=>new Vector3(...(m[k]??[.5,.5,.5])));
+ return {map:texture?.(archetype)??WHITE,means};
 }
 
 function geometryFrom(level,bin){
@@ -288,10 +363,30 @@ function geometryFrom(level,bin){
  g.setAttribute('normal',slice(level.normal,Float32Array,3));
  g.setAttribute('skinIndex',slice(level.skinIndex,Uint8Array,4));
  g.setAttribute('skinWeight',slice(level.skinWeight,Uint8Array,4,true));
- g.setAttribute('color',slice(level.color,Uint8Array,4,true));
- g.setIndex(slice(level.index,level.indexType==='u32'?Uint32Array:Uint16Array,1));
+ // Look 2: a textured citizen carries its atlas u, v and region in the slot the colour mask used.
+ if(level.crowdUV)g.setAttribute('crowdUV',slice(level.crowdUV,Uint16Array,4,true));
+ else g.setAttribute('color',slice(level.color,Uint8Array,4,true));
+ // L3 (crowd performance) carries its own index list, over L2's vertices; see withL3.
+ g.setIndex(level.indexData?new BufferAttribute(level.indexData,1):slice(level.index,level.indexType==='u32'?Uint32Array:Uint16Array,1));
  g.computeBoundingSphere();
  return g;
+}
+
+/**
+ * Crowd performance: add the far level L3 to a manifest, from public/data/crowd/hq-crowd-l3.json
+ * (scripts/bake-crowd-l3.mjs): each archetype's L2 vertices with a simplified index list, about a
+ * quarter of the triangles. The same skinning, garment colours and palette: only fewer triangles.
+ * Returns a new manifest; an archetype the file does not cover gets no L3. `decode(base64)` gives
+ * the bytes (atob in the page, Buffer in Node).
+ */
+export function withL3(manifest,l3,decode){
+ const byId=new Map((l3?.archetypes??[]).map(a=>[a.id,a]));
+ return {...manifest,archetypes:manifest.archetypes.map(a=>{
+  const far=byId.get(a.id),l2=a.levels.find(l=>l.name==='L2');
+  if(!far||!l2)return a;
+  const bytes=decode(far.index),indexData=new Uint16Array(bytes.buffer,bytes.byteOffset,bytes.byteLength/2);
+  return {...a,levels:[...a.levels.filter(l=>l.name!=='L3'),{...l2,name:'L3',triangles:far.triangles,indexData}]};
+ })};
 }
 
 /**
@@ -301,30 +396,35 @@ function geometryFrom(level,bin){
  * @param bin      its .bin, as an ArrayBuffer
  * @param capacity how many citizens each archetype may hold
  */
-export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,interpolate=true}={}){
+export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,interpolate=true,texture=null}={}){
  // RUN 7B: a lane per (archetype, LOD). A citizen moves between LODs by changing lane, which
  // is a slot swap -- geometry, palette and phase all come with them, so nothing about who
  // they are depends on how far away they happen to be.
  const levels=lods??[lod];
  const root=new Group();root.name='hq-crowd';
- const atlasData=new Float32Array(bin,manifest.atlas.byteOffset,manifest.atlas.count);
- const atlas=new DataTexture(atlasData,manifest.atlas.width,manifest.atlas.height,
-  RGBAFormat,FloatType);
- atlas.minFilter=atlas.magFilter=NearestFilter;
- atlas.generateMipmaps=false;atlas.needsUpdate=true;
+ const atlas=boneTexture(bin,manifest.atlas);
  const atlasSize={x:manifest.atlas.width,y:manifest.atlas.height};
 
  const clips=new Map(manifest.clips.map(c=>[c.name,c]));
+ const skins=new Map();                // Look 2: archetype id -> {map, means}
+ const atlases=new Map();              // Look 2b: archetype id -> its own bone atlas
+ const headBones=[Math.max(0,manifest.boneNames?.indexOf('neck_01')??0),Math.max(0,manifest.boneNames?.indexOf('Head')??0)];
  const lanes=[];                       // one per archetype
  const scratch=new Object3D();
 
  for(const archetype of manifest.archetypes)for(const wanted of levels){
   const level=archetype.levels.find(l=>l.name===wanted)??archetype.levels[0];
   const geometry=geometryFrom(level,bin);
-  const material=new MeshStandardMaterial({vertexColors:true,roughness:.82,metalness:0});
+  const textured=!!level.crowdUV;
+  const material=new MeshStandardMaterial({vertexColors:!textured,roughness:.82,metalness:0});
   geometry.computeBoundingBox();
   const low=geometry.boundingBox.min.y,tall=Math.max(1e-3,geometry.boundingBox.max.y-low);
-  installCrowdSkinning(material,atlas,atlasSize,{interpolate,neck:[low+tall*HEAD_TURN.neck,tall*HEAD_TURN.band]});
+  // One material per archetype, shared by its levels: one texture, one program.
+  const skin=textured?(skins.get(archetype.id)??skins.set(archetype.id,citizenSkin(archetype,texture)).get(archetype.id)):null;
+  // Look 2b: a citizen on its own skeleton has its own bone atlas (same rows, same clips).
+  const own=archetype.boneAtlas?(atlases.get(archetype.id)??atlases.set(archetype.id,boneTexture(bin,archetype.boneAtlas)).get(archetype.id)):atlas;
+  const ownSize=archetype.boneAtlas?{x:archetype.boneAtlas.width,y:archetype.boneAtlas.height}:atlasSize;
+  installCrowdSkinning(material,own,ownSize,{interpolate,neck:[low+tall*HEAD_TURN.neck,tall*HEAD_TURN.band],skin,headBones});
   const mesh=new InstancedMesh(geometry,material,capacity);
   mesh.instanceMatrix.setUsage(DynamicDrawUsage);
   mesh.frustumCulled=false;mesh.count=0;
@@ -344,12 +444,18 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
   geometry.setAttribute('aShoe',shoeAttr);
 
   root.add(mesh);
-  lanes.push({archetype,mesh,geometry,material,level,lod:level.name,
-   clipAttr,animAttr,palAttr,shoeAttr,prevAttr,blendAttr,count:0,
+  const lane={archetype,mesh,geometry,material,level,lod:level.name,
+   clipAttr,animAttr,palAttr,shoeAttr,prevAttr,blendAttr,count:0,visible:-1,
    // slot -> citizen index, so a slot can be vacated by swapping the last one into it.
    owners:new Int32Array(capacity).fill(-1),
-   triangles:level.triangles,vertices:level.vertices});
+   triangles:level.triangles,vertices:level.vertices};
+  // Crowd performance: after `cull(camera)` the citizens that camera can see are slots
+  // [0, visible). That camera draws only them (the main pass and the AO pass, which use it);
+  // any other camera -- a reflection -- still draws the whole lane.
+  mesh.onBeforeRender=(_r,_s,camera)=>{mesh.count=camera===cull.camera&&lane.visible>=0?Math.min(lane.visible,lane.count):lane.count;};
+  lanes.push(lane);
  }
+ const cull={camera:null,frustum:new Frustum(),matrix:new Matrix4(),sphere:new Sphere()};
 
  // ---- per-citizen state, as typed arrays -------------------------------------------
  //
@@ -391,8 +497,14 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
   prevPhase:new Float32Array(max),prevRate:new Float32Array(max),
   blendStart:new Float32Array(max),blendDur:new Float32Array(max),
   look:new Float32Array(max),       // extra turn towards what a standing citizen noticed, rad
-  head:new Float32Array(max)        // RUN 12.4: head yaw on top of it, rad
+  head:new Float32Array(max),       // RUN 12.4: head yaw on top of it, rad
+  // Look 2c: this person's own idle, walk and hurried walk (indices into styleNames; 0: none),
+  // and hysteresis on hurrying.
+  idleStyle:new Int16Array(max),walkStyle:new Int16Array(max),hurryStyle:new Int16Array(max),
+  hurrying:new Uint8Array(max)
  };
+ const styleNames=[null],styleIndex=new Map();
+ const styleOf=name=>{if(!name)return 0;let k=styleIndex.get(name);if(k===undefined){k=styleNames.length;styleNames.push(name);styleIndex.set(name,k);}return k;};
  // The palette also lives here, not only in the instanced attribute, because moving a citizen
  // between LOD lanes has to rewrite it into the new lane and an attribute is write-mostly.
  const palette=new Float32Array(max*4),shoe=new Float32Array(max);
@@ -406,7 +518,20 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
 
  const clipOf=name=>clips.get(name)??clips.values().next().value;
  const byRow=new Map(manifest.clips.map(c=>[c.row,c]));
- const clipOfRow=row=>byRow.get(row)??null;
+ // Look 2c: a citizen archetype with its own clip table (its own atlas rows: the shared clips,
+ // then its motion-captured idles and walks).
+ const tables=new Map(manifest.archetypes.filter(a=>a.clips).map(a=>[a.id,{byName:new Map(a.clips.map(c=>[c.name,c])),byRow:new Map(a.clips.map(c=>[c.row,c]))}]));
+ const tableOf=i=>tables.get(lanes[state.lane[i]].archetype.id);
+ const clipOfRow=(row,i)=>(i!==undefined?tableOf(i)?.byRow.get(row):null)??byRow.get(row)??null;
+ /** The clip citizen `i` plays now: the crowd's choice, in this person's own style. */
+ function pick(i){
+  const base=nameOf(i),table=tableOf(i);
+  if(!table)return {name:base,clip:clipOf(base)};
+  const styled=styledClip(base,{idle:styleNames[state.idleStyle[i]],walk:styleNames[state.walkStyle[i]],
+   hurry:state.hurrying[i]?styleNames[state.hurryStyle[i]]:null},HURRY+1);
+  const clip=table.byName.get(styled)??table.byName.get(base)??clipOf(base);
+  return {name:clip.name,clip};
+ }
  const nameOf=i=>clipFor(state.behaviour[i],state.waiting[i],!!state.moving[i],!!state.fast[i]);
  /** Cycles per second citizen `i` should play `clip` at. */
  function rateOf(i,name,clip){
@@ -414,6 +539,8 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
   // Walk and Run: stride / measured ground speed, so the planted foot stays planted. Everything
   // else plays at its authored rate with the citizen's own small offset, so a row of idlers is
   // not a chorus line.
+  // A motion-captured walk carries its own stride (Look 2c), on this citizen's legs.
+  if(clip.stride){const natural=1/clip.duration;return Math.max(natural*PACE.minScale,Math.min(natural*PACE.maxScale,state.pace[i]/clip.stride));}
   return cadence(name,clip.duration,state.pace[i])??state.rate[i]/Math.max(.01,clip.duration);
  }
 
@@ -431,11 +558,11 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
 
  function writeClip(i,{continuous=true}={}){
   const lane=lanes[state.lane[i]],slot=state.slot[i];
-  const name=nameOf(i),clip=clipOf(name);
+  const {name,clip}=pick(i);
   const old=state.clipRow[i],changed=continuous&&old>=0&&old!==clip.row;
   if(changed){
    // Keep the outgoing clip playing exactly as it was, and fade it out from now.
-   state.prevRow[i]=old;state.prevFrames[i]=clipOfRow(old)?.frames??clip.frames;
+   state.prevRow[i]=old;state.prevFrames[i]=clipOfRow(old,i)?.frames??clip.frames;
    state.prevPhase[i]=state.phase[i];state.prevRate[i]=state.animRate[i];
    state.blendStart[i]=clock;state.blendDur[i]=blendFor(old,name);
   }else if(!continuous){state.blendDur[i]=0;}
@@ -470,6 +597,28 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
   lane.prevAttr.needsUpdate=true;lane.blendAttr.needsUpdate=true;
  }
 
+ // ---- crowd performance: per-instance culling and partial uploads --------------------
+ //
+ // Every attribute a lane draws from, with its item size. A slot is a citizen's place in all of
+ // them at once, so moving a citizen means moving every one.
+ const slotAttrs=lane=>[[lane.mesh.instanceMatrix,16],[lane.clipAttr,2],[lane.animAttr,2],[lane.palAttr,4],
+  [lane.shoeAttr,2],[lane.prevAttr,4],[lane.blendAttr,2]];
+ /** Exchange two slots of a lane: every attribute, and who owns each. */
+ function swapSlots(lane,a,b){
+  for(const [attr,size] of slotAttrs(lane)){const v=attr.array,pa=a*size,pb=b*size;
+   for(let k=0;k<size;k++){const t=v[pa+k];v[pa+k]=v[pb+k];v[pb+k]=t;}}
+  const oa=lane.owners[a],ob=lane.owners[b];lane.owners[a]=ob;lane.owners[b]=oa;
+  if(oa>=0)state.slot[oa]=b;if(ob>=0)state.slot[ob]=a;
+ }
+ /**
+  * Upload only the slots in use. The buffers are sized for the worst case (over a thousand
+  * slots a lane, twelve lanes) and the whole of each was sent every frame; [0, count) is what is
+  * drawn. Ranges are set fresh for every attribute, so a stale one can never hide a slot.
+  */
+ function setRanges(lane){
+  for(const [attr,size] of slotAttrs(lane)){attr.clearUpdateRanges();attr.addUpdateRange(0,Math.max(1,lane.count)*size);}
+ }
+
  return {
   root,state,stats,lanes,
   get population(){return population;},
@@ -496,6 +645,8 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
    state.pace[i]=Math.max(0,speed);state.paceX[i]=Math.sin(heading)*state.pace[i];state.paceZ[i]=Math.cos(heading)*state.pace[i];state.moving[i]=speed>PACE.stopBelow?1:0;
    state.fast[i]=speed>PACE.strollTop?1:0;state.animRate[i]=0;
    state.clipRow[i]=-1;state.blendDur[i]=0;state.look[i]=0;state.head[i]=0;state.prevRow[i]=0;state.prevFrames[i]=1;state.prevPhase[i]=0;state.prevRate[i]=0;
+   state.idleStyle[i]=styleOf(look.idle);state.walkStyle[i]=styleOf(look.walk);state.hurryStyle[i]=styleOf(look.hurry);
+   state.hurrying[i]=state.hurryStyle[i]&&speed>HURRY?1:0;
    state.behaviour[i]=STATE.NORMAL;state.timer[i]=0;
    state.noticed[i]=0;state.ready[i]=0;state.attention[i]=0;state.calmed[i]=0;state.waiting[i]=0;state.light[i]=0;state.after[i]=0;
    state.health[i]=100;state.fallen[i]=0;
@@ -557,6 +708,10 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
 
   /** Which lane holds a given archetype at a given LOD, or -1. */
   laneFor(archetypeId,lodName){
+   // Look 2: a citizen id the pack does not have (the classic hq-crowd pack) draws as the RUN 6.8
+   // body it names, so the appearance and the pack never have to be switched together.
+   if(archetypeId&&typeof archetypeId==='object'){const a=archetypeId;
+    archetypeId=lanes.some(l=>l.archetype.id===a.id)?a.id:`${a.rig}:${a.hair}`;}
    return lanes.findIndex(l=>l.archetype.id===archetypeId&&l.lod===lodName);
   },
 
@@ -640,8 +795,10 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
    const moving=got.moving?1:0;
    const b=state.behaviour[i],top=b===STATE.NORMAL||b===STATE.LOOK?PACE.strollTop:PACE.walkTop;
    const fast=state.fast[i]?(got.speed>top-.25?1:0):(got.speed>top+.25?1:0);
-   if(moving!==state.moving[i]||fast!==state.fast[i]){state.moving[i]=moving;state.fast[i]=fast;writeClip(i);return true;}
-   const name=nameOf(i),clip=clipOf(name);
+   // Look 2c: hurrying, with hysteresis, for a walker who has a hurried walk.
+   const hurrying=state.hurryStyle[i]?(state.hurrying[i]?(got.speed>HURRY-.12?1:0):(got.speed>HURRY+.12?1:0)):0;
+   if(moving!==state.moving[i]||fast!==state.fast[i]||hurrying!==state.hurrying[i]){state.moving[i]=moving;state.fast[i]=fast;state.hurrying[i]=hurrying;writeClip(i);return true;}
+   const {name,clip}=pick(i);
    if(clip.loop===false||state.behaviour[i]===STATE.DOWNED)return false;
    const rate=rateOf(i,name,clip),old=state.animRate[i];
    if(Math.abs(rate-old)>Math.max(.02,old*.05)){writeClip(i);return true;}
@@ -789,8 +946,9 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
    let triangles=0,vertices=0,draws=0;
    for(const lane of lanes){
     lane.mesh.count=lane.count;
-    lane.mesh.instanceMatrix.needsUpdate=true;
-    if(lane.count)lane.shoeAttr.needsUpdate=true;
+    setRanges(lane);
+    // An empty lane draws nothing, so its buffers need not go anywhere.
+    if(lane.count){lane.mesh.instanceMatrix.needsUpdate=true;lane.shoeAttr.needsUpdate=true;}
     if(lane.count){draws++;triangles+=lane.count*lane.triangles;vertices+=lane.count*lane.vertices;}
    }
    stats.population=population;stats.drawCalls=draws;
@@ -799,9 +957,43 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
    return stats;
   },
 
+  /**
+   * Crowd performance: put the citizens `camera` can see first in each lane, so it draws only
+   * them. Nobody is removed or paused -- everyone is still simulated, animated and positioned;
+   * the rest are simply not sent to the GPU from this camera. A body's bounds are a sphere 2.1 m
+   * round a point 0.9 m above its feet (standing, or lying full length after a fall), plus
+   * `margin`. Call it after `update` and before drawing, with the camera's matrices current.
+   * Pass null to draw everyone from every camera again.
+   */
+  cull(camera,{margin=.5}={}){
+   cull.camera=camera;
+   if(!camera){for(const lane of lanes)lane.visible=-1;stats.visible=null;return null;}
+   cull.matrix.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse);
+   cull.frustum.setFromProjectionMatrix(cull.matrix);
+   const sphere=cull.sphere;sphere.radius=2.1+margin;
+   const seen=i=>{sphere.center.set(state.x[i],state.y[i]+.9,state.z[i]);return cull.frustum.intersectsSphere(sphere);};
+   let visible=0,swaps=0,triangles=0;
+   for(const lane of lanes){
+    // Two ends inwards: an unseen one at the front changes places with a seen one at the back.
+    // The partition from the frame before is almost right, so only what changed is moved.
+    let lo=0,hi=lane.count-1,moved=0;
+    while(lo<=hi){
+     if(seen(lane.owners[lo])){lo++;continue;}
+     while(hi>lo&&!seen(lane.owners[hi]))hi--;
+     if(hi<=lo)break;
+     swapSlots(lane,lo,hi);moved++;lo++;hi--;
+    }
+    lane.visible=lo;visible+=lo;triangles+=lo*lane.triangles;swaps+=moved;
+    if(moved){setRanges(lane);for(const [attr] of slotAttrs(lane))if(lane.count)attr.needsUpdate=true;}
+   }
+   stats.visible={citizens:visible,triangles,swaps};
+   return stats.visible;
+  },
+
   inspect(){
    const byLod={};for(const l of lanes)byLod[l.lod]=(byLod[l.lod]??0)+l.count;
    return {population,lod,lods:levels,byLod,drawCalls:stats.drawCalls,triangles:stats.triangles,
+    visible:stats.visible??null,
     vertices:stats.vertices,updateMs:Number((stats.updateMs??0).toFixed(3)),
     stateChanges:stats.stateChanges,
     skeletons:0,mixers:0,
@@ -812,7 +1004,7 @@ export function createHQCrowd(manifest,bin,{capacity=512,lod='L1',lods=null,inte
   dispose(){
    for(const lane of lanes){lane.geometry.dispose();lane.material.dispose();
     lane.mesh.dispose?.();lane.mesh.removeFromParent();}
-   atlas.dispose();root.removeFromParent();root.clear();
+   atlas.dispose();for(const t of atlases.values())t.dispose();root.removeFromParent();root.clear();
    population=0;byId.clear();
   }
  };

@@ -4,6 +4,9 @@ import {NEAR_LIMITS,HUMANOID_LIMITS,NEAR_IK_LIMITS,createNearCharacters}
  from '../src/life/near-characters.mjs';
 import {WARDROBE} from '../src/player/character-asset.mjs';
 import {ARCHETYPES} from '../src/life/appearance.mjs';
+// These tests pin the RUN 6.8 bodies and the classic hq-crowd pack (?people=classic); Look 2's
+// MakeHuman citizens are covered by tests/citizens.test.mjs.
+import {PEOPLE as PEOPLE_MODE} from '../src/life/appearance.mjs';PEOPLE_MODE.mode='classic';
 
 const channels=hex=>[(hex>>16)&255,(hex>>8)&255,hex&255];
 const distance=(a,b)=>{const x=channels(a),y=channels(b);

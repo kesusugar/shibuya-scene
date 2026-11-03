@@ -19,6 +19,7 @@ import {ATTACKS,attackOf,SWORD,swordBearing,swordHeight,KATANA_COMBO,WARP} from 
 import {HIT_STOP} from './hit-stop.mjs';
 import {WEAPONS} from './weapons.mjs';
 import {blowOn,RESPONSE,responseOf} from '../life/temperament.mjs';
+import {gridKey} from '../life/grid-key.mjs';
 
 // Player crowd contact, Step E: four blows either way. The player's punch and a pedestrian's
 // both take 25 of 100, so whoever takes the fourth first goes down (was 34, and 14-18).
@@ -56,7 +57,7 @@ export const PHASE=Object.freeze({IDLE:'idle',WINDUP:'windup',ACTIVE:'active',RE
 
 const nearby=(crowd,x,z,r)=>{const out=[],ix=Math.floor(x/2),iz=Math.floor(z/2),cells=Math.ceil(r/2);
  for(let i=ix-cells;i<=ix+cells;i++)for(let j=iz-cells;j<=iz+cells;j++)
-  for(const p of crowd?.grid?.get(i+','+j)??[])if(!out.includes(p))out.push(p);
+  for(const p of crowd?.grid?.get(gridKey(crowd.grid,i,j))??[])if(!out.includes(p))out.push(p);
  return out;};
 /**
  * How far a stagger carries this frame, as a fraction of its push speed (m per m/s). The push

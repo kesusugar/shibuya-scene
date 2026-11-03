@@ -9,6 +9,10 @@ function indexed(polys){const index=new SpatialIndex(12);polys.forEach((p,i)=>in
 const ringBands=new WeakMap();
 function inRingFast(p,ring){let bands=ringBands.get(ring);if(!bands){bands=new Map();for(let i=0;i<ring.length;i++){const a=ring[i],b=ring[(i+1)%ring.length];if(a[1]===b[1])continue;for(let z=Math.floor(Math.min(a[1],b[1])/2);z<=Math.floor(Math.max(a[1],b[1])/2);z++){if(!bands.has(z))bands.set(z,[]);bands.get(z).push([a,b]);}}ringBands.set(ring,bands);}let hit=false;for(const [a,b] of bands.get(Math.floor(p[1]/2))??[])if((a[1]>p[1])!==(b[1]>p[1])&&p[0]<(b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0])hit=!hit;return hit;}
 const inside=(p,poly)=>inRingFast(p,poly.outer)&&!(poly.holes??[]).some(h=>inRingFast(p,h));
+// Crowd performance: a number for a grid cell, not a string -- these caches are asked thousands of
+// times a frame, and building "x,z" for each ask was a large share of the crowd's time and garbage.
+// Exact for |i|,|j| < 2^20 (the map is a few km across at the finest, 0.1 m, step).
+const cellKey=(i,j)=>i*2097152+j;
 function edgeDistance(x,z,a,b){const dx=b[0]-a[0],dz=b[1]-a[1],t=Math.max(0,Math.min(1,((x-a[0])*dx+(z-a[1])*dz)/(dx*dx+dz*dz||1)));return Math.hypot(x-a[0]-dx*t,z-a[1]-dz*t);}
 function bindPedestrianContext(context,ground){
  const {sidewalk,walk,roads,solids,roadEdges,footwaySources}=context;
@@ -16,7 +20,7 @@ function bindPedestrianContext(context,ground){
  const solid=(x,z,r=RADIUS)=>solids.query(bb(x,z,r)).some(({value:s})=>inside([x,z],s.polygon)||s.polygon.outer.some((a,i)=>edgeDistance(x,z,a,s.polygon.outer[(i+1)%s.polygon.outer.length])<r));
  const walkPoint=(x,z)=>!onRoad(x,z)&&walk.query(bb(x,z)).some(v=>inside([x,z],v.value));
  const safeCache=new Map();
- const safe=(x,z,r=RADIUS+.06)=>{const ix=Math.round(x*10),iz=Math.round(z*10),key=ix+','+iz;let result=safeCache.get(key);if(result!==undefined)return result;const a=ix/10,b=iz/10,margin=.43;result=!solid(a,b,margin)&&walkPoint(a,b);
+ const safe=(x,z,r=RADIUS+.06)=>{const ix=Math.round(x*10),iz=Math.round(z*10),key=cellKey(ix,iz);let result=safeCache.get(key);if(result!==undefined)return result;const a=ix/10,b=iz/10,margin=.43;result=!solid(a,b,margin)&&walkPoint(a,b);
   if(result&&roadEdges.query(bb(a,b,margin)).some(({value:[p,q]})=>edgeDistance(a,b,p,q)<margin))result=false;
   if(result)for(let i=0;i<8;i++)if(!walkPoint(a+Math.cos(i*Math.PI/4)*margin,b+Math.sin(i*Math.PI/4)*margin)){result=false;break;}
   safeCache.set(key,result);return result;};
@@ -34,8 +38,8 @@ function bindPedestrianContext(context,ground){
  // is invisible at crowd scale and would be a 25 cm staircase under a foot, so anything that
  // needs to place a foot asks `heightExact` instead.
  const heights=new Map();
- const height=(x,z)=>{const a=Math.round(x*4)/4,b=Math.round(z*4)/4,key=a+','+b;
-  if(!heights.has(key))heights.set(key,exact(a,b));return heights.get(key);};
+ const height=(x,z)=>{const ia=Math.round(x*4),ib=Math.round(z*4),key=cellKey(ia,ib);let h=heights.get(key);
+  if(h===undefined){h=exact(ia/4,ib/4);heights.set(key,h);}return h;};
  return {sidewalk,walk,roads,solids,roadEdges,onRoad,solid,safe,footwaySources,height,heightExact:exact};
 }
 export function pedestrianContext(data,{ground,generic,street,core,detail}){

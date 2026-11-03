@@ -1,0 +1,45 @@
+{
+ "query": "qa=1&tier=high&time=day&camera=scramble",
+ "steps": [
+  {
+   "name": "night-ref-gta",
+   "note": "gta",
+   "state": {
+    "radio": null,
+    "fps": 0.2,
+    "drawCalls": 342,
+    "triangles": 3796119
+   }
+  },
+  {
+   "name": "night-overview-gta",
+   "note": "gta",
+   "state": {
+    "radio": null,
+    "fps": 1,
+    "drawCalls": 364,
+    "triangles": 5232065
+   }
+  },
+  {
+   "name": "day-ref-gta",
+   "note": "gta",
+   "state": {
+    "radio": null,
+    "fps": 0.2,
+    "drawCalls": 331,
+    "triangles": 3796465
+   }
+  },
+  {
+   "name": "day-overview-gta",
+   "note": "gta",
+   "state": {
+    "radio": null,
+    "fps": 0.2,
+    "drawCalls": 357,
+    "triangles": 5206875
+   }
+  }
+ ]
+}

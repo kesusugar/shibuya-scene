@@ -8,6 +8,9 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {humanoidCitizen} from '../src/player/character-asset.mjs';
 import {createPlayerFigure} from '../src/player/figure.mjs';
 import {createRagdoll,RAGDOLL} from '../src/player/ragdoll.mjs';
+// These tests pin the RUN 6.8 bodies and the classic hq-crowd pack (?people=classic); Look 2's
+// MakeHuman citizens are covered by tests/citizens.test.mjs.
+import {PEOPLE as PEOPLE_MODE} from '../src/life/appearance.mjs';PEOPLE_MODE.mode='classic';
 
 globalThis.ProgressEvent??=class{constructor(type,init={}){Object.assign(this,{type},init);}};
 const REPORT=JSON.parse(readFileSync('public/data/character/citizen.json','utf8'));
